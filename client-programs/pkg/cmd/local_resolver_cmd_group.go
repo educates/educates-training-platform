@@ -21,6 +21,7 @@ func (p *ProjectInfo) NewLocalResolverCmdGroup() *cobra.Command {
 			Commands: []*cobra.Command{
 				p.NewLocalResolverDeployCmd(),
 				p.NewLocalResolverDeleteCmd(),
+				p.NewLocalResolverUpdateCmd(),
 			},
 		},
 	}

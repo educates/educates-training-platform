@@ -67,55 +67,9 @@ func DeployResolver(domain string, targetAddress string, extraDomains []string) 
 	defer reader.Close()
 	io.Copy(os.Stdout, reader)
 
-	dnsmasqConfigTemplate, err := template.New("dnsmasq-config").Parse(dnsmasqConfigTemplateData)
-
+	configFileName, err := generateDnsmasqConfig(domain, targetAddress, extraDomains)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse dnsmasq config template")
-	}
-
-	var clusterConfigData bytes.Buffer
-
-	localIPAddress, err := config.HostIP()
-
-	if err != nil {
-		localIPAddress = "127.0.0.1"
-	}
-
-	if targetAddress == "" {
-		targetAddress = localIPAddress
-	}
-
-	type TemplateConfig struct {
-		IngressDomain string
-		TargetAddress string
-		ExtraDomains  []string
-	}
-
-	config := TemplateConfig{
-		IngressDomain: domain,
-		TargetAddress: targetAddress,
-		ExtraDomains:  extraDomains,
-	}
-
-	err = dnsmasqConfigTemplate.Execute(&clusterConfigData, config)
-
-	if err != nil {
-		return errors.Wrap(err, "failed to generate dnsmasq config")
-	}
-
-	configFileDir := utils.GetEducatesHomeDir()
-	configFileName := path.Join(configFileDir, "dnsmasq.conf")
-
-	err = os.MkdirAll(configFileDir, os.ModePerm)
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to create config directory")
-	}
-
-	err = os.WriteFile(configFileName, clusterConfigData.Bytes(), 0644)
-
-	if err != nil {
-		return errors.Wrap(err, "failed to write dnsmasq config")
+		return err
 	}
 
 	hostConfig := &container.HostConfig{
@@ -162,6 +116,7 @@ func DeployResolver(domain string, targetAddress string, extraDomains []string) 
 	}
 
 	fmt.Println("Local DNS resolver running as a Docker container", resolverContainerName)
+	fmt.Println("Local DNS resolver configuration in", configFileName)
 
 	return nil
 }
@@ -201,4 +156,90 @@ func DeleteResolver() error {
 	}
 
 	return nil
+}
+
+func UpdateResolver(domain string, targetAddress string, extraDomains []string) error {
+	ctx := context.Background()
+
+	fmt.Println("Updating local DNS resolver configuration")
+
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		return errors.Wrap(err, "unable to create docker client")
+	}
+
+	_, err = cli.ContainerInspect(ctx, resolverContainerName)
+	if err != nil {
+		return errors.Wrap(err, "resolver container not found")
+	}
+
+	configFileName, err := generateDnsmasqConfig(domain, targetAddress, extraDomains)
+	if err != nil {
+		return err
+	}
+
+	err = cli.ContainerRestart(ctx, resolverContainerName, container.StopOptions{})
+	if err != nil {
+		return errors.Wrap(err, "failed to restart resolver")
+	}
+
+	fmt.Println("Local DNS resolver configuration updated and reloaded")
+	fmt.Println("Local DNS resolver configuration in", configFileName)
+
+	return nil
+}
+
+func generateDnsmasqConfig(domain string, targetAddress string, extraDomains []string) (string, error) {
+	dnsmasqConfigTemplate, err := template.New("dnsmasq-config").Parse(dnsmasqConfigTemplateData)
+
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse dnsmasq config template")
+	}
+
+	var clusterConfigData bytes.Buffer
+
+	localIPAddress, err := config.HostIP()
+
+	if err != nil {
+		localIPAddress = "127.0.0.1"
+	}
+
+	if targetAddress == "" {
+		targetAddress = localIPAddress
+	}
+
+	type TemplateConfig struct {
+		IngressDomain string
+		TargetAddress string
+		ExtraDomains  []string
+	}
+
+	config := TemplateConfig{
+		IngressDomain: domain,
+		TargetAddress: targetAddress,
+		ExtraDomains:  extraDomains,
+	}
+
+	err = dnsmasqConfigTemplate.Execute(&clusterConfigData, config)
+
+	if err != nil {
+		return "", errors.Wrap(err, "failed to generate dnsmasq config")
+	}
+
+	configFileDir := utils.GetEducatesHomeDir()
+	configFileName := path.Join(configFileDir, "dnsmasq.conf")
+
+	err = os.MkdirAll(configFileDir, os.ModePerm)
+
+	if err != nil {
+		return "", errors.Wrapf(err, "unable to create config directory")
+	}
+
+	err = os.WriteFile(configFileName, clusterConfigData.Bytes(), 0644)
+
+	if err != nil {
+		return "", errors.Wrap(err, "failed to write dnsmasq config")
+	}
+
+	return configFileName, nil
 }

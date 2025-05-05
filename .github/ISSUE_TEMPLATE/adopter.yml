@@ -1,0 +1,37 @@
+name: "Adopter Request"
+description: "Request to be added as an adopter in the ADOPTERS.md file"
+title: "[Adopter Request] Add <Your Organization/Name>"
+labels: ["adopter"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        🥳 Thank you for using our project! Please provide the following details to be added to the ADOPTERS.md file. 🥳 
+  - type: input
+    id: name
+    attributes:
+      label: "Your Name or Organization"
+      description: "Provide the name of your organization or your name."
+      placeholder: "e.g., Acme Corp or John Doe"
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: "Link (Optional)"
+      description: "Provide a link to your website or profile (if applicable)."
+      placeholder: "e.g., https://www.acme.com"
+  - type: textarea
+    id: usage
+    attributes:
+      label: "How are you using the project?"
+      description: "Briefly describe how you are using the project."
+      placeholder: "e.g., We use this project to manage our infrastructure."
+    validations:
+      required: true
+  - type: input
+    id: contact
+    attributes:
+      label: "Contact Email (Optional)"
+      description: "Provide an email address in case we need to reach out to you."
+      placeholder: "e.g., contact@acme.com"

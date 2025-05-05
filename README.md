@@ -29,3 +29,8 @@ Contributing to Educates
 If you would like to contribute to Educates, check out our [contribution
 guidelines](CONTRIBUTING.md) and [developer
 documenation](developer-docs/README.md).
+
+Adopters of Educates
+------------------------
+
+If you're using Educates Training Platform in your organization, please [let us know](./ADOPTERS.md).

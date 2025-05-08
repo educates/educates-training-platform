@@ -233,3 +233,58 @@ educates local resolver delete
 You will need to manually remove the file you created under `/etc/resolver`.
 
 Note that when using the local DNS resolver on macOS, for it to work relies on DNS resolution within the local Kind Kubernetes cluster being passed through to the macOS system DNS resolution framework. Although this appears to work for Kubernetes Kind clusters running on macOS Intel architecture, it appears not to currently work for macOS ARM architecture. It is believed this may be because Go application binaries compiled using cross compilation do not link and use the macOS DNS frameworks and instead have a native Go implementation which bypasses the macOS `/etc/resolver` based system. If you are using macOS ARM based machines, you will need to have access to a public DNS registry or server where you can instead configure your domains. Using a DNS server on your local network or embedded in your internet router may also not work as it is also suspected that for macOS ARM acrhitecture, a Kubernetes Kind cluster bypasses local DNS servers and connects direct to a public DNS. The only known way around this at present is to override CoreDNS configuration in the Kubernetes cluster.
+
+Local image mirrors
+-------------------
+A local image mirror acts as a proxy for a remote container registry. When you configure a mirror, images pulled from the remote registry are cached locally, so subsequent pulls are faster and do not consume external bandwidth. This is especially useful for large images, repeated CI/CD runs, or when working in environments with limited or expensive internet access.
+
+Deploying a local registry mirror
+---------------------------------
+
+To deploy a local mirror for a remote registry, use the following command:
+
+```
+educates local mirror deploy ghcr.io
+```
+
+In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror.
+
+Optionally, you can also provide credentials, via `--username` and `--password`, for authenticating to the remote registry. Use these if you are mirroring a private registry, or to provide DockerHub credentials to avoid request throttling.
+
+Deleting a local registry mirror
+--------------------------------
+
+To delete a local registry mirror, run:
+
+```
+educates local mirror delete ghcr.io
+```
+
+This will stop and remove the mirror container and clean up the configuration from the cluster.
+
+Using mirrors when creating a cluster
+-------------------------------------
+
+You can specify registry mirrors in your cluster configuration YAML. When you create a cluster with mirrors configured, Educates will automatically deploy and link the mirrors to your local cluster. This ensures that all image pulls for the mirrored registries are routed through your local mirror, improving speed and reliability.
+
+```yaml
+localKindCluster:
+  listenAddress: 0.0.0.0
+  registryMirrors:
+    - mirror: ghcr.io
+    - mirror: docker.io
+      url: registry-1.docker.io
+```
+
+In this example, we're mirroring GitHub Container Registry as well as Docker Hub. Note that Docker Hub has an alternate
+url for the remote registry mirror. We could have provided credentials for Docker Hub to prevent image pull throttling.
+
+```
+educates create-cluster
+```
+
+This will deploy the cluster and all defined mirrors automatically.
+
+
+
+

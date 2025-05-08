@@ -126,6 +126,11 @@ localKindCluster:
     - hostPath: ""
       containerPath: ""
       readOnly: false
+  registryMirrors:
+    - mirror: ""
+      url: ""
+      username: ""
+      password: ""
 #@schema/nullable
 localDNSResolver:
   targetAddress: ""

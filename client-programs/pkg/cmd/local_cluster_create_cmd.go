@@ -19,33 +19,34 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/installer"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 var (
 	localClusterCreateExample = `
   # Create local educates cluster (no configuration, uses nip.io wildcard domain and Kind as provider config defaults)
-  educates admin cluster create
+  educates local cluster create
 
   # Create local educates cluster with custom configuration
-  educates admin cluster create --config config.yaml
+  educates local cluster create --config config.yaml
 
   # Create local kind cluster but don't install anything on it (it creates local registry but not local secrets)
-  educates admin cluster create --cluster-only
+  educates local cluster create --cluster-only
 
   # Create local kind cluster but don't install anything on it, but providing some config for kind
-  educates admin cluster create --cluster-only --config kind-config.yaml
+  educates local cluster create --cluster-only --config kind-config.yaml
 
   # Create local educates cluster with bundle from different repository
-  educates admin cluster create --package-repository ghcr.io/jorgemoralespou --version installer-clean
+  educates local cluster create --package-repository ghcr.io/jorgemoralespou --version installer-clean
 
   # Create local educates cluster with local build (for development)
-  educates admin cluster create --package-repository localhost:5001 --version 0.0.1
+  educates local cluster create --package-repository localhost:5001 --version 0.0.1
 
   # Create local educates cluster with default configuration for a given domain
-  educates admin cluster create --domain test.educates.io
+  educates local cluster create --domain test.educates.io
 
   # Create local educates cluster with custom configuration providing a domain
-  educates admin cluster create --config config.yaml --domain test.educates.io
+  educates local cluster create --config config.yaml --domain test.educates.io
 
 `
 )
@@ -111,16 +112,12 @@ func (o *LocalClusterCreateOptions) Run() error {
 		}
 	}
 
-	if err = registry.DeployRegistry(o.RegistryBindIP); err != nil {
+	if err = registry.DeployRegistryAndLinkToCluster(o.RegistryBindIP, client); err != nil {
 		return errors.Wrap(err, "failed to deploy registry")
 	}
 
-	if err = registry.LinkRegistryToCluster(); err != nil {
-		return errors.Wrap(err, "failed to link registry to cluster")
-	}
-
 	// This is needed for imgpkg pull from locally published workshops
-	if err = registry.UpdateRegistryService(client); err != nil {
+	if err = registry.UpdateRegistryK8SService(client); err != nil {
 		return errors.Wrap(err, "failed to create service for registry")
 	}
 
@@ -129,17 +126,11 @@ func (o *LocalClusterCreateOptions) Run() error {
 		return err
 	}
 
-	// This is needed to make containerd use the local registry
-	if err = registry.AddRegistryConfigToKindNodes("localhost:5001"); err != nil {
-		return errors.Wrap(err, "failed to add registry config to kind nodes")
-	}
-	if err = registry.AddRegistryConfigToKindNodes("registry.default.svc.cluster.local"); err != nil {
-		return errors.Wrap(err, "failed to add registry config to kind nodes")
-	}
-
-	// This is needed so that kubernetes nodes can pull images from the local registry
-	if err = registry.DocumentLocalRegistry(client); err != nil {
-		return errors.Wrap(err, "failed to document registry config in cluster")
+	// Create and add registry mirrors defined in config to Kind nodes
+	for _, mirror := range fullConfig.LocalKindCluster.RegistryMirrors {
+		if err = registry.DeployMirrorAndLinkToCluster(&mirror); err != nil {
+			return errors.Wrap(err, "failed to deploy registry mirror "+mirror.Mirror)
+		}
 	}
 
 	if !o.ClusterOnly {
@@ -163,7 +154,7 @@ func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Creates a local Kubernetes cluster",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ip, err := registry.ValidateAndResolveIP(o.RegistryBindIP)
+			ip, err := utils.ValidateAndResolveIP(o.RegistryBindIP)
 			if err != nil {
 				return errors.Wrap(err, "invalid registry bind IP")
 			}

@@ -1,0 +1,35 @@
+version: 0.1
+log:
+  level: debug
+  fields:
+    service: registry
+    environment: development
+storage:
+    delete:
+      enabled: true
+    cache:
+        blobdescriptor: inmemory
+    filesystem:
+        rootdirectory: /var/lib/registry
+    maintenance:
+        uploadpurging:
+            enabled: false
+    tag:
+      concurrencylimit: 8
+http:
+    addr: :5000
+    headers:
+        X-Content-Type-Options: [nosniff]
+health:
+  storagedriver:
+    enabled: true
+    interval: 10s
+    threshold: 3
+proxy:
+  remoteurl: https://{{- .MirrorURL }}
+  {{- if .Username }}
+  username: {{- .Username }}
+  {{- end }}
+  {{- if .Password }}
+  password: {{- .Password }}
+  {{- end }}

@@ -258,7 +258,7 @@ func createMirrorContainer(mirrorConfig *config.RegistryMirrorConfig) error {
 		PortBindings: nat.PortMap{
 			"5000/tcp": []nat.PortBinding{
 				{
-					// HostIP:   mirrorConfig.BindIP,
+					HostIP: "127.0.0.1",
 					// HostPort: mirrorConfig.Port,
 				},
 			},

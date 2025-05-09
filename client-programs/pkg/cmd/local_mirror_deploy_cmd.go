@@ -53,7 +53,7 @@ func (p *ProjectInfo) NewLocalMirrorDeployCmd() *cobra.Command {
 
 	var c = &cobra.Command{
 		Args:  cobra.ExactArgs(1),
-		Use:   "deploy-mirror NAME",
+		Use:   "deploy NAME",
 		Short: "Deploys a local image registry mirror",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.MirrorName = args[0]

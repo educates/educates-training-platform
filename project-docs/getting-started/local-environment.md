@@ -238,30 +238,6 @@ Local image mirrors
 -------------------
 A local image mirror acts as a proxy for a remote container registry. When you configure a mirror, images pulled from the remote registry are cached locally, so subsequent pulls are faster and do not consume external bandwidth. This is especially useful for large images, repeated CI/CD runs, or when working in environments with limited or expensive internet access.
 
-Deploying a local registry mirror
----------------------------------
-
-To deploy a local mirror for a remote registry, use the following command:
-
-```
-educates local mirror deploy ghcr.io
-```
-
-In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror.
-
-Optionally, you can also provide credentials, via `--username` and `--password`, for authenticating to the remote registry. Use these if you are mirroring a private registry, or to provide DockerHub credentials to avoid request throttling.
-
-Deleting a local registry mirror
---------------------------------
-
-To delete a local registry mirror, run:
-
-```
-educates local mirror delete ghcr.io
-```
-
-This will stop and remove the mirror container and clean up the configuration from the cluster.
-
 Using mirrors when creating a cluster
 -------------------------------------
 
@@ -285,6 +261,35 @@ educates create-cluster
 
 This will deploy the cluster and all defined mirrors automatically.
 
+Deploying a local registry mirror
+---------------------------------
+
+To deploy a local mirror for a remote registry, use the following command:
+
+```
+educates local mirror deploy ghcr.io
+```
+
+In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror.
+
+Optionally, you can also provide credentials, via `--username` and `--password`, for authenticating to the remote registry. Use these if you are mirroring a private registry, or to provide DockerHub credentials to avoid request throttling.
+
+It is important to note that, when done this way, this mirror's configuration is not persisted in the cluster's configuration, so if you were to recreate the cluster, the mirror would not be configured in the cluster, even if the mirror container still exists.
+
+This command is most useful in case you want to clean your existing mirror and delete the mirror, and hence it's contents, and then recreate the mirror.
+
+Deleting a local registry mirror
+--------------------------------
+
+To delete a local registry mirror, run:
+
+```
+educates local mirror delete ghcr.io
+```
+
+This will stop and remove the mirror container and clean up the configuration from the cluster. 
+
+As pointed out earlier, if the mirror configuration exists in the local cluster's configuration, if the Educates local cluster is recreated then the mirror will be recreated as well.
 
 
 

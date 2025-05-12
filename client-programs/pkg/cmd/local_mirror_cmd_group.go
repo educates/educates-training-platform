@@ -5,10 +5,10 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-func (p *ProjectInfo) NewLocalCmdGroup() *cobra.Command {
+func (p *ProjectInfo) NewLocalMirrorCmdGroup() *cobra.Command {
 	var c = &cobra.Command{
-		Use:   "local",
-		Short: "Tools for working with Educates on your local computer",
+		Use:   "mirror",
+		Short: "Manage local image registry mirrors",
 	}
 
 	// Use a command group as it allows us to dictate the order in which they
@@ -19,12 +19,8 @@ func (p *ProjectInfo) NewLocalCmdGroup() *cobra.Command {
 		{
 			Message: "Available Commands:",
 			Commands: []*cobra.Command{
-				p.NewLocalClusterCmdGroup(),
-				p.NewLocalConfigCmdGroup(),
-				p.NewLocalSecretsCmdGroup(),
-				p.NewLocalRegistryCmdGroup(),
-				p.NewLocalMirrorCmdGroup(),
-				p.NewLocalResolverCmdGroup(),
+				p.NewLocalMirrorDeployCmd(),
+				p.NewLocalMirrorDeleteCmd(),
 			},
 		},
 	}

@@ -17,9 +17,19 @@ type VolumeMountConfig struct {
 }
 
 type LocalKindClusterConfig struct {
-	ListenAddress string              `yaml:"listenAddress,omitempty"`
-	ApiServer     KindApiServerConfig `yaml:"apiServer,omitempty"`
-	VolumeMounts  []VolumeMountConfig `yaml:"volumeMounts,omitempty"`
+	ListenAddress   string                 `yaml:"listenAddress,omitempty"`
+	ApiServer       KindApiServerConfig    `yaml:"apiServer,omitempty"`
+	VolumeMounts    []VolumeMountConfig    `yaml:"volumeMounts,omitempty"`
+	RegistryMirrors []RegistryMirrorConfig `yaml:"registryMirrors,omitempty"`
+}
+
+type RegistryMirrorConfig struct {
+	Mirror   string `yaml:"mirror"`
+	URL      string `yaml:"url,omitempty"`
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
+	Port     string `yaml:"port,omitempty"`
+	BindIP   string `yaml:"bindIP,omitempty"`
 }
 
 type KindApiServerConfig struct {

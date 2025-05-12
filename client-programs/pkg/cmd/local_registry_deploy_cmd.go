@@ -8,6 +8,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 type LocalRegistryDeployOptions struct {
@@ -26,12 +27,6 @@ func (o *LocalRegistryDeployOptions) Run() error {
 	// deploy just the image registry alone without Kubernetes. If a Kubernetes
 	// cluster is created later, then the registry service will be added then.
 
-	err = registry.LinkRegistryToCluster()
-
-	if err != nil {
-		fmt.Println("Warning: Kubernetes cluster not linked to image registry.")
-	}
-
 	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
 
 	if err != nil {
@@ -47,7 +42,7 @@ func (o *LocalRegistryDeployOptions) Run() error {
 		return nil
 	}
 
-	if err = registry.UpdateRegistryService(client); err != nil {
+	if err = registry.UpdateRegistryK8SService(client); err != nil {
 		return errors.Wrap(err, "failed to create service for registry")
 	}
 
@@ -62,7 +57,7 @@ func (p *ProjectInfo) NewLocalRegistryDeployCmd() *cobra.Command {
 		Use:   "deploy",
 		Short: "Deploys a local image registry",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ip, err := registry.ValidateAndResolveIP(o.BindIP)
+			ip, err := utils.ValidateAndResolveIP(o.BindIP)
 			if err != nil {
 				return errors.Wrap(err, "invalid registry bind IP")
 			}

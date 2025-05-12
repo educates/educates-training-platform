@@ -5,9 +5,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	_ "embed"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path"
 	"strings"
@@ -18,9 +18,9 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/pkg/errors"
-	yttyaml "gopkg.in/yaml.v2"
-	apiv1 "k8s.io/api/core/v1"
+	yaml "gopkg.in/yaml.v2"
 	v1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,7 +29,69 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+const hostMirrorTomlTemplate = `[host."http://%s:5000"]
+  capabilities = ["pull", "resolve"]
+`
+
+const hostRegistryTomlTemplate = `[host."http://%s:5000"]`
+
+const (
+	RegistryImageV3               = "docker.io/library/registry:3"
+	RegistryConfigTargetPath      = "/etc/distribution/config.yml"
+	EducatesNetworkName           = "educates"
+	EducatesRegistryContainer     = "educates-registry"
+	EducatesControlPlaneContainer = "educates-control-plane"
+	EducatesRegistryRoleLabel     = "registry"
+	EducatesMirrorRoleLabel       = "mirror"
+	EducatesAppLabel              = "educates"
+)
+
+/**
+ * This function is used to deploy the registry and link it to the cluster.
+ * It is used when creating a new local cluster.
+ */
+func DeployRegistryAndLinkToCluster(bindIP string, client *kubernetes.Clientset) error {
+
+	err := createRegistryContainer(bindIP)
+	if err != nil {
+		return errors.Wrap(err, "failed to deploy registry")
+	}
+
+	// This is needed to make containerd use the local registry
+
+	if err = addRegistryConfigToKindNodes("localhost:5001", fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer)); err != nil {
+		return errors.Wrap(err, "failed to add registry config to kind nodes")
+	}
+	if err = addRegistryConfigToKindNodes("registry.default.svc.cluster.local", fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer)); err != nil {
+		return errors.Wrap(err, "failed to add registry config to kind nodes")
+	}
+
+	// This is needed so that kubernetes nodes can pull images from the local registry
+	if err = documentLocalRegistry(client); err != nil {
+		return errors.Wrap(err, "failed to document registry config in cluster")
+	}
+
+	return nil
+}
+
+/**
+ * This function is used to deploy a registry.
+ * It is used when creating a new local registry.
+ * It will not link the registry to the cluster.
+ */
 func DeployRegistry(bindIP string) error {
+	err := createRegistryContainer(bindIP)
+	if err != nil {
+		return errors.Wrap(err, "failed to deploy registry")
+	}
+
+	return nil
+}
+
+/**
+ * This private function only creates the registry container.
+ */
+func createRegistryContainer(bindIP string) error {
 	ctx := context.Background()
 
 	fmt.Println("Deploying local image registry")
@@ -40,7 +102,7 @@ func DeployRegistry(bindIP string) error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, "educates-registry")
+	_, err = cli.ContainerInspect(ctx, EducatesRegistryContainer)
 
 	if err == nil {
 		// If we can retrieve a container of required name we assume it is
@@ -51,7 +113,7 @@ func DeployRegistry(bindIP string) error {
 		return nil
 	}
 
-	reader, err := cli.ImagePull(ctx, "docker.io/library/registry:2", image.PullOptions{})
+	reader, err := cli.ImagePull(ctx, RegistryImageV3, image.PullOptions{})
 	if err != nil {
 		return errors.Wrap(err, "cannot pull registry image")
 	}
@@ -59,10 +121,10 @@ func DeployRegistry(bindIP string) error {
 	defer reader.Close()
 	io.Copy(os.Stdout, reader)
 
-	_, err = cli.NetworkInspect(ctx, "educates", network.InspectOptions{})
+	_, err = cli.NetworkInspect(ctx, EducatesNetworkName, network.InspectOptions{})
 
 	if err != nil {
-		_, err = cli.NetworkCreate(ctx, "educates", network.CreateOptions{})
+		_, err = cli.NetworkCreate(ctx, EducatesNetworkName, network.CreateOptions{})
 
 		if err != nil {
 			return errors.Wrap(err, "cannot create educates network")
@@ -83,13 +145,19 @@ func DeployRegistry(bindIP string) error {
 		},
 	}
 
+	labels := map[string]string{
+		"app":  EducatesAppLabel,
+		"role": EducatesRegistryRoleLabel,
+	}
+
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image: "docker.io/library/registry:2",
+		Image: RegistryImageV3,
 		Tty:   false,
 		ExposedPorts: nat.PortSet{
 			"5000/tcp": struct{}{},
 		},
-	}, hostConfig, nil, nil, "educates-registry")
+		Labels: labels,
+	}, hostConfig, nil, nil, EducatesRegistryContainer)
 
 	if err != nil {
 		return errors.Wrap(err, "cannot create registry container")
@@ -99,18 +167,151 @@ func DeployRegistry(bindIP string) error {
 		return errors.Wrap(err, "unable to start registry")
 	}
 
-	cli.NetworkDisconnect(ctx, "educates", "educates-registry", false)
+	cli.NetworkDisconnect(ctx, EducatesNetworkName, EducatesRegistryContainer, false)
 
-	err = cli.NetworkConnect(ctx, "educates", "educates-registry", &network.EndpointSettings{})
+	err = cli.NetworkConnect(ctx, EducatesNetworkName, EducatesRegistryContainer, &network.EndpointSettings{})
 
 	if err != nil {
 		return errors.Wrap(err, "unable to connect registry to educates network")
 	}
 
+	if err = linkRegistryToClusterNetwork(EducatesRegistryContainer); err != nil {
+		return errors.Wrap(err, "failed to link registry to cluster")
+	}
+
 	return nil
 }
 
-func AddRegistryConfigToKindNodes(repositoryName string) error {
+/**
+ * This function is used to deploy a registry mirror and link it to the cluster.
+ * It is used when creating a new local registry mirror.
+ */
+func DeployMirrorAndLinkToCluster(mirrorConfig *config.RegistryMirrorConfig) error {
+	err := createMirrorContainer(mirrorConfig)
+
+	if err != nil {
+		return errors.Wrap(err, "failed to deploy registry mirror "+mirrorConfig.Mirror)
+	}
+
+	content := fmt.Sprintf(hostMirrorTomlTemplate, registryMirrorContainerName(mirrorConfig))
+	err = addRegistryConfigToKindNodes(mirrorConfig.Mirror, content)
+
+	if err != nil {
+		fmt.Println("Warning: Mirror not added to Kind nodes")
+	}
+
+	return nil
+}
+
+/**
+ * This private function only creates the registry mirror container.
+ */
+func createMirrorContainer(mirrorConfig *config.RegistryMirrorConfig) error {
+	ctx := context.Background()
+
+	fmt.Printf("Deploying local image registry mirror %s\n", mirrorConfig.Mirror)
+
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+
+	if err != nil {
+		return errors.Wrap(err, "unable to create docker client")
+	}
+
+	mirrorContainerName := registryMirrorContainerName(mirrorConfig)
+	_, err = cli.ContainerInspect(ctx, mirrorContainerName)
+
+	if err == nil {
+		// If we can retrieve a container of required name we assume it is
+		// running okay. Technically it could be restarting, stopping or
+		// have exited and container was not removed, but if that is the case
+		// then leave it up to the user to sort out.
+		fmt.Printf("Registry mirror %s already exists\n", mirrorConfig.Mirror)
+
+		return nil
+	}
+
+	// Prepare environment variables for the registry mirror
+	envs := []string{}
+	mirrorURL := mirrorConfig.URL
+	if mirrorURL == "" {
+		mirrorURL = mirrorConfig.Mirror
+	}
+	envs = append(envs, fmt.Sprintf("REGISTRY_PROXY_REMOTEURL=https://%s", mirrorURL))
+	if mirrorConfig.Username != "" {
+		envs = append(envs, fmt.Sprintf("REGISTRY_PROXY_USERNAME=%s", mirrorConfig.Username))
+	}
+	if mirrorConfig.Password != "" {
+		envs = append(envs, fmt.Sprintf("REGISTRY_PROXY_PASSWORD=%s", mirrorConfig.Password))
+	}
+
+	_, err = cli.NetworkInspect(ctx, EducatesNetworkName, network.InspectOptions{})
+
+	if err != nil {
+		_, err = cli.NetworkCreate(ctx, EducatesNetworkName, network.CreateOptions{})
+
+		if err != nil {
+			return errors.Wrap(err, "cannot create educates network")
+		}
+	}
+
+	hostConfig := &container.HostConfig{
+		PortBindings: nat.PortMap{
+			"5000/tcp": []nat.PortBinding{
+				{
+					HostIP: "127.0.0.1",
+					// HostPort: mirrorConfig.Port,
+				},
+			},
+		},
+		RestartPolicy: container.RestartPolicy{
+			Name: "always",
+		},
+	}
+
+	labels := map[string]string{
+		"app":    EducatesAppLabel,
+		"role":   EducatesMirrorRoleLabel,
+		"mirror": mirrorConfig.Mirror,
+	}
+
+	resp, err := cli.ContainerCreate(ctx, &container.Config{
+		Image: RegistryImageV3,
+		Tty:   false,
+		Env:   envs,
+		ExposedPorts: nat.PortSet{
+			"5000/tcp": struct{}{},
+		},
+		Labels: labels,
+	}, hostConfig, nil, nil, mirrorContainerName)
+
+	if err != nil {
+		return errors.Wrap(err, "cannot create local registry mirror container")
+	}
+
+	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		return errors.Wrap(err, "unable to start local registry mirror")
+	}
+
+	cli.NetworkDisconnect(ctx, EducatesNetworkName, mirrorContainerName, false)
+
+	err = cli.NetworkConnect(ctx, EducatesNetworkName, mirrorContainerName, &network.EndpointSettings{})
+
+	if err != nil {
+		return errors.Wrap(err, "unable to connect local registry mirror to educates network")
+	}
+
+	if err = linkRegistryToClusterNetwork(mirrorContainerName); err != nil {
+		return errors.Wrap(err, "failed to link local registry mirror to cluster")
+	}
+
+	return nil
+}
+
+/**
+ * This function is used to add the registry config to the kind nodes.
+ * It is used when creating a new local registry or registry mirror.
+ */
+func addRegistryConfigToKindNodes(repositoryName string, content string) error {
 	ctx := context.Background()
 
 	fmt.Printf("Adding local image registry config (%s) to Kind nodes\n", repositoryName)
@@ -121,7 +322,7 @@ func AddRegistryConfigToKindNodes(repositoryName string) error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	containerID, _ := getContainerInfo("educates-control-plane")
+	containerID, _ := getContainerInfo(EducatesControlPlaneContainer)
 
 	registryDir := "/etc/containerd/certs.d/" + repositoryName
 
@@ -144,7 +345,6 @@ func AddRegistryConfigToKindNodes(repositoryName string) error {
 
 	hijackedResponse.Close()
 
-	content := `[host."http://educates-registry:5000"]`
 	buffer, err := tarFile([]byte(content), path.Join("/etc/containerd/certs.d/"+repositoryName, "hosts.toml"), 0x644)
 	if err != nil {
 		return err
@@ -162,13 +362,63 @@ func AddRegistryConfigToKindNodes(repositoryName string) error {
 	return nil
 }
 
-func DocumentLocalRegistry(client *kubernetes.Clientset) error {
-	yamlBytes, err := yttyaml.Marshal(`host: "localhost:5001"`)
+/**
+ * This function is used to remove the registry config from the kind nodes.
+ * It is used when deleting a local registry mirror.
+ */
+func removeRegistryConfigFromKindNodes(repositoryName string) error {
+	ctx := context.Background()
+
+	fmt.Printf("Removing local image registry config (%s) from Kind nodes\n", repositoryName)
+
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+
+	if err != nil {
+		return errors.Wrap(err, "unable to create docker client")
+	}
+
+	containerID, _ := getContainerInfo(EducatesControlPlaneContainer)
+
+	if containerID == "" {
+		return nil
+	}
+
+	registryDir := "/etc/containerd/certs.d/" + repositoryName
+
+	cmdStatement := []string{"rm", "-rf", registryDir}
+
+	optionsCreateExecuteScript := container.ExecOptions{
+		AttachStdout: true,
+		AttachStderr: true,
+		Cmd:          cmdStatement,
+	}
+
+	response, err := cli.ContainerExecCreate(ctx, containerID, optionsCreateExecuteScript)
+	if err != nil {
+		return errors.Wrap(err, "unable to create exec command")
+	}
+
+	hijackedResponse, err := cli.ContainerExecAttach(ctx, response.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return errors.Wrap(err, "unable to attach exec command")
+	}
+
+	hijackedResponse.Close()
+
+	return nil
+}
+
+/**
+ * This function is used to document the local registry in the cluster.
+ * It is used when creating a new local registry.
+ */
+func documentLocalRegistry(client *kubernetes.Clientset) error {
+	yamlBytes, err := yaml.Marshal(`host: "localhost:5001"`)
 	if err != nil {
 		return err
 	}
 
-	configMap := &apiv1.ConfigMap{
+	configMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "local-registry-hosting",
 			Namespace: "kube-public",
@@ -193,7 +443,11 @@ func DocumentLocalRegistry(client *kubernetes.Clientset) error {
 	return nil
 }
 
-func LinkRegistryToCluster() error {
+/**
+ * This function is used to link the registry to the cluster network, which is the kind network.
+ * It is used when creating a new local registry or registry mirror containers.
+ */
+func linkRegistryToClusterNetwork(containerName string) error {
 	ctx := context.Background()
 
 	fmt.Println("Linking local image registry to cluster")
@@ -204,9 +458,9 @@ func LinkRegistryToCluster() error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	cli.NetworkDisconnect(ctx, "kind", "educates-registry", false)
+	cli.NetworkDisconnect(ctx, "kind", containerName, false)
 
-	err = cli.NetworkConnect(ctx, "kind", "educates-registry", &network.EndpointSettings{})
+	err = cli.NetworkConnect(ctx, "kind", containerName, &network.EndpointSettings{})
 
 	if err != nil {
 		return errors.Wrap(err, "unable to connect registry to cluster network")
@@ -215,6 +469,10 @@ func LinkRegistryToCluster() error {
 	return nil
 }
 
+/**
+ * This function is used to delete the local registry.
+ * It is used when deleting a local registry or deleting all components of the local cluster.
+ */
 func DeleteRegistry() error {
 	ctx := context.Background()
 
@@ -226,7 +484,7 @@ func DeleteRegistry() error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, "educates-registry")
+	_, err = cli.ContainerInspect(ctx, EducatesRegistryContainer)
 
 	if err != nil {
 		// If we can't retrieve a container of required name we assume it does
@@ -237,17 +495,17 @@ func DeleteRegistry() error {
 
 	timeout := 30
 
-	err = cli.ContainerStop(ctx, "educates-registry", container.StopOptions{Timeout: &timeout})
+	err = cli.ContainerStop(ctx, EducatesRegistryContainer, container.StopOptions{Timeout: &timeout})
 
 	// timeout := time.Duration(30) * time.Second
 
-	// err = cli.ContainerStop(ctx, "educates-registry", &timeout)
+	// err = cli.ContainerStop(ctx, EducatesRegistryContainer, &timeout)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to stop registry container")
 	}
 
-	err = cli.ContainerRemove(ctx, "educates-registry", container.RemoveOptions{})
+	err = cli.ContainerRemove(ctx, EducatesRegistryContainer, container.RemoveOptions{})
 
 	if err != nil {
 		return errors.Wrap(err, "unable to delete registry container")
@@ -256,7 +514,105 @@ func DeleteRegistry() error {
 	return nil
 }
 
-func UpdateRegistryService(k8sclient *kubernetes.Clientset) error {
+/**
+ * This function is used to delete a local registry mirror and unlink it from the cluster.
+ * It is used when deleting a local registry mirror.
+ */
+func DeleteMirrorAndUnlinkFromCluster(mirrorConfig *config.RegistryMirrorConfig) error {
+	ctx := context.Background()
+
+	fmt.Printf("Deleting local image registry mirror %s\n", mirrorConfig.Mirror)
+
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+
+	if err != nil {
+		return errors.Wrap(err, "unable to create docker client")
+	}
+
+	containerName := registryMirrorContainerName(mirrorConfig)
+	_, err = cli.ContainerInspect(ctx, containerName)
+
+	if err != nil {
+		// If we can't retrieve a container of required name we assume it does
+		// not actually exist.
+
+		fmt.Printf("Registry mirror %s does not exist\n", mirrorConfig.Mirror)
+		return nil
+	}
+
+	timeout := 30
+
+	err = cli.ContainerStop(ctx, containerName, container.StopOptions{Timeout: &timeout})
+
+	if err != nil {
+		return errors.Wrap(err, "unable to stop registry mirror container "+containerName)
+	}
+
+	err = cli.ContainerRemove(ctx, containerName, container.RemoveOptions{})
+
+	if err != nil {
+		return errors.Wrap(err, "unable to delete registry mirror container "+containerName)
+	}
+
+	// Remove the registry config from the kind nodes
+	err = removeRegistryConfigFromKindNodes(mirrorConfig.Mirror)
+
+	if err != nil {
+		return errors.Wrap(err, "unable to remove registry config from kind nodes")
+	}
+
+	return nil
+}
+
+func DeleteRegistryMirrors() error {
+	ctx := context.Background()
+
+	fmt.Println("Deleting local image registry mirrors")
+
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+
+	if err != nil {
+		return errors.Wrap(err, "unable to create docker client")
+	}
+
+	mirrors, err := cli.ContainerList(ctx, container.ListOptions{
+		Filters: filters.NewArgs(
+			filters.Arg("label", "role="+EducatesMirrorRoleLabel),
+			filters.Arg("label", "app="+EducatesAppLabel),
+		),
+	})
+
+	if err != nil {
+		return errors.Wrap(err, "unable to list registry mirrors")
+	}
+
+	for _, mirror := range mirrors {
+
+		timeout := 30
+
+		err = cli.ContainerStop(ctx, mirror.ID, container.StopOptions{Timeout: &timeout})
+
+		if err != nil {
+			return errors.Wrap(err, "unable to stop registry mirror container "+mirror.ID)
+		}
+
+		err = cli.ContainerRemove(ctx, mirror.ID, container.RemoveOptions{})
+
+		if err != nil {
+			return errors.Wrap(err, "unable to delete registry mirror container "+mirror.ID)
+		}
+
+	}
+
+	return nil
+}
+
+/**
+ * TODO: Learn whether this is needed or not
+ * This function is used to update the registry k8s service.
+ * It is used when creating a cluster or a registry in order to update the k8s service to point to the new registry.
+ */
+func UpdateRegistryK8SService(k8sclient *kubernetes.Clientset) error {
 	ctx := context.Background()
 
 	cli, err := client.NewClientWithOpts(client.FromEnv)
@@ -265,13 +621,13 @@ func UpdateRegistryService(k8sclient *kubernetes.Clientset) error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	service := apiv1.Service{
+	service := v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "registry",
 		},
-		Spec: apiv1.ServiceSpec{
-			Type: apiv1.ServiceTypeClusterIP,
-			Ports: []apiv1.ServicePort{
+		Spec: v1.ServiceSpec{
+			Type: v1.ServiceTypeClusterIP,
+			Ports: []v1.ServicePort{
 				{
 					Port:       80,
 					TargetPort: intstr.FromInt(5001),
@@ -285,7 +641,7 @@ func UpdateRegistryService(k8sclient *kubernetes.Clientset) error {
 	endpointAppProtocol := "http"
 	endpointProtocol := v1.ProtocolTCP
 
-	registryInfo, err := cli.ContainerInspect(ctx, "educates-registry")
+	registryInfo, err := cli.ContainerInspect(ctx, EducatesRegistryContainer)
 
 	if err != nil {
 		return errors.Wrapf(err, "unable to inspect container for registry")
@@ -356,9 +712,9 @@ func PruneRegistry() error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	containerID, _ := getContainerInfo("educates-registry")
+	containerID, _ := getContainerInfo(EducatesRegistryContainer)
 
-	cmdStatement := []string{"registry", "garbage-collect", "/etc/docker/registry/config.yml", "--delete-untagged=true"}
+	cmdStatement := []string{"registry", "garbage-collect", RegistryConfigTargetPath, "--delete-untagged=true"}
 
 	optionsCreateExecuteScript := container.ExecOptions{
 		AttachStdout: false,
@@ -380,6 +736,17 @@ func PruneRegistry() error {
 	return nil
 }
 
+/**
+ * This function is used to get the container name of a registry mirror.
+ */
+func registryMirrorContainerName(mirrorConfig *config.RegistryMirrorConfig) string {
+	return fmt.Sprintf("%s-mirror-%s", EducatesRegistryContainer, mirrorConfig.Mirror)
+}
+
+/**
+ * This function is used to get the container id and status of a container.
+ * If the container does not exist, it will return an empty string for the container id and status.
+ */
 func getContainerInfo(containerName string) (containerID string, status string) {
 	ctx := context.Background()
 
@@ -409,6 +776,9 @@ func getContainerInfo(containerName string) (containerID string, status string) 
 	return
 }
 
+/**
+ * This function is used to tar a file to be copied into a container.
+ */
 func tarFile(fileContent []byte, basePath string, fileMode int64) (*bytes.Buffer, error) {
 	buffer := &bytes.Buffer{}
 
@@ -437,22 +807,4 @@ func tarFile(fileContent []byte, basePath string, fileMode int64) (*bytes.Buffer
 	}
 
 	return buffer, nil
-}
-
-func ValidateAndResolveIP(bindIP string) (string, error) {
-	if bindIP == "" {
-		return "", errors.New("bind ip cannot be empty")
-	}
-
-	ip := net.ParseIP(bindIP)
-	if ip == nil {
-		// Check if bindIP is a valid domain name
-		ip, err := net.LookupHost(bindIP)
-		if err != nil {
-			return "", errors.New("bind ip is not a valid IP address or a domain name that resolves to an IP address")
-		}
-		return ip[0], nil
-	}
-
-	return ip.String(), nil
 }

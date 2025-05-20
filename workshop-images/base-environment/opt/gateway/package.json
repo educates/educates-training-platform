@@ -36,7 +36,7 @@
     "matcher": "^5.0.0",
     "minimist": ">=1.2.7",
     "morgan": "^1.10.0",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.0.0",
     "node-pty": "^1.0.0",
     "path": "^0.12.7",
     "path-parse": ">=1.0.7",

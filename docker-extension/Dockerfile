@@ -19,6 +19,7 @@ RUN npm run build
 FROM bitnami/minideb:bookworm
 
 ARG TARGETARCH
+RUN echo $TARGETARCH
 
 LABEL org.opencontainers.image.title="Educates Docker Desktop Extension" \
     org.opencontainers.image.description="Spin up a local Educates Training Platform workshop" \

@@ -1,0 +1,41 @@
+# Docker Extension Build System
+
+# Variables
+REPOSITORY := env(IMAGE_REPOSITORY, "localhost:5001")
+IMAGE := REPOSITORY + "/educates-docker-extension"
+TAG := env(PACKAGE_VERSION, "latest")
+BUILDER := "buildx-multi-arch"
+DEV_UI_SOURCE := "http://localhost:3000"
+
+# Show available recipes
+help:
+    @just --list
+
+# Build service image to be deployed as a desktop extension
+build-docker-extension repository=REPOSITORY tag=TAG:
+    docker buildx build --build-arg REPOSITORY={{repository}} --build-arg TAG={{tag}} --tag={{IMAGE}}:{{tag}} {{source_directory()}}
+    docker tag {{IMAGE}}:{{tag}} educates-docker-extension:latest
+
+# Install the extension
+install-docker-extension repository=REPOSITORY tag=TAG: (build-docker-extension repository tag)
+    docker extension install --force educates-docker-extension:latest
+
+# Update the extension
+update-docker-extension repository=REPOSITORY tag=TAG: (build-docker-extension repository tag)
+    docker extension update --force educates-docker-extension:latest
+
+# Enable debug in the extension
+docker-extension-debug:
+    docker extension dev debug educates-docker-extension:latest
+
+# Replace the UI source of the extension
+docker-extension-source dev_ui_source=DEV_UI_SOURCE:
+    docker extension dev ui-source educates-docker-extension:latest {{dev_ui_source}}
+
+# Enable development mode (source + debug)
+docker-extension-dev-enable: docker-extension-source docker-extension-debug
+
+# Reset development status of the extension
+docker-extension-dev-reset:
+    docker extension dev reset educates-docker-extension:latest
+

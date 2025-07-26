@@ -1,0 +1,23 @@
+# Documentation
+
+create-docs-venv:
+    python3 -m venv {{source_directory()}}/venv
+    {{source_directory()}}/venv/bin/pip install -r {{source_directory()}}/requirements.txt
+
+build-project-docs: create-docs-venv
+    #!/usr/bin/env bash
+    source {{source_directory()}}/venv/bin/activate && make -C project-docs html
+
+open-project-docs:
+    #!/usr/bin/env bash
+    if command -v open >/dev/null 2>&1; then
+        open {{source_directory()}}/_build/html/index.html
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open {{source_directory()}}/_build/html/index.html
+    else
+        echo "Cannot open browser. Please open {{source_directory()}}/_build/html/index.html manually"
+    fi
+
+clean-project-docs:
+    rm -rf {{source_directory()}}/venv
+    rm -rf {{source_directory()}}/_build

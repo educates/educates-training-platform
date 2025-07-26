@@ -1,0 +1,31 @@
+# Training Portal Build System
+
+# Default recipe
+default:
+
+# Create Python virtual environment
+venv:
+    python3.10 -m venv venv
+
+# Update Python packages
+update-packages: venv
+    venv/bin/pip install -r requirements.txt
+
+# Collect static files
+static: venv update-packages
+    venv/bin/python src/manage.py collectstatic --no-input
+
+# Build the project
+build-project: venv update-packages static
+
+# Build Django migrations
+build-migrations: venv update-packages
+    venv/bin/python src/manage.py makemigrations
+
+# Clean project artifacts
+clean-project:
+    rm -rf src/project/__pycache__ src/project/*/__pycache__
+    rm -rf src/project/*/*/__pycache__ src/project/*/*/*/__pycache__
+    rm -f data/db.sqlite3 data/secret-key.txt
+    rm -rf src/static
+    rm -rf venv

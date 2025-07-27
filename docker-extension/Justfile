@@ -1,9 +1,20 @@
 # Docker Extension Build System
+#
+# Usage Examples:
+#   just build-docker-extension                                                       # Build with default values (localhost:5001, latest)
+#   just --set REPOSITORY "myregistry.com" build-docker-extension                     # Build with custom repository
+#   just --set TAG "v1.0.0" build-docker-extension                                    # Build with custom tag
+#   just --set REPOSITORY "myregistry.com" --set TAG "v1.0.0" build-docker-extension  # Custom repo and tag
+#   just install-docker-extension                                                     # Install extension with default values
+#   just update-docker-extension                                                      # Update extension with default values
+#   just docker-extension-dev-enable                                                  # Enable development mode (debug + source)
+#   just --set DEV_UI_SOURCE "http://localhost:3001" docker-extension-source          # Use custom UI source
+#   just --list                                                                       # Show all available recipes
 
 # Variables
-REPOSITORY := env(IMAGE_REPOSITORY, "localhost:5001")
+REPOSITORY := "localhost:5001"
 IMAGE := REPOSITORY + "/educates-docker-extension"
-TAG := env(PACKAGE_VERSION, "latest")
+TAG := "latest"
 BUILDER := "buildx-multi-arch"
 DEV_UI_SOURCE := "http://localhost:3000"
 
@@ -12,16 +23,16 @@ help:
     @just --list
 
 # Build service image to be deployed as a desktop extension
-build-docker-extension repository=REPOSITORY tag=TAG:
-    docker buildx build --build-arg REPOSITORY={{repository}} --build-arg TAG={{tag}} --tag={{IMAGE}}:{{tag}} {{source_directory()}}
-    docker tag {{IMAGE}}:{{tag}} educates-docker-extension:latest
+build-docker-extension:
+    docker buildx build --build-arg REPOSITORY={{REPOSITORY}} --build-arg TAG={{TAG}} --tag={{IMAGE}}:{{TAG}} {{source_directory()}}
+    docker tag {{IMAGE}}:{{TAG}} educates-docker-extension:latest
 
 # Install the extension
-install-docker-extension repository=REPOSITORY tag=TAG: (build-docker-extension repository tag)
+install-docker-extension: (build-docker-extension)
     docker extension install --force educates-docker-extension:latest
 
 # Update the extension
-update-docker-extension repository=REPOSITORY tag=TAG: (build-docker-extension repository tag)
+update-docker-extension: (build-docker-extension)
     docker extension update --force educates-docker-extension:latest
 
 # Enable debug in the extension

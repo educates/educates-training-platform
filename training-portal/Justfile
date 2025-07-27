@@ -1,7 +1,17 @@
 # Training Portal Build System
+#
+# Usage Examples:
+#   just                                    # Run default recipe (build-project)
+#   just build-project                      # Build the complete project (venv + packages + static files)
+#   just venv                               # Create Python virtual environment only
+#   just update-packages                    # Update Python packages (creates venv if needed)
+#   just static                             # Collect static files (builds everything if needed)
+#   just build-migrations                   # Build Django migrations
+#   just clean-project                      # Clean all build artifacts
+#   just --list                             # Show all available recipes
 
 # Default recipe
-default:
+default: build-project
 
 # Create Python virtual environment
 venv:

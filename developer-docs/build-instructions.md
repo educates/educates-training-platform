@@ -100,48 +100,48 @@ Building Educates platform images
 To build the container images for the Educates training platform you can run:
 
 ```
-make push-core-images
+just push-core-images
 ```
 
 This will trigger the building of the container images and push the resulting images to the local docker image registry.
 
-Targets for make are also available for building and pushing to the local docker image registry individual container images.
+Targets for just are also available for building and pushing to the local docker image registry individual container images.
 
 ```
-make push-session-manager
-make push-secrets-manager
-make push-training-portal
+just push-session-manager
+just push-secrets-manager
+just push-training-portal
 ...
 ```
 
-See the [Makefile](../Makefile) for more details of the make targets that are available.
+See the [justfile](../justfile) for more details of the just targets that are available.
 
 Once the container images have been built and pushed to the local docker image registry, you can then deploy everything by running:
 
 ```
-make deploy-platform
+just deploy-platform
 ```
 
 This will perform an install directly from configuration files in the current directory. If needing to test that the `educates-installer` package bundle used by the Educates CLI installer and also `kapp-controller`, is correct, you should instead use the commands:
 
 ```
-make push-all-images
-make push-installer-bundle
-make deploy-platform-bundle
+just push-all-images
+just push-installer-bundle
+just deploy-platform-app
 ```
 
-The `make push-all-images` command will make sure that optional workshop base images as well as the core Educates platform are built. It is necessary to build all images when testing the package bundle as the package generated will include image hashes for all images.
+The `just push-all-images` command will make sure that optional workshop base images as well as the core Educates platform are built. It is necessary to build all images when testing the package bundle as the package generated will include image hashes for all images.
 
-To delete everything deployed using the `educates-installer` package when using the `make` command, use:
+To delete everything deployed using the `educates-installer` package when using the `just` command, use:
 
 ```
-make delete-platform
+just delete-platform
 ```
 
 or:
 
 ```
-make delete-platform-bundle
+just delete-platform-app
 ```
 
 as appropriate.
@@ -149,28 +149,28 @@ as appropriate.
 Building additional workshop images
 -----------------------------------
 
-When using `make push-core-images`, it will only build the main workshop base image. That is, it will not build workshop base images for Java and Python.
+When using `just push-core-images`, it will only build the main workshop base image. That is, it will not build workshop base images for Java and Python.
 
 If you want to build all workshop base images you can instead run:
 
 ```
-make push-all-images
+just push-all-images
 ```
 
 Note that this will consume a lot more storage space in the local docker environment. In general you will probably want to configure the local docker environment with 100Gi or more of storage space to be used across local image caching, the local docker image registry and the Kubernetes cluster itself.
 
-As well as the `push-all-images`, make targets are also supplied for building and pushing to the local docker image registry individual workshop base images.
+As well as the `push-all-images`, just recipes are also supplied for building and pushing to the local docker image registry individual workshop base images.
 
 ```
-make push-base-environment
-make push-jdk8-environment
-make push-jdk11-environment
-make push-jdk17-environment
-make push-jdk21-environment
-make push-conda-environment
+just push-base-environment
+just push-jdk8-environment
+just push-jdk11-environment
+just push-jdk17-environment
+just push-jdk21-environment
+just push-conda-environment
 ```
 
-See the [Makefile](../Makefile) for more details of the make targets that are available.
+See the [justfile](../justfile) for more details of the just recipes that are available.
 
 Building the Educates CLI program
 ---------------------------------
@@ -178,7 +178,7 @@ Building the Educates CLI program
 If needing to work on the `educates` CLI it can be built using the command:
 
 ```
-make build-client-programs
+just build-client-programs
 ```
 
 You can then run the `educates` CLI program from the `client-programs/bin` subdirectory. The name of the compiled CLI will incorporate the target system and machine architecture, e.g.: `educates-linux-amd64`.
@@ -205,7 +205,7 @@ Commands such as `docker image prune` can prune images from the local docker bui
 To clean up available storage space across the local docker image build cache, the local docker image registry, and also any local file system space used to to local source code builds you can run:
 
 ```
-make prune-all
+just prune-all
 ```
 
 Note that this will run `docker system prune` rather than `docker image prune`, which will also result in unused docker networks and volumes being cleaned up.
@@ -218,6 +218,6 @@ Building docs.educates.dev locally
 If you're working on updates or additions to the project documentation served at [docs.educates.dev](https://docs.educates.dev), you might want to preview your changes locally before opening a PR. To build and preview the docs locally, you can run:
 
 ```
-make build-project-docs
-make open-project-docs
+just build-project-docs
+just open-project-docs
 ```

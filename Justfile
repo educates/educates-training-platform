@@ -1,11 +1,27 @@
 # Educates Training Platform Build System
+# 
+# Usage Examples:
+#   just                                    # Run default recipe (push-all-images + build-client-programs)
+#   just build-all-images                   # Build all container images
+#   just push-core-images                   # Build and push core platform images
+#   just deploy-platform                    # Deploy platform (requires developer-testing/educates-installer-values.yaml)
+#   just build-client-programs              # Build CLI tools
+#   just build-project-docs                 # Build documentation
+#   just prune-all                          # Clean up all artifacts
+#   just --list                             # Show all available recipes
+#
+# Variable Override Examples:
+#   just --set IMAGE_REPOSITORY "myregistry.com:5000" push-core-images    # Use custom registry
+#   just --set PACKAGE_VERSION "v1.2.3" build-all-images                  # Use custom version tag
+#   just --set IMAGE_REPOSITORY "prod.registry.com" --set PACKAGE_VERSION "v2.0.0" push-all-images  # Custom registry and version
+#
 import 'docker-extension/Justfile'
 import 'project-docs/Justfile'
 
 # Variables
 IMAGE_REPOSITORY := "localhost:5001"
 PACKAGE_VERSION := "latest"
-RELEASE_VERSION := "0.0.1"
+INSTALER_VERSION := "0.0.1"
 
 # System detection
 UNAME_SYSTEM := `uname -s | tr '[:upper:]' '[:lower:]'`
@@ -154,9 +170,9 @@ verify-installer-config:
 push-installer-bundle:
     ytt -f carvel-packages/installer/config/images.yaml -f carvel-packages/installer/config/schema.yaml -v imageRegistry.host={{IMAGE_REPOSITORY}} -v version={{PACKAGE_VERSION}} > carvel-packages/installer/bundle/kbld/kbld-images.yaml
     cat carvel-packages/installer/bundle/kbld/kbld-images.yaml | kbld -f - --imgpkg-lock-output carvel-packages/installer/bundle/.imgpkg/images.yml
-    imgpkg push -b {{IMAGE_REPOSITORY}}/educates-installer:{{RELEASE_VERSION}} -f carvel-packages/installer/bundle
+    imgpkg push -b {{IMAGE_REPOSITORY}}/educates-installer:{{INSTALER_VERSION}} -f carvel-packages/installer/bundle
     mkdir -p developer-testing
-    ytt -f carvel-packages/installer/config/app.yaml -f carvel-packages/installer/config/schema.yaml -v imageRegistry.host={{IMAGE_REPOSITORY}} -v version={{RELEASE_VERSION}} > developer-testing/educates-installer-app.yaml
+    ytt -f carvel-packages/installer/config/app.yaml -f carvel-packages/installer/config/schema.yaml -v imageRegistry.host={{IMAGE_REPOSITORY}} -v version={{INSTALER_VERSION}} > developer-testing/educates-installer-app.yaml
 
 # Platform deployment
 deploy-platform:

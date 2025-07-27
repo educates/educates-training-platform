@@ -21,6 +21,9 @@ spec:
   session:
     namespaces:
       budget: medium
+      security:
+        token:
+          enabled: {{ .NoKubernetesAccess }}      
     applications:
       terminal:
         enabled: true

@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/usr/src/app/.npm \
 COPY ui /ui
 RUN npm run build
 
-FROM bitnami/minideb:bookworm
+FROM debian:trixie-slim
 
 ARG TARGETARCH
 

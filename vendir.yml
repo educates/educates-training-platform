@@ -9,7 +9,7 @@ directories:
       - path: "."
         githubRelease:
           slug: kyverno/kyverno
-          tag: v1.11.5
+          tag: v1.15.1
           assetNames:
             - install.yaml
           disableAutoChecksumValidation: true
@@ -20,9 +20,9 @@ directories:
       - path: "."
         git:
           url: https://github.com/kyverno/policies
-          ref: origin/release-1.11
+          ref: origin/release-1.15
         includePaths:
-          - "pod-security/restricted/**"
+          - "pod-security-cel/restricted/**"
         excludePaths:
           - "**/kustomization.yaml"
           - "**/kyverno-test.yaml"
@@ -31,16 +31,16 @@ directories:
           - "**/pod*.yaml"
           - "**/resource.yaml"
           - "**/artifacthub-pkg.yml"
-          - "**/.chainsaw-test"
-          - "**/.kyverno-test"
+          - "**/.chainsaw-test/**"
+          - "**/.kyverno-test/**"
   - path: carvel-packages/installer/bundle/config/ytt/_ytt_lib/packages/educates/_ytt_lib/kyverno-baseline/upstream
     contents:
       - path: "."
         git:
           url: https://github.com/kyverno/policies
-          ref: origin/release-1.11
+          ref: origin/release-1.15
         includePaths:
-          - "pod-security/baseline/**"
+          - "pod-security-cel/baseline/**"
         excludePaths:
           - "**/kustomization.yaml"
           - "**/kyverno-test.yaml"
@@ -49,27 +49,27 @@ directories:
           - "**/pod*.yaml"
           - "**/resource.yaml"
           - "**/artifacthub-pkg.yml"
-          - "**/.chainsaw-test"
-          - "**/.kyverno-test"
+          - "**/.chainsaw-test/**"
+          - "**/.kyverno-test/**"
   - path: carvel-packages/installer/bundle/config/ytt/_ytt_lib/packages/educates/_ytt_lib/kyverno-policies/upstream
     contents:
       - path: "."
         git:
           url: https://github.com/kyverno/policies
-          ref: origin/release-1.11
+          ref: origin/release-1.15
         includePaths:
-          - "best-practices/disallow-empty-ingress-host/disallow-empty-ingress-host.yaml"
-          - "best-practices/disallow-cri-sock-mount/disallow-cri-sock-mount.yaml"
-          - "best-practices/restrict-service-external-ips/restrict-service-external-ips.yaml"
-          - "best-practices/restrict-node-port/restrict-node-port.yaml"
-          - "nginx-ingress/disallow-ingress-nginx-custom-snippets/disallow-ingress-nginx-custom-snippets.yaml"
-          - "nginx-ingress/restrict-annotations/restrict-annotations.yaml"
-          - "nginx-ingress/restrict-ingress-paths/restrict-ingress-paths.yaml"
-          - "other/b-d/disallow-localhost-services/disallow-localhost-services.yaml"
-          - "other/m-q/prevent-cr8escape/prevent-cr8escape.yaml"
-          #! - "other/res/restrict-ingress-defaultbackend/restrict-ingress-defaultbackend.yaml"
-          - "other/res/restrict-loadbalancer/restrict-loadbalancer.yaml"
-          #! - "other/s-z/unique-ingress-host-and-path/unique-ingress-host-and-path.yaml"
+          - "best-practices-cel/disallow-empty-ingress-host/disallow-empty-ingress-host.yaml"
+          - "best-practices-cel/disallow-cri-sock-mount/disallow-cri-sock-mount.yaml"
+          - "best-practices-cel/restrict-service-external-ips/restrict-service-external-ips.yaml"
+          - "best-practices-cel/restrict-node-port/restrict-node-port.yaml"
+          - "nginx-ingress-cel/disallow-ingress-nginx-custom-snippets/disallow-ingress-nginx-custom-snippets.yaml"
+          - "nginx-ingress-cel/restrict-annotations/restrict-annotations.yaml"
+          - "nginx-ingress-cel/restrict-ingress-paths/restrict-ingress-paths.yaml"
+          - "other-cel/disallow-localhost-services/disallow-localhost-services.yaml"
+          - "other-cel/prevent-cr8escape/prevent-cr8escape.yaml"
+          #! - "other-cel/restrict-ingress-defaultbackend/restrict-ingress-defaultbackend.yaml"
+          - "other-cel/restrict-loadbalancer/restrict-loadbalancer.yaml"
+          #! - "other-cel/unique-ingress-host-and-path/unique-ingress-host-and-path.yaml"
   - path: carvel-packages/installer/bundle/config/ytt/_ytt_lib/packages/cert-manager/upstream
     contents:
       - path: .

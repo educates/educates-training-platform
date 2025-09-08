@@ -14,9 +14,12 @@ import (
 //go:embed all:files/*
 var workshopTemplates embed.FS
 
+//go:embed all:github/*
+var githubTemplates embed.FS
+
 type InternalTemplate string
 
-func InternalTemplates() []InternalTemplate {
+func ListWorkshopTemplates() []InternalTemplate {
 	files, err := workshopTemplates.ReadDir("files")
 
 	if err != nil {
@@ -32,22 +35,30 @@ func InternalTemplates() []InternalTemplate {
 	return templates
 }
 
-func (t InternalTemplate) Exists() bool {
-	templatePath := path.Join("files", string(t))
+func (t InternalTemplate) exists(templateType string) bool {
+	templatePath := path.Join(templateType, string(t))
 
-	files, err := workshopTemplates.ReadDir(templatePath)
+	var files []os.DirEntry
+	var err error
+
+	switch templateType {
+	case "files":
+		files, err = workshopTemplates.ReadDir(templatePath)
+	case "github":
+		files, err = githubTemplates.ReadDir(templatePath)
+	}
 
 	return err == nil && len(files) != 0
 }
 
-func (t InternalTemplate) IsValid() bool {
+func (t InternalTemplate) IsValid(templateType string) bool {
 	match, _ := regexp.MatchString("^[a-z-]+$", string(t))
 
-	return match && t.Exists()
+	return match && t.exists(templateType)
 }
 
-func (t InternalTemplate) Apply(directory string, parameters map[string]string) error {
-	if !t.IsValid() {
+func (t InternalTemplate) ApplyFiles(directory string, parameters map[string]string) error {
+	if !t.IsValid("files") {
 		return errors.Errorf("internal template %q does not exist", t)
 	}
 
@@ -56,6 +67,18 @@ func (t InternalTemplate) Apply(directory string, parameters map[string]string) 
 	os.MkdirAll(directory, 0775)
 
 	return copyTemplateDir(workshopTemplates, templatePath, directory, parameters)
+}
+
+func (t InternalTemplate) ApplyGitHubAction(directory string, parameters map[string]string) error {
+	if !t.IsValid("github") {
+		return errors.Errorf("internal template %q does not exist", t)
+	}
+
+	templatePath := path.Join("github", string(t))
+
+	os.MkdirAll(directory, 0775)
+
+	return copyTemplateDir(githubTemplates, templatePath, directory, parameters)
 }
 
 func copyTemplateDir(fs embed.FS, src string, dst string, parameters map[string]string) error {

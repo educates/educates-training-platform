@@ -1,5 +1,5 @@
 mod_wsgi==5.0.2
-Django==4.2.22
+Django==4.2.24
 django-registration==3.4
 django-crispy-forms==2.1
 crispy-bootstrap5==2023.10

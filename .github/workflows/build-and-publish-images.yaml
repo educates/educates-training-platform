@@ -819,7 +819,7 @@ jobs:
     name: Publish (cli) image
     runs-on: ubuntu-latest
     needs:
-      - publish-client-programs
+      - publish-workshop-base-image
 
     steps:
       - name: Check out the repository
@@ -880,7 +880,7 @@ jobs:
     name: Extension
     runs-on: ubuntu-latest
     needs:
-      - publish-client-programs
+      - publish-cli-image
 
     steps:
       - name: Check out the repository

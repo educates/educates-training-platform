@@ -103,7 +103,7 @@ To build the container images for the Educates training platform you can run:
 make push-core-images
 ```
 
-NOTE: By default, images will be pushed to a local registry. There's instructions avobe on how to provide a local registry
+NOTE: By default, images will be pushed to a local registry. There's instructions above on how to provide a local registry
 via the Educates cli.
 
 This will trigger the building of the container images and push the resulting images to the local docker image registry.

@@ -157,7 +157,7 @@ endif
 # Push/Load configuration - can be overridden by PUSH_IMAGES env var or make parameter
 ifeq ($(PUSH_IMAGES),false)
 # Load images locally when PUSH_IMAGES is not true (default)
-DOCKER_BUILDER = 
+DOCKER_BUILDER =
 MULTIARCH_PLATFORMS = $(DOCKER_PLATFORM)
 else
 # Push images to registry when PUSH_IMAGES is true

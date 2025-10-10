@@ -103,6 +103,9 @@ To build the container images for the Educates training platform you can run:
 make push-core-images
 ```
 
+NOTE: By default, images will be pushed to a local registry. There's instructions above on how to provide a local registry
+via the Educates cli.
+
 This will trigger the building of the container images and push the resulting images to the local docker image registry.
 
 Targets for make are also available for building and pushing to the local docker image registry individual container images.
@@ -114,7 +117,8 @@ make push-training-portal
 ...
 ```
 
-See the [Makefile](../Makefile) for more details of the make targets that are available.
+See the [Makefile](../Makefile) for more details of the make targets that are available. There are parameters that can be
+set to alter behavior of the Makefile. There's comprehensive documentation at the top of the file.
 
 Once the container images have been built and pushed to the local docker image registry, you can then deploy everything by running:
 

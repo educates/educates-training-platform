@@ -1,10 +1,10 @@
 ARG REPOSITORY=localhost:5001
-ARG CLI_IMAGE_NAME=educates-client-programs
+ARG CLI_IMAGE_NAME=educates-cli
 ARG TAG=latest
 
 FROM ${REPOSITORY}/${CLI_IMAGE_NAME}:${TAG} AS client-programs
 
-FROM --platform=$BUILDPLATFORM node:18.12-alpine3.16 AS client-builder
+FROM node:24-alpine AS client-builder
 WORKDIR /ui
 # cache packages in layer
 COPY ui/package.json /ui/package.json
@@ -17,8 +17,6 @@ COPY ui /ui
 RUN npm run build
 
 FROM debian:trixie-slim
-
-ARG TARGETARCH
 
 LABEL org.opencontainers.image.title="Educates Docker Desktop Extension" \
     org.opencontainers.image.description="Spin up a local Educates Training Platform workshop" \
@@ -46,7 +44,7 @@ apt-get update && \
 apt-get install -y containerd.io docker-ce docker-ce-cli docker-compose-plugin
 EOF
 
-COPY --from=client-programs educates-linux-${TARGETARCH} /educates
+COPY --from=client-programs /educates /educates
 
 COPY docker-compose.yaml .
 COPY metadata.json .

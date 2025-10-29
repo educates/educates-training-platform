@@ -41,7 +41,7 @@ DEV_UI_SOURCE?=http://localhost:3000
 
 build-extension: setup-buildx ## Build service image to be deployed as a desktop extension
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
-	    --builder $(DOCKER_BUILDER) \
+	    $(if $(DOCKER_BUILDER),$(DOCKER_BUILDER)) \
 		-t $(IMAGE_REPOSITORY)/educates-docker-extension:$(PACKAGE_VERSION) \
 		.
 

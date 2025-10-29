@@ -368,12 +368,10 @@ jobs:
           rm -rf /tmp/.buildx-cache-old || true
 
       - name: Dump cache directory sizes
-        # if: ${{ (matrix.image == 'conda-environment') }}
         run: |
           du -ks /tmp/.buildx-cache-* || true
 
       - name: Save Docker cache
-        # if: ${{ (matrix.image == 'conda-environment') }}
         uses: actions/cache/save@v4
         with:
           path: /tmp/.buildx-cache-new
@@ -921,7 +919,7 @@ jobs:
       - name: Calculate variables
         shell: bash
         run: |
-          REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
+          REPOSITORY_TAG=${GITHUB_REF##*/}"
           if [[ "$REPOSITORY_TAG" == *-* ]]; then
             PRERELEASE=true
           else

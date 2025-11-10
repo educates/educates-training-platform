@@ -35,6 +35,21 @@ var (
 
   # Create a new workshop with kubernetes access enabled in the workshop
   educates workshop new my-workshop --with-kubernetes-access
+
+  # Create a new workshop with github action enabled in the workshop
+  educates workshop new my-workshop --with-github-action
+
+  # Create a new workshop with virtual cluster enabled in the workshop
+  educates workshop new my-workshop --with-virtual-cluster
+
+  # Create a new workshop with docker, registry and console enabled in the workshop
+  educates workshop new my-workshop --with-docker --with-registry --with-console
+
+  # Create a new workshop with editor and terminal disabled in the workshop
+  educates workshop new my-workshop --with-editor=false --with-terminal=false
+
+  # Create a new workshop with workshop instructions disabled in the workshop
+  educates workshop new my-workshop --with-workshop-instructions=false
 `
 )
 
@@ -103,11 +118,60 @@ func (p *ProjectInfo) NewWorkshopNewCmd() *cobra.Command {
 		"enable kubernetes access in the workshop",
 	)
 	c.Flags().BoolVarP(
-		&o.AddGitHubAction,
-		"add-github-action",
+		&o.WithGitHubAction,
+		"with-github-action",
 		"",
 		false,
-		"add GitHub action to the generated workshop",
+		"add GitHub action to the generated workshop to publish the workshop",
+	)
+	c.Flags().BoolVarP(
+		&o.WithVirtualCluster,
+		"with-virtual-cluster",
+		"",
+		false,
+		"enable virtual cluster in the workshop",
+	)
+	c.Flags().BoolVarP(
+		&o.WithDocker,
+		"with-docker",
+		"",
+		false,
+		"enable docker in the workshop",
+	)
+	c.Flags().BoolVarP(
+		&o.WithRegistry,
+		"with-registry",
+		"",
+		false,
+		"enable registry in the workshop",
+	)
+	c.Flags().BoolVarP(
+		&o.WithConsole,
+		"with-console",
+		"",
+		false,
+		"enable web console/dashboard in the workshop",
+	)
+	c.Flags().BoolVarP(
+		&o.WithEditor,
+		"with-editor",
+		"",
+		true,
+		"enable editor in the workshop",
+	)
+	c.Flags().BoolVarP(
+		&o.WithTerminal,
+		"with-terminal",
+		"",
+		true,
+		"enable terminal in the workshop",
+	)
+	c.Flags().BoolVarP(
+		&o.WithWorkshopInstructions,
+		"with-workshop-instructions",
+		"",
+		true,
+		"enable workshop instructions in the workshop. If disabled, the workshop instructions will be disabled and only the workshop workarea will be displayed.",
 	)
 
 	return c

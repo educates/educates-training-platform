@@ -13,15 +13,15 @@ import (
 )
 
 type WorkshopNewOptions struct {
-	Template           string
-	Name               string
-	Title              string
-	Description        string
-	Image              string
-	TargetDirectory    string
-	Overwrite          bool
-	NoKubernetesAccess bool
-	AddGitHubAction    bool
+	Template             string
+	Name                 string
+	Title                string
+	Description          string
+	Image                string
+	TargetDirectory      string
+	Overwrite            bool
+	WithKubernetesAccess bool
+	AddGitHubAction      bool
 }
 
 // If o.TargetDirectory is provided, we will use that as the directory to be used, otherwise a new one will be created
@@ -66,11 +66,11 @@ func (o *WorkshopNewOptions) Run(args []string) error {
 	}
 
 	parameters := map[string]string{
-		"WorkshopName":        name,
-		"WorkshopTitle":       o.Title,
-		"WorkshopDescription": o.Description,
-		"WorkshopImage":       o.Image,
-		"NoKubernetesAccess":  strconv.FormatBool(o.NoKubernetesAccess),
+		"WorkshopName":         name,
+		"WorkshopTitle":        o.Title,
+		"WorkshopDescription":  o.Description,
+		"WorkshopImage":        o.Image,
+		"WithKubernetesAccess": strconv.FormatBool(o.WithKubernetesAccess),
 	}
 
 	template := templates.InternalTemplate(o.Template)

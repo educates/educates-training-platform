@@ -33,8 +33,8 @@ var (
   # Create a new workshop using the classic template
   educates workshop new my-workshop --template classic
 
-  # Create a new workshop with no kubernetes access enabled in the workshop
-  educates workshop new my-workshop --no-kubernetes-access
+  # Create a new workshop with kubernetes access enabled in the workshop
+  educates workshop new my-workshop --with-kubernetes-access
 `
 )
 
@@ -96,11 +96,11 @@ func (p *ProjectInfo) NewWorkshopNewCmd() *cobra.Command {
 		"overwrite existing files in the target directory. If not provided, the user will be prompted to confirm the operation.",
 	)
 	c.Flags().BoolVarP(
-		&o.NoKubernetesAccess,
-		"no-kubernetes-access",
+		&o.WithKubernetesAccess,
+		"with-kubernetes-access",
 		"",
 		false,
-		"disable kubernetes access in the workshop",
+		"enable kubernetes access in the workshop",
 	)
 	c.Flags().BoolVarP(
 		&o.AddGitHubAction,

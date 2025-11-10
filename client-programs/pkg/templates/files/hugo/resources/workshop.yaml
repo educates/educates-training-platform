@@ -23,7 +23,7 @@ spec:
       budget: medium
       security:
         token:
-          enabled: {{ not .NoKubernetesAccess }}      
+          enabled: {{ .WithKubernetesAccess }}      
     applications:
       terminal:
         enabled: true

@@ -27,6 +27,11 @@ jobs:
     name: Publish
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     strategy:
       fail-fast: false
       matrix:
@@ -148,6 +153,11 @@ jobs:
     name: Publish (base-environment)
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     steps:
       - name: Free Disk Space
         uses: endersonmenezes/free-disk-space@v2
@@ -255,6 +265,12 @@ jobs:
   publish-workshop-images:
     name: Publish
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     needs:
       - publish-workshop-base-image
 
@@ -380,6 +396,12 @@ jobs:
   publish-carvel-bundles:
     name: Bundle
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     needs:
       - publish-generic-images
       - publish-workshop-images
@@ -697,6 +719,12 @@ jobs:
   publish-client-programs:
     name: Programs
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     needs:
       - build-client-programs-linux-amd64
       - build-client-programs-linux-arm64
@@ -762,6 +790,12 @@ jobs:
   publish-cli-image:
     name: Publish (cli) image
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     needs:
       - publish-workshop-base-image
 
@@ -834,6 +868,12 @@ jobs:
   publish-docker-extension:
     name: Extension
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     needs:
       - publish-cli-image
 
@@ -919,7 +959,7 @@ jobs:
       - name: Calculate variables
         shell: bash
         run: |
-          REPOSITORY_TAG=${GITHUB_REF##*/}"
+          REPOSITORY_TAG="${GITHUB_REF##*/}"
           if [[ "$REPOSITORY_TAG" == *-* ]]; then
             PRERELEASE=true
           else

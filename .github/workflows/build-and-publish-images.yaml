@@ -16,8 +16,6 @@ on:
       - "[0-9]+.[0-9]+.[0-9]+-alpha.[0-9]+"
       - "[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+"
       - "[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+"
-  pull_request:
-    types: [opened, reopened]
 
 env:
   GO_VERSION: "1.23.7"
@@ -113,7 +111,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
             type=sha
 
       - name: Login to GitHub container registry
@@ -228,7 +225,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
             type=sha
 
       - name: Login to GitHub container registry
@@ -355,7 +351,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
             type=sha
 
       - name: Login to GitHub container registry
@@ -422,7 +417,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
 
       - name: Calculate variables
         shell: bash
@@ -552,7 +546,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
 
       - name: Build educates client program
         shell: bash
@@ -599,7 +592,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
 
       - name: Build educates client program
         shell: bash
@@ -646,7 +638,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
 
       - name: Build educates client program
         shell: bash
@@ -698,7 +689,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
 
       - name: Build educates client program
         shell: bash
@@ -768,7 +758,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
 
       - name: Calculate variables
         shell: bash
@@ -844,7 +833,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
             type=sha
 
       - name: Login to GitHub container registry
@@ -922,7 +910,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
             type=sha
 
       - name: Login to GitHub container registry

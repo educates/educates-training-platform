@@ -52,7 +52,7 @@ func (o *FilesPublishOptions) Run(args []string) error {
 	fileInfo, err := os.Stat(workshopDir)
 
 	if err != nil || !fileInfo.IsDir() {
-		return errors.New("workshop directory does not exist or path is not a workshopDir")
+		return errors.New("workshop directory does not exist or path is not a workshop directory")
 	}
 
 	return o.Publish(workshopDir)
@@ -198,7 +198,7 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 			syncOptions.Directories = nil
 			syncOptions.Files = []string{filepath.Join(tempDir, "vendir.yml")}
 
-			// Note that Chdir here actually changes the process working workshopDir.
+			// Note that Chdir here actually changes the process working directory.
 
 			syncOptions.LockFile = filepath.Join(tempDir, "lock-file")
 			syncOptions.Locked = false
@@ -212,7 +212,7 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 			}
 		}
 
-		// Restore working workshopDir as was changed.
+		// Restore working directory as was changed.
 
 		os.Chdir((workingDirectory))
 
@@ -220,7 +220,7 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 		includePaths = []string{rootDirectory}
 	}
 
-	// Now publish workshop workshopDir contents as OCI image artifact.
+	// Now publish workshop directory contents as OCI image artifact.
 
 	fmt.Printf("Publishing workshop files to %q.\n", image)
 
@@ -254,7 +254,7 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 			unstructured.SetNestedField(workshop.Object, o.WorkshopVersion, "spec", "version")
 		}
 
-		// Remove the publish section as will not be accurate after publising.
+		// Remove the publish section as will not be accurate after publishing.
 
 		unstructured.RemoveNestedField(workshop.Object, "spec", "publish")
 

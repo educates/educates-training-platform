@@ -96,7 +96,12 @@ export default function WorkshopsTable({ rows, onStop, showPort }: WorkshopsTabl
                     </TableCell>
                     {showPort && (
                       <TableCell align="left">
-                        <Typography variant="body1">{row.url.split(":")[2]}</Typography>
+                        <Typography variant="body1">
+                          {(() => {
+                            const segments = row.url.split(":");
+                            return segments.length > 2 && segments[2] ? segments[2] : "";
+                          })()}
+                        </Typography>
                       </TableCell>
                     )}
                     <TableCell align="left">{row.source}</TableCell>

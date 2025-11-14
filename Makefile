@@ -345,8 +345,8 @@ build-client-programs: client-programs-educates
 push-client-programs: build-client-programs
 	(cd client-programs; GOOS=linux GOARCH=amd64 go build -o bin/educates-linux-amd64 cmd/educates/main.go)
 	(cd client-programs; GOOS=linux GOARCH=arm64 go build -o bin/educates-linux-arm64 cmd/educates/main.go)
-	(cd client-programs; GOOS=linux GOARCH=amd64 go build -o bin/educates-linux-amd64 cmd/educates/main.go)
-	(cd client-programs; GOOS=linux GOARCH=arm64 go build -o bin/educates-linux-arm64 cmd/educates/main.go)
+	(cd client-programs; GOOS=darwin GOARCH=amd64 go build -o bin/educates-darwin-amd64 cmd/educates/main.go)
+	(cd client-programs; GOOS=darwin GOARCH=arm64 go build -o bin/educates-darwin-arm64 cmd/educates/main.go)
 	imgpkg push -i $(IMAGE_REPOSITORY)/educates-client-programs:$(PACKAGE_VERSION) -f client-programs/bin
 
 build-cli-image:
@@ -367,7 +367,7 @@ update-docker-extension : build-docker-extension
 project-docs/venv :
 	python3 -m venv project-docs/venv
 	project-docs/venv/bin/pip install -r project-docs/requirements.txt
- 
+
 build-project-docs : project-docs/venv
 	source project-docs/venv/bin/activate && make -C project-docs html
 

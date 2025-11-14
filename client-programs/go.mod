@@ -15,7 +15,7 @@ require (
 	carvel.dev/vendir v0.44.0
 	carvel.dev/ytt v0.52.1
 	github.com/adrg/xdg v0.5.3
-	github.com/compose-spec/compose-go v1.20.2
+	github.com/compose-spec/compose-go/v2 v2.9.1
 	github.com/cppforlife/go-cli-ui v0.0.0-20250603184554-47874c9078ad
 	// Every time we update below version, we need to update Docker Desktop client to match the required version
 	// or else downgrade CLI support via export DOCKER_API_VERSION=1.xx
@@ -38,7 +38,7 @@ require (
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubectl v0.34.2
 	sigs.k8s.io/controller-runtime v0.22.4
-	sigs.k8s.io/kind v0.29.0
+	sigs.k8s.io/kind v0.30.0
 	sigs.k8s.io/yaml v1.6.0
 )
 

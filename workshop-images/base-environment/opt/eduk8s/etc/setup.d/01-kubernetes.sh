@@ -54,13 +54,19 @@ case "$KUBECTL_VERSION" in
 1.32)
     KUBECTL_VERSION=1.32
     ;;
+1.33)
+    KUBECTL_VERSION=1.33
+    ;;
+1.34)
+    KUBECTL_VERSION=1.34
+    ;;
 1.3*)
-    KUBECTL_VERSION=1.32
+    KUBECTL_VERSION=1.34
     ;;
 esac
 
 if [ -z "$KUBECTL_VERSION" ]; then
-    KUBECTL_VERSION=1.32
+    KUBECTL_VERSION=1.34
 fi
 
 # Restrict access permissions on kubeconfig file as some clients will complain

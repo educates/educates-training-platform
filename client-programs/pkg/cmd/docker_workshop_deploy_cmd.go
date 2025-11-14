@@ -16,8 +16,8 @@ import (
 	"time"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	composeloader "github.com/compose-spec/compose-go/loader"
-	composetypes "github.com/compose-spec/compose-go/types"
+	composeloader "github.com/compose-spec/compose-go/v2/loader"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/docker/client"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
@@ -280,6 +280,14 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 		networks["educates"] = &composetypes.ServiceNetworkConfig{}
 	}
 
+	var extraHostsList composetypes.HostsList
+	if len(workshopExtraHosts) > 0 {
+		extraHostsList = make(composetypes.HostsList, len(workshopExtraHosts))
+		for hostname, ip := range workshopExtraHosts {
+			extraHostsList[hostname] = []string{ip}
+		}
+	}
+
 	workshopServiceConfig := composetypes.ServiceConfig{
 		Name:        "workshop",
 		Image:       workshopImageName,
@@ -289,7 +297,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 		Volumes:     workshopVolumesConfig,
 		Environment: composetypes.NewMappingWithEquals(workshopEnvironment),
 		Labels:      composetypes.Labels(workshopLabels),
-		ExtraHosts:  composetypes.HostsList(workshopExtraHosts),
+		ExtraHosts:  extraHostsList,
 		DependsOn:   composetypes.DependsOnConfig{},
 		Networks:    networks,
 	}
@@ -320,13 +328,15 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 		}
 	}
 
-	workshopServices := []composetypes.ServiceConfig{workshopServiceConfig}
+	workshopServices := composetypes.Services{
+		"workshop": workshopServiceConfig,
+	}
 
 	composeConfig := composetypes.Project{
 		Name:     originalName,
 		Services: workshopServices,
 		Networks: composetypes.Networks{
-			"educates": {External: composetypes.External{External: true}},
+			"educates": composetypes.NetworkConfig{Name: "educates", External: true},
 		},
 		Volumes: composetypes.Volumes{
 			"workshop": composetypes.VolumeConfig{},
@@ -334,12 +344,12 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 	}
 
 	if workshopComposeProject != nil {
-		for _, extraService := range workshopComposeProject.Services {
+		for serviceName, extraService := range workshopComposeProject.Services {
 			extraService.Ports = []composetypes.ServicePortConfig{}
 
-			composeConfig.Services = append(composeConfig.Services, extraService)
+			composeConfig.Services[serviceName] = extraService
 
-			workshopServiceConfig.DependsOn[extraService.Name] = composetypes.ServiceDependency{
+			workshopServiceConfig.DependsOn[serviceName] = composetypes.ServiceDependency{
 				Condition: composetypes.ServiceConditionStarted,
 			}
 		}
@@ -352,7 +362,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 	}
 
 	if o.Cluster != "" {
-		composeConfig.Networks["kind"] = composetypes.NetworkConfig{External: composetypes.External{External: true}}
+		composeConfig.Networks["kind"] = composetypes.NetworkConfig{Name: "kind", External: true}
 	}
 
 	composeConfigBytes, err := yaml.Marshal(&composeConfig)
@@ -904,10 +914,11 @@ func extractWorkshopComposeConfig(workshop *unstructured.Unstructured) (*compose
 			ConfigFiles: []composetypes.ConfigFile{configFiles},
 		}
 
-		return composeloader.Load(composeConfigDetails, func(options *composeloader.Options) {
+		return composeloader.LoadWithContext(context.Background(), composeConfigDetails, func(options *composeloader.Options) {
 			options.SkipConsistencyCheck = true
 			options.SkipNormalization = true
 			options.ResolvePaths = false
+			options.SkipValidation = true
 		})
 	}
 

@@ -15,7 +15,7 @@ require (
 	carvel.dev/vendir v0.44.0
 	carvel.dev/ytt v0.52.1
 	github.com/adrg/xdg v0.5.3
-	github.com/compose-spec/compose-go v1.20.2
+	github.com/compose-spec/compose-go/v2 v2.9.1
 	github.com/cppforlife/go-cli-ui v0.0.0-20250603184554-47874c9078ad
 	// Every time we update below version, we need to update Docker Desktop client to match the required version
 	// or else downgrade CLI support via export DOCKER_API_VERSION=1.xx
@@ -38,7 +38,7 @@ require (
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubectl v0.34.2
 	sigs.k8s.io/controller-runtime v0.22.4
-	sigs.k8s.io/kind v0.29.0
+	sigs.k8s.io/kind v0.30.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -186,7 +186,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/crypto v0.44.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.33.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect

@@ -43,7 +43,7 @@ KUBECTL_VERSION=$(kubectl version -o json | jq -re '[.serverVersion.major,.serve
 
 case "$KUBECTL_VERSION" in
 1.2*)
-    KUBECTL_VERSION=1.30
+    KUBECTL_VERSION=1.31
     ;;
 1.3[01])
     KUBECTL_VERSION=1.31

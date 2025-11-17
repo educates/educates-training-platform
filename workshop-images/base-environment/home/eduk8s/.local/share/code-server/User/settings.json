@@ -8,5 +8,6 @@
     "update.mode": "none",
     "python.linting.enabled": false,
     "security.workspace.trust.enabled": false,
-    "telemetry.telemetryLevel": "off"
+    "telemetry.telemetryLevel": "off",
+    "chat.disableAIFeatures": true
 }

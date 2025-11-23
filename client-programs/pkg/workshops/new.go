@@ -13,22 +13,21 @@ import (
 )
 
 type WorkshopNewOptions struct {
-	Template                 string
-	Name                     string
-	Title                    string
-	Description              string
-	Image                    string
-	TargetDirectory          string
-	Overwrite                bool
-	WithKubernetesAccess     bool
-	WithGitHubAction         bool
-	WithVirtualCluster       bool
-	WithDocker               bool
-	WithRegistry             bool
-	WithConsole              bool
-	WithEditor               bool
-	WithTerminal             bool
-	WithWorkshopInstructions bool
+	Template              string
+	Name                  string
+	Title                 string
+	Description           string
+	Image                 string
+	TargetDirectory       string
+	Overwrite             bool
+	WithKubernetesAccess  bool
+	WithGitHubAction      bool
+	WithVirtualCluster    bool
+	WithDockerDaemon      bool
+	WithImageRegistry     bool
+	WithKubernetesConsole bool
+	WithEditor            bool
+	WithTerminal          bool
 }
 
 // If o.TargetDirectory is provided, we will use that as the directory to be used, otherwise a new one will be created
@@ -73,18 +72,17 @@ func (o *WorkshopNewOptions) Run(args []string) error {
 	}
 
 	parameters := map[string]string{
-		"WorkshopName":             name,
-		"WorkshopTitle":            o.Title,
-		"WorkshopDescription":      o.Description,
-		"WorkshopImage":            o.Image,
-		"WithKubernetesAccess":     strconv.FormatBool(o.WithKubernetesAccess),
-		"WithVirtualCluster":       strconv.FormatBool(o.WithVirtualCluster),
-		"WithDocker":               strconv.FormatBool(o.WithDocker),
-		"WithRegistry":             strconv.FormatBool(o.WithRegistry),
-		"WithConsole":              strconv.FormatBool(o.WithConsole),
-		"WithEditor":               strconv.FormatBool(o.WithEditor),
-		"WithTerminal":             strconv.FormatBool(o.WithTerminal),
-		"WithWorkshopInstructions": strconv.FormatBool(o.WithWorkshopInstructions),
+		"WorkshopName":          name,
+		"WorkshopTitle":         o.Title,
+		"WorkshopDescription":   o.Description,
+		"WorkshopImage":         o.Image,
+		"WithKubernetesAccess":  strconv.FormatBool(o.WithKubernetesAccess),
+		"WithVirtualCluster":    strconv.FormatBool(o.WithVirtualCluster),
+		"WithDockerDaemon":      strconv.FormatBool(o.WithDockerDaemon),
+		"WithImageRegistry":     strconv.FormatBool(o.WithImageRegistry),
+		"WithKubernetesConsole": strconv.FormatBool(o.WithKubernetesConsole),
+		"WithEditor":            strconv.FormatBool(o.WithEditor),
+		"WithTerminal":          strconv.FormatBool(o.WithTerminal),
 	}
 
 	template := templates.InternalTemplate(o.Template)

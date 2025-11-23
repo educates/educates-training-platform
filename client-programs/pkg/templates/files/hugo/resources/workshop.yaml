@@ -25,10 +25,6 @@ spec:
         token:
           enabled: {{ .WithKubernetesAccess }}      
     applications:
-      {{- if eq .WithWorkshopInstructions "false"}}
-      workshop:
-        enabled: {{ .WithWorkshopInstructions }}
-      {{- end }}
       terminal:
         enabled: {{ .WithTerminal }}
         {{- if eq .WithTerminal "true" }}
@@ -37,10 +33,10 @@ spec:
       editor:
         enabled: {{ .WithEditor }}
       console:
-        enabled: {{ .WithConsole }}
+        enabled: {{ .WithKubernetesConsole }}
       docker:
-        enabled: {{ .WithDocker }}
+        enabled: {{ .WithDockerDaemon }}
       registry:
-        enabled: {{ .WithRegistry }}
+        enabled: {{ .WithImageRegistry }}
       vcluster:
         enabled: {{ .WithVirtualCluster }}

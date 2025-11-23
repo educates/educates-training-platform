@@ -132,25 +132,25 @@ func (p *ProjectInfo) NewWorkshopNewCmd() *cobra.Command {
 		"enable virtual cluster in the workshop",
 	)
 	c.Flags().BoolVarP(
-		&o.WithDocker,
-		"with-docker",
+		&o.WithDockerDaemon,
+		"with-docker-daemon",
 		"",
 		false,
-		"enable docker in the workshop",
+		"enable docker daemon in the workshop",
 	)
 	c.Flags().BoolVarP(
-		&o.WithRegistry,
-		"with-registry",
+		&o.WithImageRegistry,
+		"with-image-registry",
 		"",
 		false,
-		"enable registry in the workshop",
+		"enable image registry in the workshop",
 	)
 	c.Flags().BoolVarP(
-		&o.WithConsole,
-		"with-console",
+		&o.WithKubernetesConsole,
+		"with-kubernetes-console",
 		"",
 		false,
-		"enable web console/dashboard in the workshop",
+		"enable Kubernetes console in the workshop",
 	)
 	c.Flags().BoolVarP(
 		&o.WithEditor,
@@ -165,13 +165,6 @@ func (p *ProjectInfo) NewWorkshopNewCmd() *cobra.Command {
 		"",
 		true,
 		"enable terminal in the workshop",
-	)
-	c.Flags().BoolVarP(
-		&o.WithWorkshopInstructions,
-		"with-workshop-instructions",
-		"",
-		true,
-		"enable workshop instructions in the workshop. If disabled, the workshop instructions will be disabled and only the workshop workarea will be displayed.",
 	)
 
 	return c

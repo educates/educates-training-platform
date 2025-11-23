@@ -12,7 +12,7 @@ func (p *ProjectInfo) NewTemplateListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List available workshop templates",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			for _, name := range templates.InternalTemplates() {
+			for _, name := range templates.ListWorkshopTemplates() {
 				cmd.Println(name)
 			}
 

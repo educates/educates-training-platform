@@ -81,6 +81,7 @@ Educates
   :maxdepth: 2
   :caption: Release Notes:
 
+  release-notes/version-3.5.0
   release-notes/version-3.4.0
   release-notes/version-3.3.3
   release-notes/version-3.3.2

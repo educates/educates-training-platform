@@ -156,7 +156,7 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 				dir = filepath.Join(tempDir, "files", filepath.Clean(filePath))
 			}
 
-			if directoryConfig, found := artifactEntry.(map[string]interface{})["workshopDir"]; found {
+			if directoryConfig, found := artifactEntry.(map[string]interface{})["directory"]; found {
 				if directoryPath, found := directoryConfig.(map[string]interface{})["path"].(string); found {
 					if !filepath.IsAbs(directoryPath) {
 						directoryConfig.(map[string]interface{})["path"] = filepath.Join(workshopDir, directoryPath)

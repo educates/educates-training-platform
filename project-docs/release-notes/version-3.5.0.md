@@ -30,8 +30,11 @@ Features Changed
 Bugs Fixed
 ----------
 
-* A subset of the workshop policy rules enforced by Kyverno were only being
+* A subset of the workshop security rules enforced by Kyverno were only being
   applied to the first workshop deployed to an Educates cluster and were not
-  being applied to any workshop deployed after that.
+  being applied to any workshop deployed after that. If you had a workshop
+  which unknowingly was working okay, but now find fails due to proper
+  enforcement of workshop security rules, you will need to add an exclusion
+  for the failing rule to the workshop definition.
 
 * Syncing services to/from vcluster was not working.

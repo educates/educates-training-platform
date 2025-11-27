@@ -2,7 +2,7 @@ import os
 
 import yaml
 
-from .helpers import xget, parse_image_reference
+from .helpers import xget
 
 from .operator_config import (
     OPERATOR_API_GROUP,
@@ -251,10 +251,6 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     # vcluster_config["rbac"]["role"]["enabled"] = False
     # vcluster_config["rbac"]["clusterRole"]["enabled"] = False
     # vcluster_config["rbac"]["enableVolumeSnapshotRules"]["enabled"] = False
-
-    # Enable specific k8s distro. This is done directly in the statefulset
-    #vcluster_config["controlPlane"]["distro"]["k8s"]["enabled"] = True
-    #vcluster_config["controlPlane"]["distro"]["k8s"]["image"]["tag"] = parse_image_reference(k8s_image)["tag"]
 
     # Sync mapping of resources
     # TO_HOST_SYNC

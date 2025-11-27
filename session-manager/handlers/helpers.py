@@ -1,5 +1,50 @@
 import base64
 
+from docker_image import reference
+
+
+def parse_image_reference(image_ref):
+    """Parse a container image reference into its components.
+    
+    Args:
+        image_ref (str): Complete container image reference such as:
+            - gcr.io/loft-sh/kubernetes:v1.31.5
+            - localhost:5001/educates-pause-container@sha256:d6e03aa572dee6...
+    
+    Returns:
+        dict: Dictionary with the following keys:
+            - registry: The registry hostname (may include port), or None if not specified
+            - repository: The repository path
+            - tag: The tag or digest (without @ or : prefix), or None if not specified
+            - is_digest: True if tag is a digest (sha256), False otherwise
+    
+    Examples:
+        >>> parse_image_reference("gcr.io/loft-sh/kubernetes:v1.31.5")
+        {'registry': 'gcr.io', 'repository': 'loft-sh/kubernetes', 'tag': 'v1.31.5', 'is_digest': False}
+        
+        >>> parse_image_reference("localhost:5001/educates-pause-container@sha256:d6e03aa...")
+        {'registry': 'localhost:5001', 'repository': 'educates-pause-container', 'tag': 'sha256:d6e03aa...', 'is_digest': True}
+    """
+    ref = reference.Reference.parse(image_ref)
+    
+    result = {
+        # TODO: Maybe instead of None for registry, return docker hub equivalent (docker.io)
+        'registry': ref.repository['domain'] if ref.repository.get('domain') else None,
+        'repository': ref.repository['path'],
+        'tag': None,
+        'is_digest': False
+    }
+    
+    # Check if it's a digest reference
+    if ref.get('digest'):
+        result['tag'] = ref['digest']
+        result['is_digest'] = True
+    elif ref.get('tag'):
+        result['tag'] = ref['tag']
+        result['is_digest'] = False
+    
+    return result
+
 
 def xget(obj, key, default=None):
     """Looks up a property within an object using a dotted path as key.

@@ -12,7 +12,7 @@ kyverno_policies = []
 
 if os.path.exists("/opt/app-root/config/kyverno-policies.yaml"):
     with open("/opt/app-root/config/kyverno-policies.yaml") as fp:
-        kyverno_policies = yaml.load_all(fp.read(), Loader=yaml.Loader)
+        kyverno_policies = list(yaml.load_all(fp.read(), Loader=yaml.Loader))
 
 
 @synchronized

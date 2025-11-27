@@ -47,13 +47,13 @@ imageVersions:
     image: "debian:sid-20230502-slim"
   - name: docker-in-docker
     image: "docker:27.5.1-dind"
-  - name: rancher-k3s-v1.27
-    image: "rancher/k3s:v1.27.14-k3s1"
-  - name: rancher-k3s-v1.28
-    image: "rancher/k3s:v1.28.10-k3s1"
-  - name: rancher-k3s-v1.29
-    image: "rancher/k3s:v1.29.5-k3s1"
-  - name: rancher-k3s-v1.30
-    image: "rancher/k3s:v1.30.1-k3s1"
+  - name: loftsh-kubernetes-v1.31
+    image: "ghcr.io/loft-sh/kubernetes:v1.31.1"
+  - name: loftsh-kubernetes-v1.32
+    image: "ghcr.io/loft-sh/kubernetes:v1.32.1"
+  - name: loftsh-kubernetes-v1.33
+    image: "ghcr.io/loft-sh/kubernetes:v1.33.4"
+  - name: loftsh-kubernetes-v1.34
+    image: "ghcr.io/loft-sh/kubernetes:v1.34.0"
   - name: loftsh-vcluster
-    image: "loftsh/vcluster:0.18.1"
+    image: "ghcr.io/loft-sh/vcluster-oss:0.30.2"

@@ -80,7 +80,6 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     map_services_from_virtual = xget(application_properties, "services.fromVirtual", [])
     map_services_from_host = xget(application_properties, "services.fromHost", [])
 
-    # TODO: We need to see whether we need to sync ingress_classes and storage_classes
     if ingress_enabled:
         sync_ingress_resources = False
     else:
@@ -273,13 +272,7 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     # TODO: Fix the generated Kubeconfig, as it's using localhost:8443 as server instead of the one specified here
     vcluster_config["exportKubeConfig"] = {
         "context": "my-vcluster",
-        "server": "https://my-vcluster.$(vcluster_namespace)",
-        "additionalSecrets": [
-            {
-                "name": "$(vcluster_namespace)-kubeconfig",
-                "server": "https://my-vcluster.$(vcluster_namespace)"
-            }
-        ],
+        "server": "https://my-vcluster.$(vcluster_namespace).svc.$(cluster_domain)",
     }
     vcluster_config["policies"]["resourceQuota"]["enabled"] = False
     vcluster_config["policies"]["limitRange"]["enabled"] = False
@@ -288,7 +281,7 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     # vcluster_config["controlPlane"]["ingress"]["host"] = f"$(session_namespace)-vc-api.{INGRESS_DOMAIN}"
     # vcluster_config["controlPlane"]["ingress"]["spec"]["tls"] = ingress_tls
     # Add extra SANs to the proxy
-    vcluster_config["controlPlane"]["proxy"]["extraSANs"] = ["my-vcluster.$(vcluster_namespace)-vc", "my-vcluster.$(vcluster_namespace)-vc.svc.cluster.local"]
+    vcluster_config["controlPlane"]["proxy"]["extraSANs"] = ["my-vcluster.$(vcluster_namespace)", "my-vcluster.$(vcluster_namespace).svc.$(cluster_domain)"]
 
     # TODO: Work integration with cert-manager
 
@@ -325,7 +318,7 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                 "rules": [
                     {
                         "sourceSecret": {
-                            "name": "$(session_namespace)-vc-kubeconfig",
+                            "name": "vc-my-vcluster",
                             "namespace": "$(session_namespace)-vc",
                         },
                         "targetNamespaces": {

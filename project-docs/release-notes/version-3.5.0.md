@@ -1,6 +1,11 @@
 Version 3.5.0
 =============
 
+New Features
+------------
+
+* Added support to customize pod CIDR and service CIDR for local kind cluster.
+
 Features Changed
 ----------------
 

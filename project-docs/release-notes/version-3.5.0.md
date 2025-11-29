@@ -28,9 +28,14 @@ Features Changed
   what settings are enabled in the generated workshop definition.
 
 * Updated version of `vcluster` to 0.30.2, and also removed `k3s` distro support 
-  as it defaults to `k8s` distro and resources for `k8s` distro are not configurable. Supported k8s versions are 1.31 through 1.34.
+  as it defaults to `k8s` distro and resources for `k8s` distro are not
+  configurable. Supported k8s versions are 1.31 through 1.34. Note that due
+  to changes in how the `vcluster` software works, the ability to apply a
+  session budget to the virtual cluster had to be removed for now. We will
+  investigate how this can be added back in later.
 
-* Now, vcluster internal ingress controller deploys only 1 contour pod replica, if enabled.
+* Now, vcluster internal ingress controller deploys only 1 contour pod replica,
+  if enabled.
 
 Bugs Fixed
 ----------

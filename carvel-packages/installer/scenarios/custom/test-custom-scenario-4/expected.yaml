@@ -63,15 +63,15 @@ clusterPackages:
           name: debian-base-image
         - image: docker:20.10.18-dind
           name: docker-in-docker
-        - image: rancher/k3s:v1.27.14-k3s1
-          name: rancher-k3s-v1.27
-        - image: rancher/k3s:v1.28.10-k3s1
-          name: rancher-k3s-v1.28
-        - image: rancher/k3s:v1.29.5-k3s1
-          name: rancher-k3s-v1.29
-        - image: rancher/k3s:v1.30.1-k3s1
-          name: rancher-k3s-v1.30
-        - image: loftsh/vcluster:0.18.1
-          name: loftsh-vcluster
+        - name: loftsh-kubernetes-v1.31
+          image: "ghcr.io/loft-sh/kubernetes:v1.31.1"
+        - name: loftsh-kubernetes-v1.32
+          image: "ghcr.io/loft-sh/kubernetes:v1.32.1"
+        - name: loftsh-kubernetes-v1.33
+          image: "ghcr.io/loft-sh/kubernetes:v1.33.4"
+        - name: loftsh-kubernetes-v1.34
+          image: "ghcr.io/loft-sh/kubernetes:v1.34.0"
+        - name: loftsh-vcluster
+          image: "ghcr.io/loft-sh/vcluster-oss:0.30.2"
       sessionCookies:
         domain: educates.example.com

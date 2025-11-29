@@ -100,21 +100,25 @@ Building Educates platform images
 To build the container images for the Educates training platform you can run:
 
 ```
-make push-core-images
+make build-core-images
 ```
+
+NOTE: By default, images will be pushed to a local registry. There's instructions above on how to provide a local registry
+via the Educates cli.
 
 This will trigger the building of the container images and push the resulting images to the local docker image registry.
 
 Targets for make are also available for building and pushing to the local docker image registry individual container images.
 
 ```
-make push-session-manager
-make push-secrets-manager
-make push-training-portal
+make build-session-manager
+make build-secrets-manager
+make build-training-portal
 ...
 ```
 
-See the [Makefile](../Makefile) for more details of the make targets that are available.
+See the [Makefile](../Makefile) for more details of the make targets that are available. There are parameters that can be
+set to alter behavior of the Makefile. There's comprehensive documentation at the top of the file.
 
 Once the container images have been built and pushed to the local docker image registry, you can then deploy everything by running:
 
@@ -122,15 +126,15 @@ Once the container images have been built and pushed to the local docker image r
 make deploy-platform
 ```
 
-This will perform an install directly from configuration files in the current directory. If needing to test that the `educates-installer` package bundle used by the Educates CLI installer and also `kapp-controller`, is correct, you should instead use the commands:
+This will perform an install directly from configuration files in the current directory. If needing to test that the `educates-installer` package bundle used by the Educates CLI installer can be installed using `kapp-controller`, ensure that `kapp-controller` is installed in the cluster and then use the commands:
 
 ```
-make push-all-images
+make build-all-images
 make push-installer-bundle
-make deploy-platform-bundle
+make deploy-platform-app
 ```
 
-The `make push-all-images` command will make sure that optional workshop base images as well as the core Educates platform are built. It is necessary to build all images when testing the package bundle as the package generated will include image hashes for all images.
+The `make build-all-images` command will make sure that optional workshop base images as well as the core Educates platform are built. It is necessary to build all images when testing the package bundle as the package generated will include image hashes for all images.
 
 To delete everything deployed using the `educates-installer` package when using the `make` command, use:
 
@@ -141,7 +145,7 @@ make delete-platform
 or:
 
 ```
-make delete-platform-bundle
+make delete-platform-app
 ```
 
 as appropriate.
@@ -149,25 +153,25 @@ as appropriate.
 Building additional workshop images
 -----------------------------------
 
-When using `make push-core-images`, it will only build the main workshop base image. That is, it will not build workshop base images for Java and Python.
+When using `make build-core-images`, it will only build the main workshop base image. That is, it will not build workshop base images for Java and Python.
 
 If you want to build all workshop base images you can instead run:
 
 ```
-make push-all-images
+make build-all-images
 ```
 
 Note that this will consume a lot more storage space in the local docker environment. In general you will probably want to configure the local docker environment with 100Gi or more of storage space to be used across local image caching, the local docker image registry and the Kubernetes cluster itself.
 
-As well as the `push-all-images`, make targets are also supplied for building and pushing to the local docker image registry individual workshop base images.
+As well as the `build-all-images`, make targets are also supplied for building and pushing to the local docker image registry individual workshop base images.
 
 ```
-make push-base-environment
-make push-jdk8-environment
-make push-jdk11-environment
-make push-jdk17-environment
-make push-jdk21-environment
-make push-conda-environment
+make build-base-environment
+make build-jdk8-environment
+make build-jdk11-environment
+make build-jdk17-environment
+make build-jdk21-environment
+make build-conda-environment
 ```
 
 See the [Makefile](../Makefile) for more details of the make targets that are available.

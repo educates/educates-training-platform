@@ -1,125 +1,39 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-
-	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	"github.com/pkg/errors"
+	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/kubectl/pkg/scheme"
 )
 
-type FilesExportOptions struct {
-	Repository      string
-	WorkshopFile    string
-	WorkshopVersion string
-	DataValuesFlags yttcmd.DataValuesFlags
-}
+var (
+	workshopExportExample = `
+  # Export workshop definition from current directory (workshop definition is expected within the path defined by workshop-file flag) to stdout
+  educates workshop export
 
-func (o *FilesExportOptions) Run(args []string) error {
-	var err error
+  # Export workshop definition from specific directory to stdout
+  educates workshop export lab-k8s-fundamentals
 
-	var directory string
+  # Export workshop definition using specific image repository
+  educates workshop export --image-repository ghcr.io/myorg
 
-	if len(args) != 0 {
-		directory = filepath.Clean(args[0])
-	} else {
-		directory = "."
-	}
+  # Export workshop definition using specific version
+  educates workshop export --workshop-version v1.0.0
 
-	if directory, err = filepath.Abs(directory); err != nil {
-		return errors.Wrap(err, "couldn't convert workshop directory to absolute path")
-	}
-
-	fileInfo, err := os.Stat(directory)
-
-	if err != nil || !fileInfo.IsDir() {
-		return errors.New("workshop directory does not exist or path is not a directory")
-	}
-
-	return o.Export(directory)
-}
-
-func (o *FilesExportOptions) Export(directory string) error {
-	// If image name hasn't been supplied read workshop definition file and
-	// try to work out image name to Export workshop as.
-
-	rootDirectory := directory
-	workshopFilePath := o.WorkshopFile
-
-	if !filepath.IsAbs(workshopFilePath) {
-		workshopFilePath = filepath.Join(rootDirectory, workshopFilePath)
-	}
-
-	workshopFileData, err := os.ReadFile(workshopFilePath)
-
-	if err != nil {
-		return errors.Wrapf(err, "cannot open workshop definition %q", workshopFilePath)
-	}
-
-	// Process the workshop YAML data for ytt templating and data variables.
-
-	if workshopFileData, err = processWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
-		return errors.Wrap(err, "unable to process workshop definition as template")
-	}
-
-	workshopFileData = []byte(strings.ReplaceAll(string(workshopFileData), "$(image_repository)", o.Repository))
-	workshopFileData = []byte(strings.ReplaceAll(string(workshopFileData), "$(workshop_version)", o.WorkshopVersion))
-
-	decoder := serializer.NewCodecFactory(scheme.Scheme).UniversalDecoder()
-
-	workshop := &unstructured.Unstructured{}
-
-	err = runtime.DecodeInto(decoder, workshopFileData, workshop)
-
-	if err != nil {
-		return errors.Wrap(err, "couldn't parse workshop definition")
-	}
-
-	if workshop.GetAPIVersion() != "training.educates.dev/v1beta1" || workshop.GetKind() != "Workshop" {
-		return errors.New("invalid type for workshop definition")
-	}
-
-	// Insert workshop version property if not specified.
-
-	_, found, _ := unstructured.NestedString(workshop.Object, "spec", "version")
-
-	if !found && o.WorkshopVersion != "latest" {
-		unstructured.SetNestedField(workshop.Object, o.WorkshopVersion, "spec", "version")
-	}
-
-	// Remove the publish section as will not be accurate after publising.
-
-	unstructured.RemoveNestedField(workshop.Object, "spec", "publish")
-
-	// Export modified workshop definition file.
-
-	workshopFileData, err = yaml.Marshal(&workshop.Object)
-
-	if err != nil {
-		return errors.Wrap(err, "couldn't convert workshop definition back to YAML")
-	}
-
-	fmt.Print(string(workshopFileData))
-
-	return nil
-}
+  # Export workshop definition for custom workshop file path
+  educates workshop export --workshop-file custom-workshop.yaml
+  educates workshop export $HOME/workshops/labs-educates-showcase --workshop-file lab-session-workshop.yaml
+`
+)
 
 func (p *ProjectInfo) NewWorkshopExportCmd() *cobra.Command {
-	var o FilesExportOptions
+	var o workshops.FilesExportOptions
 
 	var c = &cobra.Command{
-		Args:  cobra.MaximumNArgs(1),
-		Use:   "export [PATH]",
-		Short: "Export workshop resource definition",
-		RunE:  func(cmd *cobra.Command, args []string) error { return o.Run(args) },
+		Args:    cobra.MaximumNArgs(1),
+		Use:     "export [PATH]",
+		Short:   "Export workshop resource definition for distribution to stdout",
+		RunE:    func(cmd *cobra.Command, args []string) error { return o.Run(args) },
+		Example: workshopExportExample,
 	}
 
 	c.Flags().StringVar(

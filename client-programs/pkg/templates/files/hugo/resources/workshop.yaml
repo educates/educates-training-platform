@@ -21,17 +21,22 @@ spec:
   session:
     namespaces:
       budget: medium
+      security:
+        token:
+          enabled: {{ .WithKubernetesAccess }}      
     applications:
       terminal:
-        enabled: true
+        enabled: {{ .WithTerminal }}
+        {{- if eq .WithTerminal "true" }}
         layout: split
+        {{- end }}
       editor:
-        enabled: true
+        enabled: {{ .WithEditor }}
       console:
-        enabled: false
+        enabled: {{ .WithKubernetesConsole }}
       docker:
-        enabled: false
+        enabled: {{ .WithDockerDaemon }}
       registry:
-        enabled: false
+        enabled: {{ .WithImageRegistry }}
       vcluster:
-        enabled: false
+        enabled: {{ .WithVirtualCluster }}

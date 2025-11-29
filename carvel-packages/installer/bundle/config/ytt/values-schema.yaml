@@ -117,25 +117,11 @@ clusterInfrastructure:
     name: ""
 #!--------- educates installation schema
 #@schema/nullable
-localKindCluster:
-  listenAddress: ""
-  apiServer:
-    address: ""
-    port: 6443
-  volumeMounts:
-    - hostPath: ""
-      containerPath: ""
-      readOnly: false
-  registryMirrors:
-    - mirror: ""
-      url: ""
-      username: ""
-      password: ""
+#@schema/type any=True
+localKindCluster: {}
 #@schema/nullable
-localDNSResolver:
-  targetAddress: ""
-  extraDomains:
-    - ""
+#@schema/type any=True
+localDNSResolver: {}
 #!--------- educates training platform schema
 #! NOTE: https://github.com/jorgemoralespou/educates-training-platform/blob/develop/carvel-packages/training-platform/bundle/config/00-schema.yaml#L21C1-L33
 #! This is only so that the images generates are loaded from this registry. There's a pre-proccesing step that will generate a images file

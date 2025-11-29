@@ -100,9 +100,9 @@ COPY --from=k8s-console / /opt/console/
 # Miscellaneous tools.
 
 RUN <<EOF
-    BOMBARDIER_VERSION=1.2.6
-    CHECKSUM_amd64="c29be68fb6711434d50d8c25bc5ce08d33d8265871e6e1a518b3775e530fbb9b"
-    CHECKSUM_arm64="3064a2c7639b8f4c682895cbd8f7791c272200066d68837591e3204988cd6190"
+    BOMBARDIER_VERSION=2.0.2
+    CHECKSUM_amd64="d3dc4a9ecec3f8bd43f8c196ad533cb4b79ca55b11fc74c3184231e00a95bc0b"
+    CHECKSUM_arm64="258025ea4dc183bbe3f4ccc7772de1faf2c73700e9f81aa5b84e0c1799d7323c"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /usr/local/bin/bombardier https://github.com/codesenberg/bombardier/releases/download/v${BOMBARDIER_VERSION}/bombardier-linux-${TARGETARCH}
@@ -111,9 +111,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    YQ_VERSION=4.45.1
-    CHECKSUM_amd64="654d2943ca1d3be2024089eb4f270f4070f491a0610481d128509b2834870049"
-    CHECKSUM_arm64="ceea73d4c86f2e5c91926ee0639157121f5360da42beeb8357783d79c2cc6a1d"
+    YQ_VERSION=4.48.1
+    CHECKSUM_amd64="99df6047f5b577a9d25f969f7c3823ada3488de2e2115b30a0abb10d9324fd9f"
+    CHECKSUM_arm64="0e46b5b926a9e57c526fa2bd8f8e38b7e17fbf6e2403ff1741f3b268e3363a9e"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${TARGETARCH}
@@ -122,9 +122,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    HUGO_VERSION=0.144.1
-    CHECKSUM_amd64="8ff8490aa292e1d56121e9a6ce7bd1623e98b3b0f0c652a4a5035316f100a0d2"
-    CHECKSUM_arm64="b6529d6ec236ee7d09018462a456a2cda17e4db21b6551a4224edad9cc2808b9"
+    HUGO_VERSION=0.152.2
+    CHECKSUM_amd64="52b6eda6c00f4449d96f0cbfd7300e834c26179c4fe68e0510ef566db52dba04"
+    CHECKSUM_arm64="76b6f2d229cba2e81555cfe08cf2a32294b6ce68f254cae6b981b062868c50ae"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/hugo.tar.gz https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_linux-${TARGETARCH}.tar.gz
@@ -135,9 +135,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    DIVE_VERSION=0.12.0
-    CHECKSUM_amd64="20a7966523a0905f950c4fbf26471734420d6788cfffcd4a8c4bc972fded3e96"
-    CHECKSUM_arm64="a2a1470302cdfa367a48f80b67bbf11c0cd8039af9211e39515bd2bbbda58fea"
+    DIVE_VERSION=0.13.1
+    CHECKSUM_amd64="0970549eb4a306f8825a84145a2534153badb4d7dcf3febd1967c706367c3d0e"
+    CHECKSUM_arm64="2fcd2cf20f634ccdb41efac44048b204bfc867c115641f37a7420693ed480a18"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/dive.tar.gz https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/dive_${DIVE_VERSION}_linux_${TARGETARCH}.tar.gz
@@ -147,15 +147,16 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    UV_VERSION=0.6.6
+    UV_VERSION=0.9.8
     ARCHNAME_amd64=x86_64
     ARCHNAME_arm64=aarch64
     ARCHNAME=ARCHNAME_${TARGETARCH}
-    CHECKSUM_amd64="16667b429a57ee917b10093e81e52956e4c19f9fd73d05dd87c3cbc27779ac7e"
-    CHECKSUM_arm64="37a543598cdb7d8fc9b74e6b1fe1fdf8b9a279c6137c7ff8396a88f69ec7a43c"
+    CHECKSUM_amd64="950bad4899800ab158db97081b30a601a3ff4237d705756fda8695342cfcc20a"
+    CHECKSUM_arm64="8dc203a27c99f721545adc531279f0486ea3deb77c951a051e6bb9ea1d588a71"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/uv.tar.gz https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${!ARCHNAME}-unknown-linux-gnu.tar.gz
+    echo "${!CHECKSUM} /tmp/uv.tar.gz" | sha256sum --check --status
     tar -C /usr/local/bin --strip-components 1 -xf /tmp/uv.tar.gz uv-${!ARCHNAME}-unknown-linux-gnu/uv uv-${!ARCHNAME}-unknown-linux-gnu/uvx
     rm -f /tmp/uv.tar.gz
 EOF
@@ -165,10 +166,10 @@ EOF
 RUN mkdir -p /opt/kubernetes/bin
 
 RUN <<EOF
-    KUBECTL_VERSION=1.30.10
+    KUBECTL_VERSION=1.31.13
     KUBECTL_SHORT_VERSION=$(echo ${KUBECTL_VERSION} | cut -d. -f1,2)
-    CHECKSUM_amd64="1d575cf29fc6514565ef76329f2b7008a3d7c7e7dfa853a70e9bd65784b653a3338260325c2a7bc8e80427cb3829bf6407aba6a39fb4bf73c30da775d3aad2c8"
-    CHECKSUM_arm64="3111d0842d92a1b26d6115d9346b780d3552732d46ee233f7ffb34122b50addb0717032cf85a6ff80317d0ad88e3b4fd7f16628cad2d7a53eadf971fa8da0244"
+    CHECKSUM_amd64="724a8082d31664e70320f954564548ab222bf9a60b5a117456e93c56d0e8c921fe427dc639e25f5d256d4886aff61ef74a2fe535dc1873e56a681cc62a322610"
+    CHECKSUM_arm64="d275c20fd3e0c17511a294e352247794063bb2f8ab15713f9db7b6d0b771574736f7986debea51c59c8aecec312c8caf4c76cebf7ca7d070397ba0c460dda5d6"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz https://dl.k8s.io/v${KUBECTL_VERSION}/kubernetes-client-linux-${TARGETARCH}.tar.gz
@@ -181,10 +182,10 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    KUBECTL_VERSION=1.31.6
+    KUBECTL_VERSION=1.32.9
     KUBECTL_SHORT_VERSION=$(echo ${KUBECTL_VERSION} | cut -d. -f1,2)
-    CHECKSUM_amd64="dd3d8723e7ff54aa4c8a1087d961c8f604b8dce5a6981357daea9b8e1882efbfaf9e226afc35cdc277e2ac06f6ef3bd9867c21158d9ae917d02ade7c245f8610"
-    CHECKSUM_arm64="6fef05cf595f6d10a355670b2509ae4aa85d036bb6793624e8a3362fbacc22825b410f852665b83c91c1e10c4d11a539ad8d695fc257808cd5198fd53c39a7be"
+    CHECKSUM_amd64="80c2b593fcbee404fb70412a6ed8c428ed5eb256b79c1ca180f9b405f26de708629014401db0dff8ac4af3471411dd445b13d9f6f71149efbbd4956ac51db546"
+    CHECKSUM_arm64="b126355cb3df897e19e6035e0665fc17bccf8b17455d1400599a2a75356d88568d3f29cc8deee3eaad22973a38e4b5a5e58fa30e1c6b4b6c9abdb5026e6ebffc"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz https://dl.k8s.io/v${KUBECTL_VERSION}/kubernetes-client-linux-${TARGETARCH}.tar.gz
@@ -197,10 +198,10 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    KUBECTL_VERSION=1.32.2
+    KUBECTL_VERSION=1.33.5
     KUBECTL_SHORT_VERSION=$(echo ${KUBECTL_VERSION} | cut -d. -f1,2)
-    CHECKSUM_amd64="0f27d1918088df6a672f42b13cf213acb5e7499db1b9db5191478adb2ca0c350ba8f5004ceee3798b0ff47fc358bf2fb37097c1113f603dbedd0d00ae0dbaf7f"
-    CHECKSUM_arm64="ad0af31c2845e80fcc1916b550b6047a42bd01971f5a20256d98bdd59b51d03061607898cf190365a484a169d411a5b3d46aa8365ec3e035fb98fd345fb04c09"
+    CHECKSUM_amd64="c0959e01d4d82b293848202b4392f8c784ca7e27abb68ebae36c303e34abb83378bcfa5679699c15681f1a3fc6eb801ea1204e086fc8e6512f11023fb1e178e7"
+    CHECKSUM_arm64="1d49d8cb369d6f61a21d7616b01e64e1ae52ddc22f3c96b713a00603a0d28634fcd0d425e2d81ea0e5132a64c5843927941f84979ba5ea1a0a72eb198a1a9f8b"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz https://dl.k8s.io/v${KUBECTL_VERSION}/kubernetes-client-linux-${TARGETARCH}.tar.gz
@@ -213,9 +214,25 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    K9S_VERSION=0.40.5
-    CHECKSUM_amd64="63dcf6817b2c391ccb4a8b7ee313f5990f5accfa0e55a72c769b73c303a03e01"
-    CHECKSUM_arm64="3e3c852b3f7604c14e96dfb56b869769c2c314fdad8d4c35ab158c738c516a22"
+    KUBECTL_VERSION=1.34.2
+    KUBECTL_SHORT_VERSION=$(echo ${KUBECTL_VERSION} | cut -d. -f1,2)
+    CHECKSUM_amd64="a9656e446054151390279b5d2a57cdc52cc0546ae5dcac17c370cc4435d93486da9d9603f560cfca64233ad2f9642dd41219c2f308196491af194faefe2cf2ae"
+    CHECKSUM_arm64="ffbe3367b61531db26494388776f53fe9c83793dc7bab83c3435e5d884846ac25f8e9b8132be083bcdc120462d00ea108dcc033790ff50be20ccb396de6ab786"
+    CHECKSUM=CHECKSUM_${TARGETARCH}
+    set -eo pipefail
+    curl --silent --fail -L -o /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz https://dl.k8s.io/v${KUBECTL_VERSION}/kubernetes-client-linux-${TARGETARCH}.tar.gz
+    echo "${!CHECKSUM} /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz" | sha512sum --check --status
+    tar -C /tmp -zxf /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz
+    mv /tmp/kubernetes/client/bin/kubectl /opt/kubernetes/bin/kubectl@${KUBECTL_SHORT_VERSION}
+    mv /tmp/kubernetes/client/bin/kubectl-convert /opt/kubernetes/bin/kubectl-convert@${KUBECTL_SHORT_VERSION}
+    rm -f /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz
+    rm -rf /tmp/kubernetes
+EOF
+
+RUN <<EOF
+    K9S_VERSION=0.50.16
+    CHECKSUM_amd64="bda09dc030a08987fe2b3bed678b15b52f23d6705e872d561932d4ca07db7818"
+    CHECKSUM_arm64="7f3b414bc5e6b584fbcb97f9f4f5b2c67a51cdffcbccb95adcadbaeab904e98e"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/k9s.tar.gz https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linux_${TARGETARCH}.tar.gz
@@ -226,9 +243,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    YTT_VERSION=0.51.1
-    CHECKSUM_amd64="026a12ee7108ff2d1150eb1347d544367d92e993ade7b2d2727c4c8d13a47a6b"
-    CHECKSUM_arm64="55849cab41cf7780b0d26da416395cf77576a434a4bcf883b0e2a29944325e7c"
+    YTT_VERSION=0.52.1
+    CHECKSUM_amd64="490f138ae5b6864071d3c20a5a231e378cee7487cd4aeffc79dbf66718e65408"
+    CHECKSUM_arm64="7d86bd3299e43d1455201fc213d698bae7482cd88f3e05de2f935e6eab842db9"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /opt/kubernetes/bin/ytt https://github.com/carvel-dev/ytt/releases/download/v${YTT_VERSION}/ytt-linux-${TARGETARCH}
@@ -237,9 +254,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    IMGPKG_VERSION=0.44.0
-    CHECKSUM_amd64="15ca4f8ec4c7a1c6ecf06740a942149887a73845565f0ffbf6ccbf013b65a58a"
-    CHECKSUM_arm64="f772b6eb10654f45d15d2166d5be81cf18529aece59df906c25dcb364f508ebe"
+    IMGPKG_VERSION=0.46.1
+    CHECKSUM_amd64="1bc6b735dbdd940a5c78661781f937090bd5fbc89172f01e600ee91fe122edbe"
+    CHECKSUM_arm64="3e7cfba3cc55401ad1bbc80c7710e67a0376c56d8a72dc81864ffbbe64b30aba"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /opt/kubernetes/bin/imgpkg https://github.com/carvel-dev/imgpkg/releases/download/v${IMGPKG_VERSION}/imgpkg-linux-${TARGETARCH}
@@ -248,9 +265,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    KBLD_VERSION=0.45.0
-    CHECKSUM_amd64="e076af83ef05765e6bf825f2bf5ac31c365cc0d513b7317bd634f3b9c6b5ee5d"
-    CHECKSUM_arm64="9e52c553322fa21a8af10d47d76c66eb7a2f406fad92bb589458554cb4143121"
+    KBLD_VERSION=0.46.0
+    CHECKSUM_amd64="90e8d123d5e33ab13b849997bdb05626fa7f2384120d87a29eebd56490105ca9"
+    CHECKSUM_arm64="f0202ff24fda501ead70f4b83f24d0e078bb45b52e8ce7217f0b78a6bfedebc3"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /opt/kubernetes/bin/kbld https://github.com/carvel-dev/kbld/releases/download/v${KBLD_VERSION}/kbld-linux-${TARGETARCH}
@@ -259,9 +276,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    KAPP_VERSION=0.64.0
-    CHECKSUM_amd64="14207d33130e833d201f2cd6e3e87435fb8b9534298843ed3c00fe7cda5221df"
-    CHECKSUM_arm64="fc7617107fa87480e6326c1cdf2c62708f455c9d96f8e9550fb5e848c296cc80"
+    KAPP_VERSION=0.64.2
+    CHECKSUM_amd64="475ed4fc7ee538efceeb02972524a17cb580d9b3e59ab16c7a18de02427daedc"
+    CHECKSUM_arm64="bffda57ed0c83cd2a8cc6faaaf97b3aa71f000658258eeaae6b0a31531a0e03a"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /opt/kubernetes/bin/kapp https://github.com/carvel-dev/kapp/releases/download/v${KAPP_VERSION}/kapp-linux-${TARGETARCH}
@@ -281,9 +298,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    VENDIR_VERSION=0.43.0
-    CHECKSUM_amd64="3d31f00efc0a11a8dfcf662d45a120d18f99105d1502bbfe12a6cbd9d0b1f570"
-    CHECKSUM_arm64="0895efdc3fe36f37035ce96169e8cc335a103adcfe02092fcc29f514be8867e7"
+    VENDIR_VERSION=0.44.0
+    CHECKSUM_amd64="a2befbb9dd4f174aac7a34fe0bd50b1e5dc356dadaed0183a24b817f2fd1d094"
+    CHECKSUM_arm64="db33e705d818f4fa1fb3c19bd97167219188650b96e307a8e72620329aec9a91"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /opt/kubernetes/bin/vendir https://github.com/carvel-dev/vendir/releases/download/v${VENDIR_VERSION}/vendir-linux-${TARGETARCH}
@@ -292,9 +309,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    KCTRL_VERSION=0.55.1
-    CHECKSUM_amd64="39dd9593f3a7435ea2a9014dd832b5c9ed1eb1aba52e22c2b6186a0170c52f34"
-    CHECKSUM_arm64="234bcab23f6d8349855bf1dfd27dd0d1617ff2188034be8c37e984026893d9e1"
+    KCTRL_VERSION=0.58.1
+    CHECKSUM_amd64="978fc078d53a827716dacde7483294d1265c3d42ace0c2582df62b5c38dd17ae"
+    CHECKSUM_arm64="a9cb74f12effb45c56d16b56551aaf50e96fac0359b5ace6ec8e40d370762ac8"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /opt/kubernetes/bin/kctrl https://github.com/carvel-dev/kapp-controller/releases/download/v${KCTRL_VERSION}/kctrl-linux-${TARGETARCH}
@@ -334,9 +351,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    HELM_VERSION=3.17.1
-    CHECKSUM_amd64="3b66f3cd28409f29832b1b35b43d9922959a32d795003149707fea84cbcd4469"
-    CHECKSUM_arm64="c86c9b23602d4abbfae39d9634e25ab1d0ea6c4c16c5b154113efe316a402547"
+    HELM_VERSION=3.19.1
+    CHECKSUM_amd64="966bed9b1e0dda11268f59bd7268c3cd3e308b37b070546e1d78a02526ff63f2"
+    CHECKSUM_arm64="ceed150305a1d1ef4a37923a7f66931a6807c34a38ea487fa8340e102dd2c7f7"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/helm.tar.gz https://get.helm.sh/helm-v${HELM_VERSION}-linux-${TARGETARCH}.tar.gz
@@ -346,9 +363,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    SKAFFOLD_VERSION=2.14.1
-    CHECKSUM_amd64="e66836d51a0898ad618409404a9adfa045594a3c0234143c5d34e78f0e12c7c1"
-    CHECKSUM_arm64="ef92ae3015d5331cabaee384b24fdd950f5c84c6729beb2604f2b637f6f535d8"
+    SKAFFOLD_VERSION=2.16.1
+    CHECKSUM_amd64="1cbeea85aa14ba603dbc2bbdfa7bfde5644d7988beed0fdc0fd1c67298d4cf67"
+    CHECKSUM_arm64="b68fa949b7a918935641061b5bf3917e0be3a5ecaa591169f7cc0f8362c3fb82"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /opt/kubernetes/bin/skaffold https://github.com/GoogleContainerTools/skaffold/releases/download/v${SKAFFOLD_VERSION}/skaffold-linux-${TARGETARCH}
@@ -357,9 +374,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    KUSTOMIZE_VERSION=5.6.0
-    CHECKSUM_amd64="54e4031ddc4e7fc59e408da29e7c646e8e57b8088c51b84b3df0864f47b5148f"
-    CHECKSUM_arm64="ad8ab62d4f6d59a8afda0eec4ba2e5cd2f86bf1afeea4b78d06daac945eb0660"
+    KUSTOMIZE_VERSION=5.8.0
+    CHECKSUM_amd64="4dfa8307358dd9284aa4d2b1d5596766a65b93433e8fa3f9f74498941f01c5ef"
+    CHECKSUM_arm64="a4f48b4c3d4ca97d748943e19169de85a2e86e80bcc09558603e2aa66fb15ce1"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/kustomize.tar.gz https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_${TARGETARCH}.tar.gz
@@ -369,11 +386,11 @@ RUN <<EOF
 EOF
 
 # VS Code editor and dashboard extension.
-
+# Make sure when updating that AI features are disabled and working https://github.com/coder/code-server/issues/7540
 RUN <<EOF
-    CODE_VERSION=4.98.2
-    CHECKSUM_amd64="592acabf2f16210f4aec62d0390b2e3a392b7013068f97de72a14ce87d4279ff"
-    CHECKSUM_arm64="bf31ba7e59c1ef3fc6a131adb3723812a0d41e971ba959bb2aa85b7a3ed27550"
+    CODE_VERSION=4.104.3
+    CHECKSUM_amd64="bfcb80e826d2a448132994ea1583ecc7924e2b9300ea02e8e3dca09dbb13c1d9"
+    CHECKSUM_arm64="902db76c1764df4670c584045db5854367ffcb135635607b76875cd41ebf510a"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     mkdir /opt/editor
@@ -401,14 +418,14 @@ RUN mkdir -p /opt/slides/reveal.js/3.9.2 && \
     curl -sL -o src.tar.gz https://github.com/hakimel/reveal.js/archive/3.9.2.tar.gz && \
     tar --strip-components 1 -xf src.tar.gz && \
     rm src.tar.gz && \
-    mkdir -p /opt/slides/reveal.js/4.6.0 && \
-    cd /opt/slides/reveal.js/4.6.0 && \
-    curl -sL -o src.tar.gz https://github.com/hakimel/reveal.js/archive/4.6.0.tar.gz && \
+    mkdir -p /opt/slides/reveal.js/4.6.1 && \
+    cd /opt/slides/reveal.js/4.6.1 && \
+    curl -sL -o src.tar.gz https://github.com/hakimel/reveal.js/archive/4.6.1.tar.gz && \
     tar --strip-components 1 -xf src.tar.gz && \
     rm src.tar.gz && \
-    mkdir -p /opt/slides/reveal.js/5.1.0 && \
-    cd /opt/slides/reveal.js/5.1.0 && \
-    curl -sL -o src.tar.gz https://github.com/hakimel/reveal.js/archive/5.1.0.tar.gz && \
+    mkdir -p /opt/slides/reveal.js/5.2.1 && \
+    cd /opt/slides/reveal.js/5.2.1 && \
+    curl -sL -o src.tar.gz https://github.com/hakimel/reveal.js/archive/5.2.1.tar.gz && \
     tar --strip-components 1 -xf src.tar.gz && \
     rm src.tar.gz && \
     mkdir -p /opt/slides/impress.js/1.1.0 && \

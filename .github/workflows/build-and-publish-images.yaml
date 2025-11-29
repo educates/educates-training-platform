@@ -17,14 +17,15 @@ on:
       - "[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+"
       - "[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+"
 
-env:
-  GO_VERSION: "1.22.5"
-  BUILDKIT_VERSION: "v0.15.1"
-
 jobs:
   publish-generic-images:
     name: Publish
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
 
     strategy:
       fail-fast: false
@@ -51,6 +52,7 @@ jobs:
           if [ -z "$TARGET_PLATFORMS" ]; then
             TARGET_PLATFORMS="${{secrets.TARGET_PLATFORMS}}"
           fi
+          # Only build for amd64 if it's a fork for speed reasons
           if [ -z "$TARGET_PLATFORMS" ]; then
             IS_FORK=$(if [[ $GITHUB_EVENT_NAME == 'push' && $GITHUB_EVENT_PATH ]]; then jq -r .repository.fork <<< $(cat $GITHUB_EVENT_PATH); else echo false; fi)
             if [ $IS_FORK == "true" ]; then
@@ -72,32 +74,28 @@ jobs:
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:${{env.BUILDKIT_VERSION}}
 
-      - name: Restore Docker cache (amd64)
+      - name: Free Disk Space
+        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') || (matrix.image == 'lookup-service') }}
+        uses: endersonmenezes/free-disk-space@v2
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+
+      - name: Restore Docker cache
         if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') || (matrix.image == 'lookup-service') }}
         uses: actions/cache/restore@v4
         with:
           path: /tmp/.buildx-cache-amd64-new
-          key: ${{runner.os}}-buildx-cache-amd64-${{matrix.image}}-${{github.sha}}
+          key: ${{runner.os}}-buildx-cache-${{matrix.image}}-${{github.sha}}
           restore-keys: |
-            ${{runner.os}}-buildx-cache-amd64-${{matrix.image}}-
-
-      - name: Restore Docker cache (arm64)
-        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') || (matrix.image == 'lookup-service') }}
-        uses: actions/cache/restore@v4
-        with:
-          path: /tmp/.buildx-cache-arm64-new
-          key: ${{runner.os}}-buildx-cache-arm64-${{matrix.image}}-${{github.sha}}
-          restore-keys: |
-            ${{runner.os}}-buildx-cache-arm64-${{matrix.image}}-
+            ${{runner.os}}-buildx-cache-${{matrix.image}}-
 
       - name: Rename cache directories
         run: |
-          test -d /tmp/.buildx-cache-amd64-new && mv /tmp/.buildx-cache-amd64-new /tmp/.buildx-cache-amd64-old || true
-          test -d /tmp/.buildx-cache-arm64-new && mv /tmp/.buildx-cache-arm64-new /tmp/.buildx-cache-arm64-old || true
+          test -d /tmp/.buildx-cache-new && mv /tmp/.buildx-cache-new /tmp/.buildx-cache-old || true
           du -ks /tmp/.buildx-cache-* || true
 
       - name: Generate container image metadata
@@ -110,6 +108,7 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=sha
 
       - name: Login to GitHub container registry
         uses: docker/login-action@v3
@@ -124,55 +123,44 @@ jobs:
           context: ${{matrix.image}}
           platforms: ${{env.TARGET_PLATFORMS}}
           tags: ${{steps.meta.outputs.tags}}
-          cache-from: |
-            type=local,src=/tmp/.buildx-cache-arm64-old
-            type=local,src=/tmp/.buildx-cache-amd64-old
+          cache-from: type=local,src=/tmp/.buildx-cache-old
+          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache-new
           push: true
 
-      - name: Cache build ${{matrix.image}} (amd64)
-        if: contains(env.TARGET_PLATFORMS, 'linux/amd64')
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{matrix.image}}
-          platforms: linux/amd64
-          cache-from: type=local,src=/tmp/.buildx-cache-amd64-old
-          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache-amd64-new
-          push: false
-
-      - name: Cache build ${{matrix.image}} (arm64)
-        if: contains(env.TARGET_PLATFORMS, 'linux/arm64')
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{matrix.image}}
-          platforms: linux/arm64
-          cache-from: type=local,src=/tmp/.buildx-cache-arm64-old
-          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache-arm64-new
-          push: false
+      - name: Remove old cache directories
+        run: |
+          rm -rf /tmp/.buildx-cache-old || true
 
       - name: Dump cache directory sizes
         if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') || (matrix.image == 'lookup-service') }}
         run: |
           du -ks /tmp/.buildx-cache-* || true
 
-      - name: Save Docker cache (amd64)
+      - name: Save Docker cache
         if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') || (matrix.image == 'lookup-service') }}
         uses: actions/cache/save@v4
         with:
-          path: /tmp/.buildx-cache-amd64-new
-          key: ${{runner.os}}-buildx-cache-amd64-${{matrix.image}}-${{github.sha}}
-
-      - name: Save Docker cache (arm64)
-        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') || (matrix.image == 'lookup-service') }}
-        uses: actions/cache/save@v4
-        with:
-          path: /tmp/.buildx-cache-arm64-new
-          key: ${{runner.os}}-buildx-cache-arm64-${{matrix.image}}-${{github.sha}}
+          path: /tmp/.buildx-cache-new
+          key: ${{runner.os}}-buildx-cache-${{matrix.image}}-${{github.sha}}
 
   publish-workshop-base-image:
     name: Publish (base-environment)
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     steps:
+      - name: Free Disk Space
+        uses: endersonmenezes/free-disk-space@v2
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+
       - name: Check out the repository
         uses: actions/checkout@v4
 
@@ -183,6 +171,7 @@ jobs:
           if [ -z "$TARGET_PLATFORMS" ]; then
             TARGET_PLATFORMS="${{secrets.TARGET_PLATFORMS}}"
           fi
+          # Only build for amd64 if it's a fork for speed reasons
           if [ -z "$TARGET_PLATFORMS" ]; then
             IS_FORK=$(if [[ $GITHUB_EVENT_NAME == 'push' && $GITHUB_EVENT_PATH ]]; then jq -r .repository.fork <<< $(cat $GITHUB_EVENT_PATH); else echo false; fi)
             if [ $IS_FORK == "true" ]; then
@@ -204,42 +193,23 @@ jobs:
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:${{env.BUILDKIT_VERSION}}
 
       - name: Verify docker daemon image contents
         run: |
           docker images
 
-      - name: Remove unwanted images to free storage space
-        run: |
-          docker rmi node:14 || true
-          docker rmi node:16 || true
-          docker rmi node:18 || true
-          docker rmi node:20 || true
-          docker images prune
-
-      - name: Restore Docker cache (amd64)
+      - name: Restore Docker cache
         uses: actions/cache/restore@v4
         with:
-          path: /tmp/.buildx-cache-amd64-new
-          key: ${{runner.os}}-buildx-cache-amd64-base-environment-${{github.sha}}
+          path: /tmp/.buildx-cache-new
+          key: ${{runner.os}}-buildx-cache-base-environment-${{github.sha}}
           restore-keys: |
-            ${{runner.os}}-buildx-cache-amd64-base-environment-
+            ${{runner.os}}-buildx-cache-base-environment-
 
-      - name: Restore Docker cache (arm64)
-        uses: actions/cache/restore@v4
-        with:
-          path: /tmp/.buildx-cache-arm64-new
-          key: ${{runner.os}}-buildx-cache-arm64-base-environment-${{github.sha}}
-          restore-keys: |
-            ${{runner.os}}-buildx-cache-arm64-base-environment-
 
       - name: Rename cache directories
         run: |
-          test -d /tmp/.buildx-cache-amd64-new && mv /tmp/.buildx-cache-amd64-new /tmp/.buildx-cache-amd64-old || true
-          test -d /tmp/.buildx-cache-arm64-new && mv /tmp/.buildx-cache-arm64-new /tmp/.buildx-cache-arm64-old || true
+          test -d /tmp/.buildx-cache-new && mv /tmp/.buildx-cache-new /tmp/.buildx-cache-old || true
           du -ks /tmp/.buildx-cache-* || true
 
       - name: Generate container image metadata
@@ -267,54 +237,33 @@ jobs:
           context: workshop-images/base-environment
           platforms: ${{env.TARGET_PLATFORMS}}
           tags: ${{steps.meta.outputs.tags}}
-          cache-from: |
-            type=local,src=/tmp/.buildx-cache-arm64-old
-            type=local,src=/tmp/.buildx-cache-amd64-old
+          cache-from: type=local,src=/tmp/.buildx-cache-old
+          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache-new
           push: true
 
-      - name: Cache build ${{matrix.image}} (amd64)
-        if: contains(env.TARGET_PLATFORMS, 'linux/amd64')
-        uses: docker/build-push-action@v6
-        with:
-          context: workshop-images/base-environment
-          platforms: linux/amd64
-          cache-from: type=local,src=/tmp/.buildx-cache-amd64-old
-          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache-amd64-new
-          push: false
-
-      - name: Remove old cache directories
+      - name: Remove old cache directories amd64
         run: |
-          rm -rf /tmp/.buildx-cache-amd64-old
-
-      - name: Cache build ${{matrix.image}} (arm64)
-        if: contains(env.TARGET_PLATFORMS, 'linux/arm64')
-        uses: docker/build-push-action@v6
-        with:
-          context: workshop-images/base-environment
-          platforms: linux/arm64
-          cache-from: type=local,src=/tmp/.buildx-cache-arm64-old
-          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache-arm64-new
-          push: false
+          rm -rf /tmp/.buildx-cache-old || true
 
       - name: Dump cache directory sizes
         run: |
           du -ks /tmp/.buildx-cache-* || true
 
-      - name: Save Docker cache (amd64)
+      - name: Save Docker cache
         uses: actions/cache/save@v4
         with:
-          path: /tmp/.buildx-cache-amd64-new
-          key: ${{runner.os}}-buildx-cache-amd64-base-environment-${{github.sha}}
-
-      - name: Save Docker cache (arm64)
-        uses: actions/cache/save@v4
-        with:
-          path: /tmp/.buildx-cache-arm64-new
-          key: ${{runner.os}}-buildx-cache-arm64-base-environment-${{github.sha}}
+          path: /tmp/.buildx-cache-new
+          key: ${{runner.os}}-buildx-cache-base-environment-${{github.sha}}
 
   publish-workshop-images:
     name: Publish
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     needs:
       - publish-workshop-base-image
 
@@ -329,6 +278,14 @@ jobs:
           - image: conda-environment
 
     steps:
+      - name: Free Disk Space
+        uses: endersonmenezes/free-disk-space@v2
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+
       - name: Check out the repository
         uses: actions/checkout@v4
 
@@ -339,6 +296,7 @@ jobs:
           if [ -z "$TARGET_PLATFORMS" ]; then
             TARGET_PLATFORMS="${{secrets.TARGET_PLATFORMS}}"
           fi
+          # Only build for amd64 if it's a fork for speed reasons
           if [ -z "$TARGET_PLATFORMS" ]; then
             IS_FORK=$(if [[ $GITHUB_EVENT_NAME == 'push' && $GITHUB_EVENT_PATH ]]; then jq -r .repository.fork <<< $(cat $GITHUB_EVENT_PATH); else echo false; fi)
             if [ $IS_FORK == "true" ]; then
@@ -361,44 +319,23 @@ jobs:
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:${{env.BUILDKIT_VERSION}}
 
       - name: Verify docker daemon image contents
         run: |
           docker images
 
-      - name: Remove unwanted images to free storage space
-        run: |
-          docker rmi node:14 || true
-          docker rmi node:16 || true
-          docker rmi node:18 || true
-          docker rmi node:20 || true
-          docker images prune
-
-      - name: Restore Docker cache (amd64)
+      - name: Restore Docker cache
         if: ${{ (matrix.image == 'conda-environment') }}
         uses: actions/cache/restore@v4
         with:
           path: /tmp/.buildx-cache-amd64-new
-          key: ${{runner.os}}-buildx-cache-amd64-${{matrix.image}}-${{github.sha}}
+          key: ${{runner.os}}-buildx-cache-${{matrix.image}}-${{github.sha}}
           restore-keys: |
-            ${{runner.os}}-buildx-cache-amd64-${{matrix.image}}-
-
-      - name: Restore Docker cache (arm64)
-        if: ${{ (matrix.image == 'conda-environment') }}
-        uses: actions/cache/restore@v4
-        with:
-          path: /tmp/.buildx-cache-arm64-new
-          key: ${{runner.os}}-buildx-cache-arm64-${{matrix.image}}-${{github.sha}}
-          restore-keys: |
-            ${{runner.os}}-buildx-cache-arm64-${{matrix.image}}-
+            ${{runner.os}}-buildx-cache-${{matrix.image}}-
 
       - name: Rename cache directories
         run: |
-          test -d /tmp/.buildx-cache-amd64-new && mv /tmp/.buildx-cache-amd64-new /tmp/.buildx-cache-amd64-old || true
-          test -d /tmp/.buildx-cache-arm64-new && mv /tmp/.buildx-cache-arm64-new /tmp/.buildx-cache-arm64-old || true
+          test -d /tmp/.buildx-cache-new && mv /tmp/.buildx-cache-new /tmp/.buildx-cache-old || true
           du -ks /tmp/.buildx-cache-* || true
 
       - name: Generate container image metadata
@@ -411,6 +348,7 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=sha
 
       - name: Login to GitHub container registry
         uses: docker/login-action@v3
@@ -429,65 +367,33 @@ jobs:
             IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
             BASE_IMAGE_NAME=educates-base-environment
             PACKAGE_VERSION=${{env.REPOSITORY_SHA_TAG}}
-          cache-from: |
-            type=local,src=/tmp/.buildx-cache-arm64-old
-            type=local,src=/tmp/.buildx-cache-amd64-old
+          cache-from: type=local,src=/tmp/.buildx-cache-old
+          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache-new
           push: true
-
-      - name: Cache build ${{matrix.image}} (amd64)
-        if: contains(env.TARGET_PLATFORMS, 'linux/amd64')
-        uses: docker/build-push-action@v6
-        with:
-          context: workshop-images/${{matrix.image}}
-          platforms: linux/amd64
-          build-args: |
-            IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
-            BASE_IMAGE_NAME=educates-base-environment
-            PACKAGE_VERSION=${{env.REPOSITORY_SHA_TAG}}
-          cache-from: type=local,src=/tmp/.buildx-cache-amd64-old
-          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache-amd64-new
-          push: false
 
       - name: Remove old cache directories
         run: |
-          rm -rf /tmp/.buildx-cache-amd64-old
-
-      - name: Cache build ${{matrix.image}} (arm64)
-        if: contains(env.TARGET_PLATFORMS, 'linux/arm64')
-        uses: docker/build-push-action@v6
-        with:
-          context: workshop-images/${{matrix.image}}
-          platforms: linux/arm64
-          build-args: |
-            IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
-            BASE_IMAGE_NAME=educates-base-environment
-            PACKAGE_VERSION=${{env.REPOSITORY_SHA_TAG}}
-          cache-from: type=local,src=/tmp/.buildx-cache-arm64-old
-          cache-to: type=local,mode=max,dest=/tmp/.buildx-cache-arm64-new
-          push: false
+          rm -rf /tmp/.buildx-cache-old || true
 
       - name: Dump cache directory sizes
-        if: ${{ (matrix.image == 'conda-environment') }}
         run: |
           du -ks /tmp/.buildx-cache-* || true
 
-      - name: Save Docker cache (amd64)
-        if: ${{ (matrix.image == 'conda-environment') }}
+      - name: Save Docker cache
         uses: actions/cache/save@v4
         with:
-          path: /tmp/.buildx-cache-amd64-new
-          key: ${{runner.os}}-buildx-cache-amd64-${{matrix.image}}-${{github.sha}}
-
-      - name: Save Docker cache (arm64)
-        if: ${{ (matrix.image == 'conda-environment') }}
-        uses: actions/cache/save@v4
-        with:
-          path: /tmp/.buildx-cache-arm64-new
-          key: ${{runner.os}}-buildx-cache-arm64-${{matrix.image}}-${{github.sha}}
+          path: /tmp/.buildx-cache-new
+          key: ${{runner.os}}-buildx-cache-${{matrix.image}}-${{github.sha}}
 
   publish-carvel-bundles:
     name: Bundle
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     needs:
       - publish-generic-images
       - publish-workshop-images
@@ -500,12 +406,21 @@ jobs:
         shell: bash
         run: curl -L https://carvel.dev/install.sh | bash
 
+      - name: Calculate tag/version
+        id: tag-meta
+        uses: docker/metadata-action@v5
+        with:
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
       - name: Calculate variables
         shell: bash
         run: |
           REPOSITORY_OWNER=${{github.repository_owner}}
           echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
+          echo "REPOSITORY_TAG=${{steps.tag-meta.outputs.tags}}" >>${GITHUB_ENV}
           echo "REPOSITORY_SHA_TAG=sha-${GITHUB_SHA::7}" >>${GITHUB_ENV}
 
       - name: Create publish values file
@@ -614,11 +529,20 @@ jobs:
           echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: ${{env.GO_VERSION}}
+          go-version-file: go.work
           cache-dependency-path: |
             client-programs/go.sum
+
+      - name: Calculate tag/version
+        id: tag-meta
+        uses: docker/metadata-action@v5
+        with:
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build educates client program
         shell: bash
@@ -627,7 +551,7 @@ jobs:
           mkdir client-programs/pkg/renderer/files
           cp -rp workshop-images/base-environment/opt/eduk8s/etc/themes client-programs/pkg/renderer/files/
           cd client-programs
-          REPOSITORY_TAG=${GITHUB_REF##*/}
+          REPOSITORY_TAG=${{steps.tag-meta.outputs.tags}}
           IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
           go build -o educates-linux-amd64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
 
@@ -651,11 +575,20 @@ jobs:
           echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: ${{env.GO_VERSION}}
+          go-version-file: go.work
           cache-dependency-path: |
             client-programs/go.sum
+
+      - name: Calculate tag/version
+        id: tag-meta
+        uses: docker/metadata-action@v5
+        with:
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build educates client program
         shell: bash
@@ -664,7 +597,7 @@ jobs:
           mkdir client-programs/pkg/renderer/files
           cp -rp workshop-images/base-environment/opt/eduk8s/etc/themes client-programs/pkg/renderer/files/
           cd client-programs
-          REPOSITORY_TAG=${GITHUB_REF##*/}
+          REPOSITORY_TAG=${{steps.tag-meta.outputs.tags}}
           IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
           GOOS=linux GOARCH=arm64 go build -o educates-linux-arm64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
 
@@ -675,7 +608,7 @@ jobs:
 
   build-client-programs-darwin-amd64:
     name: Build (clients) / amd64@darwin
-    runs-on: macos-13
+    runs-on: macos-latest
 
     steps:
       - name: Check out the repository
@@ -688,11 +621,20 @@ jobs:
           echo "REPOSITORY_OWNER=$(echo "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >>${GITHUB_ENV}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: ${{env.GO_VERSION}}
+          go-version-file: go.work
           cache-dependency-path: |
             client-programs/go.sum
+
+      - name: Calculate tag/version
+        id: tag-meta
+        uses: docker/metadata-action@v5
+        with:
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build educates client program
         shell: bash
@@ -701,7 +643,7 @@ jobs:
           mkdir client-programs/pkg/renderer/files
           cp -rp workshop-images/base-environment/opt/eduk8s/etc/themes client-programs/pkg/renderer/files/
           cd client-programs
-          REPOSITORY_TAG=${GITHUB_REF##*/}
+          REPOSITORY_TAG=${{steps.tag-meta.outputs.tags}}
           IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
           # DO NOT USE GOOS/GOARCH for native build as it appears to produce a
           # binary which is different and cannot create a Kind cluster which can
@@ -717,7 +659,7 @@ jobs:
 
   build-client-programs-darwin-arm64:
     name: Build (clients) / arm64@darwin
-    runs-on: macos-13
+    runs-on: macos-latest
 
     steps:
       - name: Check out the repository
@@ -730,11 +672,20 @@ jobs:
           echo "REPOSITORY_OWNER=$(echo "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >>${GITHUB_ENV}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: ${{env.GO_VERSION}}
+          go-version-file: go.work
           cache-dependency-path: |
             client-programs/go.sum
+
+      - name: Calculate tag/version
+        id: tag-meta
+        uses: docker/metadata-action@v5
+        with:
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build educates client program
         shell: bash
@@ -743,7 +694,7 @@ jobs:
           mkdir client-programs/pkg/renderer/files
           cp -rp workshop-images/base-environment/opt/eduk8s/etc/themes client-programs/pkg/renderer/files/
           cd client-programs
-          REPOSITORY_TAG=${GITHUB_REF##*/}
+          REPOSITORY_TAG=${{steps.tag-meta.outputs.tags}}
           IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
           GOOS=darwin GOARCH=arm64 go build -o educates-darwin-arm64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
 
@@ -755,6 +706,12 @@ jobs:
   publish-client-programs:
     name: Programs
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     needs:
       - build-client-programs-linux-amd64
       - build-client-programs-linux-arm64
@@ -790,12 +747,21 @@ jobs:
         shell: bash
         run: curl -L https://carvel.dev/install.sh | bash
 
+      - name: Calculate tag/version
+        id: tag-meta
+        uses: docker/metadata-action@v5
+        with:
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
       - name: Calculate variables
         shell: bash
         run: |
           REPOSITORY_OWNER=${{github.repository_owner}}
           echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
+          echo "REPOSITORY_TAG=${{steps.tag-meta.outputs.tags}}" >>${GITHUB_ENV}
 
       - name: Publish client programs
         shell: bash
@@ -807,11 +773,17 @@ jobs:
             --registry-username=${{github.actor}} \
             --registry-password=${{secrets.GITHUB_TOKEN}}
 
-  publish-docker-extension:
-    name: Extension
+  publish-cli-image:
+    name: Publish (cli) image
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     needs:
-      - publish-client-programs
+      - publish-workshop-base-image
 
     steps:
       - name: Check out the repository
@@ -822,15 +794,108 @@ jobs:
         run: |
           REPOSITORY_OWNER=${{github.repository_owner}}
           echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
+          echo "REPOSITORY_SHA_TAG=sha-${GITHUB_SHA::7}" >>${GITHUB_ENV}
+
+      - name: Calculate platforms
+        shell: bash
+        run: |
+          TARGET_PLATFORMS="${{github.event.inputs.target_platforms}}"
+          if [ -z "$TARGET_PLATFORMS" ]; then
+            TARGET_PLATFORMS="${{secrets.TARGET_PLATFORMS}}"
+          fi
+          # Only build for amd64 if it's a fork for speed reasons
+          if [ -z "$TARGET_PLATFORMS" ]; then
+            IS_FORK=$(if [[ $GITHUB_EVENT_NAME == 'push' && $GITHUB_EVENT_PATH ]]; then jq -r .repository.fork <<< $(cat $GITHUB_EVENT_PATH); else echo false; fi)
+            if [ $IS_FORK == "true" ]; then
+              TARGET_PLATFORMS="linux/amd64"
+            else
+              TARGET_PLATFORMS="linux/amd64,linux/arm64"
+            fi
+          fi
+          echo "TARGET_PLATFORMS=${TARGET_PLATFORMS}" >>${GITHUB_ENV}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Generate container image metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          driver-opts: |
-            image=moby/buildkit:${{env.BUILDKIT_VERSION}}
+          images: |
+            ghcr.io/${{env.REPOSITORY_OWNER}}/educates-cli
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Login to GitHub container registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{github.actor}}
+          password: ${{secrets.GITHUB_TOKEN}}
+          registry: ghcr.io
+
+      - name: Build and push docker-cli image
+        uses: docker/build-push-action@v6
+        with:
+          context: client-programs
+          platforms: ${{env.TARGET_PLATFORMS}}
+          build-args: |
+            REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
+            TAG=${{env.REPOSITORY_SHA_TAG}}
+          tags: ${{steps.meta.outputs.tags}}
+          push: true
+
+  publish-docker-extension:
+    name: Extension
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    needs:
+      - publish-cli-image
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Calculate variables
+        shell: bash
+        run: |
+          REPOSITORY_OWNER=${{github.repository_owner}}
+          echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
+          echo "REPOSITORY_SHA_TAG=sha-${GITHUB_SHA::7}" >>${GITHUB_ENV}
+
+      - name: Calculate platforms
+        shell: bash
+        run: |
+          TARGET_PLATFORMS="${{github.event.inputs.target_platforms}}"
+          if [ -z "$TARGET_PLATFORMS" ]; then
+            TARGET_PLATFORMS="${{secrets.TARGET_PLATFORMS}}"
+          fi
+          # Only build for amd64 if it's a fork for speed reasons
+          if [ -z "$TARGET_PLATFORMS" ]; then
+            IS_FORK=$(if [[ $GITHUB_EVENT_NAME == 'push' && $GITHUB_EVENT_PATH ]]; then jq -r .repository.fork <<< $(cat $GITHUB_EVENT_PATH); else echo false; fi)
+            if [ $IS_FORK == "true" ]; then
+              TARGET_PLATFORMS="linux/amd64"
+            else
+              TARGET_PLATFORMS="linux/amd64,linux/arm64"
+            fi
+          fi
+          echo "TARGET_PLATFORMS=${TARGET_PLATFORMS}" >>${GITHUB_ENV}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Generate container image metadata
         id: meta
@@ -842,6 +907,7 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=sha
 
       - name: Login to GitHub container registry
         uses: docker/login-action@v3
@@ -850,11 +916,6 @@ jobs:
           password: ${{secrets.GITHUB_TOKEN}}
           registry: ghcr.io
 
-      - name: Calculate variables
-        shell: bash
-        run: |
-          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
-
       - name: Build and push docker-extension image
         uses: docker/build-push-action@v6
         with:
@@ -862,7 +923,7 @@ jobs:
           platforms: ${{env.TARGET_PLATFORMS}}
           build-args: |
             REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
-            TAG=${{env.REPOSITORY_TAG}}
+            TAG=${{env.REPOSITORY_SHA_TAG}}
           tags: ${{steps.meta.outputs.tags}}
           push: true
 
@@ -882,7 +943,7 @@ jobs:
       - name: Calculate variables
         shell: bash
         run: |
-          REPOSITORY_TAG=${GITHUB_REF##*/}
+          REPOSITORY_TAG="${GITHUB_REF##*/}"
           if [[ "$REPOSITORY_TAG" == *-* ]]; then
             PRERELEASE=true
           else

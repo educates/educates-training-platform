@@ -6,24 +6,26 @@ from .helpers import xget
 
 from .operator_config import (
     OPERATOR_API_GROUP,
-    CLUSTER_STORAGE_GROUP,
-    RANCHER_K3S_V1_27_IMAGE,
-    RANCHER_K3S_V1_28_IMAGE,
-    RANCHER_K3S_V1_29_IMAGE,
-    RANCHER_K3S_V1_30_IMAGE,
     LOFTSH_VCLUSTER_IMAGE,
-    CONTOUR_BUNDLE_IMAGE,
+    LOFTSH_KUBERNETES_V1_31_IMAGE,
+    LOFTSH_KUBERNETES_V1_32_IMAGE,
+    LOFTSH_KUBERNETES_V1_33_IMAGE,
+    LOFTSH_KUBERNETES_V1_34_IMAGE,
+    CLUSTER_STORAGE_GROUP,
 )
 
+K8S_DEFAULT_VERSION = "1.33"
 
-K8S_DEFAULT_VERSION = "1.29"
-
-K3S_VERSIONS = {
-    "1.27": RANCHER_K3S_V1_27_IMAGE,
-    "1.28": RANCHER_K3S_V1_28_IMAGE,
-    "1.29": RANCHER_K3S_V1_29_IMAGE,
-    "1.30": RANCHER_K3S_V1_30_IMAGE,
+K8S_VERSIONS = {
+    "1.31": LOFTSH_KUBERNETES_V1_31_IMAGE,
+    "1.32": LOFTSH_KUBERNETES_V1_32_IMAGE,
+    "1.33": LOFTSH_KUBERNETES_V1_33_IMAGE,
+    "1.34": LOFTSH_KUBERNETES_V1_34_IMAGE,
 }
+
+# Scenarios
+# - Expose k8s api_server in vcluster via a TLS ingress on host.
+# - Enable internal vcluster to use it's own ingresses, so deploy an internal ingress controller.  
 
 
 def vcluster_workshop_spec_patches(workshop_spec, application_properties):
@@ -35,6 +37,7 @@ def vcluster_workshop_spec_patches(workshop_spec, application_properties):
                 "namespaces": {
                     "security": {"policy": policy, "token": {"enabled": False}}
                 },
+                # TODO: Remove octant console
                 "applications": {"console": {"octant": {"version": "latest"}}},
                 "variables": [
                     {
@@ -55,228 +58,19 @@ def vcluster_environment_objects_list(workshop_spec, application_properties):
     return []
 
 
-COREDNS_YAML = """
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: coredns
-  namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    kubernetes.io/bootstrapping: rbac-defaults
-  name: system:coredns
-rules:
-  - apiGroups:
-      - ""
-    resources:
-      - endpoints
-      - services
-      - pods
-      - namespaces
-    verbs:
-      - list
-      - watch
-  - apiGroups:
-      - discovery.k8s.io
-    resources:
-      - endpointslices
-    verbs:
-      - list
-      - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  annotations:
-    rbac.authorization.kubernetes.io/autoupdate: "true"
-  labels:
-    kubernetes.io/bootstrapping: rbac-defaults
-  name: system:coredns
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: system:coredns
-subjects:
-  - kind: ServiceAccount
-    name: coredns
-    namespace: kube-system
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: coredns
-  namespace: kube-system
-data:
-  Corefile: |
-    .:1053 {
-        {{.LOG_IN_DEBUG}}
-        errors
-        health
-        ready
-        kubernetes cluster.local in-addr.arpa ip6.arpa {
-          pods insecure
-          fallthrough in-addr.arpa ip6.arpa
-        }
-        hosts /etc/coredns/NodeHosts {
-          ttl 60
-          reload 15s
-          fallthrough
-        }
-        prometheus :9153
-        forward . /etc/resolv.conf
-        cache 30
-        loop
-        reload
-        loadbalance
-    }
-
-    import /etc/coredns/custom/*.server
-  NodeHosts: ""
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: coredns
-  namespace: kube-system
-  labels:
-    k8s-app: kube-dns
-    kubernetes.io/name: "CoreDNS"
-spec:
-  replicas: 1
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-  selector:
-    matchLabels:
-      k8s-app: kube-dns
-  template:
-    metadata:
-      labels:
-        k8s-app: kube-dns
-    spec:
-      priorityClassName: "system-cluster-critical"
-      serviceAccountName: coredns
-      nodeSelector:
-        kubernetes.io/os: linux
-      topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
-          labelSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      containers:
-        - name: coredns
-          image: {{.IMAGE}}
-          imagePullPolicy: IfNotPresent
-          resources:
-            limits:
-              cpu: 1000m
-              memory: 170Mi
-            requests:
-              cpu: 3m
-              memory: 16Mi
-          args: [ "-conf", "/etc/coredns/Corefile" ]
-          volumeMounts:
-            - name: config-volume
-              mountPath: /etc/coredns
-              readOnly: true
-            - name: custom-config-volume
-              mountPath: /etc/coredns/custom
-              readOnly: true
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: {{.RUN_AS_USER}}
-            runAsGroup: {{.RUN_AS_GROUP}}
-            allowPrivilegeEscalation: false
-            capabilities:
-              add:
-                - NET_BIND_SERVICE
-              drop:
-                - ALL
-            readOnlyRootFilesystem: true
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8080
-              scheme: HTTP
-            initialDelaySeconds: 60
-            periodSeconds: 10
-            timeoutSeconds: 1
-            successThreshold: 1
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /ready
-              port: 8181
-              scheme: HTTP
-            initialDelaySeconds: 0
-            periodSeconds: 2
-            timeoutSeconds: 1
-            successThreshold: 1
-            failureThreshold: 3
-      dnsPolicy: Default
-      volumes:
-        - name: config-volume
-          configMap:
-            name: coredns
-            items:
-              - key: Corefile
-                path: Corefile
-              - key: NodeHosts
-                path: NodeHosts
-        - name: custom-config-volume
-          configMap:
-            name: coredns-custom
-            optional: true
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kube-dns
-  namespace: kube-system
-  annotations:
-    prometheus.io/port: "9153"
-    prometheus.io/scrape: "true"
-  labels:
-    k8s-app: kube-dns
-    kubernetes.io/cluster-service: "true"
-    kubernetes.io/name: "CoreDNS"
-spec:
-  selector:
-    k8s-app: kube-dns
-  type: ClusterIP
-  ports:
-    - name: dns
-      port: 53
-      targetPort: 1053
-      protocol: UDP
-    - name: dns-tcp
-      port: 53
-      targetPort: 1053
-      protocol: TCP
-    - name: metrics
-      port: 9153
-      protocol: TCP
-"""
-
-
 def vcluster_session_objects_list(workshop_spec, application_properties):
-    syncer_memory = xget(application_properties, "resources.syncer.memory", "1Gi")
-    k3s_memory = xget(application_properties, "resources.k3s.memory", "2Gi")
+    def relpath(*paths):
+        return os.path.join(os.path.dirname(__file__), *paths)
 
+    syncer_memory = xget(application_properties, "resources.syncer.memory", "1Gi")
     syncer_storage = xget(application_properties, "resources.syncer.storage", "5Gi")
 
     k8s_version = xget(application_properties, "version", K8S_DEFAULT_VERSION)
 
-    if k8s_version not in K3S_VERSIONS:
+    if k8s_version not in K8S_VERSIONS:
         k8s_version = K8S_DEFAULT_VERSION
 
-    k3s_image = K3S_VERSIONS.get(k8s_version)
+    k8s_image = K8S_VERSIONS.get(k8s_version)
 
     ingress_enabled = xget(application_properties, "ingress.enabled", False)
 
@@ -286,12 +80,10 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     map_services_from_virtual = xget(application_properties, "services.fromVirtual", [])
     map_services_from_host = xget(application_properties, "services.fromHost", [])
 
-    sync_resources = "hoststorageclasses,-ingressclasses"
-
     if ingress_enabled:
-        sync_resources = f"{sync_resources},-ingresses"
+        sync_ingress_resources = False
     else:
-        sync_resources = f"{sync_resources},ingresses"
+        sync_ingress_resources = True
 
     vcluster_objects = xget(application_properties, "objects", [])
 
@@ -317,9 +109,6 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
         # LoadBalancer.
 
         contour_objects = []
-
-        def relpath(*paths):
-            return os.path.join(os.path.dirname(__file__), *paths)
 
         with open(
             relpath("../packages/contour/upstream/00-common.yaml"), encoding="utf-8"
@@ -362,7 +151,11 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
         with open(
             relpath("../packages/contour/upstream/03-contour.yaml"), encoding="utf-8"
         ) as f:
-            contour_objects.extend(yaml.safe_load_all(f))
+            for obj in yaml.safe_load_all(f):
+                if obj.get("kind") == "Deployment":
+                    obj["spec"]["replicas"] = 1
+
+                contour_objects.append(obj)
 
         with open(
             relpath("../packages/contour/upstream/03-envoy.yaml"), encoding="utf-8"
@@ -426,20 +219,83 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
             }
         )
 
-    syncer_args = []
+    # Load vcluster.yaml configuration - Load reference config verbatim and customize for Educates
+    with open(
+        relpath("../packages/vcluster/vcluster-all-config.yaml"), encoding="utf-8"
+    ) as f:
+        vcluster_config = yaml.safe_load(f)
 
-    syncer_args.append(f"--sync={sync_resources}")
+    #
+    # CONFIGURATION CUSTOMIZATION
+    #
+    # Things we WANT this cluster to have:
+    # - sync service accounts of the vcluster to the host cluster
+    # - sync ingresses of the vcluster to the host cluster when dedicated vcluster ingress is enabled
+    # - sync storage classes of the host cluster to the vcluster so they can be used by the vcluster
+    # - sync ingress classes of the host cluster to the vcluster so they can be used by the vcluster
+    # - replicate services to/from the host to/from the vcluster if they are configured in the workshop
+    # - expose kubeconfig of the vcluster to the host cluster and save it into a secret for use in the workshop session
+    #
+    # Things we DO NOT WANT this cluster to have:
+    # - Expose the api server of the vcluster as ingress on the host cluster
+    # - We don't want policies to be controlled by the virtual cluster as we do use the workshop policies
+    #
+    #
+    # Things that are configured directly via kubernetes resources, and hence no need to tweak in configuration
+    # - rbac. This is why the rbac don't need to be enabled/disabled explicitly
+    # - distro. We use kubernetes distro, but it's directly configured in the statefulset
+    #
 
-    for mapping in map_services_from_virtual:
-        from_virtual = mapping["from"]
-        to_host = mapping["to"]
-        syncer_args.append(f"--map-virtual-service={from_virtual}={to_host}")
+    # Disable rbac as it's already been precreated by Educates. This is also done directly as resources
+    # vcluster_config["rbac"]["role"]["enabled"] = False
+    # vcluster_config["rbac"]["clusterRole"]["enabled"] = False
+    # vcluster_config["rbac"]["enableVolumeSnapshotRules"]["enabled"] = False
 
-    for mapping in map_services_from_host:
-        from_host = mapping["from"]
-        to_virtual = mapping["to"]
-        syncer_args.append(f"--map-host-service={from_host}={to_virtual}")
+    # Sync mapping of resources
+    # TO_HOST_SYNC
+    #vcluster_config["sync"]["toHost"]["services"] = {"enabled": True}
+    #vcluster_config["sync"]["toHost"]["endpoints"] = {"enabled": True}
+    #vcluster_config["sync"]["toHost"]["endpointSlices"] = {"enabled": True}
+    #vcluster_config["sync"]["toHost"]["persistentVolumeClaims"] = {"enabled": True}
+    #vcluster_config["sync"]["toHost"]["configMaps"] = {"enabled": True}
+    #vcluster_config["sync"]["toHost"]["secrets"] = {"enabled": True}
+    vcluster_config["sync"]["toHost"]["serviceAccounts"] = {"enabled": True}
+    vcluster_config["sync"]["toHost"]["ingresses"] = {"enabled": sync_ingress_resources}
+    # FROM_HOST_SYNC    
+    vcluster_config["sync"]["fromHost"]["storageClasses"] = {"enabled": True}
+    vcluster_config["sync"]["fromHost"]["ingressClasses"] = {"enabled": True}
 
+    # Map services from virtual cluster to host cluster
+    vcluster_config["networking"]["replicateServices"]["toHost"] = map_services_from_virtual
+    vcluster_config["networking"]["replicateServices"]["fromHost"] = map_services_from_host
+
+    # TODO: Fix the generated Kubeconfig, as it's using localhost:8443 as server instead of the one specified here
+    vcluster_config["exportKubeConfig"] = {
+        "context": "my-vcluster",
+        "server": "https://my-vcluster.$(vcluster_namespace).svc.$(cluster_domain)",
+    }
+    vcluster_config["policies"]["resourceQuota"]["enabled"] = False
+    vcluster_config["policies"]["limitRange"]["enabled"] = False
+
+    # vcluster_config["controlPlane"]["ingress"]["enabled"] = True
+    # vcluster_config["controlPlane"]["ingress"]["host"] = f"$(session_namespace)-vc-api.{INGRESS_DOMAIN}"
+    # vcluster_config["controlPlane"]["ingress"]["spec"]["tls"] = ingress_tls
+    # Add extra SANs to the proxy
+    vcluster_config["controlPlane"]["proxy"]["extraSANs"] = ["my-vcluster.$(vcluster_namespace)", "my-vcluster.$(vcluster_namespace).svc.$(cluster_domain)"]
+
+    # TODO: Work integration with cert-manager
+
+    vcluster_config["experimental"]["deploy"]["vcluster"]["manifests"] = yaml.dump_all(vcluster_objects, Dumper=yaml.Dumper)
+
+    # Definition of vcluster objects:
+    # - Namespace for vcluster
+    # - SecretCopier to copy the vcluster kubeconfig to the workshop namespace
+    # - ServiceAccount for vcluster creation
+    # - ServiceAccount for workloads in vcluster
+    # - Secret with vcluster configuration
+    # - ClusterRole, Role, RoleBinding and ClusterRoleBinding for vcluster creation
+    # - vcluster and vcluster-headless services to access vCluster from the host cluster
+    # - vCluster statefulset to create the vCluster
     objects = [
         {
             "apiVersion": "v1",
@@ -462,7 +318,7 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                 "rules": [
                     {
                         "sourceSecret": {
-                            "name": "$(session_namespace)-vc-kubeconfig",
+                            "name": "vc-my-vcluster",
                             "namespace": "$(session_namespace)-vc",
                         },
                         "targetNamespaces": {
@@ -481,6 +337,7 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                 "name": "vc-my-vcluster",
                 "namespace": "$(session_namespace)-vc",
             },
+            # TODO: Add ImagePullSecrets capability
         },
         {
             "apiVersion": "v1",
@@ -488,6 +345,18 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
             "metadata": {
                 "name": "vc-workload-my-vcluster",
                 "namespace": "$(session_namespace)",
+            },
+            # TODO: Add ImagePullSecrets capability
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {
+                "name": "vc-config-my-vcluster",
+                "namespace": "$(session_namespace)-vc",
+            },
+            "stringData": {
+                "config.yaml": yaml.dump(vcluster_config),
             },
         },
         {
@@ -509,7 +378,7 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                 },
                 {
                     "apiGroups": [""],
-                    "resources": ["services"],
+                    "resources": ["services", "endpoints"],
                     "verbs": ["get", "list", "watch"],
                 },
             ],
@@ -528,10 +397,12 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                         "configmaps",
                         "secrets",
                         "services",
+                        "serviceaccounts",
                         "pods",
                         "pods/attach",
                         "pods/portforward",
                         "pods/exec",
+                        "pods/status",
                         "endpoints",
                         "persistentvolumeclaims",
                     ],
@@ -549,6 +420,11 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                     "apiGroups": [""],
                     "resources": ["events", "pods/log"],
                     "verbs": ["get", "list", "watch"],
+                },
+                {
+                    "apiGroups": ["discovery.k8s.io"],
+                    "resources": ["endpointslices"],
+                    "verbs": ["get", "list", "watch", "update"],
                 },
                 {
                     "apiGroups": ["networking.k8s.io"],
@@ -687,28 +563,6 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
         },
         {
             "apiVersion": "v1",
-            "kind": "ConfigMap",
-            "metadata": {
-                "name": "my-vcluster-init-manifests",
-                "namespace": "$(session_namespace)-vc",
-            },
-            "data": {
-                "manifests": yaml.dump_all(vcluster_objects, Dumper=yaml.Dumper),
-            },
-        },
-        {
-            "apiVersion": "v1",
-            "kind": "ConfigMap",
-            "metadata": {
-                "name": "my-vcluster-coredns",
-                "namespace": "$(session_namespace)-vc",
-            },
-            "data": {
-                "coredns.yaml": COREDNS_YAML,
-            },
-        },
-        {
-            "apiVersion": "v1",
             "kind": "Service",
             "metadata": {
                 "name": "my-vcluster",
@@ -720,6 +574,12 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                     {
                         "name": "https",
                         "port": 443,
+                        "targetPort": 8443,
+                        "protocol": "TCP",
+                    },
+                    {
+                        "name": "kubelet",
+                        "port": 10250,
                         "targetPort": 8443,
                         "protocol": "TCP",
                     }
@@ -781,81 +641,49 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                         "tolerations": [],
                         "serviceAccountName": "vc-my-vcluster",
                         "volumes": [
+                            {"name": "helm-cache", "emptyDir": {}},
+                            {"name": "binaries", "emptyDir": {}},
+                            {"name": "tmp", "emptyDir": {}},
+                            {"name": "certs", "emptyDir": {}},
                             {
-                                "name": "config",
-                                "emptyDir": {},
-                            },
-                            {
-                                "name": "coredns",
-                                "configMap": {
-                                    "name": "my-vcluster-coredns",
-                                },
+                                "name": "vcluster-config",
+                                "secret": {"secretName": "vc-config-my-vcluster"},
                             },
                         ],
                         "securityContext": {
                             "fsGroup": CLUSTER_STORAGE_GROUP,
                             "supplementalGroups": [CLUSTER_STORAGE_GROUP],
                         },
-                        "containers": [
+                        "initContainers": [
                             {
-                                "image": k3s_image,
-                                "name": "vcluster",
-                                "command": ["/bin/sh"],
-                                "args": [
-                                    "-c",
-                                    "/bin/k3s server --write-kubeconfig=/data/k3s-config/kube-config.yaml --data-dir=/data --disable=traefik,servicelb,metrics-server,local-storage,coredns --disable-network-policy --disable-agent --disable-cloud-controller --flannel-backend=none --disable-scheduler --kube-controller-manager-arg=controllers=*,-nodeipam,-nodelifecycle,-persistentvolume-binder,-attachdetach,-persistentvolume-expander,-cloud-node-lifecycle,-ttl --kube-apiserver-arg=endpoint-reconciler-type=none --service-cidr=$(SERVICE_CIDR) && true",
-                                ],
-                                "env": [
-                                    {
-                                        "name": "SERVICE_CIDR",
-                                        "valueFrom": {
-                                            "configMapKeyRef": {
-                                                "name": "vc-cidr-my-vcluster",
-                                                "key": "cidr",
-                                            }
-                                        },
-                                    },
-                                ],
-                                "securityContext": {
-                                    "allowPrivilegeEscalation": False,
-                                    "runAsNonRoot": True,
-                                    "runAsUser": 12345,
-                                },
+                                "name": "kubernetes",
+                                "image": k8s_image,
+                                "command": ["cp"],
+                                "args": ["-r", "/kubernetes/.", "/binaries/"],
                                 "volumeMounts": [
-                                    {
-                                        "name": "config",
-                                        "mountPath": "/etc/rancher",
-                                    },
-                                    {"mountPath": "/data", "name": "data"},
+                                    {"mountPath": "/binaries", "name": "binaries"}
                                 ],
+                                "securityContext": {},
                                 "resources": {
-                                    "limits": {"memory": k3s_memory},
-                                    "requests": {"cpu": "200m", "memory": k3s_memory},
+                                    "limits": {"cpu": "100m", "memory": "256Mi"},
+                                    "requests": {"cpu": "40m", "memory": "64Mi"},
                                 },
-                            },
+                            }
+                        ],
+                        "containers": [
                             {
                                 "name": "syncer",
                                 "image": LOFTSH_VCLUSTER_IMAGE,
-                                "args": [
-                                    "--name=my-vcluster",
-                                    "--service-account=vc-workload-my-vcluster",
-                                    "--target-namespace=$(session_namespace)",
-                                    "--tls-san=my-vcluster.$(session_namespace)-vc.svc.cluster.local",
-                                    "--out-kube-config-server=https://my-vcluster.$(session_namespace)-vc.svc.cluster.local",
-                                    "--out-kube-config-secret=$(session_namespace)-vc-kubeconfig",
-                                    "--kube-config-context-name=my-vcluster",
-                                    "--leader-elect=false",
-                                ]
-                                + syncer_args,
                                 "livenessProbe": {
                                     "httpGet": {
                                         "path": "/healthz",
                                         "port": 8443,
                                         "scheme": "HTTPS",
                                     },
-                                    "failureThreshold": 60,
                                     "initialDelaySeconds": 60,
                                     "periodSeconds": 2,
+                                    "timeoutSeconds": 3,
+                                    "failureThreshold": 60,
                                 },
                                 "readinessProbe": {
                                     "httpGet": {
@@ -863,15 +691,45 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                                         "port": 8443,
                                         "scheme": "HTTPS",
                                     },
-                                    "failureThreshold": 60,
                                     "periodSeconds": 2,
+                                    "timeoutSeconds": 3,
+                                    "failureThreshold": 60,
+                                },
+                                "startupProbe": {
+                                    "httpGet": {
+                                        "path": "/readyz",
+                                        "port": 8443,
+                                        "scheme": "HTTPS",
+                                    },
+                                    "periodSeconds": 6,
+                                    "timeoutSeconds": 3,
+                                    "failureThreshold": 300,
                                 },
                                 "securityContext": {
                                     "allowPrivilegeEscalation": False,
                                     "runAsNonRoot": True,
+                                    "runAsGroup": 1001,
                                     "runAsUser": 12345,
                                 },
+                                "resources": {
+                                    "limits": {
+                                        "ephemeral-storage": syncer_storage,
+                                        "memory": syncer_memory,
+                                    },
+                                    "requests": {
+                                        "cpu": "200m",
+                                        "ephemeral-storage": syncer_storage,
+                                        "memory": syncer_memory,
+                                    },
+                                },
                                 "env": [
+                                    {"name": "VCLUSTER_NAME", "value": "my-vcluster"},
+                                    {
+                                        "name": "POD_NAME",
+                                        "valueFrom": {
+                                            "fieldRef": {"fieldPath": "metadata.name"}
+                                        },
+                                    },
                                     {
                                         "name": "POD_IP",
                                         "valueFrom": {
@@ -879,31 +737,26 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                                         },
                                     },
                                     {
-                                        "name": "VCLUSTER_NODE_NAME",
+                                        "name": "NODE_NAME",
                                         "valueFrom": {
                                             "fieldRef": {"fieldPath": "spec.nodeName"}
                                         },
                                     },
+                                    {
+                                        "name": "NODE_IP",
+                                        "valueFrom": {
+                                            "fieldRef": {"fieldPath": "status.hostIP"}
+                                        },
+                                    },
                                 ],
                                 "volumeMounts": [
-                                    {
-                                        "name": "coredns",
-                                        "mountPath": "/manifests/coredns",
-                                        "readOnly": True,
-                                    },
-                                    {
-                                        "mountPath": "/data",
-                                        "name": "data",
-                                        "readOnly": True,
-                                    },
+                                    {"name": "data", "mountPath": "/data"},
+                                    {"name": "binaries", "mountPath": "/binaries"},
+                                    {"name": "certs", "mountPath": "/pki"},
+                                    {"name": "helm-cache", "mountPath": "/.cache/helm"},
+                                    {"name": "vcluster-config", "mountPath": "/var/lib/vcluster"},
+                                    {"name": "tmp", "mountPath": "/tmp"},
                                 ],
-                                "resources": {
-                                    "limits": {"memory": syncer_memory},
-                                    "requests": {
-                                        "cpu": "100m",
-                                        "memory": syncer_memory,
-                                    },
-                                },
                             },
                         ],
                     },
@@ -918,7 +771,7 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
             "kind": "Ingress",
             "metadata": {
                 "name": "contour-$(session_namespace)",
-                "namespace": "$(session_namespace)",
+                "namespace": "$(session_namespace)-vc",
                 "annotations": {
                     "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
                     "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",

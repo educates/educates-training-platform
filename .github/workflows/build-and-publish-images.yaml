@@ -406,21 +406,12 @@ jobs:
         shell: bash
         run: curl -L https://carvel.dev/install.sh | bash
 
-      - name: Calculate tag/version
-        id: tag-meta
-        uses: docker/metadata-action@v5
-        with:
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}.{{patch}}
-
       - name: Calculate variables
         shell: bash
         run: |
           REPOSITORY_OWNER=${{github.repository_owner}}
           echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_TAG=${{steps.tag-meta.outputs.tags}}" >>${GITHUB_ENV}
+          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
           echo "REPOSITORY_SHA_TAG=sha-${GITHUB_SHA::7}" >>${GITHUB_ENV}
 
       - name: Create publish values file
@@ -527,6 +518,7 @@ jobs:
         run: |
           REPOSITORY_OWNER=${{github.repository_owner}}
           echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
+          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -542,7 +534,7 @@ jobs:
           mkdir client-programs/pkg/renderer/files
           cp -rp workshop-images/base-environment/opt/eduk8s/etc/themes client-programs/pkg/renderer/files/
           cd client-programs
-          REPOSITORY_TAG=${GITHUB_REF##*/}
+          REPOSITORY_TAG=${{env.REPOSITORY_TAG}}
           IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
           go build -o educates-linux-amd64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
 
@@ -564,6 +556,7 @@ jobs:
         run: |
           REPOSITORY_OWNER=${{github.repository_owner}}
           echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
+          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -579,7 +572,7 @@ jobs:
           mkdir client-programs/pkg/renderer/files
           cp -rp workshop-images/base-environment/opt/eduk8s/etc/themes client-programs/pkg/renderer/files/
           cd client-programs
-          REPOSITORY_TAG=${GITHUB_REF##*/}
+          REPOSITORY_TAG=${{env.REPOSITORY_TAG}}
           IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
           GOOS=linux GOARCH=arm64 go build -o educates-linux-arm64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
 
@@ -601,6 +594,7 @@ jobs:
         run: |
           REPOSITORY_OWNER=${{github.repository_owner}}
           echo "REPOSITORY_OWNER=$(echo "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >>${GITHUB_ENV}
+          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -616,7 +610,7 @@ jobs:
           mkdir client-programs/pkg/renderer/files
           cp -rp workshop-images/base-environment/opt/eduk8s/etc/themes client-programs/pkg/renderer/files/
           cd client-programs
-          REPOSITORY_TAG=${GITHUB_REF##*/}
+          REPOSITORY_TAG=${{env.REPOSITORY_TAG}}
           IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
           # DO NOT USE GOOS/GOARCH for native build as it appears to produce a
           # binary which is different and cannot create a Kind cluster which can
@@ -643,6 +637,7 @@ jobs:
         run: |
           REPOSITORY_OWNER=${{github.repository_owner}}
           echo "REPOSITORY_OWNER=$(echo "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >>${GITHUB_ENV}
+          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -658,7 +653,7 @@ jobs:
           mkdir client-programs/pkg/renderer/files
           cp -rp workshop-images/base-environment/opt/eduk8s/etc/themes client-programs/pkg/renderer/files/
           cd client-programs
-          REPOSITORY_TAG=${GITHUB_REF##*/}
+          REPOSITORY_TAG=${{env.REPOSITORY_TAG}}
           IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
           GOOS=darwin GOARCH=arm64 go build -o educates-darwin-arm64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
 
@@ -711,21 +706,12 @@ jobs:
         shell: bash
         run: curl -L https://carvel.dev/install.sh | bash
 
-      - name: Calculate tag/version
-        id: tag-meta
-        uses: docker/metadata-action@v5
-        with:
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}.{{patch}}
-
       - name: Calculate variables
         shell: bash
         run: |
           REPOSITORY_OWNER=${{github.repository_owner}}
           echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_TAG=${{steps.tag-meta.outputs.tags}}" >>${GITHUB_ENV}
+          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
 
       - name: Publish client programs
         shell: bash

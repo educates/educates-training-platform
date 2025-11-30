@@ -107,7 +107,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}}
             type=sha
 
       - name: Login to GitHub container registry
@@ -221,7 +221,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}}
             type=sha
 
       - name: Login to GitHub container registry
@@ -347,7 +347,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}}
             type=sha
 
       - name: Login to GitHub container registry
@@ -413,7 +413,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}}
 
       - name: Calculate variables
         shell: bash
@@ -668,7 +668,7 @@ jobs:
           path: client-programs/educates-darwin-arm64
 
   publish-client-programs:
-    name: Programs
+    name: Client Programs Imgpkg Bundle
     runs-on: ubuntu-latest
 
     permissions:
@@ -718,7 +718,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}}
 
       - name: Calculate variables
         shell: bash
@@ -793,7 +793,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}}
             type=sha
 
       - name: Login to GitHub container registry
@@ -870,7 +870,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}}
             type=sha
 
       - name: Login to GitHub container registry

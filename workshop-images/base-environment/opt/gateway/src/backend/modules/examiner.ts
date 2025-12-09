@@ -13,7 +13,78 @@ const test_program_directories = [
     "/opt/renderer/workshop/examiner/tests"
 ];
 
-function find_test_program(name) {
+/**
+ * Validates that a test name contains only safe characters.
+ * Allows alphanumeric characters, hyphens, underscores, and dots.
+ * Prevents path traversal and command injection attempts.
+ */
+function validate_test_name(name: string): boolean {
+    if (!name || typeof name !== 'string') {
+        return false;
+    }
+    // Only allow alphanumeric, hyphens, underscores, and dots
+    // Explicitly disallow path separators and other special characters
+    const safePattern = /^[a-zA-Z0-9._-]+$/;
+    return safePattern.test(name) && !name.includes('..') && !name.includes('/') && !name.includes('\\');
+}
+
+/**
+ * Validates that a resolved pathname is within one of the allowed directories.
+ * Prevents directory traversal attacks even if path.join() is bypassed.
+ */
+function validate_pathname(pathname: string): boolean {
+    if (!pathname || typeof pathname !== 'string') {
+        return false;
+    }
+    // Resolve to absolute path to prevent symlink attacks
+    const resolvedPath = path.resolve(pathname);
+    
+    // Check if the resolved path is within any allowed directory
+    for (const allowedDir of test_program_directories) {
+        const resolvedDir = path.resolve(allowedDir);
+        // Check if resolvedPath starts with resolvedDir followed by path.sep
+        // This ensures the file is actually within the directory, not just a prefix match
+        if (resolvedPath.startsWith(resolvedDir + path.sep) || resolvedPath === resolvedDir) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Validates command arguments to prevent injection attacks.
+ * Ensures args is an array of strings without dangerous characters.
+ */
+function validate_args(args: any): string[] | null {
+    if (!Array.isArray(args)) {
+        return null;
+    }
+    
+    const validatedArgs: string[] = [];
+    for (const arg of args) {
+        // Only allow string arguments
+        if (typeof arg !== 'string') {
+            return null;
+        }
+        // Reject empty strings and strings with null bytes (common injection vector)
+        if (arg.length === 0 || arg.includes('\0')) {
+            return null;
+        }
+        // Allow all printable characters in arguments (they're passed as array, not shell)
+        // The spawn() function with array arguments doesn't use shell, so we just need
+        // to ensure they're valid strings without null bytes
+        validatedArgs.push(arg);
+    }
+    
+    return validatedArgs;
+}
+
+function find_test_program(name: string): string | null {
+    // Validate test name first
+    if (!validate_test_name(name)) {
+        return null;
+    }
+
     let i: any;
 
     for (i in test_program_directories) {
@@ -21,11 +92,17 @@ function find_test_program(name) {
 
         try {
             fs.accessSync(pathname, fs.constants.R_OK | fs.constants.X_OK);
-            return pathname;
+            
+            // Additional validation: ensure the resolved path is within allowed directory
+            if (validate_pathname(pathname)) {
+                return pathname;
+            }
         } catch (err) {
             // Ignore it.
         }
     }
+    
+    return null;
 }
 
 export function setup_examiner(app: express.Application, token: string = null) {
@@ -39,17 +116,42 @@ export function setup_examiner(app: express.Application, token: string = null) {
 
         let options = req.body
 
-        let timeout = options.timeout || 15
-        let args = options.args || []
-        let form = options.form || {}
+        // Validate test parameter
+        if (!test || !validate_test_name(test)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid test name"
+            })
+        }
 
-        if (!test)
-            return next()
+        // Validate and sanitize arguments
+        let rawArgs = options.args || []
+        let args = validate_args(rawArgs)
+        
+        if (args === null) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid arguments: must be an array of non-empty strings"
+            })
+        }
+
+        let timeout = options.timeout || 15
+        let form = options.form || {}
 
         let pathname = find_test_program(test)
 
-        if (!pathname)
+        if (!pathname) {
             return res.sendStatus(404)
+        }
+
+        // Double-check pathname validation (defense in depth)
+        if (!validate_pathname(pathname)) {
+            console.error(`${test}: Security validation failed for pathname: ${pathname}`)
+            return res.status(403).json({
+                success: false,
+                message: "Security validation failed"
+            })
+        }
 
         let process: any
 

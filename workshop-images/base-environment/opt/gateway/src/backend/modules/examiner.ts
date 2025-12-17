@@ -90,15 +90,19 @@ function find_test_program(name: string): string | null {
     for (i in test_program_directories) {
         let pathname = path.join(test_program_directories[i], name);
 
+        // CRITICAL: Validate pathname BEFORE checking file existence
+        // This prevents any path traversal or symlink attacks
+        if (!validate_pathname(pathname)) {
+            continue; // Skip this path if validation fails
+        }
+
         try {
             fs.accessSync(pathname, fs.constants.R_OK | fs.constants.X_OK);
-            
-            // Additional validation: ensure the resolved path is within allowed directory
-            if (validate_pathname(pathname)) {
-                return pathname;
-            }
+            // Pathname already validated above, safe to return
+            return pathname;
         } catch (err) {
-            // Ignore it.
+            // File doesn't exist or isn't accessible, continue to next directory
+            continue;
         }
     }
     
@@ -134,10 +138,12 @@ export function setup_examiner(app: express.Application, token: string = null) {
                 message: "Invalid arguments: must be an array of non-empty strings"
             })
         }
+        // CRITICAL: args is now validated and sanitized - never use rawArgs again
 
         let timeout = options.timeout || 15
         let form = options.form || {}
 
+        // find_test_program already validates test name and pathname internally
         let pathname = find_test_program(test)
 
         if (!pathname) {
@@ -158,6 +164,7 @@ export function setup_examiner(app: express.Application, token: string = null) {
         try {
             let timer: any
 
+            // CRITICAL: Use only validated args here - never use options.args directly
             process = child_process.spawn(pathname, args, { cwd: os.homedir() })
 
             process.on('error', (err) => {

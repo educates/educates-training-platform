@@ -27,7 +27,7 @@
 		"watch": "tsc -watch -p ./"
 	},
 	"dependencies": {
-		"express": "^4.21.2",
+		"express": "^4.22.1",
 		"regexp-match-indices": "^1.0.2",
 		"yaml": "^1.10.2",
 		"ansi-regex": ">=6.0.1",

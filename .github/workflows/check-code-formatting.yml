@@ -1,0 +1,48 @@
+name: Check Code Formatting
+
+on:
+  pull_request:
+    paths:
+      - '**.ts'
+      - '**.tsx'
+      - '**.js'
+      - '**.jsx'
+      - '**.json'
+      - '**.md'
+      - '.prettierrc.json'
+      - '.editorconfig'
+      - 'package.json'
+
+jobs:
+  check-formatting:
+    name: Check Code Formatting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Check code formatting
+        run: npm run format:check
+        continue-on-error: false
+
+      - name: Comment PR if formatting is incorrect
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Code formatting check failed**\n\nThis PR contains files that are not formatted according to the project style. Please run `npm run format` to fix the formatting issues.\n\nYou can also format specific directories:\n- `npm run format:gateway`\n- `npm run format:renderer`\n- `npm run format:helper`\n- `npm run format:docker-extension`'
+            })

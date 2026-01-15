@@ -1,21 +1,17 @@
 package cmd
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
-	"io"
-	"os"
+	"net"
+	"strconv"
+	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/go-connections/nat"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
-	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/installer"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
@@ -82,13 +78,9 @@ func (o *LocalClusterCreateOptions) Run() error {
 		return err
 	}
 
-	httpAvailable, err := checkPortAvailability(fullConfig.LocalKindCluster.ListenAddress, []uint{80, 443}, o.Verbose)
+	available := checkPortAvailability(fullConfig.LocalKindCluster.ListenAddress, []uint{80, 443}, o.Verbose)
 
-	if err != nil {
-		return errors.Wrap(err, "couldn't test whether ports 80/443 available")
-	}
-
-	if !httpAvailable {
+	if !available {
 		return errors.New("ports 80/443 not available")
 	}
 
@@ -112,7 +104,12 @@ func (o *LocalClusterCreateOptions) Run() error {
 		}
 	}
 
-	if err = registry.DeployRegistryAndLinkToCluster(o.RegistryBindIP, client); err != nil {
+	localRegistryIP, err := registry.ResolveLocalRegistryIP()
+	if err != nil {
+		return errors.Wrap(err, "failed to resolve local registry IP")
+	}
+
+	if err = registry.DeployRegistryAndLinkToCluster(o.RegistryBindIP, localRegistryIP, client); err != nil {
 		return errors.Wrap(err, "failed to deploy registry")
 	}
 
@@ -134,6 +131,10 @@ func (o *LocalClusterCreateOptions) Run() error {
 	}
 
 	if !o.ClusterOnly {
+		if !o.SkipImageResolution && !isImageResolutionPossible() {
+			fmt.Println("🔴 No network connectivity detected; skipping image resolution")
+			o.SkipImageResolution = true
+		}
 		installer := installer.NewInstaller()
 		err = installer.Run(o.Version, o.PackageRepository, fullConfig, &clusterConfig.Config, o.Verbose, false, o.SkipImageResolution, false)
 		if err != nil {
@@ -228,31 +229,10 @@ func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
 	return c
 }
 
-func checkPortAvailability(listenAddress string, ports []uint, verbose bool) (bool, error) {
-	ctx := context.Background()
-
-	cli, err := docker.NewDockerClient()
-
-	if err != nil {
-		return false, errors.Wrap(err, "unable to create docker client")
-	}
-
-	cli.ContainerRemove(ctx, "educates-port-availability-check", container.RemoveOptions{})
-
-	reader, err := cli.ImagePull(ctx, "docker.io/library/busybox:latest", image.PullOptions{})
-	if err != nil {
-		return false, errors.Wrap(err, "cannot pull busybox image")
-	}
-
-	defer reader.Close()
-
-	if verbose {
-		io.Copy(os.Stdout, reader)
-	} else {
-		io.Copy(io.Discard, reader)
-	}
-
+func checkPortAvailability(listenAddress string, ports []uint, verbose bool) bool {
+	// Handle empty address default
 	if listenAddress == "" {
+		var err error
 		listenAddress, err = config.HostIP()
 
 		if err != nil {
@@ -260,49 +240,32 @@ func checkPortAvailability(listenAddress string, ports []uint, verbose bool) (bo
 		}
 	}
 
-	hostConfig := &container.HostConfig{
-		PortBindings: nat.PortMap{},
-	}
-
-	exposedPorts := nat.PortSet{}
-
 	for _, port := range ports {
-		key := nat.Port(fmt.Sprintf("%d/tcp", port))
-		hostConfig.PortBindings[key] = []nat.PortBinding{
-			{
-				HostIP:   listenAddress,
-				HostPort: fmt.Sprintf("%d", port),
-			},
-		}
-		exposedPorts[key] = struct{}{}
-	}
+		// Format the address:port string
+		address := net.JoinHostPort(listenAddress, strconv.Itoa(int(port)))
 
-	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image:        "docker.io/library/busybox:latest",
-		Cmd:          []string{"/bin/true"},
-		Tty:          false,
-		ExposedPorts: exposedPorts,
-	}, hostConfig, nil, nil, "educates-port-availability-check")
-
-	if err != nil {
-		return false, errors.Wrap(err, "cannot create busybox container")
-	}
-
-	defer cli.ContainerRemove(ctx, "educates-port-availability-check", container.RemoveOptions{})
-
-	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return false, errors.Wrap(err, "cannot start busybox container")
-	}
-
-	statusCh, errCh := cli.ContainerWait(ctx, "educates-port-availability-check", container.WaitConditionNotRunning)
-
-	select {
-	case err := <-errCh:
+		// Try to create a server listener
+		listener, err := net.Listen("tcp", address)
 		if err != nil {
-			return false, nil
+			// If we get an error, the port is likely in use (or we lack permission)
+			return false
 		}
-	case <-statusCh:
+
+		// Important: Close the listener immediately so we don't hog the port!
+		listener.Close()
 	}
 
-	return true, nil
+	return true
+}
+
+func isImageResolutionPossible() bool {
+	timeout := 2 * time.Second
+	target := net.JoinHostPort("registry-1.docker.io", "443")
+
+	conn, err := net.DialTimeout("tcp", target, timeout)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }

@@ -38,6 +38,8 @@ const hostRegistryTomlTemplate = `[host."http://%s:5000"]`
 const (
 	RegistryImageV3               = "docker.io/library/registry:3"
 	RegistryConfigTargetPath      = "/etc/distribution/config.yml"
+	KindNetworkName               = "kind"
+	// Used for docker-based workshop deployments to discover the local registry.
 	EducatesNetworkName           = "educates"
 	EducatesRegistryContainer     = "educates-registry"
 	EducatesControlPlaneContainer = "educates-control-plane"
@@ -50,9 +52,9 @@ const (
  * This function is used to deploy the registry and link it to the cluster.
  * It is used when creating a new local cluster.
  */
-func DeployRegistryAndLinkToCluster(bindIP string, client *kubernetes.Clientset) error {
+func DeployRegistryAndLinkToCluster(bindIP string, kindRegistryIP string, client *kubernetes.Clientset) error {
 
-	err := createRegistryContainer(bindIP)
+	err := createRegistryContainer(bindIP, kindRegistryIP)
 	if err != nil {
 		return errors.Wrap(err, "failed to deploy registry")
 	}
@@ -80,7 +82,7 @@ func DeployRegistryAndLinkToCluster(bindIP string, client *kubernetes.Clientset)
  * It will not link the registry to the cluster.
  */
 func DeployRegistry(bindIP string) error {
-	err := createRegistryContainer(bindIP)
+	err := createRegistryContainer(bindIP, "")
 	if err != nil {
 		return errors.Wrap(err, "failed to deploy registry")
 	}
@@ -91,7 +93,7 @@ func DeployRegistry(bindIP string) error {
 /**
  * This private function only creates the registry container.
  */
-func createRegistryContainer(bindIP string) error {
+func createRegistryContainer(bindIP string, kindRegistryIP string) error {
 	ctx := context.Background()
 
 	fmt.Println("Deploying local image registry")
@@ -175,7 +177,7 @@ func createRegistryContainer(bindIP string) error {
 		return errors.Wrap(err, "unable to connect registry to educates network")
 	}
 
-	if err = linkRegistryToClusterNetwork(EducatesRegistryContainer); err != nil {
+	if err = linkRegistryToClusterNetwork(EducatesRegistryContainer, kindRegistryIP); err != nil {
 		return errors.Wrap(err, "failed to link registry to cluster")
 	}
 
@@ -226,7 +228,13 @@ func createMirrorContainer(mirrorConfig *config.RegistryMirrorConfig) error {
 		// have exited and container was not removed, but if that is the case
 		// then leave it up to the user to sort out.
 		fmt.Printf("Registry mirror %s already exists\n", mirrorConfig.Mirror)
-
+		kindMirrorIP, err := ResolveLocalMirrorIP(mirrorContainerName)
+		if err != nil {
+			return errors.Wrap(err, "failed to resolve fixed kind IP for local registry mirror")
+		}
+		if err = linkRegistryToClusterNetwork(mirrorContainerName, kindMirrorIP); err != nil {
+			return errors.Wrap(err, "failed to link local registry mirror to cluster")
+		}
 		return nil
 	}
 
@@ -300,7 +308,12 @@ func createMirrorContainer(mirrorConfig *config.RegistryMirrorConfig) error {
 		return errors.Wrap(err, "unable to connect local registry mirror to educates network")
 	}
 
-	if err = linkRegistryToClusterNetwork(mirrorContainerName); err != nil {
+	kindMirrorIP, err := ResolveLocalMirrorIP(mirrorContainerName)
+	if err != nil {
+		return errors.Wrap(err, "failed to resolve fixed kind IP for local registry mirror")
+	}
+
+	if err = linkRegistryToClusterNetwork(mirrorContainerName, kindMirrorIP); err != nil {
 		return errors.Wrap(err, "failed to link local registry mirror to cluster")
 	}
 
@@ -447,25 +460,11 @@ func documentLocalRegistry(client *kubernetes.Clientset) error {
  * This function is used to link the registry to the cluster network, which is the kind network.
  * It is used when creating a new local registry or registry mirror containers.
  */
-func linkRegistryToClusterNetwork(containerName string) error {
-	ctx := context.Background()
-
+func linkRegistryToClusterNetwork(containerName string, kindFixedIP string) error {
 	fmt.Println("Linking local image registry to cluster")
-
-	cli, err := docker.NewDockerClient()
-
-	if err != nil {
-		return errors.Wrap(err, "unable to create docker client")
-	}
-
-	cli.NetworkDisconnect(ctx, "kind", containerName, false)
-
-	err = cli.NetworkConnect(ctx, "kind", containerName, &network.EndpointSettings{})
-
-	if err != nil {
+	if err := EnsureContainerKindNetworkIP(containerName, kindFixedIP); err != nil {
 		return errors.Wrap(err, "unable to connect registry to cluster network")
 	}
-
 	return nil
 }
 
@@ -647,10 +646,23 @@ func UpdateRegistryK8SService(k8sclient *kubernetes.Clientset) error {
 		return errors.Wrapf(err, "unable to inspect container for registry")
 	}
 
-	kindNetwork, exists := registryInfo.NetworkSettings.Networks["kind"]
-
+	kindNetwork, exists := registryInfo.NetworkSettings.Networks[KindNetworkName]
 	if !exists {
-		return errors.New("registry is not attached to kind network")
+		kindRegistryIP, err := ResolveLocalRegistryIP()
+		if err != nil {
+			return errors.Wrap(err, "failed to resolve kind registry IP")
+		}
+		if err := EnsureContainerKindNetworkIP(EducatesRegistryContainer, kindRegistryIP); err != nil {
+			return errors.Wrap(err, "failed to attach registry to kind network")
+		}
+		registryInfo, err = cli.ContainerInspect(ctx, EducatesRegistryContainer)
+		if err != nil {
+			return errors.Wrapf(err, "unable to inspect container for registry after reattach")
+		}
+		kindNetwork, exists = registryInfo.NetworkSettings.Networks[KindNetworkName]
+		if !exists {
+			return errors.New("registry is not attached to kind network")
+		}
 	}
 
 	endpointAddresses := []string{kindNetwork.IPAddress}

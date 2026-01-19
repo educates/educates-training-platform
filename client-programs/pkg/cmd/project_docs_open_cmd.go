@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -15,7 +15,7 @@ func (p *ProjectInfo) NewProjectDocsOpenCmd() *cobra.Command {
 		Use:   "open",
 		Short: "Open browser on project documentation",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return utils.OpenBrowser(config.PROJECT_DOCS_URL)
+			return utils.OpenBrowser(constants.PROJECT_DOCS_URL)
 		},
 	}
 

@@ -3,10 +3,11 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
 )
 
 type ClusterSessionExtendOptions struct {
@@ -75,7 +76,7 @@ func (p *ProjectInfo) NewClusterSessionExtendCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name of the training portal",
 	)
 

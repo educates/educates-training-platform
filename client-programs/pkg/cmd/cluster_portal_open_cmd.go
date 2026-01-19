@@ -1,21 +1,17 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"os/exec"
-	"runtime"
 	"time"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/portal"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type ClusterPortalOpenOptions struct {
@@ -24,13 +20,26 @@ type ClusterPortalOpenOptions struct {
 	Portal string
 }
 
+const clusterPortalOpenExample = `
+# Open TrainingPortal in Educates cluster with default name
+educates cluster portal open
+
+# Open TrainingPortal in Educates cluster with specific name
+educates cluster portal open --portal=my-portal
+
+# Open admin interface of specific TrainingPortal
+educates cluster portal open --portal=my-portal --admin
+
+# Open given TrainingPortal in given Educates cluster
+educates cluster portal open --portal=my-portal --kubeconfig ~/.kube/config --context=my-context
+`
+
 func (o *ClusterPortalOpenOptions) Run() error {
 	var err error
 
 	// Ensure have portal name.
-
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
@@ -45,37 +54,20 @@ func (o *ClusterPortalOpenOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	trainingPortalClient := dynamicClient.Resource(trainingPortalResource)
-
-	trainingPortal, err := trainingPortalClient.Get(context.TODO(), o.Portal, metav1.GetOptions{})
-
-	if k8serrors.IsNotFound(err) {
-		return errors.New("no workshops deployed")
+	config := portal.TrainingPortalOpenConfig{
+		Portal: o.Portal,
+		Admin: o.Admin,
 	}
 
-	targetUrl, found, _ := unstructured.NestedString(trainingPortal.Object, "status", "educates", "url")
+	manager := portal.NewPortalManager(dynamicClient)
 
-	if !found {
-		return errors.New("workshops not available")
+	targetUrl, err := manager.GetTrainingPortalBrowserUrl(&config)
+
+	if err != nil {
+		return err
 	}
 
-	rootUrl := targetUrl
-
-	if o.Admin {
-		targetUrl = targetUrl + "/admin"
-	} else {
-		password, _, _ := unstructured.NestedString(trainingPortal.Object, "spec", "portal", "password")
-
-		if password != "" {
-			values := url.Values{}
-			values.Add("redirect_url", "/")
-			values.Add("password", password)
-
-			targetUrl = fmt.Sprintf("%s/workshops/access/?%s", targetUrl, values.Encode())
-		}
-	}
-
-	fmt.Printf("Training portal %q.\n", trainingPortal.GetName())
+	fmt.Printf("Training portal %q.\n", o.Portal)
 
 	fmt.Print("Checking training portal is ready.\n")
 
@@ -89,7 +81,7 @@ func (o *ClusterPortalOpenOptions) Run() error {
 
 		time.Sleep(time.Second)
 
-		resp, err := http.Get(rootUrl)
+		resp, err := http.Get(targetUrl)
 
 		if err != nil || resp.StatusCode == 503 {
 			continue
@@ -105,22 +97,7 @@ func (o *ClusterPortalOpenOptions) Run() error {
 
 	fmt.Printf("Opening training portal %s.\n", targetUrl)
 
-	switch runtime.GOOS {
-	case "linux":
-		err = exec.Command("xdg-open", targetUrl).Start()
-	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", targetUrl).Start()
-	case "darwin":
-		err = exec.Command("open", targetUrl).Start()
-	default:
-		err = fmt.Errorf("unsupported platform")
-	}
-
-	if err != nil {
-		return errors.Wrap(err, "unable to open web browser")
-	}
-
-	return nil
+	return utils.OpenBrowser(targetUrl)
 }
 
 func (p *ProjectInfo) NewClusterPortalOpenCmd() *cobra.Command {
@@ -131,6 +108,7 @@ func (p *ProjectInfo) NewClusterPortalOpenCmd() *cobra.Command {
 		Use:   "open",
 		Short: "Browse portal in Kubernetes",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: clusterPortalOpenExample,
 	}
 
 	c.Flags().StringVar(
@@ -155,7 +133,7 @@ func (p *ProjectInfo) NewClusterPortalOpenCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 

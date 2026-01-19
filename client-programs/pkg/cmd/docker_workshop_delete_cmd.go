@@ -10,9 +10,10 @@ import (
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/docker/docker/client"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -95,7 +96,7 @@ func (o *DockerWorkshopDeleteOptions) Run(cmd *cobra.Command) error {
 
 		var workshop *unstructured.Unstructured
 
-		if workshop, err = loadWorkshopDefinition(o.Name, path, "educates-cli", o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+		if workshop, err = loadWorkshopDefinition(o.Name, path, constants.DefaultPortalName, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
 			return err
 		}
 

@@ -1,19 +1,13 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/sessions"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type ClusterSessionListOptions struct {
@@ -22,7 +16,16 @@ type ClusterSessionListOptions struct {
 	Environment string
 }
 
-var workshopSessionResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshopsessions"}
+const clusterSessionListExample = `
+# List active Educates sessions in default Educates portal and cluster
+educates cluster session list
+
+# List active Educates sessions using a specific portal
+educates cluster session list --portal=my-portal
+
+# List active Educates sessions in Kubernetes using a specific portal and context
+educates cluster session list --portal=my-portal --kubeconfig ~/.kube/config --context=my-context
+`
 
 func (o *ClusterSessionListOptions) Run() error {
 	var err error
@@ -39,59 +42,18 @@ func (o *ClusterSessionListOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	workshopSessionClient := dynamicClient.Resource(workshopSessionResource)
+	manager := sessions.NewSessionManager()
 
-	workshopSessions, err := workshopSessionClient.List(context.TODO(), metav1.ListOptions{})
-
-	if k8serrors.IsNotFound(err) {
-		fmt.Println("No sessions found.")
-		return nil
+	list, err := manager.ListSessions(sessions.ListSessionsConfig{
+		Client: dynamicClient,
+		Portal: o.Portal,
+		Environment: o.Environment,
+	})
+	if err != nil {
+		return err
 	}
 
-	var sessions []unstructured.Unstructured
-
-	for _, item := range workshopSessions.Items {
-		labels := item.GetLabels()
-
-		portal, ok := labels["training.educates.dev/portal.name"]
-
-		if ok && portal == o.Portal {
-			if o.Environment != "" {
-				environment, ok := labels["training.educates.dev/environment.name"]
-
-				if ok && environment == o.Environment {
-					sessions = append(sessions, item)
-				}
-			} else {
-				sessions = append(sessions, item)
-			}
-
-		}
-	}
-
-	if len(sessions) == 0 {
-		fmt.Println("No sessions found.")
-		return nil
-	}
-
-	w := new(tabwriter.Writer)
-	w.Init(os.Stdout, 8, 8, 3, ' ', 0)
-
-	defer w.Flush()
-
-	fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "NAME", "PORTAL", "ENVIRONMENT", "STATUS")
-
-	for _, item := range sessions {
-		name := item.GetName()
-		labels := item.GetLabels()
-
-		portal := labels["training.educates.dev/portal.name"]
-		environment := labels["training.educates.dev/environment.name"]
-
-		status, _, _ := unstructured.NestedString(item.Object, "status", "educates", "phase")
-
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", name, portal, environment, status)
-	}
+	fmt.Println(list)
 
 	return nil
 }
@@ -104,6 +66,7 @@ func (p *ProjectInfo) NewClusterSessionListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List active sessions in Kubernetes",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: clusterSessionListExample,
 	}
 
 	c.Flags().StringVar(

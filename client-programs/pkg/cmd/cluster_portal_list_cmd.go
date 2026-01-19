@@ -44,7 +44,7 @@ func (o *ClusterPortalListOptions) Run() error {
 		return err
 	}
 
-	fmt.Print(list)
+	fmt.Println(list)
 
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -43,7 +44,7 @@ func (o *ClusterWorkshopUpdateOptions) Run() error {
 	// Ensure have portal name.
 
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	// If path not provided assume the current working directory. When loading
@@ -129,7 +130,7 @@ func (p *ProjectInfo) NewClusterWorkshopUpdateCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 
@@ -340,7 +341,7 @@ var workshopResource = schema.GroupVersionResource{Group: "training.educates.dev
 func updateWorkshopResource(client dynamic.Interface, workshop *unstructured.Unstructured) error {
 	workshopsClient := client.Resource(workshopResource)
 
-	// _, err := workshopsClient.Apply(context.TODO(), workshop.GetName(), workshop, metav1.ApplyOptions{FieldManager: "educates-cli", Force: true})
+	// _, err := workshopsClient.Apply(context.TODO(), workshop.GetName(), workshop, metav1.ApplyOptions{FieldManager: constants.DefaultPortalName, Force: true})
 
 	workshopBytes, err := runtime.Encode(unstructured.UnstructuredJSONScheme, workshop)
 
@@ -348,7 +349,7 @@ func updateWorkshopResource(client dynamic.Interface, workshop *unstructured.Uns
 		return errors.Wrapf(err, "unable to update workshop definition in cluster %q", workshop.GetName())
 	}
 
-	_, err = workshopsClient.Patch(context.TODO(), workshop.GetName(), types.ApplyPatchType, workshopBytes, metav1.ApplyOptions{FieldManager: "educates-cli", Force: true}.ToPatchOptions())
+	_, err = workshopsClient.Patch(context.TODO(), workshop.GetName(), types.ApplyPatchType, workshopBytes, metav1.ApplyOptions{FieldManager: constants.DefaultPortalName, Force: true}.ToPatchOptions())
 
 	if err != nil {
 		return errors.Wrapf(err, "unable to update workshop definition in cluster %q", workshop.GetName())

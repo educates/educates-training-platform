@@ -9,11 +9,12 @@ import (
 	"strings"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
 	"github.com/joho/godotenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -89,7 +90,7 @@ func (o *ClusterWorkshopRequestOptions) Run() error {
 	// Ensure have portal name.
 
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	if name == "" {
@@ -178,7 +179,7 @@ func (p *ProjectInfo) NewClusterWorkshopRequestCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 	c.Flags().StringArrayVarP(

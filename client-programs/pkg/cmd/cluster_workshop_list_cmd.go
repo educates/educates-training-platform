@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -25,7 +26,7 @@ func (o *ClusterWorkshopsListOptions) Run() error {
 	// Ensure have portal name.
 
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
@@ -128,7 +129,7 @@ func (p *ProjectInfo) NewClusterWorkshopListCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 

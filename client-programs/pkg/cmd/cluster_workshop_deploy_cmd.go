@@ -16,6 +16,7 @@ import (
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -57,7 +58,7 @@ func (o *ClusterWorkshopDeployOptions) Run() error {
 	// Ensure have portal name.
 
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	// If path not provided assume the current working directory. When loading
@@ -158,7 +159,7 @@ func (p *ProjectInfo) NewClusterWorkshopDeployCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 	c.Flags().UintVar(
@@ -549,10 +550,10 @@ func deployWorkshopResource(client dynamic.Interface, workshop *unstructured.Uns
 
 	if trainingPortalExists {
 		fmt.Printf("Updating existing training portal %q.\n", trainingPortal.GetName())
-		_, err = trainingPortalClient.Update(context.TODO(), trainingPortal, metav1.UpdateOptions{FieldManager: "educates-cli"})
+		_, err = trainingPortalClient.Update(context.TODO(), trainingPortal, metav1.UpdateOptions{FieldManager: constants.DefaultPortalName})
 	} else {
 		fmt.Printf("Creating new training portal %q.\n", trainingPortal.GetName())
-		_, err = trainingPortalClient.Create(context.TODO(), trainingPortal, metav1.CreateOptions{FieldManager: "educates-cli"})
+		_, err = trainingPortalClient.Create(context.TODO(), trainingPortal, metav1.CreateOptions{FieldManager: constants.DefaultPortalName})
 	}
 
 	if err != nil {

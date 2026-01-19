@@ -16,6 +16,20 @@ type ClusterPortalPasswordOptions struct {
 	Portal string
 }
 
+const clusterPortalPasswordExample = `
+# View accesspassword for TrainingPortal in Educates cluster with default name
+educates cluster portal password
+
+# View access password for TrainingPortal in Educates cluster with specific name
+educates cluster portal password --portal=my-portal
+
+# View admin password for TrainingPortal in Educates cluster with default name
+educates cluster portal password --admin
+
+# View access password for given TrainingPortal in given Educates cluster
+educates cluster portal password --portal=my-portal --kubeconfig ~/.kube/config --context=my-context --admin
+`
+
 func (o *ClusterPortalPasswordOptions) Run() error {
 	var err error
 
@@ -63,6 +77,7 @@ func (p *ProjectInfo) NewClusterPortalPasswordCmd() *cobra.Command {
 		Use:   "password",
 		Short: "View portal credentials in Kubernetes",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: clusterPortalPasswordExample,
 	}
 
 	c.Flags().StringVar(

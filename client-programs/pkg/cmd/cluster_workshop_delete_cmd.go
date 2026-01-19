@@ -5,6 +5,7 @@ import (
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,7 +33,7 @@ func (o *ClusterWorkshopDeleteOptions) Run() error {
 	// Ensure have portal name.
 
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	if name == "" {
@@ -129,7 +130,7 @@ func (p *ProjectInfo) NewClusterWorkshopDeleteCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 
@@ -223,7 +224,7 @@ func deleteWorkshopResource(client dynamic.Interface, name string, alias string,
 
 	unstructured.SetNestedSlice(trainingPortal.Object, updatedWorkshops, "spec", "workshops")
 
-	_, err = trainingPortalClient.Update(context.TODO(), trainingPortal, metav1.UpdateOptions{FieldManager: "educates-cli"})
+	_, err = trainingPortalClient.Update(context.TODO(), trainingPortal, metav1.UpdateOptions{FieldManager: constants.DefaultPortalName})
 
 	if err != nil {
 		return errors.Wrapf(err, "unable to update training portal %q in cluster", portal)

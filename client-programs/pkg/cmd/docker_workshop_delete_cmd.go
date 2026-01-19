@@ -9,7 +9,8 @@ import (
 	"path"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
+	"github.com/docker/docker/client"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -51,7 +52,7 @@ func (m *DockerWorkshopsManager) DeleteWorkshop(name string, stdout io.Writer, s
 
 	ctx := context.Background()
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -95,7 +96,7 @@ func (o *DockerWorkshopDeleteOptions) Run(cmd *cobra.Command) error {
 
 		var workshop *unstructured.Unstructured
 
-		if workshop, err = loadWorkshopDefinition(o.Name, path, "educates-cli", o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+		if workshop, err = loadWorkshopDefinition(o.Name, path, constants.DefaultPortalName, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
 			return err
 		}
 

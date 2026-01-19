@@ -19,6 +19,7 @@ import (
 	composeloader "github.com/compose-spec/compose-go/v2/loader"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/docker/client"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -102,7 +103,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 
 	var workshop *unstructured.Unstructured
 
-	if workshop, err = loadWorkshopDefinition("", o.Path, "educates-cli", o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+	if workshop, err = loadWorkshopDefinition("", o.Path, constants.DefaultPortalName, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
 		return "", err
 	}
 

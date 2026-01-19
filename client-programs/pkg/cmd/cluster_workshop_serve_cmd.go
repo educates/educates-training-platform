@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/renderer"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
@@ -139,7 +140,7 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 	// Ensure have portal name.
 
 	if portal == "" {
-		portal = "educates-cli"
+		portal = constants.DefaultPortalName
 	}
 
 	// Calculate workshop root and name.
@@ -273,7 +274,7 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name of the training portal to lookup the workshop",
 	)
 	c.Flags().StringVar(

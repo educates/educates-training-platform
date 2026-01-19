@@ -16,6 +16,7 @@ import (
 	yttcmdui "carvel.dev/ytt/pkg/cmd/ui"
 	"carvel.dev/ytt/pkg/files"
 	"carvel.dev/ytt/pkg/yamlmeta"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/internalversion/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -190,7 +191,7 @@ func UpdateWorkshopResource(client dynamic.Interface, workshop *unstructured.Uns
 		return errors.Wrapf(err, "unable to update workshop definition in cluster %q", workshop.GetName())
 	}
 
-	_, err = workshopsClient.Patch(context.TODO(), workshop.GetName(), types.ApplyPatchType, workshopBytes, metav1.ApplyOptions{FieldManager: DefaultPortalName, Force: true}.ToPatchOptions())
+	_, err = workshopsClient.Patch(context.TODO(), workshop.GetName(), types.ApplyPatchType, workshopBytes, metav1.ApplyOptions{FieldManager: constants.DefaultPortalName, Force: true}.ToPatchOptions())
 
 	if err != nil {
 		return errors.Wrapf(err, "unable to update workshop definition in cluster %q", workshop.GetName())

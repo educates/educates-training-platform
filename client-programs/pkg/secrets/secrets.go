@@ -6,8 +6,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
+	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -169,7 +170,7 @@ func SyncLocalCachedSecretsToCluster(client *kubernetes.Clientset) error {
 					patch = applycorev1.Secret(name, secretsNS).WithType(secretObj.Type).WithData(secretObj.Data)
 				}
 
-				_, err = secretsClient.Apply(context.TODO(), patch, metav1.ApplyOptions{FieldManager: "educates-cli", Force: true})
+				_, err = secretsClient.Apply(context.TODO(), patch, metav1.ApplyOptions{FieldManager: constants.DefaultPortalName, Force: true})
 
 				if err != nil {
 					return errors.Wrapf(err, "unable to update secret in cluster %q", name)

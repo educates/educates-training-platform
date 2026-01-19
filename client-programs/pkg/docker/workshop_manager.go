@@ -23,6 +23,7 @@ import (
 	"github.com/docker/compose/v5/pkg/compose"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
 	"github.com/pkg/errors"
@@ -259,7 +260,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 
 	var workshop *unstructured.Unstructured
 
-	if workshop, err = workshops.LoadWorkshopDefinition("", o.Path, workshops.DefaultPortalName, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+	if workshop, err = workshops.LoadWorkshopDefinition("", o.Path, constants.DefaultPortalName, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
 		return "", err
 	}
 

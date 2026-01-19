@@ -211,7 +211,7 @@ func (m *PortalManager) ListTrainingPortals(cfg *TrainingPortalListConfig) (stri
 
 	fmt.Fprintf(w, "%s\t%s\t%s\n", "NAME", "CAPACITY", "URL")
 
-	for _, item := range trainingPortals.Items {
+	for i, item := range trainingPortals.Items {
 		name := item.GetName()
 
 		sessionsMaximum, propertyExists, err := unstructured.NestedInt64(item.Object, "spec", "portal", "sessions", "maximum")
@@ -224,7 +224,10 @@ func (m *PortalManager) ListTrainingPortals(cfg *TrainingPortalListConfig) (stri
 
 		url, _, _ := unstructured.NestedString(item.Object, "status", "educates", "url")
 
-		fmt.Fprintf(w, "%s\t%s\t%s\n", name, capacity, url)
+		fmt.Fprintf(w, "%s\t%s\t%s", name, capacity, url)
+		if i < len(trainingPortals.Items) - 1 {
+			fmt.Fprintf(w, "\n")
+		}
 	}
 
 	// Important: Flush ensures all data is written from tabwriter to the builder
@@ -294,7 +297,7 @@ func (m *PortalManager) GetTrainingPortalPassword(cfg *TrainingPortalPasswordCon
 		w.Init(&buf, 8, 8, 3, ' ', 0)
 
 		fmt.Fprintf(w, "%s\t%s\n", "USERNAME", "PASSWORD")
-		fmt.Fprintf(w, "%s\t%s\n", username, password)
+		fmt.Fprintf(w, "%s\t%s", username, password)
 
 		// Important: Flush ensures all data is written from tabwriter to the builder
         w.Flush()

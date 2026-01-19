@@ -64,7 +64,7 @@ func (o *ClusterPortalPasswordOptions) Run() error {
 		return err
 	}
 
-	fmt.Print(password)
+	fmt.Println(password)
 
 	return nil
 }

@@ -5,8 +5,8 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
-	"github.com/pkg/errors"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/sessions"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -16,32 +16,33 @@ type ClusterSessionStatusOptions struct {
 	Name   string
 }
 
+const clusterSessionStatusExample = `
+# Get status of Educates session "my-session" in default Educates portal
+educates cluster session status my-session
+
+# Get status of Educates session "my-session" using a specific portal
+educates cluster session status my-session --portal=my-portal
+
+# Get status of Educates session "my-session"  using a specific portal and context
+educates cluster session status my-session --portal=my-portal --kubeconfig ~/.kube/config --context=my-context
+`
+
 func (o *ClusterSessionStatusOptions) Run() error {
 	var err error
 
 	clusterConfig := cluster.NewClusterConfig(o.Kubeconfig, o.Context)
 
-	catalogApiRequester := educatesrestapi.NewWorkshopsCatalogRequester(
-		clusterConfig,
-		o.Portal,
-	)
-	logout, err := catalogApiRequester.Login()
-	defer logout()
-	if err != nil {
-		return errors.Wrap(err, "failed to login to training portal")
-	}
-
-	details, err := catalogApiRequester.GetWorkshopSession(o.Name)
+	manager := sessions.NewSessionManager()
+	result, err := manager.SessionStatus(sessions.SessionStatusConfig{
+		ClusterConfig: clusterConfig,
+		Portal: o.Portal,
+		Name: o.Name,
+	})
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Started:", details.Started)
-	fmt.Println("Expires:", details.Expires)
-	fmt.Println("Expiring:", details.Expiring)
-	fmt.Println("Countdown:", details.Countdown)
-	fmt.Println("Extendable:", details.Extendable)
-	fmt.Println("Status:", details.Status)
+	fmt.Println(result)
 
 	return nil
 }
@@ -50,10 +51,16 @@ func (p *ProjectInfo) NewClusterSessionStatusCmd() *cobra.Command {
 	var o ClusterSessionStatusOptions
 
 	var c = &cobra.Command{
-		Args:  cobra.ExactArgs(1),
+		Args:  func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return utils.CmdError(cmd, "session name is required", "NAME")
+			}
+			return nil
+		},
 		Use:   "status NAME",
 		Short: "Output status of session in Kubernetes",
 		RunE:  func(_ *cobra.Command, args []string) error { o.Name = args[0]; return o.Run() },
+		Example: clusterSessionStatusExample,
 	}
 
 	c.Flags().StringVar(

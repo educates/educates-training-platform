@@ -20,7 +20,7 @@ type WorkshopNewOptions struct {
 	Image       string
 }
 
-var workshopNewExample = `
+const workshopNewExample = `
   # Create workshop files from template in my-workshop directory
   educates workshop new my-workshop
 

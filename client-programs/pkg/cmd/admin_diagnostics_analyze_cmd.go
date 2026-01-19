@@ -11,7 +11,7 @@ type AdminDiagnosticsAnalyzeOptions struct {
 	Dir  string
 }
 
-var adminDiagnosticsAnalyzeExample = `
+const adminDiagnosticsAnalyzeExample = `
   # Analyze diagnostic information for current Educates cluster in current directory
   educates admin diagnostics analyze --file ./diagnostics.tar.gz
 `

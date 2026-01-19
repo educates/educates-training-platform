@@ -16,7 +16,7 @@ type AdminDiagnosticsCollectOptions struct {
 	Verbose bool
 }
 
-var adminDiagnosticsCollectExample = `
+const adminDiagnosticsCollectExample = `
   # Collect diagnostic information for current Educates cluster in current directory
   educates admin diagnostics collect
 

@@ -1,38 +1,82 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
+
+	yttcmd "carvel.dev/ytt/pkg/cmd/template"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
-var (
-	workshopExportExample = `
-  # Export workshop definition from current directory (workshop definition is expected within the path defined by workshop-file flag) to stdout
+var workshopExportExample = `
+  # Export workshop resource definition in current directory
   educates workshop export
 
-  # Export workshop definition from specific directory to stdout
-  educates workshop export lab-k8s-fundamentals
+  # Export workshop resource definition in my-workshop directory
+  educates workshop export my-workshop
 
-  # Export workshop definition using specific image repository
-  educates workshop export --image-repository ghcr.io/myorg
+  # Export workshop resource definition in my-workshop directory in a different workshop.yaml file
+  educates workshop export my-workshop --workshop-file ./workshop.yaml
 
-  # Export workshop definition using specific version
-  educates workshop export --workshop-version v1.0.0
-
-  # Export workshop definition for custom workshop file path
-  educates workshop export --workshop-file custom-workshop.yaml
-  educates workshop export $HOME/workshops/labs-educates-showcase --workshop-file lab-session-workshop.yaml
+  # Export workshop resource definition with data values
+  educates workshop export --image-repository ghcr.io/educates --workshop-version 1.0.0
 `
-)
+
+type FilesExportOptions struct {
+	Repository      string
+	WorkshopFile    string
+	WorkshopVersion string
+	DataValuesFlags yttcmd.DataValuesFlags
+}
+
+func (o *FilesExportOptions) Run(args []string) error {
+	var err error
+
+	var directory string
+
+	if len(args) != 0 {
+		directory = filepath.Clean(args[0])
+	} else {
+		directory = "."
+	}
+
+	if directory, err = filepath.Abs(directory); err != nil {
+		return errors.Wrap(err, "couldn't convert workshop directory to absolute path")
+	}
+
+	fileInfo, err := os.Stat(directory)
+
+	if err != nil || !fileInfo.IsDir() {
+		return errors.New("workshop directory does not exist or path is not a directory")
+	}
+	config := workshops.WorkshopExportConfig{
+		Repository:      o.Repository,
+		WorkshopFile:    o.WorkshopFile,
+		WorkshopVersion: o.WorkshopVersion,
+		DataValuesFlags: o.DataValuesFlags,
+	}
+
+	manager := workshops.NewWorkshopManager()
+
+	return manager.Export(directory, &config)
+}
 
 func (p *ProjectInfo) NewWorkshopExportCmd() *cobra.Command {
-	var o workshops.FilesExportOptions
+	var o FilesExportOptions
 
 	var c = &cobra.Command{
-		Args:    cobra.MaximumNArgs(1),
-		Use:     "export [PATH]",
-		Short:   "Export workshop resource definition for distribution to stdout",
-		RunE:    func(cmd *cobra.Command, args []string) error { return o.Run(args) },
+		Args:  func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return utils.CmdError(cmd, "too many arguments", "[PATH]")
+			}
+			return nil
+		},
+		Use:   "export [PATH]",
+		Short: "Export workshop resource definition",
+		RunE:  func(cmd *cobra.Command, args []string) error { return o.Run(args) },
 		Example: workshopExportExample,
 	}
 

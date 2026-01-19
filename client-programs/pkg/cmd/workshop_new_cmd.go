@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/templates"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 type WorkshopNewOptions struct {
@@ -19,11 +20,29 @@ type WorkshopNewOptions struct {
 	Image       string
 }
 
+var workshopNewExample = `
+  # Create workshop files from template in my-workshop directory
+  educates workshop new my-workshop
+
+  # Create workshop files from template in my-workshop directory
+  educates workshop new my-workshop --template hugo (default template is hugo)
+
+  # Create workshop files from template in my-workshop directory with a different name
+  educates workshop new my-workshop --name "my-workshop" --title "My Workshop" --description "This is a workshop about my workshop"
+`
 func (p *ProjectInfo) NewWorkshopNewCmd() *cobra.Command {
 	var o WorkshopNewOptions
 
 	var c = &cobra.Command{
-		Args:  cobra.ExactArgs(1),
+		Args:  func(cmd *cobra.Command, args []string) error {
+			if len(args) < 1 {
+				return utils.CmdError(cmd, "path is required", "PATH")
+			}
+			if len(args) > 1 {
+				return utils.CmdError(cmd, "too many arguments", "PATH")
+			}
+			return nil
+		},
 		Use:   "new PATH",
 		Short: "Create workshop files from template",
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -60,6 +79,7 @@ func (p *ProjectInfo) NewWorkshopNewCmd() *cobra.Command {
 
 			return template.Apply(directory, parameters)
 		},
+		Example: workshopNewExample,
 	}
 
 	c.Flags().StringVarP(

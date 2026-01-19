@@ -1,20 +1,29 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
+	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/kubectl/pkg/scheme"
 )
+
+var workshopExportExample = `
+  # Export workshop resource definition in current directory
+  educates workshop export
+
+  # Export workshop resource definition in my-workshop directory
+  educates workshop export my-workshop
+
+  # Export workshop resource definition in my-workshop directory in a different workshop.yaml file
+  educates workshop export my-workshop --workshop-file ./workshop.yaml
+
+  # Export workshop resource definition with data values
+  educates workshop export --image-repository ghcr.io/educates --workshop-version 1.0.0
+`
 
 type FilesExportOptions struct {
 	Repository      string
@@ -43,83 +52,32 @@ func (o *FilesExportOptions) Run(args []string) error {
 	if err != nil || !fileInfo.IsDir() {
 		return errors.New("workshop directory does not exist or path is not a directory")
 	}
-
-	return o.Export(directory)
-}
-
-func (o *FilesExportOptions) Export(directory string) error {
-	// If image name hasn't been supplied read workshop definition file and
-	// try to work out image name to Export workshop as.
-
-	rootDirectory := directory
-	workshopFilePath := o.WorkshopFile
-
-	if !filepath.IsAbs(workshopFilePath) {
-		workshopFilePath = filepath.Join(rootDirectory, workshopFilePath)
+	config := workshops.WorkshopExportConfig{
+		Repository:      o.Repository,
+		WorkshopFile:    o.WorkshopFile,
+		WorkshopVersion: o.WorkshopVersion,
+		DataValuesFlags: o.DataValuesFlags,
 	}
 
-	workshopFileData, err := os.ReadFile(workshopFilePath)
+	manager := workshops.NewWorkshopManager()
 
-	if err != nil {
-		return errors.Wrapf(err, "cannot open workshop definition %q", workshopFilePath)
-	}
-
-	// Process the workshop YAML data for ytt templating and data variables.
-
-	if workshopFileData, err = processWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
-		return errors.Wrap(err, "unable to process workshop definition as template")
-	}
-
-	workshopFileData = []byte(strings.ReplaceAll(string(workshopFileData), "$(image_repository)", o.Repository))
-	workshopFileData = []byte(strings.ReplaceAll(string(workshopFileData), "$(workshop_version)", o.WorkshopVersion))
-
-	decoder := serializer.NewCodecFactory(scheme.Scheme).UniversalDecoder()
-
-	workshop := &unstructured.Unstructured{}
-
-	err = runtime.DecodeInto(decoder, workshopFileData, workshop)
-
-	if err != nil {
-		return errors.Wrap(err, "couldn't parse workshop definition")
-	}
-
-	if workshop.GetAPIVersion() != "training.educates.dev/v1beta1" || workshop.GetKind() != "Workshop" {
-		return errors.New("invalid type for workshop definition")
-	}
-
-	// Insert workshop version property if not specified.
-
-	_, found, _ := unstructured.NestedString(workshop.Object, "spec", "version")
-
-	if !found && o.WorkshopVersion != "latest" {
-		unstructured.SetNestedField(workshop.Object, o.WorkshopVersion, "spec", "version")
-	}
-
-	// Remove the publish section as will not be accurate after publising.
-
-	unstructured.RemoveNestedField(workshop.Object, "spec", "publish")
-
-	// Export modified workshop definition file.
-
-	workshopFileData, err = yaml.Marshal(&workshop.Object)
-
-	if err != nil {
-		return errors.Wrap(err, "couldn't convert workshop definition back to YAML")
-	}
-
-	fmt.Print(string(workshopFileData))
-
-	return nil
+	return manager.Export(directory, &config)
 }
 
 func (p *ProjectInfo) NewWorkshopExportCmd() *cobra.Command {
 	var o FilesExportOptions
 
 	var c = &cobra.Command{
-		Args:  cobra.MaximumNArgs(1),
+		Args:  func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return utils.CmdError(cmd, "too many arguments", "[PATH]")
+			}
+			return nil
+		},
 		Use:   "export [PATH]",
 		Short: "Export workshop resource definition",
 		RunE:  func(cmd *cobra.Command, args []string) error { return o.Run(args) },
+		Example: workshopExportExample,
 	}
 
 	c.Flags().StringVar(

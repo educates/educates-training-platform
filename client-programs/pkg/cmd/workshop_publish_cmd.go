@@ -23,7 +23,7 @@ type FilesPublishOptions struct {
 	DataValuesFlags yttcmd.DataValuesFlags
 }
 
-var workshopPublishExample = `
+const workshopPublishExample = `
   # Publish workshop files to repository in current directory
   educates workshop publish
 

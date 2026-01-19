@@ -10,7 +10,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/installer"
 )
 
-var (
+const (
 	adminPlatformValuesExample = `
   # Show configuration values for local deployment
   educates admin platform values --local-config
@@ -19,7 +19,7 @@ var (
   educates admin platform values --config config.yaml
 
   # Get configuration used to deploy to the current cluster
-  educates admin platform values --from-cluster 
+  educates admin platform values --from-cluster
   educates admin platform values --from-cluster --kubeconfig /path/to/kubeconfig --context my-cluster
 
   # Get configuration values using locally built educates package (version latest does the same and skips image resolution)

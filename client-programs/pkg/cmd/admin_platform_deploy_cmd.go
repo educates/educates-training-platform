@@ -12,7 +12,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 )
 
-var (
+const (
 	adminPlatformDeployExample = `
   # Deploy educates platform
   educates admin platform deploy --config config.yaml

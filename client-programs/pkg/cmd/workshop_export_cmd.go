@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var workshopExportExample = `
+const workshopExportExample = `
   # Export workshop resource definition in current directory
   educates workshop export
 

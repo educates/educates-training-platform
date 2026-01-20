@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -71,7 +72,7 @@ func (m *PortalManager) CreateTrainingPortal(cfg *TrainingPortalCreateConfig) er
 	trainingPortal := &unstructured.Unstructured{}
 
 	if !cfg.IsPasswordSet {
-		cfg.Password = RandomPassword(12)
+		cfg.Password = utils.RandomPassword(12)
 	}
 
 	type LabelDetails struct {

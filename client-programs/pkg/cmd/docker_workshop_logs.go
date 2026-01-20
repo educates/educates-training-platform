@@ -5,6 +5,7 @@ import (
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -41,7 +42,15 @@ func (o *DockerWorkshopLogsOptions) Run(cmd *cobra.Command) error {
 
 		var workshop *unstructured.Unstructured
 
-		if workshop, err = loadWorkshopDefinition(o.Name, path, constants.DefaultPortalName, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+		definitionConfig := workshops.WorkshopDefinitionConfig{
+			Name: o.Name,
+			Path: path,
+			Portal: constants.DefaultPortalName,
+			WorkshopFile: o.WorkshopFile,
+			WorkshopVersion: o.WorkshopVersion,
+			DataValueFlags: o.DataValuesFlags,
+		}
+		if workshop, err = workshops.LoadWorkshopDefinition(&definitionConfig); err != nil {
 			return err
 		}
 

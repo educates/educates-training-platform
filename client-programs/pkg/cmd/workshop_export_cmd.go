@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates/local/workshops"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
-	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )

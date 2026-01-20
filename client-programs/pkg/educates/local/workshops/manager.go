@@ -13,6 +13,7 @@ import (
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 
 	"github.com/cppforlife/go-cli-ui/ui"
+	eduk8sWorkshops "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
 	"github.com/educates/educates-training-platform/client-programs/pkg/templates"
 	"github.com/pkg/errors"
 	"go.yaml.in/yaml/v2"
@@ -56,6 +57,18 @@ func NewWorkshopManager() *WorkshopManager {
 }
 
 func (m *WorkshopManager) NewWorkshop(directory string,o *WorkshopNewConfig) error {
+	var err error
+
+	directory = filepath.Clean(directory)
+
+	if directory, err = filepath.Abs(directory); err != nil {
+		return errors.Wrapf(err, "could not convert path name %q to absolute path", directory)
+	}
+
+	if _, err = os.Stat(directory); err == nil {
+		return errors.Errorf("target path name %q already exists", directory)
+	}
+
 	name := o.Name
 
 	if name == "" {
@@ -97,7 +110,7 @@ func (m *WorkshopManager) Export(directory string,o *WorkshopExportConfig) error
 
 	// Process the workshop YAML data for ytt templating and data variables.
 
-	if workshopFileData, err = ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
+	if workshopFileData, err = eduk8sWorkshops.ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
 		return errors.Wrap(err, "unable to process workshop definition as template")
 	}
 
@@ -171,7 +184,7 @@ func (m *WorkshopManager) Publish(directory string,o *WorkshopPublishConfig) err
 
 	// Process the workshop YAML data for ytt templating and data variables.
 
-	if workshopFileData, err = ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
+	if workshopFileData, err = eduk8sWorkshops.ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
 		return errors.Wrap(err, "unable to process workshop definition as template")
 	}
 

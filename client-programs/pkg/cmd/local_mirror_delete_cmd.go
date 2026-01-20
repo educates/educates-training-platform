@@ -7,7 +7,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 )
 
-var (
+const (
 	localMirrorDeleteExample = `
   # Delete a local image registry mirror
   educates local mirror delete mymirror

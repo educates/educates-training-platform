@@ -7,17 +7,14 @@ import (
 	"text/tabwriter"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
+	educatesrestapi "github.com/educates/educates-training-platform/client-programs/pkg/educates/restapi"
+	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
-
-var workshopSessionResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshopsessions"}
-
 
 type SessionManager struct {
 }
@@ -52,7 +49,7 @@ type TerminateSessionConfig struct {
 }
 
 func (m *SessionManager) ListSessions(cfg ListSessionsConfig) (string, error) {
-	workshopSessionClient := cfg.Client.Resource(workshopSessionResource)
+	workshopSessionClient := cfg.Client.Resource(educatesTypes.WorkshopsessionsResource)
 
 	workshopSessions, err := workshopSessionClient.List(context.TODO(), metav1.ListOptions{})
 

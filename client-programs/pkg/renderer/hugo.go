@@ -24,13 +24,13 @@ import (
 	"time"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 //go:embed all:files/*
@@ -119,8 +119,6 @@ type RunHugoServerConfig struct {
 	CleanupFunc ServerCleanupFunc
 }
 
-var workshopSessionResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshopsessions"}
-
 func fetchWorkshopSessionAndValidate(kubeconfig string, kubeContext string, workshop string, portal string, session string) (string, string, error) {
 	// Returns session URL, config password and error.
 
@@ -134,7 +132,7 @@ func fetchWorkshopSessionAndValidate(kubeconfig string, kubeContext string, work
 		return "", "", errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	workshopSessionClient := dynamicClient.Resource(workshopSessionResource)
+	workshopSessionClient := dynamicClient.Resource(educatesTypes.WorkshopsessionsResource)
 
 	workshopSession, err := workshopSessionClient.Get(context.TODO(), session, metav1.GetOptions{})
 

@@ -8,16 +8,14 @@ import (
 	"text/tabwriter"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
-
-var TrainingPortalResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "trainingportals"}
 
 type PortalManager struct {
 	client dynamic.Interface
@@ -57,7 +55,7 @@ func NewPortalManager(client dynamic.Interface) *PortalManager {
 }
 
 func (m *PortalManager) CreateTrainingPortal(cfg *TrainingPortalCreateConfig) error {
-	trainingPortalClient := m.client.Resource(TrainingPortalResource)
+	trainingPortalClient := m.client.Resource(educatesTypes.TrainingPortalResource)
 
 	_, err := trainingPortalClient.Get(context.TODO(), cfg.Portal, metav1.GetOptions{})
 
@@ -176,7 +174,7 @@ func (m *PortalManager) CreateTrainingPortal(cfg *TrainingPortalCreateConfig) er
 }
 
 func (m *PortalManager) DeleteTrainingPortal(cfg *TrainingPortalDeleteConfig) error {
-	trainingPortalClient := m.client.Resource(TrainingPortalResource)
+	trainingPortalClient := m.client.Resource(educatesTypes.TrainingPortalResource)
 
 	_, err := trainingPortalClient.Get(context.TODO(), cfg.Portal, metav1.GetOptions{})
 
@@ -195,7 +193,7 @@ func (m *PortalManager) DeleteTrainingPortal(cfg *TrainingPortalDeleteConfig) er
 
 
 func (m *PortalManager) ListTrainingPortals(cfg *TrainingPortalListConfig) (string, error) {
-	trainingPortalClient := m.client.Resource(TrainingPortalResource)
+	trainingPortalClient := m.client.Resource(educatesTypes.TrainingPortalResource)
 
 	trainingPortals, err := trainingPortalClient.List(context.TODO(), metav1.ListOptions{})
 
@@ -238,7 +236,7 @@ func (m *PortalManager) ListTrainingPortals(cfg *TrainingPortalListConfig) (stri
 }
 
 func (m *PortalManager) GetTrainingPortalBrowserUrl(cfg *TrainingPortalOpenConfig) (string, error) {
-	trainingPortalClient := m.client.Resource(TrainingPortalResource)
+	trainingPortalClient := m.client.Resource(educatesTypes.TrainingPortalResource)
 
 	trainingPortal, err := trainingPortalClient.Get(context.TODO(), cfg.Portal, metav1.GetOptions{})
 
@@ -270,7 +268,7 @@ func (m *PortalManager) GetTrainingPortalBrowserUrl(cfg *TrainingPortalOpenConfi
 }
 
 func (m *PortalManager) GetTrainingPortalPassword(cfg *TrainingPortalPasswordConfig) (string, error) {
-	trainingPortalClient := m.client.Resource(TrainingPortalResource)
+	trainingPortalClient := m.client.Resource(educatesTypes.TrainingPortalResource)
 
 	trainingPortal, err := trainingPortalClient.Get(context.TODO(), cfg.Portal, metav1.GetOptions{})
 

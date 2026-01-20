@@ -24,8 +24,8 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	eduk8sWorkshops "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
-	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
 	"github.com/pkg/errors"
 	"go.yaml.in/yaml/v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -260,7 +260,15 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 
 	var workshop *unstructured.Unstructured
 
-	if workshop, err = workshops.LoadWorkshopDefinition("", o.Path, constants.DefaultPortalName, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+	definitionConfig := eduk8sWorkshops.WorkshopDefinitionConfig{
+		Name: "",
+		Path: o.Path,
+		Portal: constants.DefaultPortalName,
+		WorkshopFile: o.WorkshopFile,
+		WorkshopVersion: o.WorkshopVersion,
+		DataValueFlags: o.DataValuesFlags,
+	}
+	if workshop, err = eduk8sWorkshops.LoadWorkshopDefinition(&definitionConfig); err != nil {
 		return "", err
 	}
 

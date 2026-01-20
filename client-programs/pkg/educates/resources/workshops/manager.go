@@ -584,7 +584,6 @@ func LoadWorkshopDefinition(o *WorkshopDefinitionConfig) (*unstructured.Unstruct
 	}
 
 	// Read in the workshop definition as raw data ready for parsing.
-
 	var workshopData []byte
 
 	if urlInfo.Scheme != "http" && urlInfo.Scheme != "https" {

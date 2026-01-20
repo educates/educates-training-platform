@@ -11,6 +11,17 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
+const localRegistryDeployExample = `
+  # Deploy the local image registry
+  educates local registry deploy
+
+  # Deploy the local image registry with a custom bind IP
+  educates local registry deploy --bind-ip 192.168.1.100
+
+  # Deploy the local image registry with a custom kubeconfig
+  educates local registry deploy --kubeconfig /path/to/kubeconfig --context my-context
+`
+
 type LocalRegistryDeployOptions struct {
 	KubeconfigOptions
 	BindIP string
@@ -26,7 +37,6 @@ func (o *LocalRegistryDeployOptions) Run() error {
 	// This will fail if you do not have a Kubernetes cluster, but we can still
 	// deploy just the image registry alone without Kubernetes. If a Kubernetes
 	// cluster is created later, then the registry service will be added then.
-
 	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
 
 	if err != nil {
@@ -65,6 +75,7 @@ func (p *ProjectInfo) NewLocalRegistryDeployCmd() *cobra.Command {
 
 			return o.Run()
 		},
+		Example: localRegistryDeployExample,
 	}
 
 	c.Flags().StringVar(

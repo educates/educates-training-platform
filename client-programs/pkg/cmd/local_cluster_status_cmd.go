@@ -6,6 +6,11 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 )
 
+const localClusterStatusExample = `
+  # Get status of the local Kubernetes cluster
+  educates local cluster status
+`
+
 func (p *ProjectInfo) NewLocalClusterStatusCmd() *cobra.Command {
 	var c = &cobra.Command{
 		Args:  cobra.NoArgs,
@@ -16,6 +21,7 @@ func (p *ProjectInfo) NewLocalClusterStatusCmd() *cobra.Command {
 
 			return c.ClusterStatus()
 		},
+		Example: localClusterStatusExample,
 	}
 
 	return c

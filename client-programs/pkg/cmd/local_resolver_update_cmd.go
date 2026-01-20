@@ -7,6 +7,17 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/resolver"
 )
 
+const localResolverUpdateExample = `
+  # Update the local DNS resolver
+  educates local resolver update
+
+  # Update the local DNS resolver with a custom config
+  educates local resolver update --config /path/to/config.yaml
+
+  # Update the local DNS resolver with a custom domain
+  educates local resolver update --domain test.educates.io
+`
+
 type LocalResolverUpdateOptions struct {
 	Config string
 	Domain string
@@ -37,6 +48,7 @@ func (p *ProjectInfo) NewLocalResolverUpdateCmd() *cobra.Command {
 		Use:   "update",
 		Short: "Updates the local DNS resolver",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: localResolverUpdateExample,
 	}
 
 	c.Flags().StringVar(

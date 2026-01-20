@@ -1,4 +1,4 @@
-package educatesrestapi
+package restapi
 
 // WorkshopCatalog
 // --------------------------------------------

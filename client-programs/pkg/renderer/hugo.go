@@ -24,10 +24,6 @@ import (
 	"time"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-<<<<<<< HEAD
-=======
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
->>>>>>> 91b3f12b (Refactored cluster_workshop_xx commands)
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -110,16 +106,16 @@ type WorkshopConfig struct {
 
 type RunHugoServerConfig struct {
 	WorkshopRoot string
-	Kubeconfig string
-	Context string
-	Workshop string
-	Portal string
-	LocalHost string
-	LocalPort int
-	HugoPort int
-	Token string
-	Files bool
-	CleanupFunc ServerCleanupFunc
+	Kubeconfig   string
+	Context      string
+	Workshop     string
+	Portal       string
+	LocalHost    string
+	LocalPort    int
+	HugoPort     int
+	Token        string
+	Files        bool
+	CleanupFunc  ServerCleanupFunc
 }
 
 var workshopSessionResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshopsessions"}
@@ -295,10 +291,10 @@ func GenerateHugoConfiguration(workshopDir string, target string, params map[str
 	}
 
 	type HugoConfig struct {
-		BaseURL       string                          `yaml:"baseURL"`
-		Params        map[string]interface{}           `yaml:"params"`
-		OutputFormats map[string]OutputFormatConfig    `yaml:"outputFormats"`
-		Outputs       map[string][]string              `yaml:"outputs"`
+		BaseURL       string                        `yaml:"baseURL"`
+		Params        map[string]interface{}        `yaml:"params"`
+		OutputFormats map[string]OutputFormatConfig `yaml:"outputFormats"`
+		Outputs       map[string][]string           `yaml:"outputs"`
 	}
 
 	config := HugoConfig{Params: make(map[string]interface{})}
@@ -421,13 +417,8 @@ func startHugoServer(workshopDir string, tempDir string, port int, sessionURL st
 	return nil
 }
 
-<<<<<<< HEAD
 func PopulateTemporaryDirectory() (string, error) {
 	tempDir, err := ioutil.TempDir("", "educates")
-=======
-func populateTemporaryDirectory() (string, error) {
-	tempDir, err := os.MkdirTemp("", "educates")
->>>>>>> 91b3f12b (Refactored cluster_workshop_xx commands)
 
 	if err != nil {
 		return "", errors.Wrapf(err, "unable to create hugo files directory")
@@ -661,7 +652,6 @@ func RunHugoServer(o *RunHugoServerConfig) error {
 	return nil
 }
 
-<<<<<<< HEAD
 func RenderHugoStaticHTML(workshopDir string, tempDir string) error {
 	commandArgs := []string{
 		"build",
@@ -719,49 +709,4 @@ func RenderHugoStaticHTML(workshopDir string, tempDir string) error {
 	}
 
 	return nil
-=======
-func GenerateAccessToken(refresh bool) (string, error) {
-	configFileDir := utils.GetEducatesHomeDir()
-	accessTokenFile := path.Join(configFileDir, "live-reload-token.dat")
-
-	err := os.MkdirAll(configFileDir, os.ModePerm)
-
-	if err != nil {
-		return "", errors.Wrapf(err, "unable to create config directory")
-	}
-
-	var accessToken string
-
-	if refresh {
-		accessToken = utils.RandomPassword(32)
-
-		err := os.WriteFile(accessTokenFile, []byte(accessToken), 0644)
-
-		if err != nil {
-			return "", err
-		}
-	} else {
-		if _, err := os.Stat(accessTokenFile); err == nil {
-			accessTokenBytes, err := ioutil.ReadFile(accessTokenFile)
-
-			if err != nil {
-				return "", err
-			}
-
-			accessToken = string(accessTokenBytes)
-		} else if os.IsNotExist(err) {
-			accessToken = utils.RandomPassword(32)
-
-			err = os.WriteFile(accessTokenFile, []byte(accessToken), 0644)
-
-			if err != nil {
-				return "", err
-			}
-		} else {
-			return "", err
-		}
-	}
-
-	return accessToken, nil
->>>>>>> 91b3f12b (Refactored cluster_workshop_xx commands)
 }

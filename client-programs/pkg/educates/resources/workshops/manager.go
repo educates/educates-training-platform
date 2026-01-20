@@ -1,11 +1,13 @@
 package workshops
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,15 +17,19 @@ import (
 	"time"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
+	yttcmdui "carvel.dev/ytt/pkg/cmd/ui"
+	"carvel.dev/ytt/pkg/files"
+	"carvel.dev/ytt/pkg/yamlmeta"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
-	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
+
+	// "github.com/educates/educates-training-platform/client-programs/pkg/workshops"
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -80,12 +86,8 @@ type DeleteWorkshopResourceConfig struct {
 	Portal string
 }
 
-var TrainingPortalResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "trainingportals"}
-var WorkshopResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshops"}
-
-
 func (m *WorkshopManager) DeployWorkshopResource(o *DeployWorkshopConfig) error {
-	trainingPortalClient := m.Client.Resource(TrainingPortalResource)
+	trainingPortalClient := m.Client.Resource(educatesTypes.TrainingPortalResource)
 
 	trainingPortal, err := trainingPortalClient.Get(context.TODO(), o.Portal, metav1.GetOptions{})
 
@@ -418,7 +420,7 @@ func (m *WorkshopManager) DeployWorkshopResource(o *DeployWorkshopConfig) error 
 
 
 func (m *WorkshopManager) UpdateWorkshopResource(o *UpdateWorkshopResourceConfig) error {
-	workshopsClient := m.Client.Resource(WorkshopResource)
+	workshopsClient := m.Client.Resource(educatesTypes.WorkshopResource)
 
 	// _, err := workshopsClient.Apply(context.TODO(), workshop.GetName(), workshop, metav1.ApplyOptions{FieldManager: constants.DefaultPortalName, Force: true})
 
@@ -438,7 +440,7 @@ func (m *WorkshopManager) UpdateWorkshopResource(o *UpdateWorkshopResourceConfig
 }
 
 func (m *WorkshopManager) ListWorkshopResources(o *ListWorkshopResourcesConfig) (string, error) {
-	trainingPortalClient := m.Client.Resource(TrainingPortalResource)
+	trainingPortalClient := m.Client.Resource(educatesTypes.TrainingPortalResource)
 
 	trainingPortal, err := trainingPortalClient.Get(context.TODO(), o.Portal, metav1.GetOptions{})
 
@@ -464,7 +466,7 @@ func (m *WorkshopManager) ListWorkshopResources(o *ListWorkshopResourcesConfig) 
 
 	fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "NAME", "ALIAS", "CAPACITY", "SOURCE")
 
-	workshopsClient := m.Client.Resource(WorkshopResource)
+	workshopsClient := m.Client.Resource(educatesTypes.WorkshopResource)
 
 	for _, item := range workshops {
 		object := item.(map[string]interface{})
@@ -501,7 +503,7 @@ func (m *WorkshopManager) ListWorkshopResources(o *ListWorkshopResourcesConfig) 
 }
 
 func (m *WorkshopManager) DeleteWorkshopResource(o *DeleteWorkshopResourceConfig) error {
-	trainingPortalClient := m.Client.Resource(TrainingPortalResource)
+	trainingPortalClient := m.Client.Resource(educatesTypes.TrainingPortalResource)
 
 	trainingPortal, err := trainingPortalClient.Get(context.TODO(), o.Portal, metav1.GetOptions{})
 
@@ -613,7 +615,7 @@ func LoadWorkshopDefinition(o *WorkshopDefinitionConfig) (*unstructured.Unstruct
 
 	// Process the workshop YAML data in case it contains ytt templating.
 
-	if workshopData, err = workshops.ProcessWorkshopDefinition(workshopData, o.DataValueFlags); err != nil {
+	if workshopData, err = ProcessWorkshopDefinition(workshopData, o.DataValueFlags); err != nil {
 		return nil, errors.Wrap(err, "unable to process workshop definition as template")
 	}
 
@@ -676,6 +678,39 @@ func LoadWorkshopDefinition(o *WorkshopDefinitionConfig) (*unstructured.Unstruct
 
 	return workshop, nil
 }
+
+func ProcessWorkshopDefinition(yamlData []byte, dataValueFlags yttcmd.DataValuesFlags) ([]byte, error) {
+	templatingOptions := yttcmd.NewOptions()
+
+	templatingOptions.IgnoreUnknownComments = true
+
+	templatingOptions.DataValuesFlags = dataValueFlags
+
+	var filesToProcess []*files.File
+
+	mainInputFile := files.MustNewFileFromSource(files.NewBytesSource("workshop.yaml", yamlData))
+
+	filesToProcess = append(filesToProcess, mainInputFile)
+
+	logUI := yttcmdui.NewCustomWriterTTY(false, log.Writer(), log.Writer())
+
+	output := templatingOptions.RunWithFiles(yttcmd.Input{Files: filesToProcess}, logUI)
+
+	if output.Err != nil {
+		return []byte{}, fmt.Errorf("execution of ytt failed: %s", output.Err)
+	}
+
+	if len(output.DocSet.Items) == 0 {
+		return []byte{}, nil
+	}
+
+	var buf bytes.Buffer
+
+	yamlmeta.NewYAMLPrinter(&buf).Print(output.DocSet.Items[0])
+
+	return buf.Bytes(), nil
+}
+
 
 
 func generateWorkshopName(path string, workshop *unstructured.Unstructured, portal string) string {

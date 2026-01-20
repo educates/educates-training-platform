@@ -8,7 +8,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/portal"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/portal"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"

@@ -10,7 +10,8 @@ import (
 	"strings"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
+	educatesrestapi "github.com/educates/educates-training-platform/client-programs/pkg/educates/restapi"
+	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,16 +20,6 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
-var workshopResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshops"}
-var trainingportalResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "trainingportals"}
-var workshopsessionsResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshopsessions"}
-var workshoprequestsResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshoprequests"}
-var workshopenvironmentsResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshopenvironments"}
-var workshopallocationsResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshopallocations"}
-var secretcopierResource = schema.GroupVersionResource{Group: "secrets.educates.dev", Version: "v1beta1", Resource: "secretcopiers"}
-var secretinjectorsResource = schema.GroupVersionResource{Group: "secrets.educates.dev", Version: "v1beta1", Resource: "secretinjectors"}
-var secretexportersResource = schema.GroupVersionResource{Group: "secrets.educates.dev", Version: "v1beta1", Resource: "secretexporters"}
-var secretimportersResource = schema.GroupVersionResource{Group: "secrets.educates.dev", Version: "v1beta1", Resource: "secretimporters"}
 
 type ClusterDiagnosticsFetcher struct {
 	clusterConfig *cluster.ClusterConfig
@@ -216,7 +207,7 @@ func (c *ClusterDiagnosticsFetcher) fetchTrainingPortalDetailsAtRest(fileNamePat
 	if err != nil {
 		return err
 	}
-	dynClient := dynamicClient.Resource(trainingportalResource)
+	dynClient := dynamicClient.Resource(educatesTypes.TrainingPortalResource)
 	trainingPortals, err := dynClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err

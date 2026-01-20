@@ -1,4 +1,4 @@
-package educatesrestapi
+package restapi
 
 import (
 	"bytes"
@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
+	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type AuthDetails struct {
@@ -300,7 +300,7 @@ func (c *WorkshopsCatalogRequester) Login() (func(), error) {
 		return nil, errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	trainingPortalClient := dynamicClient.Resource(schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "trainingportals"})
+	trainingPortalClient := dynamicClient.Resource(educatesTypes.TrainingPortalResource)
 
 	var trainingPortal *unstructured.Unstructured
 	var executions = 0

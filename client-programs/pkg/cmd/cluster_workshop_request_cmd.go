@@ -10,7 +10,8 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
+	educatesrestapi "github.com/educates/educates-training-platform/client-programs/pkg/educates/restapi"
+	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/joho/godotenv"
 	"github.com/pkg/errors"
@@ -323,7 +324,7 @@ func ensurePortalHasWorkshop(clusterConfig *cluster.ClusterConfig, name string, 
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	trainingPortalClient := client.Resource(workshops.TrainingPortalResource)
+	trainingPortalClient := client.Resource(educatesTypes.TrainingPortalResource)
 
 	trainingPortal, err := trainingPortalClient.Get(context.TODO(), portal, metav1.GetOptions{})
 

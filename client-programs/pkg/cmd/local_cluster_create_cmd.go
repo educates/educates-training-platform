@@ -22,7 +22,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
-var (
+const (
 	localClusterCreateExample = `
   # Create local educates cluster (no configuration, uses nip.io wildcard domain and Kind as provider config defaults)
   educates local cluster create

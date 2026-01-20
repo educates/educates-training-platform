@@ -7,15 +7,20 @@ import (
 	"regexp"
 	"syscall"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/kubectl/pkg/scheme"
 	"sigs.k8s.io/yaml"
 )
+
+const localSecretsImportExample = `
+  # Import secrets from a file
+  educates local secrets import --file /path/to/secrets.yaml
+`
 
 type LocalSecretsImportOptions struct {
 	File string
@@ -113,6 +118,7 @@ func (p *ProjectInfo) NewLocalSecretsImportCmd() *cobra.Command {
 		Use:   "import",
 		Short: "Import secrets to the cache",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: localSecretsImportExample,
 	}
 
 	c.Flags().StringVarP(

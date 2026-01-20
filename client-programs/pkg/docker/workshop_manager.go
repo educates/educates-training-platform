@@ -112,7 +112,7 @@ type DockerWorkshopDeployConfig struct {
 
 
 func (m *DockerWorkshopsManager) WorkshopStatus(name string) (DockerWorkshopDetails, bool) {
-	workshops, err := m.ListWorkhops()
+	workshops, err := m.ListWorkshops()
 
 	if err != nil {
 		return DockerWorkshopDetails{}, false
@@ -148,7 +148,7 @@ func (m *DockerWorkshopsManager) ClearWorkshopStatus(name string) {
 	m.StatusesMutex.Unlock()
 }
 
-func (m *DockerWorkshopsManager) ListWorkhops() ([]DockerWorkshopDetails, error) {
+func (m *DockerWorkshopsManager) ListWorkshops() ([]DockerWorkshopDetails, error) {
 	setOfWorkshops := map[string]DockerWorkshopDetails{}
 	workshopsList := []DockerWorkshopDetails{}
 

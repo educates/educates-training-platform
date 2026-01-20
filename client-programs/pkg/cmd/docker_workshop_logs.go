@@ -8,8 +8,21 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+const dockerWorkshopLogsExample = `
+  # Display logs for Educates workshop in current workshop directory
+  educates docker workshop logs
+
+  # Display logs for Educates workshop with provided name
+  educates docker workshop logs --name my-workshop
+
+  # Display logs for Educates workshop from specific path and using custom workshop file
+  educates docker workshop logs --path ./workshop --workshop-file custom-workshop.yaml
+
+  # Display logs for Educates workshop in current folder and follow the logs
+  educates docker workshop logs --follow
+`
 
 type DockerWorkshopLogsOptions struct {
 	Name            string
@@ -32,16 +45,12 @@ func (o *DockerWorkshopLogsOptions) Run(cmd *cobra.Command) error {
 		// the workshop will then expect the workshop definition to reside in the
 		// resources/workshop.yaml file under the directory, the same as if a
 		// directory path was provided explicitly.
-
 		if path == "" {
 			path = "."
 		}
 
 		// Load the workshop definition. The path can be a HTTP/HTTPS URL for a
 		// local file system path for a directory or file.
-
-		var workshop *unstructured.Unstructured
-
 		definitionConfig := workshops.WorkshopDefinitionConfig{
 			Name: o.Name,
 			Path: path,
@@ -50,7 +59,8 @@ func (o *DockerWorkshopLogsOptions) Run(cmd *cobra.Command) error {
 			WorkshopVersion: o.WorkshopVersion,
 			DataValueFlags: o.DataValuesFlags,
 		}
-		if workshop, err = workshops.LoadWorkshopDefinition(&definitionConfig); err != nil {
+		workshop, err := workshops.LoadWorkshopDefinition(&definitionConfig)
+		if err != nil {
 			return err
 		}
 
@@ -90,6 +100,7 @@ func (p *ProjectInfo) NewDockerWorkshopLogsCmd() *cobra.Command {
 		Use:   "logs",
 		Short: "Display logs for workshop",
 		RunE:  func(cmd *cobra.Command, _ []string) error { return o.Run(cmd) },
+		Example: dockerWorkshopLogsExample,
 	}
 
 	c.Flags().StringVarP(

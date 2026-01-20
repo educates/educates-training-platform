@@ -1,22 +1,23 @@
 package cmd
 
 import (
-	"context"
-	"fmt"
-	"io"
-	"os"
-	"os/exec"
-	"path"
-
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	"github.com/docker/docker/client"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+const dockerWorkshopDeleteExample = `
+  # Delete Educates workshop from Docker in current workshop directory and using default workshop file
+  educates docker workshop delete
+
+  # Delete Educates workshop from Docker from specific portal
+  educates docker workshop delete --portal my-portal
+
+  # Delete Educates workshop from Docker defined with custom path and workshop file
+  educates docker workshop delete --path ./workshop --workshop-file custom-workshop.yaml
+`
 
 type DockerWorkshopDeleteOptions struct {
 	Name            string
@@ -26,58 +27,7 @@ type DockerWorkshopDeleteOptions struct {
 	DataValuesFlags yttcmd.DataValuesFlags
 }
 
-func (m *DockerWorkshopsManager) DeleteWorkshop(name string, stdout io.Writer, stderr io.Writer) error {
-	m.SetWorkshopStatus(name, "", "", "Stopping")
-
-	defer m.ClearWorkshopStatus(name)
-
-	dockerCommand := exec.Command(
-		"docker",
-		"compose",
-		"--project-name",
-		name,
-		"rm",
-		"--stop",
-		"--force",
-		"--volumes",
-	)
-
-	dockerCommand.Stdout = stdout
-	dockerCommand.Stderr = stderr
-
-	err := dockerCommand.Run()
-
-	if err != nil {
-		return errors.Wrap(err, "unable to stop workshop")
-	}
-
-	ctx := context.Background()
-
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-
-	if err != nil {
-		return errors.Wrap(err, "unable to create docker client")
-	}
-
-	err = cli.VolumeRemove(ctx, fmt.Sprintf("%s_workshop", name), false)
-
-	if err != nil {
-		return errors.Wrap(err, "unable to delete workshop volume")
-	}
-
-	configFileDir := utils.GetEducatesHomeDir()
-	workshopConfigDir := path.Join(configFileDir, "workshops", name)
-	composeConfigDir := path.Join(configFileDir, "compose", name)
-
-	os.RemoveAll(workshopConfigDir)
-	os.RemoveAll(composeConfigDir)
-
-	return nil
-}
-
 func (o *DockerWorkshopDeleteOptions) Run(cmd *cobra.Command) error {
-	var err error
-
 	var name = o.Name
 
 	if name == "" {
@@ -87,32 +37,28 @@ func (o *DockerWorkshopDeleteOptions) Run(cmd *cobra.Command) error {
 		// the workshop will then expect the workshop definition to reside in the
 		// resources/workshop.yaml file under the directory, the same as if a
 		// directory path was provided explicitly.
-
 		if path == "" {
 			path = "."
 		}
 
 		// Load the workshop definition. The path can be a HTTP/HTTPS URL for a
 		// local file system path for a directory or file.
-
-		var workshop *unstructured.Unstructured
-
-		definitionConfig := workshops.WorkshopDefinitionConfig{
+		workshop, err := workshops.LoadWorkshopDefinition(&workshops.WorkshopDefinitionConfig{
 			Name: o.Name,
 			Path: path,
 			Portal: constants.DefaultPortalName,
 			WorkshopFile: o.WorkshopFile,
 			WorkshopVersion: o.WorkshopVersion,
 			DataValueFlags: o.DataValuesFlags,
-		}
-		if workshop, err = workshops.LoadWorkshopDefinition(&definitionConfig); err != nil {
+		})
+		if err != nil {
 			return err
 		}
 
 		name = workshop.GetName()
 	}
 
-	dockerWorkshopsManager := NewDockerWorkshopsManager()
+	dockerWorkshopsManager := docker.NewDockerWorkshopsManager()
 
 	return dockerWorkshopsManager.DeleteWorkshop(name, cmd.OutOrStdout(), cmd.OutOrStderr())
 }
@@ -125,6 +71,7 @@ func (p *ProjectInfo) NewDockerWorkshopDeleteCmd() *cobra.Command {
 		Use:   "delete",
 		Short: "Delete workshop from Docker",
 		RunE:  func(cmd *cobra.Command, _ []string) error { return o.Run(cmd) },
+		Example: dockerWorkshopDeleteExample,
 	}
 
 	c.Flags().StringVarP(
@@ -134,6 +81,8 @@ func (p *ProjectInfo) NewDockerWorkshopDeleteCmd() *cobra.Command {
 		"",
 		"name to be used for the workshop definition, generated if not set",
 	)
+
+	// TODO: Move "." to a constant
 	c.Flags().StringVarP(
 		&o.Path,
 		"file",
@@ -142,6 +91,7 @@ func (p *ProjectInfo) NewDockerWorkshopDeleteCmd() *cobra.Command {
 		"path to local workshop directory, definition file, or URL for workshop definition file",
 	)
 
+	// TODO: Move "resources/workshop.yaml" to a constant
 	c.Flags().StringVar(
 		&o.WorkshopFile,
 		"workshop-file",
@@ -149,6 +99,7 @@ func (p *ProjectInfo) NewDockerWorkshopDeleteCmd() *cobra.Command {
 		"location of the workshop definition file",
 	)
 
+	// TODO: Move "latest" to a constant
 	c.Flags().StringVar(
 		&o.WorkshopVersion,
 		"workshop-version",

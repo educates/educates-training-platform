@@ -1,29 +1,28 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"hash/maphash"
-	"io"
-	"math/rand"
-	"net/http"
-	"net/url"
-	"os/exec"
-	"runtime"
-	"strings"
-	"time"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
+)
+
+const (
+	clusterWorkshopDeployExample = `
+  # Deploy Educates workshop to cluster in current workshop directory and using default workshop file
+  educates cluster workshop deploy
+
+  # Deploy Educates workshop to cluster with custom workshop name and alias and custom workshop settings
+  educates cluster workshop deploy --name my-workshop --alias my-workshop -initial 10 -reserved 5 -expires 1h -overtime 10m -deadline 2h -orphaned 10m -overdue 10s
+
+  # Deploy Educates workshop to cluster with custom workshop file
+  educates cluster workshop deploy --path ./workshop --workshop-file custom-workshop.yaml
+`
 )
 
 type ClusterWorkshopDeployOptions struct {
@@ -75,7 +74,16 @@ func (o *ClusterWorkshopDeployOptions) Run() error {
 
 	var workshop *unstructured.Unstructured
 
-	if workshop, err = loadWorkshopDefinition(o.Name, path, o.Portal, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+	loadConfig := workshops.WorkshopDefinitionConfig{
+		Name: o.Name,
+		Path: path,
+		Portal: o.Portal,
+		WorkshopFile: o.WorkshopFile,
+		WorkshopVersion: o.WorkshopVersion,
+		DataValueFlags: o.DataValuesFlags,
+	}
+
+	if workshop, err = workshops.LoadWorkshopDefinition(&loadConfig); err != nil {
 		return err
 	}
 
@@ -91,9 +99,14 @@ func (o *ClusterWorkshopDeployOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	// Update the workshop resource in the Kubernetes cluster.
+	manager := workshops.NewWorkshopManager(dynamicClient)
 
-	err = updateWorkshopResource(dynamicClient, workshop)
+	// Update the workshop resource in the Kubernetes cluster.
+	updateConfig := workshops.UpdateWorkshopResourceConfig{
+		Workshop: workshop,
+	}
+
+	err = manager.UpdateWorkshopResource(&updateConfig)
 
 	if err != nil {
 		return err
@@ -103,7 +116,33 @@ func (o *ClusterWorkshopDeployOptions) Run() error {
 
 	// Update the training portal, creating it if necessary.
 
-	err = deployWorkshopResource(dynamicClient, workshop, o.Alias, o.Portal, o.Capacity, o.Reserved, o.Initial, o.Expires, o.Overtime, o.Deadline, o.Orphaned, o.Overdue, o.Refresh, o.Repository, o.Environ, o.Labels, o.OpenBrowser)
+	deployConfig := workshops.DeployWorkshopConfig{
+		Workshop: workshop,
+		Alias: o.Alias,
+		Portal: o.Portal,
+		Capacity: o.Capacity,
+		Reserved: o.Reserved,
+		Initial: o.Initial,
+		Expires: o.Expires,
+		Overtime: o.Overtime,
+		Deadline: o.Deadline,
+		Orphaned: o.Orphaned,
+		Overdue: o.Overdue,
+		Refresh: o.Refresh,
+		Registry: o.Repository,
+		Environ: o.Environ,
+		Labels: o.Labels,
+		OpenBrowser: o.OpenBrowser,
+	}
+	err = manager.DeployWorkshopResource(&deployConfig)
+
+	// TODO: Move open browser logic to separate function and extract logic here
+	// if o.OpenBrowser {
+	// 	err = manager.OpenBrowser(&deployConfig)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	if err != nil {
 		return err
@@ -120,6 +159,7 @@ func (p *ProjectInfo) NewClusterWorkshopDeployCmd() *cobra.Command {
 		Use:   "deploy",
 		Short: "Deploy workshop to Kubernetes",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: clusterWorkshopDeployExample,
 	}
 
 	c.Flags().StringVarP(
@@ -298,364 +338,4 @@ func (p *ProjectInfo) NewClusterWorkshopDeployCmd() *cobra.Command {
 	)
 
 	return c
-}
-
-var trainingPortalResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "trainingportals"}
-
-func deployWorkshopResource(client dynamic.Interface, workshop *unstructured.Unstructured, alias string, portal string, capacity uint, reserved uint, initial uint, expires string, overtime string, deadline string, orphaned string, overdue string, refresh string, registry string, environ []string, labels []string, openBrowser bool) error {
-	trainingPortalClient := client.Resource(trainingPortalResource)
-
-	trainingPortal, err := trainingPortalClient.Get(context.TODO(), portal, metav1.GetOptions{})
-
-	var trainingPortalExists = true
-
-	if k8serrors.IsNotFound(err) {
-		trainingPortalExists = false
-
-		trainingPortal = &unstructured.Unstructured{}
-
-		trainingPortal.SetUnstructuredContent(map[string]interface{}{
-			"apiVersion": "training.educates.dev/v1beta1",
-			"kind":       "TrainingPortal",
-			"metadata": map[string]interface{}{
-				"name": portal,
-			},
-			"spec": map[string]interface{}{
-				"portal": map[string]interface{}{
-					"password": randomPassword(12),
-					"registration": struct {
-						Type string `json:"type"`
-					}{
-						Type: "anonymous",
-					},
-					"updates": struct {
-						Workshop bool `json:"workshop"`
-					}{
-						Workshop: true,
-					},
-					"sessions": struct {
-						Maximum int64 `json:"maximum"`
-					}{
-						Maximum: 5,
-					},
-					"workshop": map[string]interface{}{
-						"defaults": struct {
-							Reserved int `json:"reserved"`
-						}{
-							Reserved: 0,
-						},
-					},
-				},
-				"workshops": []interface{}{},
-			},
-		})
-	}
-
-	workshops, _, err := unstructured.NestedSlice(trainingPortal.Object, "spec", "workshops")
-
-	if err != nil {
-		return errors.Wrap(err, "unable to retrieve workshops from training portal")
-	}
-
-	var updatedWorkshops []interface{}
-
-	if expires == "" {
-		duration, propertyExists, err := unstructured.NestedString(workshop.Object, "spec", "duration")
-
-		if err != nil || !propertyExists {
-			expires = "60m"
-		} else {
-			expires = duration
-		}
-	}
-
-	type EnvironDetails struct {
-		Name  string `json:"name"`
-		Value string `json:"value"`
-	}
-
-	var environVariables []EnvironDetails
-
-	for _, value := range environ {
-		parts := strings.SplitN(value, "=", 2)
-		environVariables = append(environVariables, EnvironDetails{
-			Name:  parts[0],
-			Value: parts[1],
-		})
-	}
-
-	type LabelDetails struct {
-		Name  string `json:"name"`
-		Value string `json:"value"`
-	}
-
-	var labelOverrides []LabelDetails
-
-	for _, value := range labels {
-		parts := strings.SplitN(value, "=", 2)
-		labelOverrides = append(labelOverrides, LabelDetails{
-			Name:  parts[0],
-			Value: parts[1],
-		})
-	}
-
-	var foundWorkshop = false
-
-	for _, item := range workshops {
-		object := item.(map[string]interface{})
-
-		updatedWorkshops = append(updatedWorkshops, object)
-
-		if object["name"] == workshop.GetName() && object["alias"] == alias {
-			foundWorkshop = true
-
-			object["reserved"] = int64(reserved)
-			object["initial"] = int64(initial)
-
-			if capacity != 0 {
-				object["capacity"] = int64(capacity)
-			} else {
-				delete(object, "capacity")
-			}
-
-			if expires != "" {
-				object["expires"] = expires
-			} else {
-				delete(object, "expires")
-			}
-
-			if overtime != "" {
-				object["overtime"] = overtime
-			} else {
-				delete(object, "overtime")
-			}
-
-			if deadline != "" {
-				object["deadline"] = deadline
-			} else {
-				delete(object, "deadline")
-			}
-
-			if orphaned != "" {
-				object["orphaned"] = orphaned
-			} else {
-				delete(object, "orphaned")
-			}
-
-			if overdue != "" {
-				object["overdue"] = overdue
-			} else {
-				delete(object, "overdue")
-			}
-
-			if refresh != "" {
-				object["refresh"] = refresh
-			} else {
-				delete(object, "refresh")
-			}
-
-			var tmpEnvironVariables []interface{}
-
-			for _, item := range environVariables {
-				tmpEnvironVariables = append(tmpEnvironVariables, map[string]interface{}{
-					"name":  item.Name,
-					"value": item.Value,
-				})
-			}
-
-			object["env"] = tmpEnvironVariables
-
-			var tmpLabelOverrides []interface{}
-
-			for _, item := range labelOverrides {
-				tmpLabelOverrides = append(tmpLabelOverrides, map[string]interface{}{
-					"name":  item.Name,
-					"value": item.Value,
-				})
-			}
-
-			object["labels"] = tmpLabelOverrides
-		}
-	}
-
-	type RegistryDetails struct {
-		Host      string `json:"host"`
-		Namespace string `json:"namespace,omitempty"`
-	}
-
-	type WorkshopDetails struct {
-		Name     string           `json:"name"`
-		Alias    string           `json:"alias"`
-		Capacity int64            `json:"capacity,omitempty"`
-		Initial  int64            `json:"initial"`
-		Reserved int64            `json:"reserved"`
-		Expires  string           `json:"expires,omitempty"`
-		Overtime string           `json:"overtime,omitempty"`
-		Deadline string           `json:"deadline,omitempty"`
-		Orphaned string           `json:"orphaned,omitempty"`
-		Overdue  string           `json:"overdue,omitempty"`
-		Refresh  string           `json:"refresh,omitempty"`
-		Registry *RegistryDetails `json:"registry,omitempty"`
-		Environ  []EnvironDetails `json:"env"`
-		Labels   []LabelDetails   `json:"labels"`
-	}
-
-	if !foundWorkshop {
-		workshopDetails := WorkshopDetails{
-			Name:     workshop.GetName(),
-			Alias:    alias,
-			Initial:  int64(initial),
-			Reserved: int64(reserved),
-			Expires:  expires,
-			Overtime: overtime,
-			Deadline: deadline,
-			Orphaned: orphaned,
-			Overdue:  overdue,
-			Refresh:  refresh,
-			Environ:  environVariables,
-			Labels:   labelOverrides,
-		}
-
-		if capacity != 0 {
-			workshopDetails.Capacity = int64(capacity)
-		}
-
-		if registry != "" {
-			parts := strings.SplitN(registry, "/", 2)
-
-			host := parts[0]
-			var namespace string
-
-			if len(parts) > 1 {
-				namespace = parts[1]
-			}
-
-			registryDetails := RegistryDetails{
-				Host:      host,
-				Namespace: namespace,
-			}
-
-			workshopDetails.Registry = &registryDetails
-		}
-
-		var workshopDetailsMap map[string]interface{}
-
-		data, _ := json.Marshal(workshopDetails)
-		json.Unmarshal(data, &workshopDetailsMap)
-
-		updatedWorkshops = append(updatedWorkshops, workshopDetailsMap)
-	}
-
-	unstructured.SetNestedSlice(trainingPortal.Object, updatedWorkshops, "spec", "workshops")
-
-	if trainingPortalExists {
-		fmt.Printf("Updating existing training portal %q.\n", trainingPortal.GetName())
-		_, err = trainingPortalClient.Update(context.TODO(), trainingPortal, metav1.UpdateOptions{FieldManager: constants.DefaultPortalName})
-	} else {
-		fmt.Printf("Creating new training portal %q.\n", trainingPortal.GetName())
-		_, err = trainingPortalClient.Create(context.TODO(), trainingPortal, metav1.CreateOptions{FieldManager: constants.DefaultPortalName})
-	}
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to update training portal %q in cluster", portal)
-	}
-
-	fmt.Print("Workshop added to training portal.\n")
-
-	if openBrowser {
-		// Need to refetch training portal because if was just created the URL
-		// for access may not have been set yet.
-
-		var targetUrl string
-
-		fmt.Print("Checking training portal is ready.\n")
-
-		spinner := func(iteration int) string {
-			spinners := `|/-\`
-			return string(spinners[iteration%len(spinners)])
-		}
-
-		for i := 1; i < 60; i++ {
-			fmt.Printf("\r[%s] Waiting...", spinner(i))
-
-			time.Sleep(time.Second)
-
-			trainingPortal, err = trainingPortalClient.Get(context.TODO(), portal, metav1.GetOptions{})
-
-			if err != nil {
-				return errors.Wrapf(err, "unable to fetch training portal %q in cluster", portal)
-			}
-
-			var found bool
-
-			targetUrl, found, _ = unstructured.NestedString(trainingPortal.Object, "status", "educates", "url")
-
-			if found {
-				break
-			}
-		}
-
-		rootUrl := targetUrl
-
-		password, _, _ := unstructured.NestedString(trainingPortal.Object, "spec", "portal", "password")
-
-		if password != "" {
-			values := url.Values{}
-			values.Add("redirect_url", "/")
-			values.Add("password", password)
-
-			targetUrl = fmt.Sprintf("%s/workshops/access/?%s", targetUrl, values.Encode())
-		}
-
-		for i := 1; i < 300; i++ {
-			fmt.Printf("\r[%s] Waiting...", spinner(i))
-
-			time.Sleep(time.Second)
-
-			resp, err := http.Get(rootUrl)
-
-			if err != nil || resp.StatusCode == 503 {
-				continue
-			}
-
-			defer resp.Body.Close()
-			io.ReadAll(resp.Body)
-
-			break
-		}
-
-		fmt.Print("\r              \r")
-
-		fmt.Printf("Opening training portal %s.\n", targetUrl)
-
-		switch runtime.GOOS {
-		case "linux":
-			err = exec.Command("xdg-open", targetUrl).Start()
-		case "windows":
-			err = exec.Command("rundll32", "url.dll,FileProtocolHandler", targetUrl).Start()
-		case "darwin":
-			err = exec.Command("open", targetUrl).Start()
-		default:
-			err = fmt.Errorf("unsupported platform")
-		}
-
-		if err != nil {
-			return errors.Wrap(err, "unable to open web browser")
-		}
-	}
-
-	return nil
-}
-
-func randomPassword(length int) string {
-	rand.New(rand.NewSource(int64(new(maphash.Hash).Sum64())))
-
-	chars := []rune("!#%+23456789:=?@ABCDEFGHJKLMNPRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
-
-	var b strings.Builder
-
-	for i := 0; i < length; i++ {
-		b.WriteRune(chars[rand.Intn(len(chars))])
-	}
-	return b.String()
 }

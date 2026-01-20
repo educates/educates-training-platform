@@ -2,9 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
@@ -14,10 +12,24 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
 	"github.com/educates/educates-training-platform/client-programs/pkg/renderer"
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
+const (
+	clusterWorkshopServeExample = `
+  # Serve Educates workshop from local system in current workshop directory and using default workshop file
+  educates cluster workshop serve
+
+  # Serve Educates workshop from local system with custom workshop file
+  educates cluster workshop serve --path ./workshop --workshop-file custom-workshop.yaml
+
+  # Serve Educates workshop from local system with custom workshop file and activate live reload mode
+  educates cluster workshop serve --path ./workshop --workshop-file custom-workshop.yaml --patch-workshop
+`
+)
+
+// TODO: Move this function somewhere and see how to update the code that does this same functionality in many workshop related commands
 func calculateWorkshopRoot(path string) (string, error) {
 	var err error
 
@@ -42,22 +54,6 @@ func calculateWorkshopRoot(path string) (string, error) {
 	return path, nil
 }
 
-// func calculateWorkshopName(name string, path string, portal string, workshopFile string, workshopVersion string, dataValuesFlags yttcmd.DataValuesFlags) (string, error) {
-// 	var err error
-
-// 	if name == "" {
-// 		var workshop *unstructured.Unstructured
-
-// 		if workshop, err = loadWorkshopDefinition(name, path, portal, workshopFile, workshopVersion, dataValuesFlags); err != nil {
-// 			return "", err
-// 		}
-
-// 		name = workshop.GetName()
-// 	}
-
-// 	return name, nil
-// }
-
 type ClusterWorkshopServeOptions struct {
 	KubeconfigOptions
 	Name            string
@@ -78,51 +74,6 @@ type ClusterWorkshopServeOptions struct {
 	DataValuesFlags yttcmd.DataValuesFlags
 }
 
-func generateAccessToken(refresh bool) (string, error) {
-	configFileDir := utils.GetEducatesHomeDir()
-	accessTokenFile := path.Join(configFileDir, "live-reload-token.dat")
-
-	err := os.MkdirAll(configFileDir, os.ModePerm)
-
-	if err != nil {
-		return "", errors.Wrapf(err, "unable to create config directory")
-	}
-
-	var accessToken string
-
-	if refresh {
-		accessToken = randomPassword(32)
-
-		err := ioutil.WriteFile(accessTokenFile, []byte(accessToken), 0644)
-
-		if err != nil {
-			return "", err
-		}
-	} else {
-		if _, err := os.Stat(accessTokenFile); err == nil {
-			accessTokenBytes, err := ioutil.ReadFile(accessTokenFile)
-
-			if err != nil {
-				return "", err
-			}
-
-			accessToken = string(accessTokenBytes)
-		} else if os.IsNotExist(err) {
-			accessToken = randomPassword(32)
-
-			err = ioutil.WriteFile(accessTokenFile, []byte(accessToken), 0644)
-
-			if err != nil {
-				return "", err
-			}
-		} else {
-			return "", err
-		}
-	}
-
-	return accessToken, nil
-}
-
 func (o *ClusterWorkshopServeOptions) Run() error {
 	var err error
 
@@ -138,20 +89,26 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 	}
 
 	// Ensure have portal name.
-
 	if portal == "" {
 		portal = constants.DefaultPortalName
 	}
 
 	// Calculate workshop root and name.
-
 	if path, err = calculateWorkshopRoot(path); err != nil {
 		return err
 	}
 
 	var workshop *unstructured.Unstructured
 
-	if workshop, err = loadWorkshopDefinition(name, path, portal, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+	definitionConfig := workshops.WorkshopDefinitionConfig{
+		Name: name,
+		Path: path,
+		Portal: portal,
+		WorkshopFile: o.WorkshopFile,
+		WorkshopVersion: o.WorkshopVersion,
+		DataValueFlags: o.DataValuesFlags,
+	}
+	if workshop, err = workshops.LoadWorkshopDefinition(&definitionConfig); err != nil {
 		return err
 	}
 
@@ -160,9 +117,8 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 	}
 
 	// If going to patch hosted workshop, ensure we have an access token.
-
 	if o.PatchWorkshop && token == "" {
-		token, err = generateAccessToken(o.RefreshToken)
+		token, err = renderer.GenerateAccessToken(o.RefreshToken)
 
 		if err != nil {
 			return errors.Wrap(err, "error generating access token")
@@ -170,7 +126,6 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 	}
 
 	// If patching hosted workshop create an apply the updated configuration.
-
 	if o.PatchWorkshop {
 		patchedWorkshop := workshop.DeepCopyObject().(*unstructured.Unstructured)
 
@@ -202,9 +157,11 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 			return errors.Wrapf(err, "unable to create Kubernetes client")
 		}
 
+		manager := workshops.NewWorkshopManager(dynamicClient)
 		// Update the workshop resource in the Kubernetes cluster.
-
-		err = updateWorkshopResource(dynamicClient, patchedWorkshop)
+		err = manager.UpdateWorkshopResource(&workshops.UpdateWorkshopResourceConfig{
+			Workshop: patchedWorkshop,
+		})
 
 		if err != nil {
 			return err
@@ -215,23 +172,38 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 
 	var cleanupFunc = func() {
 		// Do our best to revert workshop configuration and ignore errors.
-
 		clusterConfig := cluster.NewClusterConfig(o.Kubeconfig, o.Context)
 
 		dynamicClient, err := clusterConfig.GetDynamicClient()
 
 		if err == nil {
 			// Update the workshop resource in the Kubernetes cluster.
-
-			updateWorkshopResource(dynamicClient, workshop)
-
-			fmt.Printf("Restored workshop %q.\n", workshop.GetName())
+			manager := workshops.NewWorkshopManager(dynamicClient)
+			err = manager.UpdateWorkshopResource(&workshops.UpdateWorkshopResourceConfig{
+				Workshop: workshop,
+			})
+			if err != nil {
+				fmt.Printf("Error restoring workshop %q: %v\n", workshop.GetName(), err)
+			} else {
+				fmt.Printf("Restored workshop %q.\n", workshop.GetName())
+			}
 		}
 	}
 
 	// Run the proxy server and Hugo server.
-
-	return renderer.RunHugoServer(path, o.Kubeconfig, o.Context, name, portal, o.LocalHost, o.LocalPort, o.HugoPort, token, o.Files, cleanupFunc)
+	return renderer.RunHugoServer(&renderer.RunHugoServerConfig{
+		WorkshopRoot: path,
+		Kubeconfig: o.Kubeconfig,
+		Context: o.Context,
+		Workshop: name,
+		Portal: portal,
+		LocalHost: o.LocalHost,
+		LocalPort: o.LocalPort,
+		HugoPort: o.HugoPort,
+		Token: token,
+		Files: o.Files,
+		CleanupFunc: cleanupFunc,
+	})
 }
 
 func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
@@ -242,6 +214,7 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 		Use:   "serve",
 		Short: "Serve workshop from local system",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: clusterWorkshopServeExample,
 	}
 
 	c.Flags().StringVarP(

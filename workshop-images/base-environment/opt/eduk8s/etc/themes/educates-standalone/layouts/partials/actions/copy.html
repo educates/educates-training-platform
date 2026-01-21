@@ -1,0 +1,10 @@
+{{/* NEW STUB FILE - NEEDS REVIEW */}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "workshop:copy" -}}
+{{- $glyph := "fa-copy" -}}
+{{- $prefix := "Workshop" -}}
+{{- $title := "Copy text to paste buffer" -}}
+{{- $body := .Inner -}}
+{{- $args := dict "text" .Inner -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

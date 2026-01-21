@@ -1,0 +1,13 @@
+{{/* NEW STUB FILE - NEEDS REVIEW */}}
+{{- $args := .Inner | unmarshal -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "editor:insert-value-into-yaml" -}}
+{{- $glyph := "fa-file-import" -}}
+{{- $prefix := default "Editor" $args.prefix -}}
+{{- $title := default (printf "Insert value into YAML file \"%s\" at \"%s\"" $args.file $args.path) $args.title -}}
+{{- $body := $args.value -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

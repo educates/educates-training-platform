@@ -1,0 +1,13 @@
+{{/* NEW STUB FILE - NEEDS REVIEW */}}
+{{- $args := .Inner | unmarshal -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "dashboard:open-url" -}}
+{{- $glyph := "fa-external-link-alt" -}}
+{{- $prefix := default "Dashboard" $args.prefix -}}
+{{- $title := default "Open URL in browser" $args.title -}}
+{{- $body := $args.url -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

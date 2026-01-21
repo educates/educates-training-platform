@@ -1,0 +1,13 @@
+{{/* NEW STUB FILE - NEEDS REVIEW */}}
+{{- $args := .Inner | unmarshal -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "editor:append-lines-after-match" -}}
+{{- $glyph := "fa-file-import" -}}
+{{- $prefix := default "Editor" $args.prefix -}}
+{{- $title := default (printf "Append lines after \"%s\" in file \"%s\"" $args.match $args.file) $args.title -}}
+{{- $body := $args.text -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

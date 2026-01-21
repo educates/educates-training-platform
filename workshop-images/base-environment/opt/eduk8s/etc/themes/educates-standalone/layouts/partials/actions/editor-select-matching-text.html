@@ -1,0 +1,24 @@
+{{/* NEW STUB FILE - NEEDS REVIEW */}}
+{{- $args := .Inner | unmarshal -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "editor:select-matching-text" -}}
+{{- $glyph := "fa-search" -}}
+{{- $prefix := default "Editor" $args.prefix -}}
+{{- $title := "" -}}
+{{- if $args.title -}}
+{{- $title = $args.title -}}
+{{- else if $args.isRegex -}}
+{{- if $args.group -}}
+{{- $title = printf "Match pattern group %v in file \"%s\"" $args.group $args.file -}}
+{{- else -}}
+{{- $title = printf "Match pattern in file \"%s\"" $args.file -}}
+{{- end -}}
+{{- else -}}
+{{- $title = printf "Select text in file \"%s\"" $args.file -}}
+{{- end -}}
+{{- $body := $args.text -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

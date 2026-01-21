@@ -292,6 +292,110 @@ const educates = (function () {
         terminals.clear_all_terminals();
     });
 
+    clickable_action_handler("terminal:input", function (element, args) {
+        console.log("terminal:input handler called", args);
+    });
+
+    clickable_action_handler("terminal:select", function (element, args) {
+        console.log("terminal:select handler called", args);
+    });
+
+    clickable_action_handler("workshop:copy", function (element, args) {
+        console.log("workshop:copy handler called", args);
+    });
+
+    clickable_action_handler("workshop:copy-and-edit", function (element, args) {
+        console.log("workshop:copy-and-edit handler called", args);
+    });
+
+    clickable_action_handler("dashboard:expose-dashboard", function (element, args) {
+        console.log("dashboard:expose-dashboard handler called", args);
+    });
+
+    clickable_action_handler("dashboard:open-dashboard", function (element, args) {
+        console.log("dashboard:open-dashboard handler called", args);
+    });
+
+    clickable_action_handler("dashboard:create-dashboard", function (element, args) {
+        console.log("dashboard:create-dashboard handler called", args);
+    });
+
+    clickable_action_handler("dashboard:delete-dashboard", function (element, args) {
+        console.log("dashboard:delete-dashboard handler called", args);
+    });
+
+    clickable_action_handler("dashboard:reload-dashboard", function (element, args) {
+        console.log("dashboard:reload-dashboard handler called", args);
+    });
+
+    clickable_action_handler("dashboard:open-url", function (element, args) {
+        console.log("dashboard:open-url handler called", args);
+    });
+
+    clickable_action_handler("editor:open-file", function (element, args) {
+        console.log("editor:open-file handler called", args);
+    });
+
+    clickable_action_handler("editor:select-matching-text", function (element, args) {
+        console.log("editor:select-matching-text handler called", args);
+    });
+
+    clickable_action_handler("editor:replace-text-selection", function (element, args) {
+        console.log("editor:replace-text-selection handler called", args);
+    });
+
+    clickable_action_handler("editor:append-lines-to-file", function (element, args) {
+        console.log("editor:append-lines-to-file handler called", args);
+    });
+
+    clickable_action_handler("editor:insert-lines-before-line", function (element, args) {
+        console.log("editor:insert-lines-before-line handler called", args);
+    });
+
+    clickable_action_handler("editor:append-lines-after-match", function (element, args) {
+        console.log("editor:append-lines-after-match handler called", args);
+    });
+
+    clickable_action_handler("editor:insert-value-into-yaml", function (element, args) {
+        console.log("editor:insert-value-into-yaml handler called", args);
+    });
+
+    clickable_action_handler("editor:execute-command", function (element, args) {
+        console.log("editor:execute-command handler called", args);
+    });
+
+    clickable_action_handler("examiner:execute-test", function (element, args) {
+        console.log("examiner:execute-test handler called", args);
+    });
+
+    clickable_action_handler("files:download-file", function (element, args) {
+        console.log("files:download-file handler called", args);
+    });
+
+    clickable_action_handler("files:copy-file", function (element, args) {
+        console.log("files:copy-file handler called", args);
+    });
+
+    clickable_action_handler("files:upload-file", function (element, args) {
+        console.log("files:upload-file handler called", args);
+    });
+
+    clickable_action_handler("files:upload-files", function (element, args) {
+        console.log("files:upload-files handler called", args);
+    });
+
+    clickable_action_handler("section:heading", function (element, args) {
+        console.log("section:heading handler called", args);
+    });
+
+    clickable_action_handler("section:begin", function (element, args) {
+        console.log("section:begin handler called", args);
+    });
+
+    clickable_action_handler("section:end", function (element, args) {
+        console.log("section:end handler called", args);
+    });
+
     // Exported functions.
 
     function paste_to_terminal(text, session) {

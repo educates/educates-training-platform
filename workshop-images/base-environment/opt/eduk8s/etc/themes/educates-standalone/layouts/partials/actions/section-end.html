@@ -1,0 +1,10 @@
+{{/* NEW STUB FILE - NEEDS REVIEW */}}
+{{- $args := .Inner | unmarshal -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "section:end" -}}
+{{- $glyph := "fa-ban" -}}
+{{- $prefix := "Section" -}}
+{{- $title := "End" -}}
+{{- $body := "" -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,11 +15,11 @@ import (
 	"time"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	yttcmdui "carvel.dev/ytt/pkg/cmd/ui"
 	"carvel.dev/ytt/pkg/files"
 	"carvel.dev/ytt/pkg/yamlmeta"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
+	"github.com/educates/educates-training-platform/client-programs/pkg/logger"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 
 	// "github.com/educates/educates-training-platform/client-programs/pkg/workshops"
@@ -684,9 +683,7 @@ func ProcessWorkshopDefinition(yamlData []byte, dataValueFlags yttcmd.DataValues
 
 	filesToProcess = append(filesToProcess, mainInputFile)
 
-	logUI := yttcmdui.NewCustomWriterTTY(false, log.Writer(), log.Writer())
-
-	output := templatingOptions.RunWithFiles(yttcmd.Input{Files: filesToProcess}, logUI)
+	output := templatingOptions.RunWithFiles(yttcmd.Input{Files: filesToProcess}, logger.NewStdoutUI())
 
 	if output.Err != nil {
 		return []byte{}, fmt.Errorf("execution of ytt failed: %s", output.Err)

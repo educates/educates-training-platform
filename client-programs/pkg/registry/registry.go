@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -748,33 +747,17 @@ func ListRegistryMirrors() (string, error) {
 		return "", errors.Wrap(err, "unable to list registry mirrors")
 	}
 
-	var buf strings.Builder
-	w := new(tabwriter.Writer)
-
-	// Initialize tabwriter to write to 'buf' instead of 'os.Stdout'
-	w.Init(&buf, 8, 8, 3, ' ', 0)
-
-	fmt.Fprintf(w, "%s\t%s\t%s\n", "NAME", "URL", "USERNAME")
-
-	for i, item := range mirrors {
-		//  TODO: Add the right way to get the container information
+	var data [][]string
+	for _, item := range mirrors {
 		name := utils.GetContainerName(item)
 		url := item.Labels["url"]
 		if url == "" {
 			url = item.Labels["mirror"]
 		}
 		username := item.Labels["username"]
-
-		fmt.Fprintf(w, "%s\t%s\t%s", name, url, username)
-		if i < len(mirrors) - 1 {
-			fmt.Fprintf(w, "\n")
-		}
+		data = append(data, []string{name, url, username})
 	}
-
-	// Important: Flush ensures all data is written from tabwriter to the builder
-    w.Flush()
-
-	return buf.String(), nil
+	return utils.PrintTable([]string{"NAME", "URL", "USERNAME"}, data), nil
 }
 
 /**

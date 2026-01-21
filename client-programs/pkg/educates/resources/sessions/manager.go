@@ -3,12 +3,11 @@ package sessions
 import (
 	"context"
 	"fmt"
-	"strings"
-	"text/tabwriter"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	educatesrestapi "github.com/educates/educates-training-platform/client-programs/pkg/educates/restapi"
 	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -82,30 +81,19 @@ func (m *SessionManager) ListSessions(cfg ListSessionsConfig) (string, error) {
 		return "No sessions found.", nil
 	}
 
-	var buf strings.Builder
-	w := new(tabwriter.Writer)
-	w.Init(&buf, 8, 8, 3, ' ', 0)
-
-	fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "NAME", "PORTAL", "ENVIRONMENT", "STATUS")
-
-	for i, item := range sessions {
+	var data [][]string
+	for _, item := range sessions {
 		name := item.GetName()
 		labels := item.GetLabels()
-
 		portal := labels["training.educates.dev/portal.name"]
 		environment := labels["training.educates.dev/environment.name"]
 
 		status, _, _ := unstructured.NestedString(item.Object, "status", "educates", "phase")
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s", name, portal, environment, status)
-		if i < len(sessions) - 1 {
-			fmt.Fprintf(w, "\n")
-		}
+		data = append(data, []string{name, portal, environment, status})
 	}
 
-	w.Flush()
-
-	return buf.String(), nil
+	return utils.PrintTable([]string{"NAME", "PORTAL", "ENVIRONMENT", "STATUS"}, data), nil
 }
 
 func (m *SessionManager) ExtendSession(cfg ExtendSessionConfig) (string, error) {
@@ -167,14 +155,12 @@ func (m *SessionManager) TerminateSession(cfg TerminateSessionConfig) (string, e
 }
 
 func printStatus(details *educatesrestapi.WorkshopSessionDetails) string {
-	var buf strings.Builder
-
-	fmt.Fprintf(&buf, "Started: %s\n", details.Started)
-	fmt.Fprintf(&buf, "Expires: %s\n", details.Expires)
-	fmt.Fprintf(&buf, "Expiring: %t\n", details.Expiring)
-	fmt.Fprintf(&buf, "Countdown: %d\n", details.Countdown)
-	fmt.Fprintf(&buf, "Extendable: %t\n", details.Extendable)
-	fmt.Fprintf(&buf, "Status: %s", details.Status)
-
-	return buf.String()
+	return utils.PrintKeyValuesTable([][]string{
+		{"Started", details.Started},
+		{"Expires", details.Expires},
+		{"Expiring", fmt.Sprintf("%t", details.Expiring)},
+		{"Countdown", fmt.Sprintf("%d", details.Countdown)},
+		{"Extendable", fmt.Sprintf("%t", details.Extendable)},
+		{"Status", details.Status}},
+	)
 }

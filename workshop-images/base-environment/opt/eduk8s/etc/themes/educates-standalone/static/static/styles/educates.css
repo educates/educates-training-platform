@@ -275,15 +275,15 @@ div.magic-code-block-upload {
     margin-right: auto;
 }
 
-[data-action-name][data-action-result='success'] {
+.clickable-action[data-action-result='success'] .clickable-action__header {
     background-color: yellowgreen;
 }
 
-[data-action-name][data-action-result='pending'] {
+.clickable-action[data-action-result='pending'] .clickable-action__header {
     background-color: orange;
 }
 
-[data-action-name][data-action-result='failure'] {
+.clickable-action[data-action-result='failure'] .clickable-action__header {
     background-color: orangered;
 }
 

@@ -190,30 +190,220 @@ const educates = (function () {
     const clickable_action_handlers = {};
     const clickable_actions = {};
 
+    // Action state constants for centralized state management.
+
+    const ActionState = {
+        IDLE: 'idle',
+        PENDING: 'pending',
+        SUCCESS: 'success',
+        FAILURE: 'failure'
+    };
+
+    // Centralized function to manage action visual state transitions.
+
+    function set_action_state(element, state, error = null) {
+        const glyph_element = element.querySelector('.clickable-action__icon');
+        const original_glyph = element.dataset.originalGlyph;
+
+        // Remove all state classes from glyph element if it exists.
+
+        if (glyph_element) {
+            glyph_element.classList.remove('fa-spin', 'fa-cog', 'fa-check-circle', 'fa-times-circle');
+        }
+
+        switch (state) {
+            case ActionState.PENDING:
+                element.dataset.actionResult = 'pending';
+                if (glyph_element) {
+                    if (original_glyph) {
+                        glyph_element.classList.remove(original_glyph);
+                    }
+                    glyph_element.classList.add('fa-cog', 'fa-spin');
+                }
+                break;
+
+            case ActionState.SUCCESS:
+                element.dataset.actionResult = 'success';
+                element.dataset.actionCompleted = Date.now().toString();
+                if (glyph_element) {
+                    if (original_glyph) {
+                        glyph_element.classList.remove(original_glyph);
+                    }
+                    glyph_element.classList.remove('fa-cog', 'fa-spin');
+                    glyph_element.classList.add('fa-check-circle');
+                }
+                break;
+
+            case ActionState.FAILURE:
+                element.dataset.actionResult = 'failure';
+                element.dataset.actionCompleted = Date.now().toString();
+                if (glyph_element) {
+                    glyph_element.classList.remove('fa-cog', 'fa-spin');
+                    if (original_glyph) {
+                        glyph_element.classList.add(original_glyph);
+                    }
+                }
+                if (error) {
+                    console.error(`Action failed: ${error.message || error}`);
+                }
+                break;
+
+            case ActionState.IDLE:
+            default:
+                element.dataset.actionResult = '';
+                if (glyph_element && original_glyph) {
+                    glyph_element.classList.add(original_glyph);
+                }
+                break;
+        }
+    }
+
+    // Cooldown check to prevent rapid re-triggering of actions.
+
+    const ACTION_COOLDOWN_MS = 1000;
+
+    function check_cooldown(element) {
+        const last_completed = element.dataset.actionCompleted;
+
+        if (!last_completed) {
+            return true;
+        }
+
+        const elapsed = Date.now() - parseInt(last_completed, 10);
+
+        return elapsed >= ACTION_COOLDOWN_MS;
+    }
+
+    // Default timeout for action execution in milliseconds.
+
+    const ACTION_TIMEOUT_MS = 30000;
+
     function register_clickable_action(action, args) {
         const element = document.getElementById(action);
         const handler = element.dataset.handler;
-        const callback = clickable_action_handlers[handler];
 
         console.log("register_clickable_action", handler, action);
 
-        clickable_actions[action] = function () {
-            callback(element, args);
+        // Store the glyph element's original icon class for state restoration.
+
+        const glyph_element = element.querySelector('.clickable-action__icon');
+
+        if (glyph_element) {
+            // Find the FontAwesome icon class (fa-*) that isn't a modifier.
+
+            const icon_classes = Array.from(glyph_element.classList).filter(cls =>
+                cls.startsWith('fa-') && !['fa-spin', 'fa-cog', 'fa-check-circle', 'fa-times-circle'].includes(cls)
+            );
+
+            if (icon_classes.length > 0) {
+                element.dataset.originalGlyph = icon_classes[0];
+            }
+        }
+
+        // Store the action configuration for later execution.
+
+        clickable_actions[action] = {
+            element: element,
+            args: args,
+            handler: handler
         };
+    }
+
+    // Execute an action with promise-based handling and timeout support.
+
+    async function execute_action(action_id) {
+        const action_config = clickable_actions[action_id];
+
+        if (!action_config) {
+            console.error(`No action registered for: ${action_id}`);
+            return;
+        }
+
+        const { element, args, handler: handler_name } = action_config;
+        const handler = clickable_action_handlers[handler_name];
+
+        if (!handler) {
+            console.error(`No handler registered for: ${handler_name}`);
+            return;
+        }
+
+        // Don't allow re-triggering while action is pending.
+
+        if (element.dataset.actionResult === 'pending') {
+            console.log(`Action ${action_id} already pending`);
+            return;
+        }
+
+        // Check cooldown to prevent rapid re-triggering.
+
+        if (!check_cooldown(element)) {
+            console.log(`Action ${action_id} in cooldown period`);
+            return;
+        }
+
+        // Set pending state.
+
+        set_action_state(element, ActionState.PENDING);
+
+        try {
+            // Execute handler - await if it returns a promise.
+
+            const result = handler(element, args);
+
+            if (result instanceof Promise) {
+                // Apply timeout using Promise.race.
+
+                const timeout = args.timeout || ACTION_TIMEOUT_MS;
+
+                await Promise.race([
+                    result,
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Action timed out')), timeout)
+                    )
+                ]);
+            }
+
+            // Success.
+
+            set_action_state(element, ActionState.SUCCESS);
+
+            // Handle cascade if configured.
+
+            if (args.cascade) {
+                const pause = args.pause || 750;
+                setTimeout(() => trigger_next_action(element), pause);
+            }
+
+        } catch (error) {
+            // Failure.
+
+            set_action_state(element, ActionState.FAILURE, error);
+        }
+    }
+
+    // Placeholder for cascade functionality.
+
+    function trigger_next_action(element) {
+        // Find the next sibling action element and trigger it.
+
+        const next_action = element.nextElementSibling;
+
+        if (next_action && next_action.classList.contains('magic-code-block')) {
+            const action_id = next_action.id;
+
+            if (action_id && clickable_actions[action_id]) {
+                execute_action(action_id);
+            }
+        }
     }
 
     function trigger_clickable_action(event) {
         const element = event.currentTarget;
         const action = element.id;
-        const handler = element.dataset.handler;
 
-        console.log("clickable_action_handler", handler, action);
+        console.log("trigger_clickable_action", element.dataset.handler, action);
 
-        const callback = clickable_actions[action];
-
-        if (callback) {
-            callback();
-        }
+        execute_action(action);
     }
 
     function clickable_action_handler(name, handler) {
@@ -222,7 +412,7 @@ const educates = (function () {
 
     // Register built-in clickable action handlers.
 
-    clickable_action_handler("terminal:execute", function (element, args) {
+    clickable_action_handler("terminal:execute", function (_element, args) {
         const defaults = {
             "command": undefined,
             "session": "1",
@@ -236,13 +426,13 @@ const educates = (function () {
         const clear = args.clear;
 
         if (!command) {
-            return;
+            throw new Error("Command not provided");
         }
 
         terminals.execute_in_terminal(command, session, clear);
     });
 
-    clickable_action_handler("terminal:execute-all", function (element, args) {
+    clickable_action_handler("terminal:execute-all", function (_element, args) {
         const defaults = {
             "command": undefined,
             "clear": false,
@@ -254,13 +444,13 @@ const educates = (function () {
         const clear = args.clear;
 
         if (!command) {
-            return;
+            throw new Error("Command not provided");
         }
 
         terminals.execute_in_all_terminals(command, clear);
     });
 
-    clickable_action_handler("terminal:interrupt", function (element, args) {
+    clickable_action_handler("terminal:interrupt", function (_element, args) {
         const defaults = {
             "session": "1",
         }
@@ -272,11 +462,11 @@ const educates = (function () {
         terminals.interrupt_terminal(session);
     });
 
-    clickable_action_handler("terminal:interrupt-all", function (element, args) {
+    clickable_action_handler("terminal:interrupt-all", function (_element, _args) {
         terminals.interrupt_all_terminals();
     });
 
-    clickable_action_handler("terminal:clear", function (element, args) {
+    clickable_action_handler("terminal:clear", function (_element, args) {
         const defaults = {
             "session": "1",
         }
@@ -288,111 +478,112 @@ const educates = (function () {
         terminals.clear_terminal(session);
     });
 
-    clickable_action_handler("terminal:clear-all", function (element, args) {
+    clickable_action_handler("terminal:clear-all", function (_element, _args) {
         terminals.clear_all_terminals();
     });
 
-    clickable_action_handler("terminal:input", function (element, args) {
+    clickable_action_handler("terminal:input", function (_element, args) {
         console.log("terminal:input handler called", args);
     });
 
-    clickable_action_handler("terminal:select", function (element, args) {
+    clickable_action_handler("terminal:select", function (_element, args) {
         console.log("terminal:select handler called", args);
     });
 
-    clickable_action_handler("workshop:copy", function (element, args) {
+    clickable_action_handler("workshop:copy", function (_element, args) {
         console.log("workshop:copy handler called", args);
     });
 
-    clickable_action_handler("workshop:copy-and-edit", function (element, args) {
+    clickable_action_handler("workshop:copy-and-edit", function (_element, args) {
         console.log("workshop:copy-and-edit handler called", args);
     });
 
-    clickable_action_handler("dashboard:expose-dashboard", function (element, args) {
+    clickable_action_handler("dashboard:expose-dashboard", function (_element, args) {
         console.log("dashboard:expose-dashboard handler called", args);
     });
 
-    clickable_action_handler("dashboard:open-dashboard", function (element, args) {
+    clickable_action_handler("dashboard:open-dashboard", function (_element, args) {
         console.log("dashboard:open-dashboard handler called", args);
     });
 
-    clickable_action_handler("dashboard:create-dashboard", function (element, args) {
+    clickable_action_handler("dashboard:create-dashboard", function (_element, args) {
         console.log("dashboard:create-dashboard handler called", args);
     });
 
-    clickable_action_handler("dashboard:delete-dashboard", function (element, args) {
+    clickable_action_handler("dashboard:delete-dashboard", function (_element, args) {
         console.log("dashboard:delete-dashboard handler called", args);
     });
 
-    clickable_action_handler("dashboard:reload-dashboard", function (element, args) {
+    clickable_action_handler("dashboard:reload-dashboard", function (_element, args) {
         console.log("dashboard:reload-dashboard handler called", args);
     });
 
-    clickable_action_handler("dashboard:open-url", function (element, args) {
+    clickable_action_handler("dashboard:open-url", function (_element, args) {
         console.log("dashboard:open-url handler called", args);
     });
 
-    clickable_action_handler("editor:open-file", function (element, args) {
+    clickable_action_handler("editor:open-file", function (_element, args) {
         console.log("editor:open-file handler called", args);
     });
 
-    clickable_action_handler("editor:select-matching-text", function (element, args) {
+    clickable_action_handler("editor:select-matching-text", function (_element, args) {
         console.log("editor:select-matching-text handler called", args);
     });
 
-    clickable_action_handler("editor:replace-text-selection", function (element, args) {
+    clickable_action_handler("editor:replace-text-selection", function (_element, args) {
         console.log("editor:replace-text-selection handler called", args);
     });
 
-    clickable_action_handler("editor:append-lines-to-file", function (element, args) {
+    clickable_action_handler("editor:append-lines-to-file", function (_element, args) {
         console.log("editor:append-lines-to-file handler called", args);
     });
 
-    clickable_action_handler("editor:insert-lines-before-line", function (element, args) {
+    clickable_action_handler("editor:insert-lines-before-line", function (_element, args) {
         console.log("editor:insert-lines-before-line handler called", args);
     });
 
-    clickable_action_handler("editor:append-lines-after-match", function (element, args) {
+    clickable_action_handler("editor:append-lines-after-match", function (_element, args) {
         console.log("editor:append-lines-after-match handler called", args);
     });
 
-    clickable_action_handler("editor:insert-value-into-yaml", function (element, args) {
+    clickable_action_handler("editor:insert-value-into-yaml", function (_element, args) {
         console.log("editor:insert-value-into-yaml handler called", args);
     });
 
-    clickable_action_handler("editor:execute-command", function (element, args) {
+    clickable_action_handler("editor:execute-command", function (_element, args) {
         console.log("editor:execute-command handler called", args);
     });
 
-    clickable_action_handler("examiner:execute-test", function (element, args) {
+    clickable_action_handler("examiner:execute-test", function (_element, args) {
         console.log("examiner:execute-test handler called", args);
+        return new Promise(resolve => setTimeout(resolve, 5000));
     });
 
-    clickable_action_handler("files:download-file", function (element, args) {
+    clickable_action_handler("files:download-file", function (_element, args) {
         console.log("files:download-file handler called", args);
     });
 
-    clickable_action_handler("files:copy-file", function (element, args) {
+    clickable_action_handler("files:copy-file", function (_element, args) {
         console.log("files:copy-file handler called", args);
     });
 
-    clickable_action_handler("files:upload-file", function (element, args) {
+    clickable_action_handler("files:upload-file", function (_element, args) {
         console.log("files:upload-file handler called", args);
     });
 
-    clickable_action_handler("files:upload-files", function (element, args) {
+    clickable_action_handler("files:upload-files", function (_element, args) {
         console.log("files:upload-files handler called", args);
     });
 
-    clickable_action_handler("section:heading", function (element, args) {
+    clickable_action_handler("section:heading", function (_element, args) {
         console.log("section:heading handler called", args);
     });
 
-    clickable_action_handler("section:begin", function (element, args) {
+    clickable_action_handler("section:begin", function (_element, args) {
         console.log("section:begin handler called", args);
     });
 
-    clickable_action_handler("section:end", function (element, args) {
+    clickable_action_handler("section:end", function (_element, args) {
         console.log("section:end handler called", args);
     });
 

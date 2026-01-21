@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -33,8 +34,7 @@ address=/{{.IngressDomain}}/{{.TargetAddress}}
 address=/{{$Domain}}/{{$.TargetAddress}}
 {{- end }}
 `
-	dnsmasqImage          = "ghcr.io/dockur/dnsmasq:2.90"
-	resolverContainerName = "educates-resolver"
+	dnsmasqImage          = "ghcr.io/dockur/dnsmasq:2.92"
 )
 
 func DeployResolver(domain string, targetAddress string, extraDomains []string) error {
@@ -48,7 +48,7 @@ func DeployResolver(domain string, targetAddress string, extraDomains []string) 
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, resolverContainerName)
+	_, err = cli.ContainerInspect(ctx, constants.EducatesResolverContainerName)
 
 	if err == nil {
 		// If we can retrieve a container of required name we assume it is
@@ -105,7 +105,7 @@ func DeployResolver(domain string, targetAddress string, extraDomains []string) 
 		ExposedPorts: nat.PortSet{
 			"53/udp": struct{}{},
 		},
-	}, hostConfig, nil, nil, resolverContainerName)
+	}, hostConfig, nil, nil, constants.EducatesResolverContainerName)
 
 	if err != nil {
 		return errors.Wrap(err, "cannot create resolver container")
@@ -115,7 +115,7 @@ func DeployResolver(domain string, targetAddress string, extraDomains []string) 
 		return errors.Wrap(err, "unable to start resolver")
 	}
 
-	fmt.Println("Local DNS resolver running as a Docker container", resolverContainerName)
+	fmt.Println("Local DNS resolver running as a Docker container", constants.EducatesResolverContainerName)
 	fmt.Println("Local DNS resolver configuration in", configFileName)
 
 	return nil
@@ -132,7 +132,7 @@ func DeleteResolver() error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, resolverContainerName)
+	_, err = cli.ContainerInspect(ctx, constants.EducatesResolverContainerName)
 
 	if err != nil {
 		// If we can't retrieve a container of required name we assume it does
@@ -143,13 +143,13 @@ func DeleteResolver() error {
 
 	timeout := 30
 
-	err = cli.ContainerStop(ctx, resolverContainerName, container.StopOptions{Timeout: &timeout})
+	err = cli.ContainerStop(ctx, constants.EducatesResolverContainerName, container.StopOptions{Timeout: &timeout})
 
 	if err != nil {
 		return errors.Wrap(err, "unable to stop DNS resolver container")
 	}
 
-	err = cli.ContainerRemove(ctx, resolverContainerName, container.RemoveOptions{})
+	err = cli.ContainerRemove(ctx, constants.EducatesResolverContainerName, container.RemoveOptions{})
 
 	if err != nil {
 		return errors.Wrap(err, "unable to delete DNS resolver container")
@@ -168,7 +168,7 @@ func UpdateResolver(domain string, targetAddress string, extraDomains []string) 
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, resolverContainerName)
+	_, err = cli.ContainerInspect(ctx, constants.EducatesResolverContainerName)
 	if err != nil {
 		return errors.Wrap(err, "resolver container not found")
 	}
@@ -178,7 +178,7 @@ func UpdateResolver(domain string, targetAddress string, extraDomains []string) 
 		return err
 	}
 
-	err = cli.ContainerRestart(ctx, resolverContainerName, container.StopOptions{})
+	err = cli.ContainerRestart(ctx, constants.EducatesResolverContainerName, container.StopOptions{})
 	if err != nil {
 		return errors.Wrap(err, "failed to restart resolver")
 	}

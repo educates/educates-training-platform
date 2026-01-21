@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/kind/pkg/cmd"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -53,7 +54,7 @@ func (o *KindClusterConfig) ClusterExists() (bool, error) {
 		return false, errors.Wrap(err, "unable to get list of clusters")
 	}
 
-	if slices.Contains(clusters, "educates") {
+	if slices.Contains(clusters, constants.EducatesClusterName) {
 		return true, errors.New("cluster for Educates already exists")
 	}
 
@@ -89,7 +90,7 @@ func (o *KindClusterConfig) CreateCluster(config *config.InstallationConfig, ima
 		return errors.Wrapf(err, "unable to create config directory")
 	}
 
-	kindConfigPath := filepath.Join(configFileDir, "educates-cluster-config.yaml")
+	kindConfigPath := filepath.Join(configFileDir, fmt.Sprintf("%s-cluster-config.yaml", constants.EducatesClusterName))
 	err = os.WriteFile(kindConfigPath, clusterConfigData.Bytes(), 0644)
 	if err != nil {
 		return errors.Wrap(err, "failed to write cluster config to file")
@@ -98,7 +99,7 @@ func (o *KindClusterConfig) CreateCluster(config *config.InstallationConfig, ima
 	fmt.Println("Cluster config used is saved to: ", kindConfigPath)
 
 	if err := o.provider.Create(
-		"educates",
+		constants.EducatesClusterName,
 		cluster.CreateWithRawConfig(clusterConfigData.Bytes()),
 		cluster.CreateWithNodeImage(image),
 		cluster.CreateWithWaitForReady(time.Duration(time.Duration(60)*time.Second)),
@@ -122,7 +123,7 @@ func (o *KindClusterConfig) DeleteCluster() error {
 
 	fmt.Println("Deleting cluster educates ...")
 
-	if err := o.provider.Delete("educates", o.Config.Kubeconfig); err != nil {
+	if err := o.provider.Delete(constants.EducatesClusterName, o.Config.Kubeconfig); err != nil {
 		return errors.Wrapf(err, "failed to delete cluster")
 	}
 
@@ -145,7 +146,7 @@ func (o *KindClusterConfig) StopCluster() error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, "educates-control-plane")
+	_, err = cli.ContainerInspect(ctx, constants.EducatesControlPlaneContainer)
 
 	if err != nil {
 		return errors.Wrap(err, "no container for Educates cluster")
@@ -155,13 +156,13 @@ func (o *KindClusterConfig) StopCluster() error {
 
 	timeout := 30
 
-	if err := cli.ContainerStop(ctx, "educates-control-plane", container.StopOptions{Timeout: &timeout}); err != nil {
+	if err := cli.ContainerStop(ctx, constants.EducatesControlPlaneContainer, container.StopOptions{Timeout: &timeout}); err != nil {
 		return errors.Wrapf(err, "failed to stop cluster")
 	}
 
 	// timeout := time.Duration(30) * time.Second
 
-	// if err := cli.ContainerStop(ctx, "educates-control-plane", &timeout); err != nil {
+	// if err := cli.ContainerStop(ctx, EducatesControlPlaneContainer, &timeout); err != nil {
 	// 	return errors.Wrapf(err, "failed to stop cluster")
 	// }
 
@@ -184,7 +185,7 @@ func (o *KindClusterConfig) StartCluster() error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, "educates-control-plane")
+	_, err = cli.ContainerInspect(ctx, constants.EducatesControlPlaneContainer)
 
 	if err != nil {
 		return errors.Wrap(err, "no container for Educates cluster")
@@ -192,7 +193,7 @@ func (o *KindClusterConfig) StartCluster() error {
 
 	fmt.Println("Starting cluster educates ...")
 
-	if err := cli.ContainerStart(ctx, "educates-control-plane", container.StartOptions{}); err != nil {
+	if err := cli.ContainerStart(ctx, constants.EducatesControlPlaneContainer, container.StartOptions{}); err != nil {
 		return errors.Wrapf(err, "failed to start cluster")
 	}
 
@@ -215,7 +216,7 @@ func (o *KindClusterConfig) ClusterStatus() error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	containerJSON, err := cli.ContainerInspect(ctx, "educates-control-plane")
+	containerJSON, err := cli.ContainerInspect(ctx, constants.EducatesControlPlaneContainer)
 
 	if err != nil {
 		return errors.Wrap(err, "no container for Educates cluster")

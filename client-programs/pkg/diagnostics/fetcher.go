@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	educatesrestapi "github.com/educates/educates-training-platform/client-programs/pkg/educates/restapi"
 	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 	"github.com/pkg/errors"
@@ -83,7 +84,7 @@ func (c *ClusterDiagnosticsFetcher) getEducatesNamespacesEvents(fileName string)
 
 	y := printers.YAMLPrinter{}
 	for _, namespace := range namespaces.Items {
-		if !strings.HasPrefix(namespace.Labels["kubernetes.io/metadata.name"], "educates") {
+		if !strings.HasPrefix(namespace.Labels["kubernetes.io/metadata.name"], constants.EducatesNamespaceLabelMetadataName) {
 			continue
 		}
 		events, err := client.CoreV1().Events(namespace.Name).List(context.TODO(), metav1.ListOptions{

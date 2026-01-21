@@ -16,6 +16,7 @@ import (
 	"k8s.io/kubectl/pkg/scheme"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/renderer"
+	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
 )
 
 func createZIPFile(tempDir string, outputFile string) error {
@@ -128,7 +129,7 @@ func (o *FilesRenderOptions) Render(directory string, outputFile string) error {
 
 	// Process the workshop YAML data for ytt templating and data variables.
 
-	if workshopFileData, err = processWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
+	if workshopFileData, err = workshops.ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
 		return errors.Wrap(err, "unable to process workshop definition as template")
 	}
 

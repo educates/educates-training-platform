@@ -265,6 +265,8 @@ func createMirrorContainer(mirrorConfig *config.RegistryMirrorConfig) error {
 		"app":    constants.EducatesAppLabel,
 		"role":   constants.EducatesMirrorRoleLabel,
 		"mirror": mirrorConfig.Mirror,
+		"url":    mirrorConfig.URL,
+		"username": mirrorConfig.Username,
 	}
 
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
@@ -752,13 +754,18 @@ func ListRegistryMirrors() (string, error) {
 	// Initialize tabwriter to write to 'buf' instead of 'os.Stdout'
 	w.Init(&buf, 8, 8, 3, ' ', 0)
 
-	fmt.Fprintf(w, "%s\n", "NAME")
+	fmt.Fprintf(w, "%s\t%s\t%s\n", "NAME", "URL", "USERNAME")
 
 	for i, item := range mirrors {
 		//  TODO: Add the right way to get the container information
 		name := utils.GetContainerName(item)
+		url := item.Labels["url"]
+		if url == "" {
+			url = item.Labels["mirror"]
+		}
+		username := item.Labels["username"]
 
-		fmt.Fprintf(w, "%s", name)
+		fmt.Fprintf(w, "%s\t%s\t%s", name, url, username)
 		if i < len(mirrors) - 1 {
 			fmt.Fprintf(w, "\n")
 		}

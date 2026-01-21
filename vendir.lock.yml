@@ -2,26 +2,26 @@ apiVersion: vendir.k14s.io/v1alpha1
 directories:
 - contents:
   - githubRelease:
-      tag: v1.11.5
-      url: https://api.github.com/repos/kyverno/kyverno/releases/154920993
+      tag: v1.15.1
+      url: https://api.github.com/repos/kyverno/kyverno/releases/240187933
     path: .
   path: carvel-packages/installer/bundle/config/ytt/_ytt_lib/packages/kyverno/upstream
 - contents:
   - git:
-      commitTitle: 'chore: add script to update artifacthub digest (#769)...'
-      sha: fdc508b26a696ceb2cd3ae481d1f2c660dda59d0
+      commitTitle: 'fix: stop using deprecated test field resource (#1309)...'
+      sha: edbaf79409f3cd7d1bbadc59d17cd2cb7a757b2d
     path: .
   path: carvel-packages/installer/bundle/config/ytt/_ytt_lib/packages/educates/_ytt_lib/kyverno-restricted/upstream
 - contents:
   - git:
-      commitTitle: 'chore: add script to update artifacthub digest (#769)...'
-      sha: fdc508b26a696ceb2cd3ae481d1f2c660dda59d0
+      commitTitle: 'fix: stop using deprecated test field resource (#1309)...'
+      sha: edbaf79409f3cd7d1bbadc59d17cd2cb7a757b2d
     path: .
   path: carvel-packages/installer/bundle/config/ytt/_ytt_lib/packages/educates/_ytt_lib/kyverno-baseline/upstream
 - contents:
   - git:
-      commitTitle: 'chore: add script to update artifacthub digest (#769)...'
-      sha: fdc508b26a696ceb2cd3ae481d1f2c660dda59d0
+      commitTitle: 'fix: stop using deprecated test field resource (#1309)...'
+      sha: edbaf79409f3cd7d1bbadc59d17cd2cb7a757b2d
     path: .
   path: carvel-packages/installer/bundle/config/ytt/_ytt_lib/packages/educates/_ytt_lib/kyverno-policies/upstream
 - contents:

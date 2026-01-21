@@ -110,7 +110,7 @@ The OCI image containing the `educates` CLI can also be used in a `Dockerfile` i
 ```
 FROM ghcr.io/educates/educates-client-programs:X.Y.Z AS client-programs
 
-FROM fedora:41
+FROM fedora:42
 
 ARG TARGETARCH
 

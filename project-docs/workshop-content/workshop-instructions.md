@@ -4,7 +4,7 @@ Workshop Instructions
 
 Individual module files making up the workshop instructions can use either [Markdown](https://github.github.com/gfm/) or [AsciiDoc](http://asciidoc.org/) markup formats when using the ``classic`` renderer. The extension used on the file should be ``.md`` or ``.adoc``, corresponding to which formatting markup style you want to use. In the case of the ``hugo`` renderer, only Markdown files can be used. As with when Hugo is used separately, pages can be represented by a single file with ``.md`` extension, or a page bundle, which is a directory with name corresponding to the page, with an ``index.md`` file contained within the directory.
 
-If using images with pages, with the ``classic`` renderer the images can be placed in the same location as the Markdown or AsciiDoc files. When using the ``hugo`` renderer, if using single files with ``.md`` extension, the image files need to be placed in the ``workshop/static`` directory. If using a page bundle with the ``hugo`` renderer, image files can also be placed in the page bundle directory if the image is only required for that page.
+If using images in pages, with the ``classic`` renderer the images can be placed in the same location as the Markdown or AsciiDoc files. When using the ``hugo`` renderer, if using single files with ``.md`` extension, the image files need to be placed in the ``workshop/static`` directory. If using a page bundle with the ``hugo`` renderer, image files can also be placed in the page bundle directory if the image is only required for that page.
 
 Annotation of executable commands
 ---------------------------------
@@ -101,11 +101,13 @@ echo "Text to copy and edit."
 ----
 ~~~
 
-For ``copy`` only, if you prefer to mark an inline code section within a paragraph of text as copyable when clicked, you can append the special data variable reference ``{{copy}}`` immediately after the inline code block.
+For ``copy`` only, if you prefer to mark an inline code section within a paragraph of text as copyable when clicked, you can append the special data variable reference ``{{<copy>}}`` immediately after the inline code block.
 
 ```
-Text to ``copy``{{copy}}.
+Text to ``copy``{{<copy>}}.
 ```
+
+The ``{{<copy>}}`` format is using a shortcode when using the ``hugo`` renderer. If using the ``classic`` renderer, use ``{{copy}}`` instead.
 
 Extensible clickable actions
 ----------------------------
@@ -1289,6 +1291,32 @@ In all cases it is recommended that the HTML consist of only a single HTML eleme
 In addition to visual HTML elements, you can also include elements for embedded scripts or style sheets.
 
 If using the ``classic`` render and have HTML markup which needs to be added to multiple pages, extract it out into a separate file and use the include file mechanism of the Liquid template engine. You can also use the partial render mechanism of Liquid as a macro mechanism for expanding HTML content with supplied values.
+
+(embedding-images-and-static-assets)=
+Embedding images and static assets
+----------------------------------
+
+If using images in pages, with the ``classic`` renderer the images can be placed in the same location as the Markdown or AsciiDoc files. When using the ``hugo`` renderer, if using single files with ``.md`` extension, the image files need to be placed in the ``workshop/static`` directory. If using a page bundle with the ``hugo`` renderer, image files can also be placed in the page bundle directory if the image is only required for that page.
+
+If using the ``classic`` renderer, only the filename of the image need be used to refer to the image as images will appear at the same relative location as the generated HTML page.
+
+If using the ``hugo`` renderer and a page bundle is used, only the filename of the image need be used.
+
+If using the ``hugo`` renderer and images are placed in the ``workshop/static`` directory, you should use the ``baseurl`` short code to access the URL path for where workshop instructions are hosted. Any image files (or other assets) in the ``workshop/static`` directory will exist relative to that URL path.
+
+For example, if the file ``educates.png`` were placed at the location ``workshop/static/educates.png``, the markdown should use:
+
+```
+![Educates]({{<baseurl>}}/educates.png)
+```
+
+If images are placed in a further sub directory such that the file was located at ``workshop/static/images/educates.png``, you would use:
+
+```
+![Educates]({{<baseurl>}}/images/educates.png)
+```
+
+The directory name ``static`` from ``workshop/static`` does not appear in URL paths.
 
 (triggering-actions-from-javascript)=
 Triggering actions from Javascript

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	"github.com/docker/docker/client"
+	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -57,7 +57,7 @@ func (o *DockerWorkshopOpenOptions) Run() error {
 
 	ctx := context.Background()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := docker.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")

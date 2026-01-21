@@ -1,9 +1,10 @@
-# Change colour of input text.
-
-#export PS1="\e[0m[\w] $ \e[31m"
-#trap 'echo -ne "\e[0m"' DEBUG
+# Set prompt to working directory.
 
 export PS1="[\w] $ "
+
+# Set default editor for tools that need it.
+
+export EDITOR=/usr/bin/vim
 
 # Enable kubectl bash completion.
 

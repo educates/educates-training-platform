@@ -23,6 +23,7 @@ func (p *ProjectInfo) NewLocalCmdGroup() *cobra.Command {
 				p.NewLocalConfigCmdGroup(),
 				p.NewLocalSecretsCmdGroup(),
 				p.NewLocalRegistryCmdGroup(),
+				p.NewLocalMirrorCmdGroup(),
 				p.NewLocalResolverCmdGroup(),
 			},
 		},

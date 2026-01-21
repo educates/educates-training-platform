@@ -9,10 +9,10 @@ import (
 	"path"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	"github.com/docker/docker/client"
+	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -51,7 +51,7 @@ func (m *DockerWorkshopsManager) DeleteWorkshop(name string, stdout io.Writer, s
 
 	ctx := context.Background()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := docker.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")

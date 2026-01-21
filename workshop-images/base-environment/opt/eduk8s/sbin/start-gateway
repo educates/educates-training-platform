@@ -3,8 +3,8 @@
 set -eo pipefail
 set -x
 
-XDG_CONFIG_HOME=/tmp/.config
-export XDG_CONFIG_HOME
+# XDG_CONFIG_HOME=/tmp/.config
+# export XDG_CONFIG_HOME
 
 WORKSHOP_LAYOUT=$(workshop-definition -r '(.spec.session.applications.workshop.layout // "default")')
 export WORKSHOP_LAYOUT

@@ -11,9 +11,10 @@ import (
 	"path/filepath"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -256,7 +257,7 @@ func loadWorkshopDefinition(name string, path string, portal string, workshopFil
 
 	// Process the workshop YAML data in case it contains ytt templating.
 
-	if workshopData, err = processWorkshopDefinition(workshopData, dataValueFlags); err != nil {
+	if workshopData, err = workshops.ProcessWorkshopDefinition(workshopData, dataValueFlags); err != nil {
 		return nil, errors.Wrap(err, "unable to process workshop definition as template")
 	}
 

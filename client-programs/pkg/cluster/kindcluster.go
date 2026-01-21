@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 	"k8s.io/client-go/tools/clientcmd"
@@ -19,6 +18,7 @@ import (
 	"sigs.k8s.io/kind/pkg/cmd"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -139,7 +139,7 @@ func (o *KindClusterConfig) StopCluster() error {
 		return errors.New("cluster for Educates does not exist")
 	}
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := docker.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -178,7 +178,7 @@ func (o *KindClusterConfig) StartCluster() error {
 		return errors.New("cluster for Educates does not exist")
 	}
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := docker.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -209,7 +209,7 @@ func (o *KindClusterConfig) ClusterStatus() error {
 		return errors.New("cluster for Educates does not exist")
 	}
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := docker.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")

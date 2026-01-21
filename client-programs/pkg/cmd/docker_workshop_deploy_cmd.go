@@ -18,7 +18,7 @@ import (
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	composeloader "github.com/compose-spec/compose-go/loader"
 	composetypes "github.com/compose-spec/compose-go/types"
-	"github.com/docker/docker/client"
+	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -125,7 +125,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 
 	ctx := context.Background()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := docker.NewDockerClient()
 
 	if err != nil {
 		return name, errors.Wrap(err, "unable to create docker client")

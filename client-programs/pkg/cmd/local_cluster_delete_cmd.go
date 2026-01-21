@@ -19,6 +19,8 @@ func (o *LocalClusterDeleteOptions) Run() error {
 	if o.AllComponents {
 		registry.DeleteRegistry()
 		resolver.DeleteResolver()
+		// Delete all mirrors
+		registry.DeleteRegistryMirrors()
 	}
 
 	return c.DeleteCluster()

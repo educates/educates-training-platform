@@ -7,7 +7,7 @@ COPY . /app/
 RUN go mod download && \
     go build -o assets-server main.go
 
-FROM fedora:41
+FROM fedora:42
 
 RUN useradd -u 1001 -g 0 -M -d /opt/app-root/src default && \
     mkdir -p /opt/app-root/src && \

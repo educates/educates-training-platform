@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 )
 
@@ -75,10 +76,10 @@ func (c *ClusterDiagnostics) Run() error {
 	}
 
 	// fetch logs for the session-manager, secret-manager deploymentments
-	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=session-manager", "educates", "session-manager.log"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=session-manager", constants.EducatesNamespace, "session-manager.log"); err != nil {
 		fmt.Println("Error fetching logs for session-manager: ", err)
 	}
-	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=secrets-manager", "educates", "secrets-manager.log"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=secrets-manager", constants.EducatesNamespace, "secrets-manager.log"); err != nil {
 		fmt.Println("Error fetching logs for secrets-manager: ", err)
 	}
 	// dump logs for all training-portal deployments

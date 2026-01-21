@@ -311,10 +311,10 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 
 	var registryIP string
 
-	registryInfo, err := cli.ContainerInspect(ctx, "educates-registry")
+	registryInfo, err := cli.ContainerInspect(ctx, constants.EducatesRegistryContainer)
 
 	if err == nil {
-		educatesNetwork, exists := registryInfo.NetworkSettings.Networks["educates"]
+		educatesNetwork, exists := registryInfo.NetworkSettings.Networks[constants.EducatesNetworkName]
 
 		if !exists {
 			return name, errors.New("registry is not attached to educates network")
@@ -443,7 +443,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 	}
 
 	if registryNetwork {
-		networks["educates"] = &composetypes.ServiceNetworkConfig{}
+		networks[constants.EducatesNetworkName] = &composetypes.ServiceNetworkConfig{}
 	}
 
 	var extraHostsList composetypes.HostsList
@@ -502,7 +502,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 		Name:     originalName,
 		Services: workshopServices,
 		Networks: composetypes.Networks{
-			"educates": composetypes.NetworkConfig{Name: "educates", External: true},
+			"educates": composetypes.NetworkConfig{Name: constants.EducatesNetworkName, External: true},
 		},
 		Volumes: composetypes.Volumes{
 			"workshop": composetypes.VolumeConfig{},

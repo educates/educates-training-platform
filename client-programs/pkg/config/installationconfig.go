@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
@@ -437,12 +438,12 @@ func ConfigForLocalClusters(configFile string, domain string, local bool) (fullC
 	if local {
 		// This augments the installation config with the secrets that are cached locally
 		if secretName := secrets.LocalCachedSecretForIngressDomain(fullConfig.ClusterIngress.Domain); secretName != "" {
-			fullConfig.ClusterIngress.TLSCertificateRef.Namespace = "educates-secrets"
+			fullConfig.ClusterIngress.TLSCertificateRef.Namespace = constants.EducatesSecretsNamespace
 			fullConfig.ClusterIngress.TLSCertificateRef.Name = secretName
 		}
 
 		if secretName := secrets.LocalCachedSecretForCertificateAuthority(fullConfig.ClusterIngress.Domain); secretName != "" {
-			fullConfig.ClusterIngress.CACertificateRef.Namespace = "educates-secrets"
+			fullConfig.ClusterIngress.CACertificateRef.Namespace = constants.EducatesSecretsNamespace
 			fullConfig.ClusterIngress.CACertificateRef.Name = secretName
 		}
 	}

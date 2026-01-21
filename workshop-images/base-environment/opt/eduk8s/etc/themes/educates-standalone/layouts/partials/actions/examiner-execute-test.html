@@ -1,5 +1,6 @@
 {{/* NEW STUB FILE - NEEDS REVIEW */}}
-{{- $args := .Inner | unmarshal -}}
+{{- $defaults := dict "cooldown" 3 -}}
+{{- $args := merge $defaults (.Inner | unmarshal) -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "examiner:execute-test" -}}
 {{- $glyph := "fa-tasks" -}}

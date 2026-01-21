@@ -262,7 +262,7 @@ const educates = (function () {
 
     const ACTION_COOLDOWN_MS = 1000;
 
-    function check_cooldown(element) {
+    function check_cooldown(element, cooldown_ms) {
         const last_completed = element.dataset.actionCompleted;
 
         if (!last_completed) {
@@ -271,7 +271,7 @@ const educates = (function () {
 
         const elapsed = Date.now() - parseInt(last_completed, 10);
 
-        return elapsed >= ACTION_COOLDOWN_MS;
+        return elapsed >= cooldown_ms;
     }
 
     // Default timeout for action execution in milliseconds.
@@ -335,8 +335,11 @@ const educates = (function () {
         }
 
         // Check cooldown to prevent rapid re-triggering.
+        // Get cooldown from args (seconds) → convert to ms, or use global default.
 
-        if (!check_cooldown(element)) {
+        const cooldown_ms = args.cooldown !== undefined ? args.cooldown * 1000 : ACTION_COOLDOWN_MS;
+
+        if (!check_cooldown(element, cooldown_ms)) {
             console.log(`Action ${action_id} in cooldown period`);
             return;
         }

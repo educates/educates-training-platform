@@ -9,6 +9,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/logger"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 
@@ -32,13 +33,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const EducatesInstallerString = "educates-installer"
-const EducatesInstallerAppString = "label:installer=educates-installer.app"
-const educatesConfigNamespace = "educates"
-const educatesConfigConfigMapName = "educates-config"
-const processedValuesKey = "educates-processed-values.yaml"
-const originalConfigKey = "educates-original-config.yaml"
-
 // We use a NullWriter to suppress the output of some commands, like kbld
 type NullWriter int
 
@@ -57,7 +51,7 @@ func (inst *Installer) DryRun(version string, packageRepository string, fullConf
 	}
 
 	// Create a temporary directory
-	tempDir, err := os.MkdirTemp("", EducatesInstallerString)
+	tempDir, err := os.MkdirTemp("", constants.EducatesInstallerString)
 	if err != nil {
 		return err
 	}
@@ -111,7 +105,7 @@ func (inst *Installer) Run(version string, packageRepository string, fullConfig 
 	}
 
 	// Create a temporary directory
-	tempDir, err := os.MkdirTemp("", EducatesInstallerString)
+	tempDir, err := os.MkdirTemp("", constants.EducatesInstallerString)
 	if err != nil {
 		return err
 	}
@@ -179,15 +173,15 @@ func (inst *Installer) GetValuesFromCluster(kubeconfig string, kubeContext strin
 		return "", errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	configMapClient := client.CoreV1().ConfigMaps(educatesConfigNamespace)
+	configMapClient := client.CoreV1().ConfigMaps(constants.EducatesConfigNamespace)
 
-	values, err := configMapClient.Get(context.TODO(), educatesConfigConfigMapName, metav1.GetOptions{})
+	values, err := configMapClient.Get(context.TODO(), constants.EducatesConfigConfigMapName, metav1.GetOptions{})
 
 	if err != nil {
 		return "", errors.Wrap(err, "error querying the cluster")
 	}
 
-	valuesData, ok := values.Data[processedValuesKey]
+	valuesData, ok := values.Data[constants.EducatesProcessedValuesKey]
 
 	if !ok {
 		return "", errors.New("no platform configuration found")
@@ -205,15 +199,15 @@ func (inst *Installer) GetConfigFromCluster(kubeconfig string, kubeContext strin
 		return "", errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	configMapClient := client.CoreV1().ConfigMaps(educatesConfigNamespace)
+	configMapClient := client.CoreV1().ConfigMaps(constants.EducatesConfigNamespace)
 
-	values, err := configMapClient.Get(context.TODO(), educatesConfigConfigMapName, metav1.GetOptions{})
+	values, err := configMapClient.Get(context.TODO(), constants.EducatesConfigConfigMapName, metav1.GetOptions{})
 
 	if err != nil {
 		return "", errors.Wrap(err, "error querying the cluster")
 	}
 
-	valuesData, ok := values.Data[originalConfigKey]
+	valuesData, ok := values.Data[constants.EducatesOriginalConfigKey]
 
 	if !ok {
 		return "", errors.New("no platform configuration found")
@@ -387,8 +381,8 @@ func (inst *Installer) deploy(tempDir string, inputDir string, clusterConfig *cl
 
 	depsFactory := NewKappDepsFactoryImpl(clusterConfig)
 	deployOptions := app.NewDeployOptions(confUI, depsFactory, logger.NewKappLogger(), nil)
-	deployOptions.AppFlags.Name = EducatesInstallerAppString
-	deployOptions.AppFlags.AppNamespace = EducatesInstallerString
+	deployOptions.AppFlags.Name = constants.EducatesInstallerAppString
+	deployOptions.AppFlags.AppNamespace = constants.EducatesInstallerString
 	deployOptions.FileFlags.Files = []string{inputDir, filepath.Join(tempDir, "fetch/config/kapp/")}
 	deployOptions.ApplyFlags.ClusterChangeOpts.Wait = true
 	deployOptions.ApplyFlags.ClusterChangeOpts.ApplyIgnored = false
@@ -433,8 +427,8 @@ func (inst *Installer) delete(clusterConfig *cluster.ClusterConfig) error {
 
 	depsFactory := NewKappDepsFactoryImpl(clusterConfig)
 	deleteOptions := app.NewDeleteOptions(confUI, depsFactory, logger.NewKappLogger())
-	deleteOptions.AppFlags.Name = EducatesInstallerAppString
-	deleteOptions.AppFlags.AppNamespace = EducatesInstallerString
+	deleteOptions.AppFlags.Name = constants.EducatesInstallerAppString
+	deleteOptions.AppFlags.AppNamespace = constants.EducatesInstallerString
 	deleteOptions.ApplyFlags.ClusterChangeOpts.Wait = true
 	deleteOptions.ApplyFlags.ApplyingChangesOpts.Concurrency = 5
 	deleteOptions.ApplyFlags.WaitingChangesOpts.CheckInterval = time.Duration(1) * time.Second
@@ -449,7 +443,7 @@ func (inst *Installer) delete(clusterConfig *cluster.ClusterConfig) error {
 }
 
 func (inst *Installer) getBundleImageRef(version string, packageRepository string, verbose bool) string {
-	bundleImageRef := fmt.Sprintf("%s/%s:%s", packageRepository, EducatesInstallerString, version)
+	bundleImageRef := fmt.Sprintf("%s/%s:%s", packageRepository, constants.EducatesInstallerString, version)
 	if verbose {
 		fmt.Printf("Using installer image: %s\n", bundleImageRef)
 	}

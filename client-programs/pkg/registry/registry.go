@@ -11,14 +11,16 @@ import (
 	"os"
 	"path"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
-	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 	v1 "k8s.io/api/core/v1"
@@ -96,7 +98,7 @@ func createRegistryContainer(bindIP string) error {
 
 	fmt.Println("Deploying local image registry")
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -211,7 +213,7 @@ func createMirrorContainer(mirrorConfig *config.RegistryMirrorConfig) error {
 
 	fmt.Printf("Deploying local image registry mirror %s\n", mirrorConfig.Mirror)
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -316,7 +318,7 @@ func addRegistryConfigToKindNodes(repositoryName string, content string) error {
 
 	fmt.Printf("Adding local image registry config (%s) to Kind nodes\n", repositoryName)
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -371,7 +373,7 @@ func removeRegistryConfigFromKindNodes(repositoryName string) error {
 
 	fmt.Printf("Removing local image registry config (%s) from Kind nodes\n", repositoryName)
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -452,7 +454,7 @@ func linkRegistryToClusterNetwork(containerName string) error {
 
 	fmt.Println("Linking local image registry to cluster")
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -478,7 +480,7 @@ func DeleteRegistry() error {
 
 	fmt.Println("Deleting local image registry")
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -523,7 +525,7 @@ func DeleteMirrorAndUnlinkFromCluster(mirrorConfig *config.RegistryMirrorConfig)
 
 	fmt.Printf("Deleting local image registry mirror %s\n", mirrorConfig.Mirror)
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -569,7 +571,7 @@ func DeleteRegistryMirrors() error {
 
 	fmt.Println("Deleting local image registry mirrors")
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -615,7 +617,7 @@ func DeleteRegistryMirrors() error {
 func UpdateRegistryK8SService(k8sclient *kubernetes.Clientset) error {
 	ctx := context.Background()
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -706,7 +708,7 @@ func PruneRegistry() error {
 
 	fmt.Println("Pruning local image registry")
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -736,6 +738,47 @@ func PruneRegistry() error {
 	return nil
 }
 
+
+/**
+ * This function is used to list all local image registry mirrors.
+ */
+func ListRegistryMirrors() (string, error) {
+	ctx := context.Background()
+
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		return "", errors.Wrap(err, "unable to create docker client")
+	}
+
+	mirrors, err := cli.ContainerList(ctx, container.ListOptions{Filters: filters.NewArgs(filters.Arg("label", "role="+EducatesMirrorRoleLabel), filters.Arg("label", "app="+EducatesAppLabel))})
+	if err != nil {
+		return "", errors.Wrap(err, "unable to list registry mirrors")
+	}
+
+	var buf strings.Builder
+	w := new(tabwriter.Writer)
+
+	// Initialize tabwriter to write to 'buf' instead of 'os.Stdout'
+	w.Init(&buf, 8, 8, 3, ' ', 0)
+
+	fmt.Fprintf(w, "%s\n", "NAME")
+
+	for i, item := range mirrors {
+		//  TODO: Add the right way to get the container information
+		name := utils.GetContainerName(item)
+
+		fmt.Fprintf(w, "%s", name)
+		if i < len(mirrors) - 1 {
+			fmt.Fprintf(w, "\n")
+		}
+	}
+
+	// Important: Flush ensures all data is written from tabwriter to the builder
+    w.Flush()
+
+	return buf.String(), nil
+}
+
 /**
  * This function is used to get the container name of a registry mirror.
  */
@@ -750,7 +793,7 @@ func registryMirrorContainerName(mirrorConfig *config.RegistryMirrorConfig) stri
 func getContainerInfo(containerName string) (containerID string, status string) {
 	ctx := context.Background()
 
-	cli, err := docker.NewDockerClient()
+	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		panic(err)
 	}

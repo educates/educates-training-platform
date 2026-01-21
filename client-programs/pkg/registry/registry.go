@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -19,6 +20,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 	v1 "k8s.io/api/core/v1"
@@ -734,6 +736,47 @@ func PruneRegistry() error {
 	fmt.Println("Registry pruned succesfully")
 
 	return nil
+}
+
+
+/**
+ * This function is used to list all local image registry mirrors.
+ */
+func ListRegistryMirrors() (string, error) {
+	ctx := context.Background()
+
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		return "", errors.Wrap(err, "unable to create docker client")
+	}
+
+	mirrors, err := cli.ContainerList(ctx, container.ListOptions{Filters: filters.NewArgs(filters.Arg("label", "role="+EducatesMirrorRoleLabel), filters.Arg("label", "app="+EducatesAppLabel))})
+	if err != nil {
+		return "", errors.Wrap(err, "unable to list registry mirrors")
+	}
+
+	var buf strings.Builder
+	w := new(tabwriter.Writer)
+
+	// Initialize tabwriter to write to 'buf' instead of 'os.Stdout'
+	w.Init(&buf, 8, 8, 3, ' ', 0)
+
+	fmt.Fprintf(w, "%s\n", "NAME")
+
+	for i, item := range mirrors {
+		//  TODO: Add the right way to get the container information
+		name := utils.GetContainerName(item)
+
+		fmt.Fprintf(w, "%s", name)
+		if i < len(mirrors) - 1 {
+			fmt.Fprintf(w, "\n")
+		}
+	}
+
+	// Important: Flush ensures all data is written from tabwriter to the builder
+    w.Flush()
+
+	return buf.String(), nil
 }
 
 /**

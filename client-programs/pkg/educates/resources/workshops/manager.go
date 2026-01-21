@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
@@ -460,17 +459,13 @@ func (m *WorkshopManager) ListWorkshopResources(o *ListWorkshopResourcesConfig) 
 		return "No workshops found.", nil
 	}
 
-	var buf strings.Builder
-	w := new(tabwriter.Writer)
-	w.Init(&buf, 8, 8, 3, ' ', 0)
-
-	fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "NAME", "ALIAS", "CAPACITY", "SOURCE")
-
 	workshopsClient := m.Client.Resource(educatesTypes.WorkshopResource)
 
+	var data [][]string
 	for _, item := range workshops {
 		object := item.(map[string]interface{})
 		name := object["name"].(string)
+		alias := object["alias"].(string)
 
 		var capacityField string
 
@@ -494,12 +489,10 @@ func (m *WorkshopManager) ListWorkshopResources(o *ListWorkshopResourcesConfig) 
 			}
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", object["name"], object["alias"], capacityField, source)
+		data = append(data, []string{name, alias, capacityField, source})
 	}
 
-	w.Flush()
-
-	return buf.String(), nil
+	return utils.PrintTable([]string{"NAME", "ALIAS", "CAPACITY", "SOURCE"}, data), nil
 }
 
 func (m *WorkshopManager) DeleteWorkshopResource(o *DeleteWorkshopResourceConfig) error {

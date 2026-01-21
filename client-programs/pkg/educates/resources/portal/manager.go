@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
@@ -202,15 +201,8 @@ func (m *PortalManager) ListTrainingPortals(cfg *TrainingPortalListConfig) (stri
 		return "", nil
 	}
 
-	var buf strings.Builder
-	w := new(tabwriter.Writer)
-
-	// Initialize tabwriter to write to 'buf' instead of 'os.Stdout'
-	w.Init(&buf, 8, 8, 3, ' ', 0)
-
-	fmt.Fprintf(w, "%s\t%s\t%s\n", "NAME", "CAPACITY", "URL")
-
-	for i, item := range trainingPortals.Items {
+	var data [][]string
+	for _, item := range trainingPortals.Items {
 		name := item.GetName()
 
 		sessionsMaximum, propertyExists, err := unstructured.NestedInt64(item.Object, "spec", "portal", "sessions", "maximum")
@@ -223,16 +215,9 @@ func (m *PortalManager) ListTrainingPortals(cfg *TrainingPortalListConfig) (stri
 
 		url, _, _ := unstructured.NestedString(item.Object, "status", "educates", "url")
 
-		fmt.Fprintf(w, "%s\t%s\t%s", name, capacity, url)
-		if i < len(trainingPortals.Items) - 1 {
-			fmt.Fprintf(w, "\n")
-		}
+		data = append(data, []string{name, capacity, url})
 	}
-
-	// Important: Flush ensures all data is written from tabwriter to the builder
-    w.Flush()
-
-	return buf.String(), nil
+	return utils.PrintTable([]string{"NAME", "CAPACITY", "URL"}, data), nil
 }
 
 func (m *PortalManager) GetTrainingPortalBrowserUrl(cfg *TrainingPortalOpenConfig) (string, error) {
@@ -289,19 +274,7 @@ func (m *PortalManager) GetTrainingPortalPassword(cfg *TrainingPortalPasswordCon
 			return "", errors.New("unable to access credentials")
 		}
 
-		var buf strings.Builder
-		w := new(tabwriter.Writer)
-
-		// Initialize tabwriter to write to 'buf' instead of 'os.Stdout'
-		w.Init(&buf, 8, 8, 3, ' ', 0)
-
-		fmt.Fprintf(w, "%s\t%s\n", "USERNAME", "PASSWORD")
-		fmt.Fprintf(w, "%s\t%s", username, password)
-
-		// Important: Flush ensures all data is written from tabwriter to the builder
-        w.Flush()
-
-		return buf.String(), nil
+		return utils.PrintTable([]string{"USERNAME", "PASSWORD"}, [][]string{{username, password}}), nil
 	} else {
 		password, _, _ := unstructured.NestedString(trainingPortal.Object, "spec", "portal", "password")
 

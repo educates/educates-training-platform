@@ -6,6 +6,10 @@ const educates = (function () {
         });
     }
 
+    // The Terminals class is a stub implementation which will be replaced
+    // by the parent frame's terminals object if it exists. The stub will be
+    // used when workshop pages are viewed as standalone pages.
+
     class Terminals {
         paste_to_terminal(text, session) {
             console.log('paste_to_terminal:', text, session);
@@ -50,6 +54,10 @@ const educates = (function () {
     if (parent && parent.educates && parent.educates.terminals) {
         terminals = parent.educates.terminals;
     }
+
+    // The Dashboard class is a stub implementation which will be replaced
+    // by the parent frame's dashboard object if it exists. The stub will be
+    // used when workshop pages are viewed as standalone pages.
 
     class Dashboard {
         session_owner() {
@@ -99,6 +107,8 @@ const educates = (function () {
         }
 
         preview_image(src, title) {
+            // Pop out images when clicked in a modal dialog.
+
             const preview_element = document.getElementById('preview-image-element');
             const preview_title = document.getElementById('preview-image-title');
             const preview_dialog = document.getElementById('preview-image-dialog');
@@ -118,26 +128,32 @@ const educates = (function () {
         dashboard = parent.educates.dashboard;
     }
 
-    // Initialize inline copy functionality
+
     document.addEventListener('DOMContentLoaded', function () {
-        // Find all inline-copy elements
+        // Attach event listeners to all inline-copy elements.
+    
         const elements = document.querySelectorAll('.inline-copy');
 
         elements.forEach(element => {
-            // Find the preceding code element
+            // Find the preceding code element.
+
             const target = element.previousElementSibling;
 
             if (target && target.tagName === 'CODE') {
-                // Add click event listener to the code element
+                // Add click event listener to the code element.
+
                 target.addEventListener('click', () => {
-                    // Copy the text content
+                    // Copy the text content.
+
                     set_paste_buffer_to_text(target.textContent);
 
-                    // Update the icon classes
+                    // Update the icon classes.
+
                     element.classList.add('fas');
                     element.classList.remove('far');
 
-                    // Reset the icon after 250ms
+                    // Reset the icon after 250ms.
+
                     setTimeout(() => {
                         element.classList.add('far');
                         element.classList.remove('fas');
@@ -146,16 +162,20 @@ const educates = (function () {
             }
         });
 
-        // Handle external links in page content
+        // Handle external links in page content.
+
         const links = document.querySelectorAll('section.page-content a');
+
         links.forEach(anchor => {
             if (!(location.hostname === anchor.hostname || !anchor.hostname.length)) {
                 anchor.setAttribute('target', '_blank');
             }
         });
 
-        // Handle image preview in page content
+        // Handle image preview in page content.
+
         const images = document.querySelectorAll('section.page-content img');
+
         images.forEach(image => {
             image.addEventListener('click', () => {
                 dashboard.preview_image(image.src, image.alt);
@@ -163,7 +183,10 @@ const educates = (function () {
         });
     });
 
-    // Table of clickable actions and their handlers
+    // Table of clickable actions and their handlers. Clickable actions will
+    // be registered on page load and each have a unique incrementing integer
+    // ID appended to "clickable-action-" as their element ID.
+
     const clickable_action_handlers = {};
     const clickable_actions = {};
 
@@ -179,7 +202,7 @@ const educates = (function () {
         };
     }
 
-    function clickable_action_handler(event) {
+    function trigger_clickable_action(event) {
         const element = event.currentTarget;
         const action = element.id;
         const handler = element.dataset.handler;
@@ -193,7 +216,13 @@ const educates = (function () {
         }
     }
 
-    clickable_action_handlers["terminal:execute"] = function (element, args) {
+    function clickable_action_handler(name, handler) {
+        clickable_action_handlers[name] = handler;
+    }
+
+    // Register built-in clickable action handlers.
+
+    clickable_action_handler("terminal:execute", function (element, args) {
         const defaults = {
             "command": undefined,
             "session": "1",
@@ -211,9 +240,9 @@ const educates = (function () {
         }
 
         terminals.execute_in_terminal(command, session, clear);
-    }
+    });
 
-    clickable_action_handlers["terminal:execute-all"] = function (element, args) {
+    clickable_action_handler("terminal:execute-all", function (element, args) {
         const defaults = {
             "command": undefined,
             "clear": false,
@@ -229,9 +258,9 @@ const educates = (function () {
         }
 
         terminals.execute_in_all_terminals(command, clear);
-    }
+    });
 
-    clickable_action_handlers["terminal:interrupt"] = function (element, args) {
+    clickable_action_handler("terminal:interrupt", function (element, args) {
         const defaults = {
             "session": "1",
         }
@@ -241,13 +270,13 @@ const educates = (function () {
         const session = args.session;
 
         terminals.interrupt_terminal(session);
-    }
+    });
 
-    clickable_action_handlers["terminal:interrupt-all"] = function (element, args) {
+    clickable_action_handler("terminal:interrupt-all", function (element, args) {
         terminals.interrupt_all_terminals();
-    }
+    });
 
-    clickable_action_handlers["terminal:clear"] = function (element, args) {
+    clickable_action_handler("terminal:clear", function (element, args) {
         const defaults = {
             "session": "1",
         }
@@ -257,14 +286,13 @@ const educates = (function () {
         const session = args.session;
 
         terminals.clear_terminal(session);
-    }
+    });
 
-    clickable_action_handlers["terminal:clear-all"] = function (element) {
+    clickable_action_handler("terminal:clear-all", function (element, args) {
         terminals.clear_all_terminals();
-    }
+    });
 
-
-    // Exported functions
+    // Exported functions.
 
     function paste_to_terminal(text, session) {
         session = session || "1";
@@ -408,7 +436,7 @@ const educates = (function () {
 
     return {
         register_clickable_action,
-        clickable_action_handler,
+        trigger_clickable_action,
         paste_to_terminal,
         paste_to_all_terminals,
         execute_in_terminal,

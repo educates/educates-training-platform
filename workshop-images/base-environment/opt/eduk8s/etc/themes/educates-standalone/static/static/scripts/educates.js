@@ -269,6 +269,147 @@ const educates = (function () {
     const clickable_action_handlers = {};
     const clickable_actions = {};
 
+    // Shift+click copy functionality: track shift key state and hovered action.
+
+    let shift_key_pressed = false;
+    let hovered_clickable_action = null;
+
+    // Helper function to show copy icon on a clickable action element.
+
+    function show_copy_icon(element) {
+        // Don't show copy icon if action is pending.
+
+        if (element.dataset.actionResult === 'pending') {
+            return;
+        }
+
+        const glyph_element = element.querySelector('.clickable-action__icon');
+        const original_glyph = element.dataset.originalGlyph;
+
+        if (glyph_element && original_glyph) {
+            // Also need to remove success icon if present.
+
+            glyph_element.classList.remove(original_glyph, 'fa-check-circle');
+            glyph_element.classList.add('fa-copy');
+        }
+    }
+
+    // Helper function to restore icon on a clickable action element based on state.
+
+    function restore_original_icon(element) {
+        const glyph_element = element.querySelector('.clickable-action__icon');
+        const original_glyph = element.dataset.originalGlyph;
+        const action_result = element.dataset.actionResult;
+
+        if (!glyph_element || !original_glyph) {
+            return;
+        }
+
+        // Don't restore if action is pending (shouldn't have shown copy icon).
+
+        if (action_result === 'pending') {
+            return;
+        }
+
+        glyph_element.classList.remove('fa-copy');
+
+        // Restore to appropriate icon based on action state.
+
+        if (action_result === 'success') {
+            glyph_element.classList.add('fa-check-circle');
+        } else {
+            // Idle or failure state - restore original icon.
+            glyph_element.classList.add(original_glyph);
+        }
+    }
+
+    // Find the clickable action element currently under the mouse cursor.
+
+    function find_hovered_clickable_action() {
+        // Check all registered clickable actions for :hover state.
+
+        for (const action_id in clickable_actions) {
+            const element = clickable_actions[action_id].element;
+            if (element.matches(':hover')) {
+                return element;
+            }
+        }
+
+        return null;
+    }
+
+    // Update icon on currently hovered action when shift is pressed.
+
+    function update_hovered_action_icon() {
+        // Actively detect hovered element in case mouseenter hasn't fired yet.
+
+        if (!hovered_clickable_action) {
+            hovered_clickable_action = find_hovered_clickable_action();
+        }
+
+        if (hovered_clickable_action) {
+            show_copy_icon(hovered_clickable_action);
+        }
+    }
+
+    // Restore icon on currently hovered action when shift is released.
+
+    function restore_hovered_action_icon() {
+        if (hovered_clickable_action) {
+            restore_original_icon(hovered_clickable_action);
+        }
+    }
+
+    // Show visual feedback after successful copy operation.
+
+    function show_copy_feedback(element) {
+        const glyph_element = element.querySelector('.clickable-action__icon');
+
+        if (glyph_element) {
+            // Show clipboard-check briefly to indicate successful copy.
+
+            glyph_element.classList.remove('fa-copy');
+            glyph_element.classList.add('fa-clipboard-check');
+
+            setTimeout(() => {
+                glyph_element.classList.remove('fa-clipboard-check');
+
+                if (shift_key_pressed && hovered_clickable_action === element) {
+                    glyph_element.classList.add('fa-copy');
+                } else {
+                    // Restore appropriate icon based on action state.
+
+                    const action_result = element.dataset.actionResult;
+
+                    if (action_result === 'success') {
+                        glyph_element.classList.add('fa-check-circle');
+                    } else {
+                        const original_glyph = element.dataset.originalGlyph;
+                        if (original_glyph) {
+                            glyph_element.classList.add(original_glyph);
+                        }
+                    }
+                }
+            }, 250);
+        }
+    }
+
+    // Set up global shift key event listeners.
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Shift' && !shift_key_pressed) {
+            shift_key_pressed = true;
+            update_hovered_action_icon();
+        }
+    });
+
+    document.addEventListener('keyup', (event) => {
+        if (event.key === 'Shift') {
+            shift_key_pressed = false;
+            restore_hovered_action_icon();
+        }
+    });
+
     // Action state constants for centralized state management.
 
     const ActionState = {
@@ -386,6 +527,22 @@ const educates = (function () {
             args: args,
             handler: handler
         };
+
+        // Add hover listeners for shift+click copy functionality.
+
+        element.addEventListener('mouseenter', () => {
+            hovered_clickable_action = element;
+            if (shift_key_pressed) {
+                show_copy_icon(element);
+            }
+        });
+
+        element.addEventListener('mouseleave', () => {
+            if (hovered_clickable_action === element) {
+                restore_original_icon(element);
+                hovered_clickable_action = null;
+            }
+        });
     }
 
     // Execute an action with promise-based handling and timeout support.
@@ -490,6 +647,22 @@ const educates = (function () {
     function trigger_clickable_action(event) {
         const element = event.currentTarget;
         const action = element.id;
+
+        // If shift key is pressed, copy inner text instead of executing action.
+        // But not if action is currently pending.
+
+        if (event.shiftKey && element.dataset.actionResult !== 'pending') {
+            const body_element = element.querySelector('.clickable-action__body');
+            if (body_element) {
+                set_paste_buffer_to_text(body_element.textContent);
+                show_copy_feedback(element);
+
+                // Clear any text selection caused by shift+click.
+
+                window.getSelection().removeAllRanges();
+            }
+            return;
+        }
 
         console.log("trigger_clickable_action", element.dataset.handler, action);
 

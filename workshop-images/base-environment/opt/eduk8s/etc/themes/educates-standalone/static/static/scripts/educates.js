@@ -128,6 +128,85 @@ const educates = (function () {
         dashboard = parent.educates.dashboard;
     }
 
+    // The Examiner class implements examiner test execution functionality.
+    // The parent frame doesn't currently provide an examiner object, so
+    // everything is implemented here, with caveat that we don't do anything
+    // if we are running as a standalone page.
+
+    class Examiner {
+        execute_test(name, options = {}) {
+            console.log('execute_test:', name, options);
+
+            if (!parent || !parent.educates || !parent.educates.dashboard) {
+                return Promise.reject(new Error('Examiner not available in standalone mode'));
+            }
+
+            const {
+                url = null,
+                args = [],
+                form = null,
+                timeout = 30,
+                retries = 0,
+                delay = 1
+            } = options;
+
+            if (!name) {
+                return Promise.reject(new Error('Test name not provided'));
+            }
+
+            const endpoint = url || `/examiner/test/${name}`;
+            const body = JSON.stringify({ args, form, timeout });
+
+            const attempt_call = (remaining_retries) => {
+                return fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: body
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Unexpected HTTP error');
+                    }
+                    return response.json();
+                })
+                .then(result => {
+                    if (!result.success) {
+                        if (remaining_retries > 0) {
+                            return new Promise(resolve => {
+                                setTimeout(() => {
+                                    resolve(attempt_call(remaining_retries - 1));
+                                }, delay * 1000);
+                            });
+                        }
+                        throw new Error(result.message || 'Test failed');
+                    }
+                    return result;
+                })
+                .catch(error => {
+                    if (remaining_retries > 0) {
+                        return new Promise(resolve => {
+                            setTimeout(() => {
+                                resolve(attempt_call(remaining_retries - 1));
+                            }, delay * 1000);
+                        });
+                    }
+                    throw error;
+                });
+            };
+
+            return attempt_call(retries);
+        }
+    }
+
+    var examiner = new Examiner();
+
+    if (parent && parent.educates && parent.educates.examiner) {
+        examiner = parent.educates.examiner;
+    }
+
+    // Setup everything when the DOM is ready.
 
     document.addEventListener('DOMContentLoaded', function () {
         // Attach event listeners to all inline-copy elements.
@@ -334,8 +413,8 @@ const educates = (function () {
             return;
         }
 
-        // Check cooldown to prevent rapid re-triggering.
-        // Get cooldown from args (seconds) → convert to ms, or use global default.
+        // Check cooldown to prevent rapid re-triggering. Get cooldown from args
+        // (seconds) and convert to ms, or use global default.
 
         const cooldown_ms = args.cooldown !== undefined ? args.cooldown * 1000 : ACTION_COOLDOWN_MS;
 
@@ -559,7 +638,27 @@ const educates = (function () {
 
     clickable_action_handler("examiner:execute-test", function (_element, args) {
         console.log("examiner:execute-test handler called", args);
-        return new Promise(resolve => setTimeout(resolve, 5000));
+
+        const defaults = {
+            "name": undefined,
+            "args": [],
+            "timeout": 30,
+            "retries": 0,
+            "delay": 1
+        };
+
+        args = { ...defaults, ...args };
+
+        if (!args.name) {
+            throw new Error("Test name not provided");
+        }
+
+        return examiner.execute_test(args.name, {
+            args: args.args,
+            timeout: args.timeout,
+            retries: args.retries,
+            delay: args.delay
+        });
     });
 
     clickable_action_handler("files:download-file", function (_element, args) {

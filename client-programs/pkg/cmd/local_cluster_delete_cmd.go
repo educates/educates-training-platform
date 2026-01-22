@@ -25,7 +25,8 @@ func (o *LocalClusterDeleteOptions) Run() error {
 	c := cluster.NewKindClusterConfig("")
 
 	if o.AllComponents {
-		registry.DeleteRegistry()
+		reg := registry.NewRegistry("", nil)
+		reg.Delete()
 		resolver.DeleteResolver()
 		// Delete all mirrors
 		registry.DeleteRegistryMirrors()
@@ -38,10 +39,10 @@ func (p *ProjectInfo) NewLocalClusterDeleteCmd() *cobra.Command {
 	var o LocalClusterDeleteOptions
 
 	var c = &cobra.Command{
-		Args:  cobra.NoArgs,
-		Use:   "delete",
-		Short: "Deletes the local Kubernetes cluster",
-		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Args:    cobra.NoArgs,
+		Use:     "delete",
+		Short:   "Deletes the local Kubernetes cluster",
+		RunE:    func(_ *cobra.Command, _ []string) error { return o.Run() },
 		Example: localClusterDeleteExample,
 	}
 

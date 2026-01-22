@@ -28,32 +28,36 @@ type LocalRegistryDeployOptions struct {
 }
 
 func (o *LocalRegistryDeployOptions) Run() error {
-	err := registry.DeployRegistry(o.BindIP)
-
-	if err != nil {
-		return errors.Wrap(err, "failed to deploy registry")
-	}
-
 	// This will fail if you do not have a Kubernetes cluster, but we can still
 	// deploy just the image registry alone without Kubernetes. If a Kubernetes
 	// cluster is created later, then the registry service will be added then.
 	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
 
+	var client *registry.Registry
+
 	if err != nil {
 		fmt.Println("Warning: Kubernetes cluster not available")
-		return nil
+		client = registry.NewRegistry(o.BindIP, nil)
+	} else {
+		k8sClient, err := clusterConfig.GetClient()
+		if err != nil {
+			fmt.Println("Warning: Kubernetes cluster not updated with registry service.")
+			client = registry.NewRegistry(o.BindIP, nil)
+		} else {
+			client = registry.NewRegistry(o.BindIP, k8sClient)
+		}
 	}
 
-	client, err := clusterConfig.GetClient()
-
+	err = client.Deploy()
 	if err != nil {
-		fmt.Println("Warning: Kubernetes cluster not updated with registry service.")
-
-		return nil
+		return errors.Wrap(err, "failed to deploy registry")
 	}
 
-	if err = registry.UpdateRegistryK8SService(client); err != nil {
-		return errors.Wrap(err, "failed to create service for registry")
+	if client != nil {
+		if err = client.UpdateK8SService(); err != nil {
+			// Don't fail if we can't update the K8s service, just warn
+			fmt.Println("Warning: Kubernetes cluster not updated with registry service.")
+		}
 	}
 
 	return nil

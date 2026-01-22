@@ -16,7 +16,8 @@ type LocalRegistryPruneOptions struct {
 }
 
 func (o *LocalRegistryPruneOptions) Run() error {
-	err := registry.PruneRegistry()
+	reg := registry.NewRegistry("", nil)
+	err := reg.Prune()
 
 	if err != nil {
 		return errors.Wrap(err, "failed to prune registry")

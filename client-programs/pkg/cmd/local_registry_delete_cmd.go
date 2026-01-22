@@ -16,7 +16,10 @@ func (p *ProjectInfo) NewLocalRegistryDeleteCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Use:   "delete",
 		Short: "Deletes the local image registry",
-		RunE:  func(_ *cobra.Command, _ []string) error { return registry.DeleteRegistry() },
+		RunE: func(_ *cobra.Command, _ []string) error {
+			reg := registry.NewRegistry("", nil)
+			return reg.Delete()
+		},
 		Example: localRegistryDeleteExample,
 	}
 

@@ -423,6 +423,14 @@ const educates = (function () {
             return;
         }
 
+        // In standalone mode, show visual feedback but don't execute the action.
+
+        if (!parent || !parent.educates || !parent.educates.dashboard) {
+            console.log(`Action ${action_id} triggered in standalone mode`);
+            set_action_state(element, ActionState.SUCCESS);
+            return;
+        }
+
         // Set pending state.
 
         set_action_state(element, ActionState.PENDING);

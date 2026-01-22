@@ -287,6 +287,39 @@ div.magic-code-block-upload {
     background-color: orangered;
 }
 
+/* Hover state for clickable actions to indicate interactivity */
+
+.clickable-action {
+    cursor: pointer;
+    transition: box-shadow 0.15s ease-in-out;
+}
+
+.clickable-action:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.clickable-action__header {
+    transition: background-color 0.15s ease-in-out;
+}
+
+.clickable-action:hover .clickable-action__header {
+    background-color: deepskyblue;
+}
+
+/* Preserve state colors on hover */
+
+.clickable-action[data-action-result='success']:hover .clickable-action__header {
+    background-color: limegreen;
+}
+
+.clickable-action[data-action-result='pending']:hover .clickable-action__header {
+    background-color: darkorange;
+}
+
+.clickable-action[data-action-result='failure']:hover .clickable-action__header {
+    background-color: red;
+}
+
 .inline-copy {
     padding-left: 1px;
     font-size: 0.5em;

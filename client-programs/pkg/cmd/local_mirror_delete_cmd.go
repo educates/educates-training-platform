@@ -5,6 +5,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 const (
@@ -23,14 +24,20 @@ func (o *LocalMirrorDeleteOptions) Run() error {
 		Mirror: o.MirrorName,
 	}
 
-	return registry.DeleteMirrorAndUnlinkFromCluster(mirrorConfig)
+	mirror := registry.NewMirror(mirrorConfig)
+	return mirror.DeleteAndUnlinkFromCluster()
 }
 
 func (p *ProjectInfo) NewLocalMirrorDeleteCmd() *cobra.Command {
 	var o LocalMirrorDeleteOptions
 
 	var c = &cobra.Command{
-		Args:    cobra.ExactArgs(1),
+		Args:    func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return utils.CmdError(cmd, "name is required", "NAME")
+			}
+			return nil
+		},
 		Use:     "delete NAME",
 		Short:   "Deletes the local image registry mirror",
 		RunE:    func(_ *cobra.Command, args []string) error { o.MirrorName = args[0]; return o.Run() },

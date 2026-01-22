@@ -98,7 +98,7 @@ func (o *LocalClusterCreateOptions) Run() error {
 		return err
 	}
 
-	client, err := clusterConfig.Config.GetClient()
+	k8sClient, err := clusterConfig.Config.GetClient()
 
 	if err != nil {
 		return err
@@ -107,29 +107,31 @@ func (o *LocalClusterCreateOptions) Run() error {
 	// This creates the educates-secrets namespace if it doesn't exist and creates the
 	// wildcard and CA secrets in there
 	if !o.ClusterOnly {
-		if err = secrets.SyncLocalCachedSecretsToCluster(client); err != nil {
+		if err = secrets.SyncLocalCachedSecretsToCluster(k8sClient); err != nil {
 			return err
 		}
 	}
 
-	if err = registry.DeployRegistryAndLinkToCluster(o.RegistryBindIP, client); err != nil {
+	reg := registry.NewRegistry(o.RegistryBindIP, k8sClient)
+	if err = reg.DeployAndLinkToCluster(); err != nil {
 		return errors.Wrap(err, "failed to deploy registry")
 	}
 
 	// This is needed for imgpkg pull from locally published workshops
-	if err = registry.UpdateRegistryK8SService(client); err != nil {
+	if err = reg.UpdateK8SService(); err != nil {
 		return errors.Wrap(err, "failed to create service for registry")
 	}
 
 	// This is for hugo livereload (educates serve-workshop)
-	if err = cluster.CreateLoopbackService(client, fullConfig.ClusterIngress.Domain); err != nil {
+	if err = cluster.CreateLoopbackService(k8sClient, fullConfig.ClusterIngress.Domain); err != nil {
 		return err
 	}
 
 	// Create and add registry mirrors defined in config to Kind nodes
-	for _, mirror := range fullConfig.LocalKindCluster.RegistryMirrors {
-		if err = registry.DeployMirrorAndLinkToCluster(&mirror); err != nil {
-			return errors.Wrap(err, "failed to deploy registry mirror "+mirror.Mirror)
+	for _, mirrorCfg := range fullConfig.LocalKindCluster.RegistryMirrors {
+		mirror := registry.NewMirror(&mirrorCfg)
+		if err = mirror.DeployAndLinkToCluster(); err != nil {
+			return errors.Wrap(err, "failed to deploy registry mirror "+mirrorCfg.Mirror)
 		}
 	}
 

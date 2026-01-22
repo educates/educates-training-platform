@@ -39,7 +39,8 @@ func (o *LocalMirrorDeployOptions) Run() error {
 		Password: o.Password,
 	}
 
-	err := registry.DeployMirrorAndLinkToCluster(mirrorConfig)
+	mirror := registry.NewMirror(mirrorConfig)
+	err := mirror.DeployAndLinkToCluster()
 
 	if err != nil {
 		return errors.Wrap(err, "failed to deploy registry mirror")

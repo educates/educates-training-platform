@@ -4,16 +4,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
+	"strconv"
 	"strings"
 
-	"carvel.dev/imgpkg/pkg/imgpkg/cmd"
 	imgpkgcmd "carvel.dev/imgpkg/pkg/imgpkg/cmd"
 	vendirsync "carvel.dev/vendir/pkg/vendir/cmd"
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 
-	"github.com/cppforlife/go-cli-ui/ui"
 	eduk8sWorkshops "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/logger"
 	"github.com/educates/educates-training-platform/client-programs/pkg/templates"
 	"github.com/pkg/errors"
 	"go.yaml.in/yaml/v2"
@@ -28,11 +27,21 @@ type WorkshopManager struct {
 }
 
 type WorkshopNewConfig struct {
-	Template    string
-	Name        string
-	Title       string
-	Description string
-	Image       string
+	Template              string
+	Name                  string
+	Title                 string
+	Description           string
+	Image                 string
+	TargetDirectory       string
+	Overwrite             bool
+	WithKubernetesAccess  bool
+	WithGitHubAction      bool
+	WithVirtualCluster    bool
+	WithDockerDaemon      bool
+	WithImageRegistry     bool
+	WithKubernetesConsole bool
+	WithEditor            bool
+	WithTerminal          bool
 }
 
 type WorkshopExportConfig struct {
@@ -59,39 +68,37 @@ func NewWorkshopManager() *WorkshopManager {
 func (m *WorkshopManager) NewWorkshop(directory string,o *WorkshopNewConfig) error {
 	var err error
 
-	directory = filepath.Clean(directory)
-
-	if directory, err = filepath.Abs(directory); err != nil {
-		return errors.Wrapf(err, "could not convert path name %q to absolute path", directory)
-	}
-
-	if _, err = os.Stat(directory); err == nil {
-		return errors.Errorf("target path name %q already exists", directory)
-	}
-
-	name := o.Name
-
-	if name == "" {
-		name = filepath.Base(directory)
-	}
-
-	if match, _ := regexp.MatchString("^[a-z0-9-]+$", name); !match {
-		return errors.Errorf("invalid workshop name %q", name)
-	}
-
 	parameters := map[string]string{
-		"WorkshopName":        name,
-		"WorkshopTitle":       o.Title,
-		"WorkshopDescription": o.Description,
-		"WorkshopImage":       o.Image,
+		"WorkshopName":          o.Name,
+		"WorkshopTitle":         o.Title,
+		"WorkshopDescription":   o.Description,
+		"WorkshopImage":         o.Image,
+		"WithKubernetesAccess":  strconv.FormatBool(o.WithKubernetesAccess),
+		"WithVirtualCluster":    strconv.FormatBool(o.WithVirtualCluster),
+		"WithDockerDaemon":      strconv.FormatBool(o.WithDockerDaemon),
+		"WithImageRegistry":     strconv.FormatBool(o.WithImageRegistry),
+		"WithKubernetesConsole": strconv.FormatBool(o.WithKubernetesConsole),
+		"WithEditor":            strconv.FormatBool(o.WithEditor),
+		"WithTerminal":          strconv.FormatBool(o.WithTerminal),
 	}
 
 	template := templates.InternalTemplate(o.Template)
 
-	return template.Apply(directory, parameters)
+	err = template.ApplyFiles(directory, parameters)
+
+	if err != nil {
+		return errors.Wrap(err, "unable to apply template")
+	}
+
+	if o.WithGitHubAction {
+		template := templates.InternalTemplate("single")
+		err = template.ApplyGitHubAction(directory, parameters)
+	}
+
+	return err
 }
 
-func (m *WorkshopManager) Export(directory string,o *WorkshopExportConfig) error {
+func (m *WorkshopManager) Export(directory string,o *WorkshopExportConfig) (string, error) {
 	// If image name hasn't been supplied read workshop definition file and
 	// try to work out image name to Export workshop as.
 
@@ -105,13 +112,13 @@ func (m *WorkshopManager) Export(directory string,o *WorkshopExportConfig) error
 	workshopFileData, err := os.ReadFile(workshopFilePath)
 
 	if err != nil {
-		return errors.Wrapf(err, "cannot open workshop definition %q", workshopFilePath)
+		return "", errors.Wrapf(err, "cannot open workshop definition %q", workshopFilePath)
 	}
 
 	// Process the workshop YAML data for ytt templating and data variables.
 
 	if workshopFileData, err = eduk8sWorkshops.ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
-		return errors.Wrap(err, "unable to process workshop definition as template")
+		return "", errors.Wrap(err, "unable to process workshop definition as template")
 	}
 
 	workshopFileData = []byte(strings.ReplaceAll(string(workshopFileData), "$(image_repository)", o.Repository))
@@ -124,11 +131,11 @@ func (m *WorkshopManager) Export(directory string,o *WorkshopExportConfig) error
 	err = runtime.DecodeInto(decoder, workshopFileData, workshop)
 
 	if err != nil {
-		return errors.Wrap(err, "couldn't parse workshop definition")
+		return "", errors.Wrap(err, "couldn't parse workshop definition")
 	}
 
 	if workshop.GetAPIVersion() != "training.educates.dev/v1beta1" || workshop.GetKind() != "Workshop" {
-		return errors.New("invalid type for workshop definition")
+		return "", errors.New("invalid type for workshop definition")
 	}
 
 	// Insert workshop version property if not specified.
@@ -148,12 +155,10 @@ func (m *WorkshopManager) Export(directory string,o *WorkshopExportConfig) error
 	workshopFileData, err = yaml.Marshal(&workshop.Object)
 
 	if err != nil {
-		return errors.Wrap(err, "couldn't convert workshop definition back to YAML")
+		return "", errors.Wrap(err, "couldn't convert workshop definition back to YAML")
 	}
 
-	fmt.Print(string(workshopFileData))
-
-	return nil
+	return string(workshopFileData), nil
 }
 
 func (m *WorkshopManager) Publish(directory string,o *WorkshopPublishConfig) error {
@@ -201,7 +206,12 @@ func (m *WorkshopManager) Publish(directory string,o *WorkshopPublishConfig) err
 		return errors.Wrap(err, "couldn't parse workshop definition")
 	}
 
-	fmt.Printf("Processing workshop with name %q.\n", workshop.GetName())
+		// Extract vendir snippet describing subset of files to package up as the
+	// workshop image.
+
+	carvelUI := logger.NewCarvelUI()
+
+	carvelUI.PrintLinef("Processing workshop with name %q", workshop.GetName())
 
 	if workshop.GetAPIVersion() != "training.educates.dev/v1beta1" || workshop.GetKind() != "Workshop" {
 		return errors.New("invalid type for workshop definition")
@@ -216,21 +226,6 @@ func (m *WorkshopManager) Publish(directory string,o *WorkshopPublishConfig) err
 	if image == "" {
 		return errors.Errorf("cannot find image name for publishing workshop %q", workshopFilePath)
 	}
-
-	// Extract vendir snippet describing subset of files to package up as the
-	// workshop image.
-
-	confUI := ui.NewConfUI(ui.NewNoopLogger())
-
-	uiFlags := cmd.UIFlags{
-		Color:          true,
-		JSON:           false,
-		NonInteractive: true,
-	}
-
-	uiFlags.ConfigureUI(confUI)
-
-	defer confUI.Flush()
 
 	if fileArtifacts, found, _ := unstructured.NestedSlice(workshop.Object, "spec", "publish", "files"); found && len(fileArtifacts) != 0 {
 		tempDir, err := os.MkdirTemp("", "educates-imgpkg")
@@ -291,7 +286,7 @@ func (m *WorkshopManager) Publish(directory string,o *WorkshopPublishConfig) err
 				return errors.Wrap(err, "unable to write vendir config file")
 			}
 
-			syncOptions := vendirsync.NewSyncOptions(confUI)
+			syncOptions := vendirsync.NewSyncOptions(carvelUI)
 
 			syncOptions.Directories = nil
 			syncOptions.Files = []string{filepath.Join(tempDir, "vendir.yml")}
@@ -319,10 +314,9 @@ func (m *WorkshopManager) Publish(directory string,o *WorkshopPublishConfig) err
 	}
 
 	// Now publish workshop directory contents as OCI image artifact.
+	carvelUI.PrintLinef("Publishing workshop files to %q", image)
 
-	fmt.Printf("Publishing workshop files to %q.\n", image)
-
-	pushOptions := imgpkgcmd.NewPushOptions(confUI)
+	pushOptions := imgpkgcmd.NewPushOptions(carvelUI)
 
 	pushOptions.ImageFlags.Image = image
 	pushOptions.FileFlags.Files = append(pushOptions.FileFlags.Files, includePaths...)
@@ -336,11 +330,10 @@ func (m *WorkshopManager) Publish(directory string,o *WorkshopPublishConfig) err
 		return errors.Wrap(err, "unable to push image artifact for workshop")
 	}
 
-	// We add a newline to output for better readability.
-	fmt.Println()
+	// // We add a newline to output for better readability.
+	// confUI.PrintLinef("\n")
 
 	// Export modified workshop definition file.
-
 	exportWorkshop := o.ExportWorkshop
 
 	if exportWorkshop != "" {

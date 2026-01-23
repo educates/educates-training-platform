@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -61,7 +62,12 @@ func (o *FilesExportOptions) Run(args []string) error {
 
 	manager := workshops.NewWorkshopManager()
 
-	return manager.Export(directory, &config)
+	workshop, err := manager.Export(directory, &config)
+	if err != nil {
+		return err
+	}
+	fmt.Println(workshop)
+	return nil
 }
 
 func (p *ProjectInfo) NewWorkshopExportCmd() *cobra.Command {

@@ -403,6 +403,24 @@ func NewInstallationConfigFromFile(configFile string) (*InstallationConfig, erro
 	return config, nil
 }
 
+// This function is used to parse the installation config file for config edit.
+// It will not print the configFile location to the console.
+func NewInstallationConfigFromFileForConfigEdit(configFile string) (*InstallationConfig, error) {
+	config := &InstallationConfig{}
+
+	data, err := os.ReadFile(configFile)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err := yaml.UnmarshalStrict(data, &config); err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
+
 func ConfigForLocalClusters(configFile string, domain string, local bool) (fullConfig *InstallationConfig, err error) {
 	if configFile == NULL_CONFIG_FILE {
 		fullConfig = NewDefaultInstallationConfig()

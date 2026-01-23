@@ -143,7 +143,7 @@ func (o *LocalClusterCreateOptions) Run() error {
 		}
 	}
 
-	fmt.Println("Educates cluster has been created succesfully")
+	fmt.Println("🎓 Educates cluster has been created succesfully")
 
 	return nil
 }

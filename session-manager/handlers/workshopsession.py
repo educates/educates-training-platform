@@ -1,61 +1,39 @@
-import time
+import base64
+import copy
+import json
+import logging
 import random
 import string
-import base64
-import json
-import copy
-import logging
+import time
 
 import bcrypt
-
+import cryptography.hazmat.primitives
 import kopf
 import pykube
 import yaml
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
-import cryptography.hazmat.primitives
-import cryptography.hazmat.primitives.asymmetric
-
-from .namespace_budgets import namespace_budgets
-from .objects import create_from_dict, WorkshopEnvironment
-from .helpers import (
-    xget,
-    substitute_variables,
-    smart_overlay_merge,
-    image_pull_policy,
-    Applications,
-)
-from .applications import session_objects_list, pod_template_spec_patches
 from .analytics import report_analytics_event
-
-from .operator_config import (
-    resolve_workshop_image,
-    PLATFORM_ARCH,
-    OPERATOR_API_GROUP,
-    OPERATOR_STATUS_KEY,
-    OPERATOR_NAME_PREFIX,
-    IMAGE_REPOSITORY,
-    RUNTIME_CLASS,
-    CLUSTER_DOMAIN,
-    INGRESS_DOMAIN,
-    INGRESS_PROTOCOL,
-    INGRESS_SECRET,
-    INGRESS_CLASS,
-    INGRESS_CA_SECRET,
-    SESSION_COOKIE_DOMAIN,
-    CLUSTER_STORAGE_CLASS,
-    CLUSTER_STORAGE_USER,
-    CLUSTER_STORAGE_GROUP,
-    CLUSTER_SECURITY_POLICY_ENGINE,
-    DOCKERD_MTU,
-    DOCKERD_MIRROR_REMOTE,
-    NETWORK_BLOCKCIDRS,
-    GOOGLE_TRACKING_ID,
-    CLARITY_TRACKING_ID,
-    AMPLITUDE_TRACKING_ID,
-    DOCKER_IN_DOCKER_IMAGE,
-    DOCKER_REGISTRY_IMAGE,
-    BASE_ENVIRONMENT_IMAGE,
-)
+from .applications import pod_template_spec_patches, session_objects_list
+from .helpers import (Applications, image_pull_policy, smart_overlay_merge,
+                      substitute_variables, xget)
+from .namespace_budgets import namespace_budgets
+from .objects import WorkshopEnvironment, create_from_dict
+from .operator_config import (AMPLITUDE_TRACKING_ID, BASE_ENVIRONMENT_IMAGE,
+                              CLARITY_TRACKING_ID, CLUSTER_DOMAIN,
+                              CLUSTER_SECURITY_POLICY_ENGINE,
+                              CLUSTER_STORAGE_CLASS, CLUSTER_STORAGE_GROUP,
+                              CLUSTER_STORAGE_USER, DOCKER_IN_DOCKER_IMAGE,
+                              DOCKER_REGISTRY_IMAGE, DOCKERD_MIRROR_REMOTE,
+                              DOCKERD_MTU, GOOGLE_TRACKING_ID,
+                              IMAGE_REPOSITORY, INGRESS_CA_SECRET,
+                              INGRESS_CLASS, INGRESS_DOMAIN, INGRESS_PROTOCOL,
+                              INGRESS_SECRET, NETWORK_BLOCKCIDRS,
+                              OPERATOR_API_GROUP, OPERATOR_NAME_PREFIX,
+                              OPERATOR_STATUS_KEY, PLATFORM_ARCH,
+                              RUNTIME_CLASS, SESSION_COOKIE_DOMAIN,
+                              resolve_workshop_image)
 
 __all__ = ["workshop_session_create", "workshop_session_delete"]
 
@@ -793,24 +771,24 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     # Generate a SSH key pair for injection into workshop container and any
     # potential services that need it.
 
-    private_key = cryptography.hazmat.primitives.asymmetric.rsa.generate_private_key(
+    private_key = rsa.generate_private_key(
         public_exponent=65537, key_size=2048
     )
 
     unencrypted_pem_private_key = private_key.private_bytes(
-        encoding=cryptography.hazmat.primitives.serialization.Encoding.PEM,
-        format=cryptography.hazmat.primitives.serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=cryptography.hazmat.primitives.serialization.NoEncryption(),
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
     )
 
     rsa_public_key = private_key.public_key().public_bytes(
-        encoding=cryptography.hazmat.primitives.serialization.Encoding.OpenSSH,
-        format=cryptography.hazmat.primitives.serialization.PublicFormat.OpenSSH,
+        encoding=serialization.Encoding.OpenSSH,
+        format=serialization.PublicFormat.OpenSSH,
     )
 
     # pem_public_key = private_key.public_key().public_bytes(
-    #     encoding=cryptography.hazmat.primitives.serialization.Encoding.PEM,
-    #     format=cryptography.hazmat.primitives.serialization.PublicFormat.SubjectPublicKeyInfo,
+    #     encoding=serialization.Encoding.PEM,
+    #     format=serialization.PublicFormat.SubjectPublicKeyInfo,
     # )
 
     ssh_private_key = unencrypted_pem_private_key.decode("utf-8")

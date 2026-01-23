@@ -292,4 +292,15 @@ This will stop and remove the mirror container and clean up the configuration fr
 As pointed out earlier, if the mirror configuration exists in the local cluster's configuration, if the Educates local cluster is recreated then the mirror will be recreated as well.
 
 
+Customize local pod and service CIDRs
+-------------------------------------
+
+If you need to modify the pod and service CIDRs for the local Kind cluster, you can do so by editing the local cluster configuration using the command `educates local config edit` and adding the following configuration:
+
+```yaml
+localKindCluster:
+  networking:
+    podCIDR: 10.244.0.0/16
+    serviceCIDR: 10.96.0.0/12
+```
 

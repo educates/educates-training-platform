@@ -982,11 +982,6 @@ spec:
                             resources:
                               type: object
                               properties:
-                                k3s:
-                                  type: object
-                                  properties:
-                                    memory:
-                                      type: string
                                 syncer:
                                   type: object
                                   properties:
@@ -1011,6 +1006,33 @@ spec:
                               items:
                                 type: object
                                 x-kubernetes-preserve-unknown-fields: true
+                            services:
+                              type: object
+                              properties:
+                                fromHost:
+                                  type: array
+                                  items:
+                                    type: object
+                                    required:
+                                    - from
+                                    - to
+                                    properties:
+                                      from:
+                                        type: string
+                                      to:
+                                        type: string
+                                fromVirtual:
+                                  type: array
+                                  items:
+                                    type: object
+                                    required:
+                                    - from
+                                    - to
+                                    properties:
+                                      from:
+                                        type: string
+                                      to:
+                                        type: string
                         sshd:
                           type: object
                           required:

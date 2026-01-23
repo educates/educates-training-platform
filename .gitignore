@@ -29,3 +29,6 @@ vendor
 
 
 /test*.yaml
+
+# AI Assistant specific files
+.cursor

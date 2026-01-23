@@ -13,10 +13,8 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/logger"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 
-	"github.com/cppforlife/go-cli-ui/ui"
 	"github.com/pkg/errors"
 
-	"carvel.dev/imgpkg/pkg/imgpkg/cmd"
 	"carvel.dev/imgpkg/pkg/imgpkg/registry"
 	imgpkgv1 "carvel.dev/imgpkg/pkg/imgpkg/v1"
 
@@ -46,9 +44,7 @@ func NewInstaller() *Installer {
 }
 
 func (inst *Installer) DryRun(version string, packageRepository string, fullConfig *config.InstallationConfig, verbose bool, showPackagesValues bool, skipImageResolution bool) error {
-	if verbose {
-		fmt.Println("Installing educates (DryRun) ...")
-	}
+	fmt.Println("⚙️ Running dry run installation...")
 
 	// Create a temporary directory
 	tempDir, err := os.MkdirTemp("", constants.EducatesInstallerString)
@@ -100,9 +96,7 @@ func (inst *Installer) DryRun(version string, packageRepository string, fullConf
 }
 
 func (inst *Installer) Run(version string, packageRepository string, fullConfig *config.InstallationConfig, clusterConfig *cluster.ClusterConfig, verbose bool, showPackagesValues bool, skipImageResolution bool, showDiff bool) error {
-	if verbose {
-		fmt.Println("Installing educates ...")
-	}
+	fmt.Println("⚙️ Running full installation...")
 
 	// Create a temporary directory
 	tempDir, err := os.MkdirTemp("", constants.EducatesInstallerString)
@@ -228,7 +222,9 @@ func (inst *Installer) fetch(tempDir string, version string, packageRepository s
 	}
 	// TODO: Remove some logging from here
 	fetchOutputDir := filepath.Join(tempDir, "fetch")
-	_, err := imgpkgv1.Pull(inst.getBundleImageRef(version, packageRepository, verbose), fetchOutputDir, pullOpts, registry.Opts{})
+	installerImageRef := inst.getBundleImageRef(version, packageRepository)
+	fmt.Println("Using installer image: ", installerImageRef)
+	_, err := imgpkgv1.Pull(installerImageRef, fetchOutputDir, pullOpts, registry.Opts{})
 	if err != nil {
 		// TODO: There might be more potential issues here
 		return "", errors.Wrapf(err, "Installer image not found")
@@ -325,17 +321,9 @@ func (inst *Installer) resolve(tempDir string, inputDir string, verbose bool) (s
 		return "", err
 	}
 
-	// ui
-	confUI := ui.NewConfUI(ui.NewNoopLogger())
-	uiFlags := cmd.UIFlags{
-		Color:          true,
-		JSON:           false,
-		NonInteractive: true,
-	}
-	uiFlags.ConfigureUI(confUI)
-	defer confUI.Flush()
+	carvelUI := logger.NewCarvelUI()
 
-	resolveOptions := kbldcmd.NewResolveOptions(confUI)
+	resolveOptions := kbldcmd.NewResolveOptions(carvelUI)
 	resolveOptions.FileFlags.Files = []string{inputDir}
 	// Apply defaults from CLI
 	resolveOptions.ImagesAnnotation = false
@@ -370,17 +358,10 @@ func (inst *Installer) deploy(tempDir string, inputDir string, clusterConfig *cl
 		fmt.Println("Running deploy ...")
 	}
 
-	confUI := ui.NewConfUI(ui.NewNoopLogger())
-	uiFlags := cmd.UIFlags{
-		Color:          true,
-		JSON:           false,
-		NonInteractive: true,
-	}
-	uiFlags.ConfigureUI(confUI)
-	defer confUI.Flush()
+	carvelUI := logger.NewCarvelUI()
 
 	depsFactory := NewKappDepsFactoryImpl(clusterConfig)
-	deployOptions := app.NewDeployOptions(confUI, depsFactory, logger.NewKappLogger(), nil)
+	deployOptions := app.NewDeployOptions(carvelUI, depsFactory, logger.NewKappLogger(), nil)
 	deployOptions.AppFlags.Name = constants.EducatesInstallerAppString
 	deployOptions.AppFlags.AppNamespace = constants.EducatesInstallerString
 	deployOptions.FileFlags.Files = []string{inputDir, filepath.Join(tempDir, "fetch/config/kapp/")}
@@ -413,20 +394,10 @@ func (inst *Installer) deploy(tempDir string, inputDir string, clusterConfig *cl
 func (inst *Installer) delete(clusterConfig *cluster.ClusterConfig) error {
 	fmt.Println("Running delete ...")
 
-	confUI := ui.NewConfUI(ui.NewNoopLogger())
-
-	uiFlags := cmd.UIFlags{
-		Color:          true,
-		JSON:           false,
-		NonInteractive: true,
-	}
-
-	uiFlags.ConfigureUI(confUI)
-
-	defer confUI.Flush()
+	carvelUI := logger.NewCarvelUI()
 
 	depsFactory := NewKappDepsFactoryImpl(clusterConfig)
-	deleteOptions := app.NewDeleteOptions(confUI, depsFactory, logger.NewKappLogger())
+	deleteOptions := app.NewDeleteOptions(carvelUI, depsFactory, logger.NewKappLogger())
 	deleteOptions.AppFlags.Name = constants.EducatesInstallerAppString
 	deleteOptions.AppFlags.AppNamespace = constants.EducatesInstallerString
 	deleteOptions.ApplyFlags.ClusterChangeOpts.Wait = true
@@ -442,10 +413,7 @@ func (inst *Installer) delete(clusterConfig *cluster.ClusterConfig) error {
 	return nil
 }
 
-func (inst *Installer) getBundleImageRef(version string, packageRepository string, verbose bool) string {
+func (inst *Installer) getBundleImageRef(version string, packageRepository string) string {
 	bundleImageRef := fmt.Sprintf("%s/%s:%s", packageRepository, constants.EducatesInstallerString, version)
-	if verbose {
-		fmt.Printf("Using installer image: %s\n", bundleImageRef)
-	}
 	return bundleImageRef
 }

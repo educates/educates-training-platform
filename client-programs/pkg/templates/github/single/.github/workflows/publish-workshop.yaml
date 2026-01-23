@@ -1,0 +1,22 @@
+name: Publish Workshop
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+-alpha.[0-9]+"
+      - "[0-9]+.[0-9]+-beta.[0-9]+"
+      - "[0-9]+.[0-9]+-rc.[0-9]+"
+
+jobs:
+  publish-workshop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create release
+        uses: educates/educates-github-actions/publish-workshop@v7
+        with:
+          token: {{ "${{secrets.GITHUB_TOKEN}}" }}

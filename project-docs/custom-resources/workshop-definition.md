@@ -2091,7 +2091,7 @@ spec:
 
 The selected resource budget needs to accomodate that CoreDNS will always be deployed in the virtual cluster. It sets it's own explicit resource requests so default limit ranges do not get applied in that case.
 
-Other control plane services for the virtual cluster are deployed in a separate namespace of the underlying host Kubernetes cluster so don't count in the resource budget. Those control plane services do reserve significant resources which may in many cases be more than what is required. The defaults are ``1Gi`` for the virtual cluster syncer application and ``2Gi`` for the ``k3s`` instance used by the virtual cluster. To override these values to reduce memory reserved, or increase it, add a ``session.applications.vcluster.resources`` section. 
+Other control plane services for the virtual cluster are deployed in a separate namespace of the underlying host Kubernetes cluster so don't count in the resource budget. Those control plane services do reserve significant resources which may in many cases be more than what is required. The default is ``1Gi`` for the virtual cluster syncer application. To override these values to reduce memory reserved, or increase it, add a ``session.applications.vcluster.resources`` section. 
 
 ```yaml
 spec:
@@ -2102,8 +2102,6 @@ spec:
         resources:
           syncer:
             memory: 768Mi
-          k3s:
-            memory: 1Gi
 ```
 
 Any ``Ingress`` resources which are created in the virtual cluster are automatically synced to the underlying host Kubernetes cluster so that workloads can receive HTTP requests. If you need more advanced features provided by the Contour ingress controller, you can enable it and it will be automatically deployed to the virtual cluster with traffic for select ingress subdomains routed to it.

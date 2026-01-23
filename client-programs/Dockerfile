@@ -5,7 +5,7 @@ ARG TAG=latest
 FROM ${REPOSITORY}/educates-base-environment:${TAG} AS themes-source
 
 # Multi-stage build for client-programs
-FROM golang:1.23.7-alpine AS builder
+FROM golang:1.24.10-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata

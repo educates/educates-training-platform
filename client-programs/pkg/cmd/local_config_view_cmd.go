@@ -54,7 +54,7 @@ func (p *ProjectInfo) NewLocalConfigViewCmd() *cobra.Command {
 		Args:    cobra.NoArgs,
 		Use:     "view",
 		Short:   "View local configuration",
-		Long:    "View local configuration. Uses nip.io wildcard domain and Kind as provider config defaults",
+		Long:    "View local configuration. Uses nip.io wildcard domain and Kind as provider config defaults if not specified",
 		RunE:    func(_ *cobra.Command, _ []string) error { return o.Run() },
 		Example: localConfigViewExample,
 	}

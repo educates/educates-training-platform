@@ -109,7 +109,7 @@ func (o *PlatformDeployOptions) Run() error {
 		}
 	}
 
-	fmt.Println("\nEducates has been installed succesfully")
+	fmt.Println("\n🎓 Educates has been installed succesfully")
 
 	return nil
 }

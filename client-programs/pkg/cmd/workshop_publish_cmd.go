@@ -72,7 +72,6 @@ func (o *FilesPublishOptions) Run(args []string) error {
 	return m.Publish(directory, &config)
 }
 
-
 func (p *ProjectInfo) NewWorkshopPublishCmd() *cobra.Command {
 	var o FilesPublishOptions
 

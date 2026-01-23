@@ -20,6 +20,7 @@ type VolumeMountConfig struct {
 type LocalKindClusterConfig struct {
 	ListenAddress   string                 `yaml:"listenAddress,omitempty"`
 	ApiServer       KindApiServerConfig    `yaml:"apiServer,omitempty"`
+	Networking      KindNetworkingConfig   `yaml:"networking,omitempty"`
 	VolumeMounts    []VolumeMountConfig    `yaml:"volumeMounts,omitempty"`
 	RegistryMirrors []RegistryMirrorConfig `yaml:"registryMirrors,omitempty"`
 }
@@ -36,6 +37,11 @@ type RegistryMirrorConfig struct {
 type KindApiServerConfig struct {
 	Address string `yaml:"address,omitempty"`
 	Port    int    `yaml:"port,omitempty"`
+}
+
+type KindNetworkingConfig struct {
+	ServiceSubnet string `yaml:"serviceSubnet,omitempty"`
+	PodSubnet     string `yaml:"podSubnet,omitempty"`
 }
 
 type LocalDNSResolverConfig struct {
@@ -386,6 +392,24 @@ func NewInstallationConfigFromFile(configFile string) (*InstallationConfig, erro
 
 	if err := yaml.UnmarshalStrict(data, &config); err != nil {
 		return nil, errors.Wrapf(err, "unable to parse installation config file %s", configFile)
+	}
+
+	return config, nil
+}
+
+// This function is used to parse the installation config file for config edit.
+// It will not print the configFile location to the console.
+func NewInstallationConfigFromFileForConfigEdit(configFile string) (*InstallationConfig, error) {
+	config := &InstallationConfig{}
+
+	data, err := os.ReadFile(configFile)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err := yaml.UnmarshalStrict(data, &config); err != nil {
+		return nil, err
 	}
 
 	return config, nil

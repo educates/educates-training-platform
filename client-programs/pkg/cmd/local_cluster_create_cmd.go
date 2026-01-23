@@ -15,12 +15,30 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/installer"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
+
+// SupportedKubernetesVersions returns a sorted list of supported Kubernetes versions
+func SupportedKubernetesVersions() []string {
+	versions := make([]string, 0, len(constants.KubernetesVersionToKindImage))
+	for v := range constants.KubernetesVersionToKindImage {
+		versions = append(versions, v)
+	}
+	// Sort in descending order (newest first)
+	for i := 0; i < len(versions)-1; i++ {
+		for j := i + 1; j < len(versions); j++ {
+			if versions[i] < versions[j] {
+				versions[i], versions[j] = versions[j], versions[i]
+			}
+		}
+	}
+	return versions
+}
 
 const (
 	localClusterCreateExample = `
@@ -55,6 +73,7 @@ type LocalClusterCreateOptions struct {
 	Config              string
 	Kubeconfig          string
 	ClusterImage        string
+	KubernetesVersion   string
 	Domain              string
 	PackageRepository   string
 	Version             string
@@ -162,6 +181,17 @@ func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
 			}
 			o.RegistryBindIP = ip
 
+			// Validate kubernetes-version if provided
+			if o.KubernetesVersion != "" {
+				if _, ok := constants.KubernetesVersionToKindImage[o.KubernetesVersion]; !ok {
+					return fmt.Errorf("unsupported kubernetes version %q, supported versions are: %v", o.KubernetesVersion, SupportedKubernetesVersions())
+				}
+				// If kind-cluster-image is not explicitly set, use the mapped image
+				if o.ClusterImage == "" {
+					o.ClusterImage = constants.KubernetesVersionToKindImage[o.KubernetesVersion]
+				}
+			}
+
 			return o.Run()
 		},
 		Example: localClusterCreateExample,
@@ -184,6 +214,12 @@ func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
 		"kind-cluster-image",
 		"",
 		"docker image to use when booting the kind cluster",
+	)
+	c.Flags().StringVar(
+		&o.KubernetesVersion,
+		"kubernetes-version",
+		constants.DefaultKubernetesVersion,
+		fmt.Sprintf("kubernetes version for the kind cluster (supported: %v)", SupportedKubernetesVersions()),
 	)
 	c.Flags().StringVar(
 		&o.Domain,

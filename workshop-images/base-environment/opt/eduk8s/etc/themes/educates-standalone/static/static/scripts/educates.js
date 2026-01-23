@@ -702,6 +702,13 @@ const educates = (function () {
 
         console.log("trigger_clickable_action", element.dataset.handler, action);
 
+        // If click is disabled on this element, skip default trigger behavior.
+        // The action must be triggered explicitly by other means.
+
+        if (element.dataset.clickDisabled === 'true') {
+            return;
+        }
+
         execute_action(action);
     }
 
@@ -906,7 +913,58 @@ const educates = (function () {
     });
 
     clickable_action_handler("examiner:execute-test", {
-        handler: function (_element, args) {
+        setup: function (element, args) {
+            if (args.inputs && args.inputs.schema) {
+                const header_element = element.querySelector('.clickable-action__header');
+                const body_element = element.querySelector('.clickable-action__body');
+
+                // Create form element.
+
+                const form_element = document.createElement('form');
+
+                // Configure form options with onSubmit callback.
+
+                const form_options = {
+                    ...args.inputs,
+                    onSubmit: (errors, values) => {
+                        if (!errors) {
+                            execute_action(element.id);
+                        }
+                    }
+                };
+
+                // Initialize the form using jsonForm.
+
+                $(form_element).jsonForm(form_options);
+
+                // Create wrapper div with clickable-action__form class.
+
+                const div_element = document.createElement('div');
+                div_element.className = 'clickable-action__form';
+                div_element.prepend(form_element);
+
+                // Prevent Enter key from submitting in non-textarea inputs.
+
+                form_element.addEventListener('keydown', function (event) {
+                    if (event.target.tagName !== 'TEXTAREA' && event.key === 'Enter') {
+                        event.preventDefault();
+                    }
+                });
+
+                // Insert form div after the header element.
+
+                header_element.after(div_element);
+
+                // Hide the body element.
+
+                body_element.style.display = 'none';
+
+                // Disable default click-to-trigger so only submit button triggers action.
+
+                element.dataset.clickDisabled = 'true';
+            }
+        },
+        handler: function (element, args) {
             console.log("examiner:execute-test handler called", args);
 
             const defaults = {
@@ -923,8 +981,30 @@ const educates = (function () {
                 throw new Error("Test name not provided");
             }
 
+            // Process form if it exists.
+
+            let form_values = {};
+            let form_object = element.querySelector('.clickable-action__form > form');
+
+            if (form_object) {
+                let form_data = new FormData(form_object);
+                let object = {};
+                form_data.forEach((value, key) => {
+                    if (!Reflect.has(object, key)) {
+                        object[key] = value;
+                        return;
+                    }
+                    if (!Array.isArray(object[key])) {
+                        object[key] = [object[key]];
+                    }
+                    object[key].push(value);
+                });
+                form_values = object;
+            }
+
             return examiner.execute_test(args.name, {
                 args: args.args,
+                form: form_values,
                 timeout: args.timeout,
                 retries: args.retries,
                 delay: args.delay

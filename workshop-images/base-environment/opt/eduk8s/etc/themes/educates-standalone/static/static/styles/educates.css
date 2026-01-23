@@ -264,6 +264,10 @@ div.magic-code-block-upload {
     margin-bottom: 1em;
 }
 
+.clickable-action__form {
+    padding-top: 0.5em;
+}
+
 #preview-image-dialog>.modal-dialog {
     min-width: 30%;
     max-width: 95%;
@@ -289,6 +293,7 @@ div.magic-code-block-upload {
 
 /* Hover state for clickable actions to indicate interactivity */
 
+/*
 .clickable-action {
     cursor: pointer;
     transition: box-shadow 0.15s ease-in-out;
@@ -301,6 +306,7 @@ div.magic-code-block-upload {
 .clickable-action__header {
     transition: background-color 0.15s ease-in-out;
 }
+*/
 
 /*
 .clickable-action:hover .clickable-action__header {

@@ -27,9 +27,10 @@ require (
 	k8s.io/cli-runtime v0.34.2
 	k8s.io/client-go v0.34.2
 	k8s.io/klog/v2 v2.130.1
+	// Keep kubectl aligned with DefaultKubernetesVersion in constants/kubernetes.go and k8s.io/api, k8s.io/apimachinery, k8s.io/cli-runtime, k8s.io/client-go, sigs.k8s.io/kind, sigs.k8s.io/controller-runtime
 	k8s.io/kubectl v0.34.2
 	sigs.k8s.io/controller-runtime v0.22.4
-	sigs.k8s.io/kind v0.30.0
+	sigs.k8s.io/kind v0.31.0
 	sigs.k8s.io/yaml v1.6.0
 )
 

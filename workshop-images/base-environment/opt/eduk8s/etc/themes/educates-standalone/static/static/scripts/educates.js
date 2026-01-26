@@ -667,15 +667,23 @@ const educates = (function () {
     // Placeholder for cascade functionality.
 
     function trigger_next_action(element) {
-        // Find the next sibling action element and trigger it.
+        // Find the next action element by incrementing the numeric suffix in the ID.
+        // IDs are of the form "clickable-action-nnn" where nnn is an integer.
 
-        const next_action = element.nextElementSibling;
+        const current_id = element.id;
+        const match = current_id.match(/^clickable-action-(\d+)$/);
 
-        if (next_action && next_action.classList.contains('magic-code-block')) {
-            const action_id = next_action.id;
+        if (!match) {
+            return;
+        }
 
-            if (action_id && clickable_actions[action_id]) {
-                execute_action(action_id);
+        const current_num = parseInt(match[1], 10);
+        const next_id = `clickable-action-${current_num + 1}`;
+        const next_action = document.getElementById(next_id);
+
+        if (next_action && next_action.classList.contains('clickable-action')) {
+            if (clickable_actions[next_id]) {
+                execute_action(next_id);
             }
         }
     }

@@ -1,7 +1,6 @@
-{{/* NEW STUB FILE - NEEDS REVIEW */}}
 {{- $args := .Inner | unmarshal -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
-{{- $name := "dashboard:expose-dashboard" -}}
+{{- $name := "dashboard:open-dashboard" -}}
 {{- $glyph := "fa-play" -}}
 {{- $prefix := default "Dashboard" $args.prefix -}}
 {{- $title := default (printf "Expose dashboard \"%s\"" $args.name) $args.title -}}

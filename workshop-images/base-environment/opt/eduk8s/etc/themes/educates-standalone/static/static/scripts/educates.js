@@ -877,39 +877,109 @@ const educates = (function () {
         }
     });
 
-    clickable_action_handler("dashboard:expose-dashboard", {
-        handler: function (_element, args) {
-            console.log("dashboard:expose-dashboard handler called", args);
-        }
-    });
-
     clickable_action_handler("dashboard:open-dashboard", {
         handler: function (_element, args) {
-            console.log("dashboard:open-dashboard handler called", args);
+            const defaults = {
+                "name": undefined,
+            }
+
+            args = { ...defaults, ...args }
+
+            const name = args.name;
+
+            if (!name) {
+                throw new Error("Dashboard name not provided");
+            }
+
+            dashboard.expose_dashboard(name);
         }
     });
 
     clickable_action_handler("dashboard:create-dashboard", {
         handler: function (_element, args) {
-            console.log("dashboard:create-dashboard handler called", args);
+            const defaults = {
+                "name": undefined,
+                "url": undefined,
+                "focus": true
+            }
+
+            args = { ...defaults, ...args }
+
+            const name = args.name;
+            const url = args.url;
+            const focus = args.focus;
+
+            if (!name) {
+                throw new Error("Dashboard name not provided");
+            }
+
+            if (!url) {
+                throw new Error("Dashboard URL not provided");
+            }
+
+            dashboard.create_dashboard(name, url, focus);
         }
     });
 
     clickable_action_handler("dashboard:delete-dashboard", {
         handler: function (_element, args) {
-            console.log("dashboard:delete-dashboard handler called", args);
+            const defaults = {
+                "name": undefined,
+            }
+
+            args = { ...defaults, ...args }
+
+            const name = args.name;
+
+            if (!name) {
+                throw new Error("Dashboard name not provided");
+            }
+
+            dashboard.delete_dashboard(name);
         }
     });
 
     clickable_action_handler("dashboard:reload-dashboard", {
         handler: function (_element, args) {
-            console.log("dashboard:reload-dashboard handler called", args);
+            const defaults = {
+                "name": undefined,
+                "url": undefined,
+                "focus": true
+            }
+
+            args = { ...defaults, ...args }
+
+            const name = args.name;
+            const url = args.url;
+            const focus = args.focus;
+
+            if (!name) {
+                throw new Error("Dashboard name not provided");
+            }
+
+            if (!url) {
+                throw new Error("Dashboard URL not provided");
+            }
+
+            dashboard.reload_dashboard(name, url, focus);
         }
     });
 
     clickable_action_handler("dashboard:open-url", {
         handler: function (_element, args) {
-            console.log("dashboard:open-url handler called", args);
+            const defaults = {
+                "url": undefined,
+            }
+
+            args = { ...defaults, ...args  }
+
+            const url = args.url;
+            
+            if (!url) {
+                throw new Error("URL not provided");
+            }
+
+            window.open(url, '_blank');
         }
     });
 

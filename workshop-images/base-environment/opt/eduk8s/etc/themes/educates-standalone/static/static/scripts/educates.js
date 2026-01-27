@@ -165,14 +165,26 @@ const educates = (function () {
                     },
                     body: body
                 })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Unexpected HTTP error');
-                    }
-                    return response.json();
-                })
-                .then(result => {
-                    if (!result.success) {
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Unexpected HTTP error');
+                        }
+                        return response.json();
+                    })
+                    .then(result => {
+                        if (!result.success) {
+                            if (remaining_retries > 0) {
+                                return new Promise(resolve => {
+                                    setTimeout(() => {
+                                        resolve(attempt_call(remaining_retries - 1));
+                                    }, delay * 1000);
+                                });
+                            }
+                            throw new Error(result.message || 'Test failed');
+                        }
+                        return result;
+                    })
+                    .catch(error => {
                         if (remaining_retries > 0) {
                             return new Promise(resolve => {
                                 setTimeout(() => {
@@ -180,20 +192,8 @@ const educates = (function () {
                                 }, delay * 1000);
                             });
                         }
-                        throw new Error(result.message || 'Test failed');
-                    }
-                    return result;
-                })
-                .catch(error => {
-                    if (remaining_retries > 0) {
-                        return new Promise(resolve => {
-                            setTimeout(() => {
-                                resolve(attempt_call(remaining_retries - 1));
-                            }, delay * 1000);
-                        });
-                    }
-                    throw error;
-                });
+                        throw error;
+                    });
             };
 
             return attempt_call(retries);
@@ -210,7 +210,7 @@ const educates = (function () {
 
     document.addEventListener('DOMContentLoaded', function () {
         // Attach event listeners to all inline-copy elements.
-    
+
         const elements = document.querySelectorAll('.inline-copy');
 
         elements.forEach(element => {
@@ -261,9 +261,11 @@ const educates = (function () {
             });
         });
 
-        // Auto-trigger clickable actions with autostart attribute.
+        // Auto-trigger clickable actions with autostart attribute. Note that
+        // any which are contained within the body of a section are excluded
+        // and will only be executed if the section is revealed.
 
-        const autostart_actions = document.querySelectorAll('.clickable-action[data-action-autostart="true"]');
+        const autostart_actions = document.querySelectorAll('.clickable-action[data-action-autostart="true"]:not([data-content-body])');
 
         autostart_actions.forEach(element => {
             element.click();
@@ -323,11 +325,10 @@ const educates = (function () {
 
         // Restore to appropriate icon based on action state.
 
-        if (action_result === 'success') {
-            glyph_element.classList.add('fa-check-circle');
-        } else {
-            // Idle or failure state - restore original icon.
+        if (original_glyph) {
             glyph_element.classList.add(original_glyph);
+        } else {
+            glyph_element.classList.add('fa-question-circle');
         }
     }
 
@@ -389,13 +390,11 @@ const educates = (function () {
 
                     const action_result = element.dataset.actionResult;
 
-                    if (action_result === 'success') {
-                        glyph_element.classList.add('fa-check-circle');
+                    const original_glyph = element.dataset.originalGlyph;
+                    if (original_glyph) {
+                        glyph_element.classList.add(original_glyph);
                     } else {
-                        const original_glyph = element.dataset.originalGlyph;
-                        if (original_glyph) {
-                            glyph_element.classList.add(original_glyph);
-                        }
+                        glyph_element.classList.add('fa-question-circle');
                     }
                 }
             }, 250);
@@ -436,7 +435,7 @@ const educates = (function () {
         // Remove all state classes from glyph element if it exists.
 
         if (glyph_element) {
-            glyph_element.classList.remove('fa-spin', 'fa-cog', 'fa-check-circle', 'fa-times-circle');
+            glyph_element.classList.remove('fa-spin', 'fa-cog', 'fa-check-circle', 'fa-times-circle', 'fa-question-circle');
         }
 
         switch (state) {
@@ -971,10 +970,10 @@ const educates = (function () {
                 "url": undefined,
             }
 
-            args = { ...defaults, ...args  }
+            args = { ...defaults, ...args }
 
             const url = args.url;
-            
+
             if (!url) {
                 throw new Error("URL not provided");
             }
@@ -1156,16 +1155,140 @@ const educates = (function () {
     });
 
     clickable_action_handler("section:heading", {
-        handler: function (_element, args) {}
+        handler: function (_element, args) { }
     });
 
     clickable_action_handler("section:begin", {
-        handler: function (_element, args) {
-            console.log("section:begin handler called", args);
+        setup: function (element, args) {
+            const name = args.name || '';
+
+            element.dataset.sectionName = name;
+            element.dataset.contentState = 'hidden';
+        },
+        handler: function (element, args) {
+            const name = args.name || '';
+
+            // Collect following elements up to (but not including) the matching
+            // section:end.
+
+            const following_elements = [];
+            let section_end_element = null;
+            let sibling = element.nextElementSibling;
+
+            while (sibling) {
+                // Check if this is the matching section:end.
+
+                if (sibling.classList.contains('clickable-action') &&
+                    sibling.dataset.handler === 'section:end' &&
+                    sibling.dataset.sectionName === name) {
+                    section_end_element = sibling;
+                    break;
+                }
+
+                following_elements.push(sibling);
+                sibling = sibling.nextElementSibling;
+            }
+
+            // Filter to elements with matching contentBody.
+
+            const content_elements = following_elements.filter(
+                el => el.dataset.contentBody === name
+            );
+
+            if (element.dataset.contentState === 'hidden') {
+                // Reveal elements with matching contentBody, but don't change
+                // contentState for nested section:begin or section:end elements.
+
+                content_elements.forEach(el => {
+                    const is_section_element = el.classList.contains('clickable-action') &&
+                        (el.dataset.handler === 'section:begin' || el.dataset.handler === 'section:end');
+
+                    if (!is_section_element) {
+                        el.dataset.contentState = 'visible';
+                    }
+
+                    el.style.display = '';
+                });
+
+                element.dataset.contentState = 'visible';
+            } else {
+                // Hide all elements between section:begin and section:end.
+
+                following_elements.forEach(el => {
+                    el.dataset.contentState = 'hidden';
+                    el.style.display = 'none';
+                });
+
+                if (section_end_element) {
+                    section_end_element.dataset.contentState = 'hidden';
+                }
+
+                element.dataset.contentState = 'hidden';
+            }
+        },
+        finish: function (element, args, state, _error) {
+            if (state === 'success') {
+                if (element.dataset.contentState === 'hidden') {
+                    // Override icon to fa-chevron-down.
+                    const glyph_element = element.querySelector('.clickable-action__icon');
+                    if (glyph_element) {
+                        glyph_element.classList.remove('fa-check-circle', 'fa-chevron-up');
+                        element.dataset.originalGlyph = 'fa-chevron-down';
+                        glyph_element.classList.add('fa-chevron-down');
+                    }
+                } else {
+                    // Override icon to fa-chevron-up.
+                    const glyph_element = element.querySelector('.clickable-action__icon');
+                    if (glyph_element) {
+                        glyph_element.classList.remove('fa-check-circle', 'fa-chevron-down');
+                        element.dataset.originalGlyph = 'fa-chevron-up';
+                        glyph_element.classList.add('fa-chevron-up');
+                    }
+                }
+            }
         }
     });
 
     clickable_action_handler("section:end", {
+        setup: function (element, args) {
+            const name = args.name || '';
+
+            element.dataset.sectionName = name;
+            element.dataset.contentBody = name;
+
+            element.dataset.contentState = 'hidden';
+            element.style.display = 'none';
+
+            // Gather all preceding elements up to (but not including) the
+            // matching section:begin.
+
+            const preceding_elements = [];
+            let sibling = element.previousElementSibling;
+
+            while (sibling) {
+                // Check if this is the matching section:begin.
+
+                if (sibling.classList.contains('clickable-action') &&
+                    sibling.dataset.handler === 'section:begin' &&
+                    sibling.dataset.sectionName === name) {
+                    break;
+                }
+
+                preceding_elements.push(sibling);
+                sibling = sibling.previousElementSibling;
+            }
+
+            // Filter out elements that already have contentBody set, then set
+            // it and hide it.
+
+            preceding_elements
+                .filter(el => !el.dataset.contentBody)
+                .forEach(el => {
+                    el.dataset.contentBody = name;
+                    el.dataset.contentState = 'hidden';
+                    el.style.display = 'none';
+                });
+        },
         handler: function (_element, args) {
             console.log("section:end handler called", args);
         }

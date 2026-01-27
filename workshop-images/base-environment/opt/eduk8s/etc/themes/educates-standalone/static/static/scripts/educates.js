@@ -821,7 +821,28 @@ const educates = (function () {
 
     clickable_action_handler("terminal:input", {
         handler: function (_element, args) {
-            console.log("terminal:input handler called", args);
+            const defaults = {
+                "text": undefined,
+                "session": "1",
+                "endl": true,
+            }
+
+            args = { ...defaults, ...args }
+
+            const text = args.text;
+            const session = args.session || "1";
+            const clear = args.clear;
+            const endl = args.endl || true;
+
+            if (!text) {
+                throw new Error("Text not provided");
+            }
+
+            if (endl) {
+                terminals.paste_to_terminal(text + '\n', session);
+            } else {
+                terminals.paste_to_terminal(text, session);
+            }
         }
     });
 

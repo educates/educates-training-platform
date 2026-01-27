@@ -4,9 +4,9 @@
 {{- $glyph := "fa-running" -}}
 {{- $prefix := "Terminal" -}}
 {{- $endl := default true $args.endl -}}
-{{- $title := printf "Input text into terminal %s" (default "1" $args.session) -}}
+{{- $title := printf "Input text into terminal %v" (default "1" $args.session) -}}
 {{- if $endl -}}
-{{- $title = printf "Input text with newline into terminal %s" (default "1" $args.session) -}}
+{{- $title = printf "Input text with newline into terminal %v" (default "1" $args.session) -}}
 {{- end -}}
 {{- $body := $args.text -}}
 {{- if isset $args "description" -}}

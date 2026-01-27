@@ -1211,6 +1211,15 @@ const educates = (function () {
                 });
 
                 element.dataset.contentState = 'visible';
+
+                // Trigger autostart clickable actions within the revealed section.
+
+                content_elements.forEach(el => {
+                    if (el.classList.contains('clickable-action') &&
+                        el.dataset.actionAutostart === 'true') {
+                        execute_action(el.id);
+                    }
+                });
             } else {
                 // Hide all elements between section:begin and section:end.
 

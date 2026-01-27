@@ -1156,9 +1156,7 @@ const educates = (function () {
     });
 
     clickable_action_handler("section:heading", {
-        handler: function (_element, args) {
-            console.log("section:heading handler called", args);
-        }
+        handler: function (_element, args) {}
     });
 
     clickable_action_handler("section:begin", {

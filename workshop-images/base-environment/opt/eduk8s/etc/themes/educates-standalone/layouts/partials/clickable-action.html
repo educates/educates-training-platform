@@ -5,7 +5,7 @@
 {{- $title := default "Invalid action definition" .title -}}
 {{- $body := .body -}}
 {{- $args := default dict .args -}}
-<div class="clickable-action" id="clickable-action-{{ $action }}" onclick="educates.trigger_clickable_action(event)" data-handler="{{ $name }}"{{ if $args.autostart }} data-action-autostart="true"{{ end }}>
+<div class="clickable-action" id="clickable-action-{{ $action }}" onclick="educates.trigger_clickable_action(event)" data-handler="{{ $name }}"{{ if $args.autostart }} data-action-autostart="true"{{ end }}{{ if $args.hidden }} hidden{{ end }}>
     <div class="clickable-action__header">
         <span class="clickable-action__icon fas {{ $glyph }}" aria-hidden="true"></span>
         <span class="clickable-action__title">{{ $prefix }}: {{ $title }}</span>

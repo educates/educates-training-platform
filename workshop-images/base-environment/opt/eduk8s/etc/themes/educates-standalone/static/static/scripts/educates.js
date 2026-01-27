@@ -861,13 +861,19 @@ const educates = (function () {
 
     clickable_action_handler("workshop:copy", {
         handler: function (_element, args) {
-            console.log("workshop:copy handler called", args);
-        }
-    });
+            const defaults = {
+                "text": undefined,
+            }
 
-    clickable_action_handler("workshop:copy-and-edit", {
-        handler: function (_element, args) {
-            console.log("workshop:copy-and-edit handler called", args);
+            args = { ...defaults, ...args }
+
+            const text = args.text;
+
+            if (!text) {
+                throw new Error("Text not provided");
+            }
+
+            set_paste_buffer_to_text(text);
         }
     });
 

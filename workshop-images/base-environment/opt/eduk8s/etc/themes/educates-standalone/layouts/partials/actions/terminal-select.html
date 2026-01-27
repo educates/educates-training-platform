@@ -3,7 +3,7 @@
 {{- $name := "terminal:select" -}}
 {{- $glyph := "fa-running" -}}
 {{- $prefix := "Terminal" -}}
-{{- $title = printf "Select terminal %v" (default "1" $args.session) -}}
+{{- $title := printf "Select terminal %v" (default "1" $args.session) -}}
 {{- $body := "" -}}
 {{- if isset $args "description" -}}
 {{- $body = $args.description -}}

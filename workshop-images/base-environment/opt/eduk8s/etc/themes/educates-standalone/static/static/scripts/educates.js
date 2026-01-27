@@ -831,7 +831,6 @@ const educates = (function () {
 
             const text = args.text;
             const session = args.session || "1";
-            const clear = args.clear;
             const endl = args.endl || true;
 
             if (!text) {
@@ -848,7 +847,15 @@ const educates = (function () {
 
     clickable_action_handler("terminal:select", {
         handler: function (_element, args) {
-            console.log("terminal:select handler called", args);
+            const defaults = {
+                "session": "1"
+            }
+
+            args = { ...defaults, ...args }
+
+            const session = args.session || "1";
+
+            dashboard.expose_terminal(session);
         }
     });
 

@@ -1,4 +1,3 @@
-{{/* NEW STUB FILE - NEEDS REVIEW */}}
 {{- $defaults := dict "cooldown" 3 -}}
 {{- $args := merge $defaults (.Inner | unmarshal) -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}

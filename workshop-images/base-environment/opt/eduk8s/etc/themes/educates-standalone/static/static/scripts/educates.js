@@ -260,6 +260,14 @@ const educates = (function () {
                 dashboard.preview_image(image.src, image.alt);
             });
         });
+
+        // Auto-trigger clickable actions with autostart attribute.
+
+        const autostart_actions = document.querySelectorAll('.clickable-action[data-action-autostart="true"]');
+
+        autostart_actions.forEach(element => {
+            element.click();
+        });
     });
 
     // Table of clickable actions and their handlers. Clickable actions will
@@ -497,6 +505,7 @@ const educates = (function () {
     // Default timeout for action execution in milliseconds.
 
     const ACTION_TIMEOUT_MS = 30000;
+    const ACTION_CASCADE_MS = 750;
 
     function register_clickable_action(action, args) {
         const element = document.getElementById(action);
@@ -649,7 +658,7 @@ const educates = (function () {
             // Handle cascade if configured (after finish callback completes).
 
             if (args.cascade) {
-                const pause = args.pause || 750;
+                const pause = args.pause * 1000 || ACTION_CASCADE_MS;
                 setTimeout(() => trigger_next_action(element), pause);
             }
 
@@ -663,8 +672,6 @@ const educates = (function () {
             await call_finish_callback(ActionState.FAILURE, error);
         }
     }
-
-    // Placeholder for cascade functionality.
 
     function trigger_next_action(element) {
         // Find the next action element by incrementing the numeric suffix in the ID.

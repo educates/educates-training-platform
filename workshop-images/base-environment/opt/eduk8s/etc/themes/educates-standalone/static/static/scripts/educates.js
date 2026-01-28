@@ -128,6 +128,276 @@ const educates = (function () {
         dashboard = parent.educates.dashboard;
     }
 
+    // The Editor class provides integration with VSCode/code-server for file
+    // editing operations. Unlike terminals and dashboard, the editor is accessed
+    // directly via HTTP API calls rather than through the parent frame.
+
+    class Editor {
+        constructor() {
+            this.url = null;
+            this.retries = 25;
+            this.retry_delay = 1000;
+
+            // Try to get configuration from body data attributes.
+
+            const body = document.body;
+            const session_namespace = body.dataset.sessionNamespace;
+            const ingress_domain = body.dataset.ingressDomain;
+            const ingress_protocol = body.dataset.ingressProtocol;
+            const ingress_port_suffix = body.dataset.ingressPortSuffix || '';
+
+            if (session_namespace && ingress_domain && ingress_protocol) {
+                this.url = `${ingress_protocol}://${session_namespace}.${ingress_domain}${ingress_port_suffix}/code-server`;
+            }
+        }
+
+        // Normalize file paths to absolute paths in the home directory.
+
+        fixup_path(file) {
+            if (file.startsWith('~/')) {
+                return file.replace('~/', '/home/eduk8s/');
+            } else if (file.startsWith('$HOME/')) {
+                return file.replace('$HOME/', '/home/eduk8s/');
+            } else if (!file.startsWith('/')) {
+                return '/home/eduk8s/' + file;
+            }
+            return file;
+        }
+
+        // Execute an API call to the editor with retry support for 504 errors.
+
+        execute_call(endpoint, data) {
+            if (!this.url) {
+                return Promise.reject(new Error('Editor not available'));
+            }
+
+            const url = this.url + endpoint;
+            let remaining_retries = this.retries;
+            const retry_delay = this.retry_delay;
+
+            const attempt_call = () => {
+                return fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: data
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 504 && remaining_retries > 0) {
+                                remaining_retries--;
+                                return new Promise(resolve => {
+                                    setTimeout(() => resolve(attempt_call()), retry_delay);
+                                });
+                            }
+                            throw new Error(`HTTP error ${response.status}`);
+                        }
+                        return response.text();
+                    })
+                    .catch(error => {
+                        if (remaining_retries > 0) {
+                            remaining_retries--;
+                            return new Promise(resolve => {
+                                setTimeout(() => resolve(attempt_call()), retry_delay);
+                            });
+                        }
+                        throw error;
+                    });
+            };
+
+            return attempt_call();
+        }
+
+        // Open a file in the editor at the specified line.
+
+        open_file(file, line = 1) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, line });
+            return this.execute_call('/editor/line', data);
+        }
+
+        // Select matching text in a file. Supports regex patterns with groups.
+
+        select_matching_text(file, text, start, stop, isRegex, group, before, after) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!text) {
+                return Promise.reject(new Error('No text to match provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, text, start, stop, isRegex, group, before, after });
+            return this.execute_call('/editor/select-matching-text', data);
+        }
+
+        // Replace the current text selection with new text.
+
+        replace_text_selection(file, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (text === undefined) {
+                return Promise.reject(new Error('No replacement text provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, text });
+            return this.execute_call('/editor/replace-text-selection', data);
+        }
+
+        // Append lines to the end of a file.
+
+        append_lines_to_file(file, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, paste: text });
+            return this.execute_call('/editor/paste', data);
+        }
+
+        // Insert lines before a specific line number.
+
+        insert_lines_before_line(file, line, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, line, paste: text });
+            return this.execute_call('/editor/paste', data);
+        }
+
+        // Append lines after a matching string.
+
+        append_lines_after_match(file, match, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!match) {
+                return Promise.reject(new Error('No string to match provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, prefix: match, paste: text });
+            return this.execute_call('/editor/paste', data);
+        }
+
+        // Insert a value into a YAML file at a specified path.
+
+        insert_value_into_yaml(file, path, value) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!path) {
+                return Promise.reject(new Error('No property path provided'));
+            }
+
+            if (value === undefined) {
+                return Promise.reject(new Error('No property value provided'));
+            }
+
+            file = this.fixup_path(file);
+
+            // Convert value to YAML format. Use js-yaml if available, otherwise
+            // fall back to a simple conversion.
+
+            let yaml_value;
+
+            if (typeof jsyaml !== 'undefined' && jsyaml.dump) {
+                yaml_value = jsyaml.dump(value);
+            } else {
+                yaml_value = this.simple_yaml_dump(value);
+            }
+
+            const data = JSON.stringify({ file, yamlPath: path, paste: yaml_value });
+            return this.execute_call('/editor/paste', data);
+        }
+
+        // Simple YAML serialization for basic types when js-yaml is unavailable.
+
+        simple_yaml_dump(value, indent = 0) {
+            const prefix = '  '.repeat(indent);
+
+            if (value === null || value === undefined) {
+                return 'null';
+            }
+
+            if (typeof value === 'boolean') {
+                return value ? 'true' : 'false';
+            }
+
+            if (typeof value === 'number') {
+                return String(value);
+            }
+
+            if (typeof value === 'string') {
+                // Check if string needs quoting.
+                if (value === '' || /[:\[\]{}#&*!|>'"%@`]/.test(value) ||
+                    value.includes('\n') || /^\s|\s$/.test(value)) {
+                    return JSON.stringify(value);
+                }
+                return value;
+            }
+
+            if (Array.isArray(value)) {
+                if (value.length === 0) {
+                    return '[]';
+                }
+                return value.map(item => {
+                    const dumped = this.simple_yaml_dump(item, indent + 1);
+                    if (typeof item === 'object' && item !== null) {
+                        return `${prefix}- ${dumped.trimStart()}`;
+                    }
+                    return `${prefix}- ${dumped}`;
+                }).join('\n');
+            }
+
+            if (typeof value === 'object') {
+                const keys = Object.keys(value);
+                if (keys.length === 0) {
+                    return '{}';
+                }
+                return keys.map(key => {
+                    const val = value[key];
+                    const dumped = this.simple_yaml_dump(val, indent + 1);
+                    if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+                        return `${prefix}${key}:\n${dumped}`;
+                    } else if (Array.isArray(val)) {
+                        return `${prefix}${key}:\n${dumped}`;
+                    }
+                    return `${prefix}${key}: ${dumped}`;
+                }).join('\n');
+            }
+
+            return String(value);
+        }
+
+        // Execute an editor command with optional arguments.
+
+        execute_command(command, args = []) {
+            if (!command) {
+                return Promise.reject(new Error('No command provided'));
+            }
+
+            const data = JSON.stringify(args);
+            return this.execute_call('/command/' + encodeURIComponent(command), data);
+        }
+    }
+
+    var editor = new Editor();
+
     // The Examiner class implements examiner test execution functionality.
     // The parent frame doesn't currently provide an examiner object, so
     // everything is implemented here, with caveat that we don't do anything
@@ -984,49 +1254,213 @@ const educates = (function () {
 
     clickable_action_handler("editor:open-file", {
         handler: function (_element, args) {
-            console.log("editor:open-file handler called", args);
+            const defaults = {
+                "file": undefined,
+                "line": 1
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.open_file(args.file, args.line);
         }
     });
 
     clickable_action_handler("editor:select-matching-text", {
         handler: function (_element, args) {
-            console.log("editor:select-matching-text handler called", args);
+            const defaults = {
+                "file": undefined,
+                "text": undefined,
+                "start": undefined,
+                "stop": undefined,
+                "isRegex": false,
+                "group": undefined,
+                "before": undefined,
+                "after": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.text) {
+                throw new Error("Text to match not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.select_matching_text(
+                args.file,
+                args.text,
+                args.start,
+                args.stop,
+                args.isRegex,
+                args.group,
+                args.before,
+                args.after
+            );
         }
     });
 
     clickable_action_handler("editor:replace-text-selection", {
         handler: function (_element, args) {
-            console.log("editor:replace-text-selection handler called", args);
+            const defaults = {
+                "file": undefined,
+                "text": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (args.text === undefined) {
+                throw new Error("Replacement text not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.replace_text_selection(args.file, args.text);
         }
     });
 
     clickable_action_handler("editor:append-lines-to-file", {
         handler: function (_element, args) {
-            console.log("editor:append-lines-to-file handler called", args);
+            const defaults = {
+                "file": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.append_lines_to_file(args.file, args.text);
         }
     });
 
     clickable_action_handler("editor:insert-lines-before-line", {
         handler: function (_element, args) {
-            console.log("editor:insert-lines-before-line handler called", args);
+            const defaults = {
+                "file": undefined,
+                "line": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (args.line === undefined) {
+                throw new Error("Line number not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.insert_lines_before_line(args.file, args.line, args.text);
         }
     });
 
     clickable_action_handler("editor:append-lines-after-match", {
         handler: function (_element, args) {
-            console.log("editor:append-lines-after-match handler called", args);
+            const defaults = {
+                "file": undefined,
+                "match": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.match) {
+                throw new Error("Match string not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.append_lines_after_match(args.file, args.match, args.text);
         }
     });
 
     clickable_action_handler("editor:insert-value-into-yaml", {
+        setup: function (element, args) {
+            // Hugo can't display data as YAML directly, so we need to extract
+            // out JSON from the code block located within the pre block with
+            // class "clickable-action__body", reformat as YAML and insert it
+            // back into the code block.
+
+            const body_element = element.querySelector('.clickable-action__body code');
+
+            if (body_element) {
+                try {
+                    const json_data = JSON.parse(body_element.textContent);
+                    const yaml_data = jsyaml.dump(json_data);
+                    body_element.textContent = yaml_data;
+                } catch (error) {
+                    console.error("Failed to convert JSON to YAML in action body:", error);
+                }
+            }
+        },
         handler: function (_element, args) {
-            console.log("editor:insert-value-into-yaml handler called", args);
+            const defaults = {
+                "file": undefined,
+                "path": undefined,
+                "value": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.path) {
+                throw new Error("YAML path not provided");
+            }
+
+            if (args.value === undefined) {
+                throw new Error("Value not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.insert_value_into_yaml(args.file, args.path, args.value);
         }
     });
 
     clickable_action_handler("editor:execute-command", {
         handler: function (_element, args) {
-            console.log("editor:execute-command handler called", args);
+            const defaults = {
+                "command": undefined,
+                "args": []
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.command) {
+                throw new Error("Command not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.execute_command(args.command, args.args);
         }
     });
 

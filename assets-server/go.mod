@@ -1,6 +1,6 @@
 module github.com/educates/educates-training-platform/assets-server
 
-go 1.20
+go 1.25.6
 
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

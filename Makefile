@@ -157,7 +157,7 @@ endif
 # Push/Load configuration - can be overridden by PUSH_IMAGES env var or make parameter
 ifeq ($(PUSH_IMAGES),false)
 # Load images locally when PUSH_IMAGES is not true (default)
-DOCKER_BUILDER =
+DOCKER_BUILDER = --builder ${BUILDX_BUILDER} --load
 MULTIARCH_PLATFORMS = $(DOCKER_PLATFORM)
 else
 # Push images to registry when PUSH_IMAGES is true
@@ -173,7 +173,7 @@ build-all-images: setup-buildx build-session-manager build-training-portal \
   build-conda-environment build-docker-registry \
   build-pause-container build-secrets-manager build-tunnel-manager \
   build-image-cache build-assets-server build-lookup-service \
-  build-node-ca-injector build-cli-image
+  build-node-ca-injector build-cli-image build-docker-extension
 
 build-core-images: setup-buildx build-session-manager build-training-portal \
   build-base-environment build-docker-registry build-pause-container \
@@ -349,7 +349,7 @@ push-client-programs: build-client-programs
 	(cd client-programs; GOOS=darwin GOARCH=arm64 go build -o bin/educates-darwin-arm64 cmd/educates/main.go)
 	imgpkg push -i $(IMAGE_REPOSITORY)/educates-client-programs:$(PACKAGE_VERSION) -f client-programs/bin
 
-build-cli-image:
+build-cli-image: build-base-environment
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-cli:$(PACKAGE_VERSION) \

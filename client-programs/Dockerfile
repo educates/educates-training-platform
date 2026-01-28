@@ -5,16 +5,16 @@ ARG TAG=latest
 FROM ${REPOSITORY}/educates-base-environment:${TAG} AS themes-source
 
 # Multi-stage build for client-programs
-FROM golang:1.25.0-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
+FROM golang:1.25.6 AS builder
 
 # Set working directory
 WORKDIR /src
 
 # Copy go mod files
 COPY go.mod go.sum ./
+
+# Tidy up dependencies
+RUN go mod tidy
 
 # Download dependencies
 RUN go mod download
@@ -40,7 +40,6 @@ RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
 
 # Runtime stage - minimal image with binaries
 FROM scratch
-# Build for multiple architectures
 ARG TARGETOS
 ARG TARGETARCH
 # Copy binaries from builder

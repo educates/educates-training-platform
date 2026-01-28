@@ -41,7 +41,7 @@ func LocalCachedSecretForIngressDomain(domain string) string {
 			annotations := secretObj.ObjectMeta.Annotations
 
 			// Domain name must match.
-			if val, found := annotations["training.educates.dev/domain"]; !found || val != domain {
+			if val, found := annotations[constants.EducatesTrainingLabelAnnotationDomain]; !found || val != domain {
 				continue
 			}
 
@@ -84,7 +84,7 @@ func LocalCachedSecretForCertificateAuthority(domain string) string {
 			annotations := secretObj.ObjectMeta.Annotations
 
 			// Domain name must match.
-			if val, found := annotations["training.educates.dev/domain"]; !found || val != domain {
+			if val, found := annotations[constants.EducatesTrainingLabelAnnotationDomain]; !found || val != domain {
 				continue
 			}
 

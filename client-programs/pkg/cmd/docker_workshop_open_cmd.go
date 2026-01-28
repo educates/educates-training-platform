@@ -82,7 +82,7 @@ func (o *DockerWorkshopOpenOptions) Run() error {
 		return errors.New("unable to find workshop")
 	}
 
-	url, found := container.Config.Labels["training.educates.dev/url"]
+	url, found := container.Config.Labels[constants.EducatesWorkshopLabelAnnotationURL]
 
 	if !found || url == "" {
 		return errors.New("can't determine URL for workshop")

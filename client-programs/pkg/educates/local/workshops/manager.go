@@ -11,6 +11,7 @@ import (
 	vendirsync "carvel.dev/vendir/pkg/vendir/cmd"
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	eduk8sWorkshops "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
 	"github.com/educates/educates-training-platform/client-programs/pkg/logger"
 	"github.com/educates/educates-training-platform/client-programs/pkg/templates"
@@ -134,7 +135,7 @@ func (m *WorkshopManager) Export(directory string,o *WorkshopExportConfig) (stri
 		return "", errors.Wrap(err, "couldn't parse workshop definition")
 	}
 
-	if workshop.GetAPIVersion() != "training.educates.dev/v1beta1" || workshop.GetKind() != "Workshop" {
+	if workshop.GetAPIVersion() != constants.EducatesTrainingAPIGroupVersion || workshop.GetKind() != "Workshop" {
 		return "", errors.New("invalid type for workshop definition")
 	}
 
@@ -213,7 +214,7 @@ func (m *WorkshopManager) Publish(directory string,o *WorkshopPublishConfig) err
 
 	carvelUI.PrintLinef("Processing workshop with name %q", workshop.GetName())
 
-	if workshop.GetAPIVersion() != "training.educates.dev/v1beta1" || workshop.GetKind() != "Workshop" {
+	if workshop.GetAPIVersion() != constants.EducatesTrainingAPIGroupVersion || workshop.GetKind() != "Workshop" {
 		return errors.New("invalid type for workshop definition")
 	}
 

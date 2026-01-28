@@ -7,7 +7,7 @@ import { handleGoTo } from "../common/goto";
 import { Workshop, ListResponse, DeployResponse, DeleteResponse } from "../common/types";
 import { isValidURL } from "../common/validations";
 import OptionsPane from "../components/OptionsPane/OptionsPane";
-import { LoadingButton } from "@mui/lab";
+import Button from "@mui/material/Button";
 
 const sampleWorkshopURL =
   "https://github.com/educates/lab-container-basics/releases/latest/download/workshop.yaml";
@@ -171,9 +171,9 @@ export function App() {
           </Grid>
           <Grid item xs={1}>
             <Box sx={{ m: 1, position: "relative" }}>
-              <LoadingButton variant="contained" loading={queryingBackend} onClick={start}>
+              <Button variant="contained" loading={queryingBackend} onClick={start}>
                 Start
-              </LoadingButton>
+              </Button>
             </Box>
           </Grid>
           <Grid item xs={2}>

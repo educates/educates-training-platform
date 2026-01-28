@@ -32,7 +32,7 @@ func (p *ProjectInfo) NewDockerWorkshopListCmd() *cobra.Command {
 			for _, workshop := range workshops {
 				data = append(data, []string{workshop.Name, workshop.Url, workshop.Source, workshop.Status})
 			}
-			fmt.Print(utils.PrintTable([]string{"NAME", "URL", "SOURCE", "STATUS"}, data))
+			fmt.Println(utils.PrintTable([]string{"NAME", "URL", "SOURCE", "STATUS"}, data))
 
 			return nil
 		},

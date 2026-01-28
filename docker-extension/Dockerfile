@@ -4,7 +4,7 @@ ARG TAG=latest
 
 FROM ${REPOSITORY}/${CLI_IMAGE_NAME}:${TAG} AS client-programs
 
-FROM node:24-alpine AS client-builder
+FROM node:24 AS client-builder
 WORKDIR /ui
 # cache packages in layer
 COPY ui/package.json /ui/package.json
@@ -20,9 +20,9 @@ FROM debian:trixie-slim
 
 LABEL org.opencontainers.image.title="Educates Docker Desktop Extension" \
     org.opencontainers.image.description="Spin up a local Educates Training Platform workshop" \
-    org.opencontainers.image.vendor="Educates" \
+    org.opencontainers.image.vendor="Educates Team" \
     org.opencontainers.image.licenses="Apache-2.0" \
-    com.docker.desktop.extension.api.version="0.3.4" \
+    com.docker.desktop.extension.api.version="0.4.2" \
     com.docker.extension.screenshots="" \
     com.docker.desktop.extension.icon="https://raw.githubusercontent.com/educates/educates-training-platform/main/project-assets/educates-logo.svg" \
     com.docker.extension.detailed-description="Spin up a local Educates Training Platform workshop" \

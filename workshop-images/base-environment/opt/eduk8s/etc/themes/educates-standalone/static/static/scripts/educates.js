@@ -1,9 +1,38 @@
 const educates = (function () {
-    // Function to copy text to clipboard
+    // Function to copy text to clipboard. Uses the modern Clipboard API with
+    // fallback to the deprecated execCommand method for browsers that don't
+    // support it or when the Clipboard API fails due to permissions.
+
     function set_paste_buffer_to_text(text) {
-        navigator.clipboard.writeText(text).catch(err => {
-            console.error('Failed to copy text: ', err);
-        });
+        function fallback_copy(text) {
+            const textarea = document.createElement('textarea');
+
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            textarea.style.top = '-9999px';
+
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+            }
+
+            document.body.removeChild(textarea);
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(err => {
+                console.warn('Clipboard API failed, using fallback:', err);
+                fallback_copy(text);
+            });
+        } else {
+            fallback_copy(text);
+        }
     }
 
     // The Terminals class is a stub implementation which will be replaced
@@ -1565,26 +1594,308 @@ const educates = (function () {
     });
 
     clickable_action_handler("files:download-file", {
+        setup: function (element, args) {
+            // If preview is enabled, fetch and display file content in the body.
+
+            if (args.preview) {
+                const body_element = element.querySelector('.clickable-action__body code');
+
+                if (body_element) {
+                    let url = `/files/${args.path}`;
+
+                    if (args.url) {
+                        url = args.url;
+                    }
+
+                    fetch(url)
+                        .then(response => response.text())
+                        .then(text => {
+                            body_element.textContent = text;
+                        })
+                        .catch(error => console.error('Failed to fetch file preview:', error));
+                }
+            }
+        },
         handler: function (_element, args) {
-            console.log("files:download-file handler called", args);
+            const defaults = {
+                "path": undefined,
+                "url": undefined,
+                "download": undefined,
+                "preview": false
+            };
+
+            args = { ...defaults, ...args };
+
+            if (args.url) {
+                return fetch(args.url)
+                    .then(response => response.text())
+                    .then(text => {
+                        const url = new URL(args.url);
+                        const pathname = url.pathname;
+                        const basename = pathname.split('/').pop() || url.hostname || 'download.txt';
+
+                        const download_link = document.createElement('a');
+                        const blob = new Blob([text], { type: 'octet/stream' });
+
+                        download_link.setAttribute('href', window.URL.createObjectURL(blob));
+                        download_link.setAttribute('download', args.download || basename);
+                        download_link.style.display = 'none';
+
+                        document.body.appendChild(download_link);
+                        download_link.click();
+                        document.body.removeChild(download_link);
+                    });
+            } else {
+                const pathname = `/files/${args.path}`;
+                const basename = pathname.split('/').pop();
+
+                const download_link = document.createElement('a');
+
+                download_link.setAttribute('href', pathname);
+                download_link.setAttribute('download', args.download || basename);
+                download_link.style.display = 'none';
+
+                document.body.appendChild(download_link);
+                download_link.click();
+                document.body.removeChild(download_link);
+
+                return Promise.resolve();
+            }
         }
     });
 
     clickable_action_handler("files:copy-file", {
-        handler: function (_element, args) {
-            console.log("files:copy-file handler called", args);
+        setup: function (element, args) {
+            // If preview is enabled, fetch and display file content in the body.
+            // The content is also cached for use by the handler.
+
+            if (args.preview) {
+                let url = `/files/${args.path}`;
+
+                if (args.url) {
+                    url = args.url;
+                }
+
+                fetch(url)
+                    .then(response => response.text())
+                    .then(text => {
+                        // Cache the content for use in handler.
+
+                        element.dataset.cachedFileContent = text;
+
+                        // Display in the body.
+
+                        const body_element = element.querySelector('.clickable-action__body code');
+
+                        if (body_element) {
+                            body_element.textContent = text;
+                        }
+                    })
+                    .catch(error => console.error('Failed to fetch file preview:', error));
+            }
+        },
+        handler: function (element, args) {
+            // Use cached content if available (from preview fetch).
+
+            const cached_content = element.dataset.cachedFileContent;
+
+            if (cached_content !== undefined) {
+                set_paste_buffer_to_text(cached_content);
+                return Promise.resolve();
+            }
+
+            // Fetch content if not cached. The fallback in set_paste_buffer_to_text
+            // using execCommand should handle cases where the Clipboard API fails
+            // due to user activation expiry.
+
+            const defaults = {
+                "path": undefined,
+                "url": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            let url = `/files/${args.path}`;
+
+            if (args.url) {
+                url = args.url;
+            }
+
+            return fetch(url)
+                .then(response => response.text())
+                .then(text => {
+                    set_paste_buffer_to_text(text);
+                });
         }
     });
 
     clickable_action_handler("files:upload-file", {
-        handler: function (_element, args) {
-            console.log("files:upload-file handler called", args);
+        setup: function (element, args) {
+            const header_element = element.querySelector('.clickable-action__header');
+            const body_element = element.querySelector('.clickable-action__body');
+
+            // Create form element with file input.
+
+            const form_element = document.createElement('form');
+
+            form_element.innerHTML = `
+                <div class="form-group">
+                    <input type="hidden" name="path" value="${args.path || ''}">
+                    <input type="file" class="form-control-file" name="file" id="file" required>
+                </div>
+                <div class="form-group my-2">
+                    <input type="submit" class="btn btn-primary" id="form-action-submit" value="Upload">
+                </div>
+            `;
+
+            // Create wrapper div with clickable-action__form class.
+
+            const div_element = document.createElement('div');
+
+            div_element.className = 'clickable-action__form';
+            div_element.appendChild(form_element);
+
+            // Prevent Enter key from submitting in non-textarea inputs.
+
+            form_element.addEventListener('keydown', function (event) {
+                if (event.target.tagName !== 'TEXTAREA' && event.key === 'Enter') {
+                    event.preventDefault();
+                }
+            });
+
+            // Handle form submission.
+
+            form_element.addEventListener('submit', function (event) {
+                event.preventDefault();
+
+                if (form_element.checkValidity()) {
+                    execute_action(element.id);
+                } else {
+                    form_element.reportValidity();
+                }
+            });
+
+            // Insert form div after the header element.
+
+            header_element.after(div_element);
+
+            // Hide the body element.
+
+            body_element.style.display = 'none';
+
+            // Disable default click-to-trigger so only submit button triggers action.
+
+            element.dataset.clickDisabled = 'true';
+        },
+        handler: function (element, args) {
+            const form_element = element.querySelector('.clickable-action__form > form');
+
+            if (!form_element) {
+                return Promise.reject(new Error('Form not found'));
+            }
+
+            const form_data = new FormData(form_element);
+
+            return fetch('/upload/file', {
+                method: 'POST',
+                body: form_data
+            })
+                .then(response => {
+                    if (response.status !== 200) {
+                        throw new Error('Upload failed');
+                    }
+                    return response.text();
+                })
+                .then(data => {
+                    if (data !== 'OK') {
+                        throw new Error('Upload failed');
+                    }
+                });
         }
     });
 
     clickable_action_handler("files:upload-files", {
-        handler: function (_element, args) {
-            console.log("files:upload-files handler called", args);
+        setup: function (element, args) {
+            const header_element = element.querySelector('.clickable-action__header');
+            const body_element = element.querySelector('.clickable-action__body');
+
+            // Create form element with multiple file input.
+
+            const form_element = document.createElement('form');
+
+            form_element.innerHTML = `
+                <div class="form-group">
+                    <input type="hidden" name="directory" value="${args.directory || ''}">
+                    <input type="file" class="form-control-file" name="files" id="files" multiple required>
+                </div>
+                <div class="form-group my-2">
+                    <input type="submit" class="btn btn-primary" id="form-action-submit" value="Upload">
+                </div>
+            `;
+
+            // Create wrapper div with clickable-action__form class.
+
+            const div_element = document.createElement('div');
+
+            div_element.className = 'clickable-action__form';
+            div_element.appendChild(form_element);
+
+            // Prevent Enter key from submitting in non-textarea inputs.
+
+            form_element.addEventListener('keydown', function (event) {
+                if (event.target.tagName !== 'TEXTAREA' && event.key === 'Enter') {
+                    event.preventDefault();
+                }
+            });
+
+            // Handle form submission.
+
+            form_element.addEventListener('submit', function (event) {
+                event.preventDefault();
+
+                if (form_element.checkValidity()) {
+                    execute_action(element.id);
+                } else {
+                    form_element.reportValidity();
+                }
+            });
+
+            // Insert form div after the header element.
+
+            header_element.after(div_element);
+
+            // Hide the body element.
+
+            body_element.style.display = 'none';
+
+            // Disable default click-to-trigger so only submit button triggers action.
+
+            element.dataset.clickDisabled = 'true';
+        },
+        handler: function (element, args) {
+            const form_element = element.querySelector('.clickable-action__form > form');
+
+            if (!form_element) {
+                return Promise.reject(new Error('Form not found'));
+            }
+
+            const form_data = new FormData(form_element);
+
+            return fetch('/upload/files', {
+                method: 'POST',
+                body: form_data
+            })
+                .then(response => {
+                    if (response.status !== 200) {
+                        throw new Error('Upload failed');
+                    }
+                    return response.text();
+                })
+                .then(data => {
+                    if (data !== 'OK') {
+                        throw new Error('Upload failed');
+                    }
+                });
         }
     });
 
@@ -1732,9 +2043,7 @@ const educates = (function () {
                     el.style.display = 'none';
                 });
         },
-        handler: function (_element, args) {
-            console.log("section:end handler called", args);
-        }
+        handler: function (_element, args) {}
     });
 
     // Exported functions.

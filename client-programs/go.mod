@@ -1,6 +1,6 @@
 module github.com/educates/educates-training-platform/client-programs
 
-go 1.24.10
+go 1.25.6
 
 require (
 	carvel.dev/imgpkg v0.46.1

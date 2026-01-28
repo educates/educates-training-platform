@@ -1,11 +1,16 @@
-FROM golang:1.19-buster AS builder-image
+FROM golang:1.25.6 AS builder-image
 
 WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod tidy
+RUN go mod download
+COPY . .
+ARG TARGETOS
+ARG TARGETARCH
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+    -o assets-server \
+    main.go
 
-COPY . /app/
-
-RUN go mod download && \
-    go build -o assets-server main.go
 
 FROM fedora:42
 

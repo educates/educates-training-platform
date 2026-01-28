@@ -1,6 +1,13 @@
 IMAGE_REPOSITORY = localhost:5001
 PACKAGE_VERSION = latest
 
+# Create an alias for the image repository that sanitizes invalid characters
+# Docker Compose project names must consist only of lowercase alphanumeric characters,
+# hyphens, and underscores, and start with a letter or number
+IMAGE_ALIAS := $(shell echo $(IMAGE_REPOSITORY) | tr '[:upper:]' '[:lower:]' | sed 's/:/_/g' | sed 's/[^a-z0-9_-]//g' | sed 's/^[^a-z0-9]/a&/')
+IMAGE = $(IMAGE_REPOSITORY)/educates-docker-extension:$(PACKAGE_VERSION)
+IMAGE_ALIAS_FULL = $(IMAGE_ALIAS)/educates-docker-extension:$(PACKAGE_VERSION)
+
 UNAME_SYSTEM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 UNAME_MACHINE := $(shell uname -m)
 
@@ -42,26 +49,36 @@ DEV_UI_SOURCE?=http://localhost:3000
 build-extension: setup-buildx ## Build service image to be deployed as a desktop extension
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(if $(DOCKER_BUILDER),$(DOCKER_BUILDER)) \
-		-t $(IMAGE_REPOSITORY)/educates-docker-extension:$(PACKAGE_VERSION) \
+		-t $(IMAGE) \
 		.
 
-install-extension: build-extension ## Install the extension
-	docker extension install --force $(IMAGE_REPOSITORY)/educates-docker-extension:$(PACKAGE_VERSION)
+# Internal target to ensure alias tag exists when repository has invalid characters
+.PHONY: _ensure-alias-tag
+_ensure-alias-tag: build-extension
+	@if [ "$(IMAGE)" != "$(IMAGE_ALIAS_FULL)" ]; then \
+		if ! docker image inspect $(IMAGE_ALIAS_FULL) >/dev/null 2>&1; then \
+			echo "Tagging image with alias: $(IMAGE_ALIAS_FULL)"; \
+			docker tag $(IMAGE) $(IMAGE_ALIAS_FULL) || true; \
+		fi; \
+	fi
 
-update-extension: build-extension ## Update the extension
-	docker extension update --force $(IMAGE_REPOSITORY)/educates-docker-extension:$(PACKAGE_VERSION)
+install-extension: _ensure-alias-tag ## Install the extension
+	docker extension install --force $(IMAGE_ALIAS_FULL)
+
+update-extension: _ensure-alias-tag ## Update the extension
+	docker extension update --force $(IMAGE_ALIAS_FULL)
 
 setup-buildx: ## Create buildx builder for multi-arch build, if not exists
 	docker buildx create --name $(BUILDX_BUILDER) --driver docker-container --driver-opt default-load=true --driver-opt network=host --use || true
 	docker buildx inspect $(BUILDX_BUILDER) --bootstrap
 
 .PHONY: debug
-debug: ## Enable debug in the extension
-	docker extension dev debug $(IMAGE_REPOSITORY)/educates-docker-extension:$(PACKAGE_VERSION)
+debug: _ensure-alias-tag ## Enable debug in the extension
+	docker extension dev debug $(IMAGE_ALIAS_FULL)
 
 .PHONY: source
-source: ## Replace the UI source of the extension
-	docker extension dev ui-source $(IMAGE_REPOSITORY)/educates-docker-extension:$(PACKAGE_VERSION) $(DEV_UI_SOURCE)
+source: _ensure-alias-tag ## Replace the UI source of the extension
+	docker extension dev ui-source $(IMAGE_ALIAS_FULL) $(DEV_UI_SOURCE)
 
 .PHONY: dev-enable
 dev-enable: source debug

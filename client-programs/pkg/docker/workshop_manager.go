@@ -22,6 +22,8 @@ import (
 	"github.com/docker/compose/v5/pkg/api"
 	"github.com/docker/compose/v5/pkg/compose"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	eduk8sWorkshops "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
@@ -31,6 +33,18 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/kind/pkg/cmd"
+)
+
+const (
+	// Workshop status constants
+	WorkshopStatusStarting = "Starting"
+	WorkshopStatusRunning  = "Running"
+	WorkshopStatusStopping = "Stopping"
+
+	// Workshop label constants
+	LabelURL     = "training.educates.dev/url"
+	LabelSource  = "training.educates.dev/source"
+	LabelSession = "training.educates.dev/session"
 )
 
 const containerScript = `exec bash -s << "EOF"
@@ -72,11 +86,19 @@ exec start-container
 EOF
 `
 
+var (
+	containerScriptTemplateOnce   sync.Once
+	containerScriptTemplateCached *template.Template
+	containerScriptTemplateErr    error
+)
+
 type DockerWorkshopsManager struct {
 	Statuses         map[string]DockerWorkshopDetails
 	StatusesMutex    sync.Mutex
 	composeService   api.Compose
 	composeServiceMu sync.Mutex
+	dockerClient     *client.Client
+	dockerClientMu   sync.RWMutex
 }
 
 func NewDockerWorkshopsManager() DockerWorkshopsManager {
@@ -149,47 +171,43 @@ func (m *DockerWorkshopsManager) ClearWorkshopStatus(name string) {
 }
 
 func (m *DockerWorkshopsManager) ListWorkshops() ([]DockerWorkshopDetails, error) {
-	setOfWorkshops := map[string]DockerWorkshopDetails{}
-	workshopsList := []DockerWorkshopDetails{}
-
 	ctx := context.Background()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-
+	cli, err := m.GetDockerClient()
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to create docker client")
+		return nil, err
 	}
 
 	containers, err := cli.ContainerList(ctx, container.ListOptions{})
-
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to list containers")
 	}
 
+	// Copy statuses while holding lock briefly
 	m.StatusesMutex.Lock()
-
+	setOfWorkshops := make(map[string]DockerWorkshopDetails, len(m.Statuses))
 	for _, details := range m.Statuses {
-		if details.Status == "Starting" {
+		if details.Status == WorkshopStatusStarting {
 			setOfWorkshops[details.Name] = details
 		}
 	}
+	statusesCopy := make(map[string]DockerWorkshopDetails, len(m.Statuses))
+	for k, v := range m.Statuses {
+		statusesCopy[k] = v
+	}
+	m.StatusesMutex.Unlock()
 
-	defer m.StatusesMutex.Unlock()
+	for _, ctr := range containers {
+		url, found := ctr.Labels[LabelURL]
+		source := ctr.Labels[LabelSource]
+		instance := ctr.Labels[LabelSession]
 
-	for _, container := range containers {
-		url, found := container.Labels["training.educates.dev/url"]
-		source := container.Labels["training.educates.dev/source"]
-		instance := container.Labels["training.educates.dev/session"]
-
-		details, statusFound := m.Statuses[instance]
-
-		status := "Running"
-
-		if statusFound {
+		status := WorkshopStatusRunning
+		if details, statusFound := statusesCopy[instance]; statusFound {
 			status = details.Status
 		}
 
-		if found && url != "" && len(container.Names) != 0 {
+		if found && url != "" && len(ctr.Names) != 0 {
 			setOfWorkshops[instance] = DockerWorkshopDetails{
 				Name:   instance,
 				Url:    url,
@@ -199,6 +217,7 @@ func (m *DockerWorkshopsManager) ListWorkshops() ([]DockerWorkshopDetails, error
 		}
 	}
 
+	workshopsList := make([]DockerWorkshopDetails, 0, len(setOfWorkshops))
 	for _, details := range setOfWorkshops {
 		workshopsList = append(workshopsList, details)
 	}
@@ -242,6 +261,79 @@ func (m *DockerWorkshopsManager) GetComposeService(stdout io.Writer, stderr io.W
 	return service, nil
 }
 
+// GetDockerClient returns a Docker client instance, initializing it if necessary.
+// It uses a singleton pattern to reuse the same client instance across operations.
+func (m *DockerWorkshopsManager) GetDockerClient() (*client.Client, error) {
+	// Try read lock first for fast path
+	m.dockerClientMu.RLock()
+	if m.dockerClient != nil {
+		defer m.dockerClientMu.RUnlock()
+		return m.dockerClient, nil
+	}
+	m.dockerClientMu.RUnlock()
+
+	// Acquire write lock to initialize
+	m.dockerClientMu.Lock()
+	defer m.dockerClientMu.Unlock()
+
+	// Double-check after acquiring write lock
+	if m.dockerClient != nil {
+		return m.dockerClient, nil
+	}
+
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to create docker client")
+	}
+
+	m.dockerClient = cli
+	return cli, nil
+}
+
+// getContainerScriptTemplate returns the cached container script template.
+func getContainerScriptTemplate() (*template.Template, error) {
+	containerScriptTemplateOnce.Do(func() {
+		funcMap := template.FuncMap{
+			"inc": func(i int) int { return i + 1 },
+		}
+		containerScriptTemplateCached, containerScriptTemplateErr =
+			template.New("entrypoint").Funcs(funcMap).Parse(containerScript)
+	})
+	return containerScriptTemplateCached, containerScriptTemplateErr
+}
+
+
+// isDockerSocketEnabled checks if Docker socket is enabled in the workshop spec.
+func isDockerSocketEnabled(workshop *unstructured.Unstructured) bool {
+	dockerEnabled, found, _ := unstructured.NestedBool(
+		workshop.Object, "spec", "session", "applications", "docker", "enabled")
+	if !found || !dockerEnabled {
+		return false
+	}
+
+	extraServices, _, _ := unstructured.NestedMap(
+		workshop.Object, "spec", "session", "applications", "docker", "compose")
+
+	socketEnabledDefault := len(extraServices) == 0
+	socketEnabled, found, _ := unstructured.NestedBool(
+		workshop.Object, "spec", "session", "applications", "docker", "socket", "enabled")
+
+	if !found {
+		return socketEnabledDefault
+	}
+	return socketEnabled
+}
+
+// applyWorkshopVariables replaces workshop-related variables in a string efficiently.
+func applyWorkshopVariables(content, name, localRepository, version string) string {
+	replacer := strings.NewReplacer(
+		"$(image_repository)", localRepository,
+		"$(workshop_name)", name,
+		"$(workshop_version)", version,
+		"$(platform_arch)", runtime.GOARCH,
+	)
+	return replacer.Replace(content)
+}
 
 func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, stdout io.Writer, stderr io.Writer) (string, error) {
 	var err error
@@ -274,7 +366,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 
 	name := workshop.GetName()
 
-	m.SetWorkshopStatus(name, "", o.Path, "Starting")
+	m.SetWorkshopStatus(name, "", o.Path, WorkshopStatusStarting)
 
 	defer m.ClearWorkshopStatus(name)
 
@@ -291,10 +383,9 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 
 	ctx := context.Background()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-
+	cli, err := m.GetDockerClient()
 	if err != nil {
-		return name, errors.Wrap(err, "unable to create docker client")
+		return name, err
 	}
 
 	_, err = cli.ContainerInspect(ctx, name)
@@ -418,14 +509,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 		Assets:               o.Assets,
 	}
 
-	funcMap := template.FuncMap{
-		"inc": func(i int) int {
-			return i + 1
-		},
-	}
-
-	containerScriptTemplate, err := template.New("entrypoint").Funcs(funcMap).Parse(containerScript)
-
+	containerScriptTemplate, err := getContainerScriptTemplate()
 	if err != nil {
 		return name, errors.Wrap(err, "not able to parse container script template")
 	}
@@ -472,26 +556,8 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 		workshopServiceConfig.Networks["kind"] = &composetypes.ServiceNetworkConfig{}
 	}
 
-	dockerEnabled, found, _ := unstructured.NestedBool(workshop.Object, "spec", "session", "applications", "docker", "enabled")
-
-	if found && dockerEnabled {
-		extraServices, _, _ := unstructured.NestedMap(workshop.Object, "spec", "session", "applications", "docker", "compose")
-
-		socketEnabledDefault := true
-
-		if len(extraServices) != 0 {
-			socketEnabledDefault = false
-		}
-
-		socketEnabled, found, _ := unstructured.NestedBool(workshop.Object, "spec", "session", "applications", "docker", "socket", "enabled")
-
-		if !found {
-			socketEnabled = socketEnabledDefault
-		}
-
-		if socketEnabled {
-			workshopServiceConfig.GroupAdd = []string{"docker"}
-		}
+	if isDockerSocketEnabled(workshop) {
+		workshopServiceConfig.GroupAdd = []string{"docker"}
 	}
 
 	workshopServices := composetypes.Services{
@@ -585,7 +651,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 }
 
 func (m *DockerWorkshopsManager) DeleteWorkshop(name string, stdout io.Writer, stderr io.Writer) error {
-	m.SetWorkshopStatus(name, "", "", "Stopping")
+	m.SetWorkshopStatus(name, "", "", WorkshopStatusStopping)
 
 	defer m.ClearWorkshopStatus(name)
 
@@ -626,22 +692,32 @@ func (m *DockerWorkshopsManager) DeleteWorkshop(name string, stdout io.Writer, s
 		return errors.Wrap(err, "unable to stop workshop")
 	}
 
-	cli, err2 := client.NewClientWithOpts(client.FromEnv)
-
-	if err2 != nil {
-		return errors.Wrap(err2, "unable to create docker client")
+	cli, err := m.GetDockerClient()
+	if err != nil {
+		return err
 	}
 
-	err2 = cli.VolumeRemove(ctx, fmt.Sprintf("%s_workshop", name), false)
-
-	if err2 != nil {
-		return errors.Wrap(err2, "unable to delete workshop volume")
+	// List volumes that match the workshop name pattern and remove them
+	filters := filters.NewArgs()
+	filters.Add("name", fmt.Sprintf("%s_workshop", name))
+	volumesListResponse, err := cli.VolumeList(ctx, volume.ListOptions{Filters: filters})
+	if err != nil {
+		return errors.Wrap(err, "unable to list workshop volumes")
 	}
 
+	for _, volume := range volumesListResponse.Volumes {
+		if err := cli.VolumeRemove(ctx, volume.Name, false); err != nil {
+			return errors.Wrap(err, "unable to delete workshop volume")
+		}
+	}
 	workshopConfigDir := path.Join(configFileDir, "workshops", name)
 
-	os.RemoveAll(workshopConfigDir)
-	os.RemoveAll(composeConfigDir)
+	if err := os.RemoveAll(workshopConfigDir); err != nil {
+		fmt.Fprintf(stderr, "Warning: failed to remove workshop config dir: %v\n", err)
+	}
+	if err := os.RemoveAll(composeConfigDir); err != nil {
+		fmt.Fprintf(stderr, "Warning: failed to remove compose config dir: %v\n", err)
+	}
 
 	return nil
 }
@@ -679,107 +755,41 @@ func generateVendirFilesConfig(workshop *unstructured.Unstructured, name string,
 	var vendirConfigs []string
 
 	workshopVersion, found, _ := unstructured.NestedString(workshop.Object, "spec", "version")
-
 	if !found {
 		workshopVersion = version
 	}
 
 	filesItems, found, _ := unstructured.NestedSlice(workshop.Object, "spec", "workshop", "files")
+	if !found || len(filesItems) == 0 {
+		return vendirConfigs, nil
+	}
 
-	if found && len(filesItems) != 0 {
-		for _, filesItem := range filesItems {
-			directoriesConfig := []map[string]interface{}{}
+	for _, filesItem := range filesItems {
+		filesMap, ok := filesItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
 
-			tmpPath, found := filesItem.(map[string]interface{})["path"]
+		directoriesConfig := []map[string]interface{}{}
 
-			var filesItemPath string
-
-			if found {
-				filesItemPath = tmpPath.(string)
+		var filesItemPath string
+		if tmpPath, found := filesMap["path"]; found {
+			if pathStr, ok := tmpPath.(string); ok {
+				filesItemPath = pathStr
 			} else {
 				filesItemPath = "."
 			}
-
-			filesItemPath = filepath.Clean(path.Join("/opt/assets/files", filesItemPath))
-
-			filesItem.(map[string]interface{})["path"] = "."
-
-			directoriesConfig = append(directoriesConfig, map[string]interface{}{
-				"path":     filesItemPath,
-				"contents": []interface{}{filesItem},
-			})
-
-			vendirConfig := map[string]interface{}{
-				"apiVersion":  "vendir.k14s.io/v1alpha1",
-				"kind":        "Config",
-				"directories": directoriesConfig,
-			}
-
-			vendirConfigBytes, err := yaml.Marshal(&vendirConfig)
-
-			if err != nil {
-				return []string{}, errors.Wrap(err, "failed to generate vendir config")
-			}
-
-			vendirConfigString := string(vendirConfigBytes)
-
-			vendirConfigString = strings.ReplaceAll(vendirConfigString, "$(image_repository)", localRepository)
-			vendirConfigString = strings.ReplaceAll(vendirConfigString, "$(workshop_name)", name)
-			vendirConfigString = strings.ReplaceAll(vendirConfigString, "$(workshop_version)", workshopVersion)
-			vendirConfigString = strings.ReplaceAll(vendirConfigString, "$(platform_arch)", runtime.GOARCH)
-
-			vendirConfigs = append(vendirConfigs, vendirConfigString)
+		} else {
+			filesItemPath = "."
 		}
-	}
 
-	return vendirConfigs, nil
-}
+		filesItemPath = filepath.Clean(path.Join("/opt/assets/files", filesItemPath))
+		filesMap["path"] = "."
 
-func generateVendirPackagesConfig(workshop *unstructured.Unstructured, name string, localRepository string, version string) (string, error) {
-	var vendirConfigString string
-
-	workshopVersion, found, _ := unstructured.NestedString(workshop.Object, "spec", "version")
-
-	if !found {
-		workshopVersion = version
-	}
-
-	packagesItems, found, _ := unstructured.NestedSlice(workshop.Object, "spec", "workshop", "packages")
-
-	if found && len(packagesItems) != 0 {
-		directoriesConfig := []map[string]interface{}{}
-
-		for _, packagesItem := range packagesItems {
-			tmpPackagesItem := packagesItem.(map[string]interface{})
-
-			tmpName, found := tmpPackagesItem["name"]
-
-			if !found {
-				continue
-			}
-
-			packagesItemPath := filepath.Clean(path.Join("/opt/packages", tmpName.(string)))
-
-			tmpPackagesFilesItem := tmpPackagesItem["files"]
-
-			packagesFilesItem := tmpPackagesFilesItem.([]interface{})
-
-			for _, tmpEntry := range packagesFilesItem {
-				entry := tmpEntry.(map[string]interface{})
-
-				_, found = entry["path"]
-
-				if !found {
-					entry["path"] = "."
-				}
-			}
-
-			directoriesConfig = append(directoriesConfig, map[string]interface{}{
-				"path":     packagesItemPath,
-				"contents": packagesFilesItem,
-			})
-
-		}
+		directoriesConfig = append(directoriesConfig, map[string]interface{}{
+			"path":     filesItemPath,
+			"contents": []interface{}{filesItem},
+		})
 
 		vendirConfig := map[string]interface{}{
 			"apiVersion":  "vendir.k14s.io/v1alpha1",
@@ -788,30 +798,92 @@ func generateVendirPackagesConfig(workshop *unstructured.Unstructured, name stri
 		}
 
 		vendirConfigBytes, err := yaml.Marshal(&vendirConfig)
-
 		if err != nil {
-			return "", errors.Wrap(err, "failed to generate vendir config")
+			return []string{}, errors.Wrap(err, "failed to generate vendir config")
 		}
 
-		vendirConfigString = string(vendirConfigBytes)
-
-		vendirConfigString = strings.ReplaceAll(vendirConfigString, "$(image_repository)", localRepository)
-		vendirConfigString = strings.ReplaceAll(vendirConfigString, "$(workshop_name)", name)
-		vendirConfigString = strings.ReplaceAll(vendirConfigString, "$(workshop_version)", workshopVersion)
+		vendirConfigString := applyWorkshopVariables(string(vendirConfigBytes), name, localRepository, workshopVersion)
+		vendirConfigs = append(vendirConfigs, vendirConfigString)
 	}
 
-	return vendirConfigString, nil
+	return vendirConfigs, nil
+}
+
+func generateVendirPackagesConfig(workshop *unstructured.Unstructured, name string, localRepository string, version string) (string, error) {
+	workshopVersion, found, _ := unstructured.NestedString(workshop.Object, "spec", "version")
+	if !found {
+		workshopVersion = version
+	}
+
+	packagesItems, found, _ := unstructured.NestedSlice(workshop.Object, "spec", "workshop", "packages")
+	if !found || len(packagesItems) == 0 {
+		return "", nil
+	}
+
+	directoriesConfig := []map[string]interface{}{}
+
+	for _, packagesItem := range packagesItems {
+		tmpPackagesItem, ok := packagesItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		tmpName, found := tmpPackagesItem["name"]
+		if !found {
+			continue
+		}
+
+		nameStr, ok := tmpName.(string)
+		if !ok {
+			continue
+		}
+
+		packagesItemPath := filepath.Clean(path.Join("/opt/packages", nameStr))
+
+		tmpPackagesFilesItem, found := tmpPackagesItem["files"]
+		if !found {
+			continue
+		}
+
+		packagesFilesItem, ok := tmpPackagesFilesItem.([]interface{})
+		if !ok {
+			continue
+		}
+
+		for _, tmpEntry := range packagesFilesItem {
+			if entry, ok := tmpEntry.(map[string]interface{}); ok {
+				if _, found := entry["path"]; !found {
+					entry["path"] = "."
+				}
+			}
+		}
+
+		directoriesConfig = append(directoriesConfig, map[string]interface{}{
+			"path":     packagesItemPath,
+			"contents": packagesFilesItem,
+		})
+	}
+
+	vendirConfig := map[string]interface{}{
+		"apiVersion":  "vendir.k14s.io/v1alpha1",
+		"kind":        "Config",
+		"directories": directoriesConfig,
+	}
+
+	vendirConfigBytes, err := yaml.Marshal(&vendirConfig)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to generate vendir config")
+	}
+
+	return applyWorkshopVariables(string(vendirConfigBytes), name, localRepository, workshopVersion), nil
 }
 
 func generateWorkshopImageName(workshop *unstructured.Unstructured, localRepository string, imageRepository string, baseImageVersion string, workshopImage string, workshopVersion string) (string, error) {
-	_, found, _ := unstructured.NestedString(workshop.Object, "spec", "version")
-
-	if found {
-		workshopVersion, _, _ = unstructured.NestedString(workshop.Object, "spec", "version")
+	if version, found, _ := unstructured.NestedString(workshop.Object, "spec", "version"); found {
+		workshopVersion = version
 	}
 
 	image, found, err := unstructured.NestedString(workshop.Object, "spec", "workshop", "image")
-
 	if err != nil {
 		return "", errors.Wrapf(err, "unable to parse workshop definition")
 	}
@@ -820,32 +892,33 @@ func generateWorkshopImageName(workshop *unstructured.Unstructured, localReposit
 		image = "base-environment:*"
 	}
 
-	defaultImageVersion := strings.TrimSpace(baseImageVersion)
-
 	if workshopImage != "" {
-		image = workshopImage
-	} else {
-		if defaultImageVersion == "latest" {
-			image = strings.ReplaceAll(image, "base-environment:*", fmt.Sprintf("localhost:5001/educates-base-environment:%s", defaultImageVersion))
-			image = strings.ReplaceAll(image, "jdk8-environment:*", fmt.Sprintf("localhost:5001/educates-jdk8-environment:%s", defaultImageVersion))
-			image = strings.ReplaceAll(image, "jdk11-environment:*", fmt.Sprintf("localhost:5001/educates-jdk11-environment:%s", defaultImageVersion))
-			image = strings.ReplaceAll(image, "jdk17-environment:*", fmt.Sprintf("localhost:5001/educates-jdk17-environment:%s", defaultImageVersion))
-			image = strings.ReplaceAll(image, "jdk21-environment:*", fmt.Sprintf("localhost:5001/educates-jdk21-environment:%s", defaultImageVersion))
-			image = strings.ReplaceAll(image, "conda-environment:*", fmt.Sprintf("localhost:5001/educates-conda-environment:%s", defaultImageVersion))
-		} else {
-			image = strings.ReplaceAll(image, "base-environment:*", fmt.Sprintf("%s/educates-base-environment:%s", imageRepository, defaultImageVersion))
-			image = strings.ReplaceAll(image, "jdk8-environment:*", fmt.Sprintf("%s/educates-jdk8-environment:%s", imageRepository, defaultImageVersion))
-			image = strings.ReplaceAll(image, "jdk11-environment:*", fmt.Sprintf("%s/educates-jdk11-environment:%s", imageRepository, defaultImageVersion))
-			image = strings.ReplaceAll(image, "jdk17-environment:*", fmt.Sprintf("%s/educates-jdk17-environment:%s", imageRepository, defaultImageVersion))
-			image = strings.ReplaceAll(image, "jdk21-environment:*", fmt.Sprintf("%s/educates-jdk21-environment:%s", imageRepository, defaultImageVersion))
-			image = strings.ReplaceAll(image, "conda-environment:*", fmt.Sprintf("%s/educates-conda-environment:%s", imageRepository, defaultImageVersion))
-		}
+		return workshopImage, nil
 	}
 
-	image = strings.ReplaceAll(image, "$(image_repository)", localRepository)
-	image = strings.ReplaceAll(image, "$(workshop_version)", workshopVersion)
+	defaultImageVersion := strings.TrimSpace(baseImageVersion)
 
-	return image, nil
+	// Map of environment placeholders to their image names
+	imageMap := map[string]string{
+		"base-environment:*":  "educates-base-environment",
+		"jdk8-environment:*":  "educates-jdk8-environment",
+		"jdk11-environment:*": "educates-jdk11-environment",
+		"jdk17-environment:*": "educates-jdk17-environment",
+		"jdk21-environment:*": "educates-jdk21-environment",
+		"conda-environment:*": "educates-conda-environment",
+	}
+
+	repo := imageRepository
+	if defaultImageVersion == "latest" {
+		repo = "localhost:5001"
+	}
+
+	for placeholder, imageName := range imageMap {
+		replacement := fmt.Sprintf("%s/%s:%s", repo, imageName, defaultImageVersion)
+		image = strings.ReplaceAll(image, placeholder, replacement)
+	}
+
+	return applyWorkshopVariables(image, "", localRepository, workshopVersion), nil
 }
 
 func generateWorkshopVolumeMounts(workshop *unstructured.Unstructured, assets string) ([]composetypes.ServiceVolumeConfig, error) {
@@ -859,54 +932,31 @@ func generateWorkshopVolumeMounts(workshop *unstructured.Unstructured, assets st
 
 	if assets != "" {
 		assets = filepath.Clean(assets)
-		assets, err := filepath.Abs(assets)
-
+		absAssets, err := filepath.Abs(assets)
 		if err != nil {
 			return []composetypes.ServiceVolumeConfig{}, errors.Wrap(err, "can't resolve local workshop assets path")
 		}
 
 		filesMounts = append(filesMounts, composetypes.ServiceVolumeConfig{
 			Type:     "bind",
-			Source:   assets,
+			Source:   absAssets,
 			Target:   "/opt/eduk8s/mnt/assets",
 			ReadOnly: true,
 		})
 	}
 
-	dockerEnabled, found, _ := unstructured.NestedBool(workshop.Object, "spec", "session", "applications", "docker", "enabled")
-
-	if found && dockerEnabled {
-		extraServices, _, _ := unstructured.NestedMap(workshop.Object, "spec", "session", "applications", "docker", "compose")
-
-		socketEnabledDefault := true
-
-		if len(extraServices) != 0 {
-			socketEnabledDefault = false
+	if isDockerSocketEnabled(workshop) {
+		dockerSocketSource := "/var/run/docker.sock"
+		if runtime.GOOS != "linux" {
+			dockerSocketSource = "/var/run/docker.sock.raw"
 		}
 
-		socketEnabled, found, _ := unstructured.NestedBool(workshop.Object, "spec", "session", "applications", "docker", "socket", "enabled")
-
-		if !found {
-			socketEnabled = socketEnabledDefault
-		}
-
-		if socketEnabled {
-			if runtime.GOOS == "linux" {
-				filesMounts = append(filesMounts, composetypes.ServiceVolumeConfig{
-					Type:     "bind",
-					Source:   "/var/run/docker.sock",
-					Target:   "/var/run/docker/docker.sock",
-					ReadOnly: true,
-				})
-			} else {
-				filesMounts = append(filesMounts, composetypes.ServiceVolumeConfig{
-					Type:     "bind",
-					Source:   "/var/run/docker.sock.raw",
-					Target:   "/var/run/docker/docker.sock",
-					ReadOnly: true,
-				})
-			}
-		}
+		filesMounts = append(filesMounts, composetypes.ServiceVolumeConfig{
+			Type:     "bind",
+			Source:   dockerSocketSource,
+			Target:   "/var/run/docker/docker.sock",
+			ReadOnly: true,
+		})
 	}
 
 	return filesMounts, nil
@@ -931,8 +981,8 @@ func generateWorkshopLabels(workshop *unstructured.Unstructured, host string, po
 
 	domain := fmt.Sprintf("%s.nip.io", strings.ReplaceAll(host, ".", "-"))
 
-	labels["training.educates.dev/url"] = fmt.Sprintf("http://workshop.%s:%d", domain, port)
-	labels["training.educates.dev/session"] = workshop.GetName()
+	labels[LabelURL] = fmt.Sprintf("http://workshop.%s:%d", domain, port)
+	labels[LabelSession] = workshop.GetName()
 
 	return labels, nil
 }

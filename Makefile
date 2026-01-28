@@ -157,7 +157,7 @@ endif
 # Push/Load configuration - can be overridden by PUSH_IMAGES env var or make parameter
 ifeq ($(PUSH_IMAGES),false)
 # Load images locally when PUSH_IMAGES is not true (default)
-DOCKER_BUILDER =
+DOCKER_BUILDER = --builder ${BUILDX_BUILDER} --load
 MULTIARCH_PLATFORMS = $(DOCKER_PLATFORM)
 else
 # Push images to registry when PUSH_IMAGES is true
@@ -173,7 +173,7 @@ build-all-images: setup-buildx build-session-manager build-training-portal \
   build-conda-environment build-docker-registry \
   build-pause-container build-secrets-manager build-tunnel-manager \
   build-image-cache build-assets-server build-lookup-service \
-  build-cli-image
+  build-cli-image build-docker-extension
 
 build-core-images: setup-buildx build-session-manager build-training-portal \
   build-base-environment build-docker-registry build-pause-container \
@@ -343,7 +343,7 @@ push-client-programs: build-client-programs
 	(cd client-programs; GOOS=linux GOARCH=arm64 go build -o bin/educates-linux-arm64 cmd/educates/main.go)
 	imgpkg push -i $(IMAGE_REPOSITORY)/educates-client-programs:$(PACKAGE_VERSION) -f client-programs/bin
 
-build-cli-image:
+build-cli-image: build-base-environment
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-cli:$(PACKAGE_VERSION) \
@@ -361,7 +361,7 @@ update-docker-extension : build-docker-extension
 project-docs/venv :
 	python3 -m venv project-docs/venv
 	project-docs/venv/bin/pip install -r project-docs/requirements.txt
- 
+
 build-project-docs : project-docs/venv
 	source project-docs/venv/bin/activate && make -C project-docs html
 

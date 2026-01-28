@@ -105,6 +105,7 @@ func DeployResolver(domain string, targetAddress string, extraDomains []string) 
 		ExposedPorts: nat.PortSet{
 			"53/udp": struct{}{},
 		},
+		Labels: newResolverContainerLabels(),
 	}, hostConfig, nil, nil, constants.EducatesResolverContainerName)
 
 	if err != nil {
@@ -251,4 +252,11 @@ func generateDnsmasqConfig(domain string, targetAddress string, extraDomains []s
 	}
 
 	return configFileName, nil
+}
+
+func newResolverContainerLabels() map[string]string {
+	return map[string]string{
+		constants.EducatesContainersRoleLabelKey: constants.EducatesContainersResolverRoleLabel,
+		constants.EducatesContainersAppLabelKey: constants.EducatesContainersAppLabel,
+	}
 }

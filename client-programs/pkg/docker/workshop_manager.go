@@ -40,11 +40,6 @@ const (
 	WorkshopStatusStarting = "Starting"
 	WorkshopStatusRunning  = "Running"
 	WorkshopStatusStopping = "Stopping"
-
-	// Workshop label constants
-	LabelURL     = "training.educates.dev/url"
-	LabelSource  = "training.educates.dev/source"
-	LabelSession = "training.educates.dev/session"
 )
 
 const containerScript = `exec bash -s << "EOF"
@@ -178,9 +173,9 @@ func (m *DockerWorkshopsManager) ListWorkshops() ([]DockerWorkshopDetails, error
 		return nil, err
 	}
 
-	containers, err := cli.ContainerList(ctx, container.ListOptions{})
+	containers, err := cli.ContainerList(ctx, container.ListOptions{Filters: getWorkshopContainerLabelFilters()})
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to list containers")
+		return nil, errors.Wrap(err, "unable to list Educates workshop containers")
 	}
 
 	// Copy statuses while holding lock briefly
@@ -198,9 +193,9 @@ func (m *DockerWorkshopsManager) ListWorkshops() ([]DockerWorkshopDetails, error
 	m.StatusesMutex.Unlock()
 
 	for _, ctr := range containers {
-		url, found := ctr.Labels[LabelURL]
-		source := ctr.Labels[LabelSource]
-		instance := ctr.Labels[LabelSession]
+		url, found := ctr.Labels[constants.EducatesWorkshopLabelAnnotationURL]
+		source := ctr.Labels[constants.EducatesWorkshopLabelAnnotationSource]
+		instance := ctr.Labels[constants.EducatesWorkshopLabelAnnotationSession]
 
 		status := WorkshopStatusRunning
 		if details, statusFound := statusesCopy[instance]; statusFound {
@@ -370,7 +365,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 
 	defer m.ClearWorkshopStatus(name)
 
-	originalName := workshop.GetAnnotations()["training.educates.dev/workshop"]
+	originalName := workshop.GetAnnotations()[constants.EducatesWorkshopLabelAnnotationWorkshop]
 
 	configFileDir := utils.GetEducatesHomeDir()
 	composeConfigDir := path.Join(configFileDir, "compose", name)
@@ -981,8 +976,10 @@ func generateWorkshopLabels(workshop *unstructured.Unstructured, host string, po
 
 	domain := fmt.Sprintf("%s.nip.io", strings.ReplaceAll(host, ".", "-"))
 
-	labels[LabelURL] = fmt.Sprintf("http://workshop.%s:%d", domain, port)
-	labels[LabelSession] = workshop.GetName()
+	labels[constants.EducatesContainersAppLabelKey] = constants.EducatesContainersAppLabel
+	labels[constants.EducatesContainersRoleLabelKey] = constants.EducatesContainersWorkshopRoleLabel
+	labels[constants.EducatesWorkshopLabelAnnotationURL] = fmt.Sprintf("http://workshop.%s:%d", domain, port)
+	labels[constants.EducatesWorkshopLabelAnnotationSession] = workshop.GetName()
 
 	return labels, nil
 }
@@ -1064,3 +1061,9 @@ func generateClusterKubeconfig(name string) (string, error) {
 	return string(kubeConfigData), nil
 }
 
+func getWorkshopContainerLabelFilters() filters.Args {
+	return filters.NewArgs(
+		filters.Arg("label", constants.EducatesContainersAppLabelKey+"="+constants.EducatesContainersAppLabel),
+		filters.Arg("label", constants.EducatesContainersRoleLabelKey+"="+constants.EducatesContainersWorkshopRoleLabel),
+	)
+}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
@@ -31,13 +30,7 @@ func NewMirror(mirrorConfig *config.RegistryMirrorConfig) *Mirror {
 			containerName: fmt.Sprintf("%s-mirror-%s", constants.EducatesRegistryContainer, mirrorConfig.Mirror),
 			bindIP:        "127.0.0.1",
 			hostPort:      "", // dynamic port
-			labels: map[string]string{
-				"app":      constants.EducatesAppLabel,
-				"role":     constants.EducatesMirrorRoleLabel,
-				"mirror":   mirrorConfig.Mirror,
-				"url":      mirrorConfig.URL,
-				"username": mirrorConfig.Username,
-			},
+			labels: newMirrorContainerLabels(mirrorConfig),
 			envVars: buildMirrorEnvVars(mirrorConfig),
 		},
 		config: mirrorConfig,
@@ -168,10 +161,7 @@ func DeleteRegistryMirrors() error {
 	}
 
 	mirrors, err := cli.ContainerList(ctx, container.ListOptions{
-		Filters: filters.NewArgs(
-			filters.Arg("label", "role="+constants.EducatesMirrorRoleLabel),
-			filters.Arg("label", "app="+constants.EducatesAppLabel),
-		),
+		Filters: getRegistryMirrorLabelFilters(),
 	})
 	if err != nil {
 		return errors.Wrap(err, "unable to list registry mirrors")
@@ -203,7 +193,9 @@ func ListRegistryMirrors() (string, error) {
 		return "", errors.Wrap(err, "unable to create docker client")
 	}
 
-	mirrors, err := cli.ContainerList(ctx, container.ListOptions{Filters: filters.NewArgs(filters.Arg("label", "role="+constants.EducatesMirrorRoleLabel), filters.Arg("label", "app="+constants.EducatesAppLabel))})
+	mirrors, err := cli.ContainerList(ctx, container.ListOptions{
+		Filters: getRegistryMirrorLabelFilters(),
+	})
 	if err != nil {
 		return "", errors.Wrap(err, "unable to list registry mirrors")
 	}

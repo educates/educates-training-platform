@@ -83,7 +83,7 @@ func (c *ClusterDiagnostics) Run() error {
 		fmt.Println("Error fetching logs for secrets-manager: ", err)
 	}
 	// dump logs for all training-portal deployments
-	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=training-portal", "training.educates.dev/component=portal", "training-portal-%v.log"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=training-portal", constants.EducatesWorkshopLabelAnnotationComponentPortal, "training-portal-%v.log"); err != nil {
 		fmt.Println("Error fetching logs for secrets-manager: ", err)
 	}
 	// Fetch workshop_list from Rest API for each training-portal

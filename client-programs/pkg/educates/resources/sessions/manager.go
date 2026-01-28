@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	educatesrestapi "github.com/educates/educates-training-platform/client-programs/pkg/educates/restapi"
 	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
@@ -61,11 +62,11 @@ func (m *SessionManager) ListSessions(cfg ListSessionsConfig) (string, error) {
 	for _, item := range workshopSessions.Items {
 		labels := item.GetLabels()
 
-		portal, ok := labels["training.educates.dev/portal.name"]
+		portal, ok := labels[constants.EducatesTrainingLabelAnnotationPortalName]
 
 		if ok && portal == cfg.Portal {
 			if cfg.Environment != "" {
-				environment, ok := labels["training.educates.dev/environment.name"]
+				environment, ok := labels[constants.EducatesTrainingLabelAnnotationEnvironmentName]
 
 				if ok && environment == cfg.Environment {
 					sessions = append(sessions, item)
@@ -85,8 +86,8 @@ func (m *SessionManager) ListSessions(cfg ListSessionsConfig) (string, error) {
 	for _, item := range sessions {
 		name := item.GetName()
 		labels := item.GetLabels()
-		portal := labels["training.educates.dev/portal.name"]
-		environment := labels["training.educates.dev/environment.name"]
+		portal := labels[constants.EducatesTrainingLabelAnnotationPortalName]
+		environment := labels[constants.EducatesTrainingLabelAnnotationEnvironmentName]
 
 		status, _, _ := unstructured.NestedString(item.Object, "status", "educates", "phase")
 

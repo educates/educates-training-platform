@@ -11,10 +11,12 @@ import (
 	"path"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
@@ -147,7 +149,9 @@ func (b *baseContainer) stopAndRemoveContainer(cli *client.Client) error {
 	}
 
 	timeout := 30
-	err := cli.ContainerStop(ctx, b.containerName, container.StopOptions{Timeout: &timeout})
+	err := cli.ContainerStop(ctx, b.containerName, container.StopOptions{
+		Timeout: &timeout,
+	})
 	if err != nil {
 		return errors.Wrap(err, "unable to stop container")
 	}
@@ -286,4 +290,28 @@ func tarFile(fileContent []byte, basePath string, fileMode int64) (*bytes.Buffer
 	}
 
 	return buffer, nil
+}
+
+func getRegistryMirrorLabelFilters() filters.Args {
+	return filters.NewArgs(
+		filters.Arg("label", constants.EducatesContainersRoleLabelKey+"="+constants.EducatesContainersMirrorRoleLabel),
+		filters.Arg("label", constants.EducatesContainersAppLabelKey+"="+constants.EducatesContainersAppLabel),
+	)
+}
+
+func newRegistryContainerLabels() map[string]string {
+	return map[string]string{
+		constants.EducatesContainersRoleLabelKey: constants.EducatesContainersRegistryRoleLabel,
+		constants.EducatesContainersAppLabelKey: constants.EducatesContainersAppLabel,
+	}
+}
+
+func newMirrorContainerLabels(mirrorConfig *config.RegistryMirrorConfig) map[string]string {
+	return map[string]string{
+		constants.EducatesContainersRoleLabelKey: constants.EducatesContainersMirrorRoleLabel,
+		constants.EducatesContainersAppLabelKey: constants.EducatesContainersAppLabel,
+		constants.EducatesContainersMirrorLabelKey: mirrorConfig.Mirror,
+		constants.EducatesContainersURLLabelKey: mirrorConfig.URL,
+		constants.EducatesContainersUsernameLabelKey: mirrorConfig.Username,
+	}
 }

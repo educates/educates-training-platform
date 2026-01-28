@@ -6,6 +6,7 @@ import (
 	"path"
 	"regexp"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -64,7 +65,7 @@ func (o *LocalSecretsAddCaOptions) Run(name string) error {
 	}
 
 	if o.IngressDomain != "" {
-		secret.ObjectMeta.Annotations["training.educates.dev/domain"] = o.IngressDomain
+		secret.ObjectMeta.Annotations[constants.EducatesTrainingLabelAnnotationDomain] = o.IngressDomain
 	}
 
 	secretData, err := json.MarshalIndent(&secret, "", "    ")

@@ -107,7 +107,7 @@ func (m *PortalManager) CreateTrainingPortal(cfg *TrainingPortalCreateConfig) er
 	}
 
 	trainingPortal.SetUnstructuredContent(map[string]interface{}{
-		"apiVersion": "training.educates.dev/v1beta1",
+		"apiVersion": constants.EducatesTrainingAPIGroupVersion,
 		"kind":       "TrainingPortal",
 		"metadata": map[string]interface{}{
 			"name": cfg.Portal,

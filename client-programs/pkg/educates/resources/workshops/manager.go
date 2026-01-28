@@ -97,7 +97,7 @@ func (m *WorkshopManager) DeployWorkshopResource(o *DeployWorkshopConfig) error 
 		trainingPortal = &unstructured.Unstructured{}
 
 		trainingPortal.SetUnstructuredContent(map[string]interface{}{
-			"apiVersion": "training.educates.dev/v1beta1",
+			"apiVersion": constants.EducatesTrainingAPIGroupVersion,
 			"kind":       "TrainingPortal",
 			"metadata": map[string]interface{}{
 				"name": o.Portal,
@@ -483,7 +483,7 @@ func (m *WorkshopManager) ListWorkshopResources(o *ListWorkshopResourcesConfig) 
 		if err == nil {
 			annotations := workshop.GetAnnotations()
 
-			if val, ok := annotations["training.educates.dev/source"]; ok {
+			if val, ok := annotations[constants.EducatesWorkshopLabelAnnotationSource]; ok {
 				source = val
 			}
 		}
@@ -624,7 +624,7 @@ func LoadWorkshopDefinition(o *WorkshopDefinitionConfig) (*unstructured.Unstruct
 
 	// Verify the type of resource definition.
 
-	if workshop.GetAPIVersion() != "training.educates.dev/v1beta1" || workshop.GetKind() != "Workshop" {
+	if workshop.GetAPIVersion() != constants.EducatesTrainingAPIGroupVersion || workshop.GetKind() != "Workshop" {
 		return nil, errors.New("invalid type for workshop definition")
 	}
 
@@ -636,12 +636,12 @@ func LoadWorkshopDefinition(o *WorkshopDefinitionConfig) (*unstructured.Unstruct
 		annotations = map[string]string{}
 	}
 
-	annotations["training.educates.dev/workshop"] = workshop.GetName()
+	annotations[constants.EducatesWorkshopLabelAnnotationWorkshop] = workshop.GetName()
 
 	if urlInfo.Scheme != "http" && urlInfo.Scheme != "https" {
-		annotations["training.educates.dev/source"] = fmt.Sprintf("file://%s", o.Path)
+		annotations[constants.EducatesWorkshopLabelAnnotationSource] = fmt.Sprintf("file://%s", o.Path)
 	} else {
-		annotations["training.educates.dev/source"] = o.Path
+		annotations[constants.EducatesWorkshopLabelAnnotationSource] = o.Path
 	}
 
 	workshop.SetAnnotations(annotations)

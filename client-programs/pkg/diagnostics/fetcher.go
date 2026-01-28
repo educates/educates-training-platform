@@ -35,7 +35,7 @@ func (c *ClusterDiagnosticsFetcher) getEducatesNamespaces(fileName string) error
 	}
 
 	namespaces, err := client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{
-		// LabelSelector: "training.educates.dev/component",
+		// LabelSelector: constants.EducatesWorkshopLabelAnnotationComponent,
 	})
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func (c *ClusterDiagnosticsFetcher) getEducatesNamespacesEvents(fileName string)
 			continue
 		}
 		events, err := client.CoreV1().Events(namespace.Name).List(context.TODO(), metav1.ListOptions{
-			// LabelSelector: "training.educates.dev/component",
+			// LabelSelector: constants.EducatesWorkshopLabelAnnotationComponent,
 		})
 		for _, object := range events.Items {
 			object.SetManagedFields(nil) // Remove managedFields from the object

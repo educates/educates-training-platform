@@ -34,10 +34,7 @@ func NewRegistry(bindIP string, k8sClient *kubernetes.Clientset) *Registry {
 			containerName: constants.EducatesRegistryContainer,
 			bindIP:        bindIP,
 			hostPort:      "5001",
-			labels: map[string]string{
-				"app":  constants.EducatesAppLabel,
-				"role": constants.EducatesRegistryRoleLabel,
-			},
+			labels: newRegistryContainerLabels(),
 		},
 		k8sClient: k8sClient,
 	}

@@ -33,3 +33,7 @@
   })(window, document, "clarity", "script", '{{ .Param "clarity_tracking_id" }}');
 </script>
 {{ end }}
+
+{{ if .Param "amplitude_tracking_id" }}
+<script src="https://cdn.amplitude.com/libs/analytics-browser-2.11.1-min.js.gz"></script>
+{{ end }}

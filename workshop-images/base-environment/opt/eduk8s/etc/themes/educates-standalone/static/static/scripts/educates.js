@@ -882,6 +882,20 @@ const educates = (function () {
             return;
         }
 
+        // If action is disabled, skip execution, but still trigger next
+        // action in cascade if configured.
+
+        enabled = args.enabled !== undefined ? args.enabled : true;
+
+        if (!enabled) {
+            console.log(`Action ${action_id} is disabled`);
+            if (args.cascade) {
+                const pause = args.pause * 1000 || ACTION_CASCADE_MS;
+                setTimeout(() => trigger_next_action(element), pause);
+            }
+            return;
+        }
+
         // Don't allow re-triggering while action is pending.
 
         if (element.dataset.actionResult === 'pending') {
@@ -2043,7 +2057,24 @@ const educates = (function () {
                     el.style.display = 'none';
                 });
         },
-        handler: function (_element, args) {}
+        handler: function (element, args) {
+            const name = args.name || '';
+
+            // Find the matching section:begin element and trigger click on it.
+
+            let sibling = element.previousElementSibling;
+
+            while (sibling) {
+                if (sibling.classList.contains('clickable-action') &&
+                    sibling.dataset.handler === 'section:begin' &&
+                    sibling.dataset.sectionName === name) {
+                    sibling.click();
+                    break;
+                }
+
+                sibling = sibling.previousElementSibling;
+            }
+        }
     });
 
     // Exported functions.

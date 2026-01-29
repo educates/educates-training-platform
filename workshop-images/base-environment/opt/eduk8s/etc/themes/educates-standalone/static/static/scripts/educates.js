@@ -35,6 +35,98 @@ const educates = (function () {
         }
     }
 
+    // Function to send analytics events to various consumers (webhook, Google
+    // Analytics, Amplitude). Events are sent asynchronously with optional timeout.
+
+    async function send_analytics_event(event, data = {}, timeout = 0) {
+        const payload = {
+            event: {
+                name: event,
+                data: data
+            }
+        };
+
+        console.log('Sending analytics event:', JSON.stringify(payload));
+
+        const body = document.body;
+
+        const send_to_webhook = function () {
+            return fetch('/session/event', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                return response.json();
+            });
+        };
+
+        const tasks = [send_to_webhook().catch(err => {
+            console.error('Failed to send analytics event to webhook:', err);
+        })];
+
+        if (body.dataset.googleTrackingId && typeof gtag !== 'undefined') {
+            const send_to_google = function () {
+                return new Promise((resolve) => {
+                    const callbacks = {
+                        'event_callback': (arg) => resolve(arg)
+                    };
+
+                    gtag('event', event, Object.assign({}, callbacks, data));
+                });
+            };
+
+            tasks.push(send_to_google().catch(err => {
+                console.error('Failed to send analytics event to Google:', err);
+            }));
+        }
+
+        if (body.dataset.amplitudeTrackingId && typeof amplitude !== 'undefined') {
+            const send_to_amplitude = function () {
+                const globals = {
+                    'workshop_name': body.dataset.workshopName,
+                    'session_name': body.dataset.sessionNamespace,
+                    'environment_name': body.dataset.workshopNamespace,
+                    'training_portal': body.dataset.trainingPortal,
+                    'ingress_domain': body.dataset.ingressDomain,
+                    'ingress_protocol': body.dataset.ingressProtocol,
+                    'session_owner': dashboard.session_owner(),
+                };
+
+                return amplitude.track(event, Object.assign({}, globals, data)).promise;
+            };
+
+            tasks.push(send_to_amplitude().catch(err => {
+                console.error('Failed to send analytics event to Amplitude:', err);
+            }));
+        }
+
+        function abort_after_ms(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        if (timeout) {
+            try {
+                await Promise.race([
+                    Promise.all(tasks),
+                    abort_after_ms(timeout)
+                ]);
+            }
+            catch (err) {
+                console.log('Error sending analytics event', event, err);
+            }
+        }
+        else {
+            Promise.all(tasks).catch(err => {
+                console.log('Error sending analytics event', event, err);
+            });
+        }
+    }
+
     // The Terminals class is a stub implementation which will be replaced
     // by the parent frame's terminals object if it exists. The stub will be
     // used when workshop pages are viewed as standalone pages.
@@ -569,6 +661,90 @@ const educates = (function () {
         autostart_actions.forEach(element => {
             element.click();
         });
+
+        // Generate analytics events if tracking IDs are provided.
+
+        const body = document.body;
+
+        if (body.dataset.googleTrackingId && typeof gtag !== 'undefined') {
+            gtag('set', {
+                'custom_map': {
+                    'dimension1': 'workshop_name',
+                    'dimension2': 'session_name',
+                    'dimension3': 'environment_name',
+                    'dimension4': 'training_portal',
+                    'dimension5': 'ingress_domain',
+                    'dimension6': 'ingress_protocol',
+                    'dimension7': 'session_owner'
+                }
+            });
+
+            const gsettings = {
+                'workshop_name': body.dataset.workshopName,
+                'session_name': body.dataset.sessionNamespace,
+                'environment_name': body.dataset.workshopNamespace,
+                'training_portal': body.dataset.trainingPortal,
+                'ingress_domain': body.dataset.ingressDomain,
+                'ingress_protocol': body.dataset.ingressProtocol,
+                'session_owner': dashboard.session_owner()
+            };
+
+            if (body.dataset.ingressProtocol === 'https') {
+                gsettings['cookie_flags'] = 'max-age=86400;secure;samesite=none';
+            }
+
+            gtag('config', body.dataset.googleTrackingId, gsettings);
+        }
+
+        if (body.dataset.clarityTrackingId && typeof clarity !== 'undefined') {
+            clarity('set', 'workshop_name', body.dataset.workshopName);
+            clarity('set', 'session_name', body.dataset.sessionNamespace);
+            clarity('set', 'environment_name', body.dataset.workshopNamespace);
+            clarity('set', 'training_portal', body.dataset.trainingPortal);
+            clarity('set', 'ingress_domain', body.dataset.ingressDomain);
+            clarity('set', 'ingress_protocol', body.dataset.ingressProtocol);
+            clarity('set', 'session_owner', dashboard.session_owner());
+            clarity('identify', dashboard.session_owner());
+        }
+
+        if (body.dataset.amplitudeTrackingId && typeof amplitude !== 'undefined') {
+            amplitude.init(body.dataset.amplitudeTrackingId, undefined, {
+                defaultTracking: {
+                    sessions: true,
+                    pageViews: true,
+                    formInteractions: true,
+                    fileDownloads: true
+                }
+            });
+        }
+
+        if (!body.dataset.prevPage) {
+            send_analytics_event('Workshop/First', {
+                prev_page: body.dataset.prevPage,
+                current_page: body.dataset.currentPage,
+                next_page: body.dataset.nextPage,
+                page_number: body.dataset.pageNumber,
+                pages_total: body.dataset.pagesTotal,
+            });
+        }
+
+        send_analytics_event('Workshop/View', {
+            prev_page: body.dataset.prevPage,
+            current_page: body.dataset.currentPage,
+            next_page: body.dataset.nextPage,
+            page_number: body.dataset.pageNumber,
+            pages_total: body.dataset.pagesTotal,
+        });
+
+        if (!body.dataset.nextPage) {
+            send_analytics_event('Workshop/Last', {
+                prev_page: body.dataset.prevPage,
+                current_page: body.dataset.currentPage,
+                next_page: body.dataset.nextPage,
+                page_number: body.dataset.pageNumber,
+                pages_total: body.dataset.pagesTotal,
+            });
+        }
     });
 
     // Table of clickable actions and their handlers. Clickable actions will
@@ -935,6 +1111,21 @@ const educates = (function () {
             console.log(`Action ${action_id} triggered in standalone mode`);
             set_action_state(element, ActionState.SUCCESS);
             return;
+        }
+
+        // Send analytics event if configured for this action.
+
+        if (args.event !== undefined) {
+            const body = document.body;
+
+            send_analytics_event('Action/Event', {
+                prev_page: body.dataset.prevPage,
+                current_page: body.dataset.currentPage,
+                next_page: body.dataset.nextPage,
+                page_number: body.dataset.pageNumber,
+                pages_total: body.dataset.pagesTotal,
+                event_name: args.event,
+            });
         }
 
         // Set pending state.

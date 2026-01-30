@@ -37,3 +37,7 @@
 {{ if .Param "amplitude_tracking_id" }}
 <script src="https://cdn.amplitude.com/libs/analytics-browser-2.11.1-min.js.gz"></script>
 {{ end }}
+
+{{ with resources.Get "/theme/workshop-instructions.html" }}
+{{ .Content | safeHTML }}
+{{ end }}

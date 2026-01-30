@@ -59,3 +59,12 @@
 #@ end
 
 params: #@ params
+
+module:
+  mounts:
+    - source: static
+      target: static
+    - source: /opt/eduk8s/theme
+      target: static/static/theme
+    - source: /opt/eduk8s/theme
+      target: assets/theme

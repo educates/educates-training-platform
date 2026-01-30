@@ -39,6 +39,12 @@ const educates = (function () {
     // Analytics, Amplitude). Events are sent asynchronously with optional timeout.
 
     async function send_analytics_event(event, data = {}, timeout = 0) {
+        // Return early if not in an iframe or parent doesn't provide educates.dashboard.
+
+        if (!parent || !parent.educates || !parent.educates.dashboard) {
+            return;
+        }
+
         const payload = {
             event: {
                 name: event,

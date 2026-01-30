@@ -400,4 +400,8 @@ form.jsonform-hasrequired div.form-group {
     .menu {
         display: none;
     }
+
+    .navigation-buttons {
+        display: none;
+    }
 }

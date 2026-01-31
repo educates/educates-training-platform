@@ -64,6 +64,9 @@ func (o *DockerWorkshopDeployOptions) Run(cmd *cobra.Command) error {
 		DisableOpenBrowser: o.DisableOpenBrowser,
 		ImageRepository: o.ImageRepository,
 		ImageVersion: o.ImageVersion,
+		WorkshopFile: o.WorkshopFile,
+		WorkshopVersion: o.WorkshopVersion,
+		DataValuesFlags: o.DataValuesFlags,
 	}
 	_, err := dockerWorkshopsManager.DeployWorkshop(&config, cmd.OutOrStdout(), cmd.OutOrStderr())
 

@@ -572,12 +572,11 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 
 	if workshopComposeProject != nil {
 		for serviceName, extraService := range workshopComposeProject.Services {
-			extraService.Ports = []composetypes.ServicePortConfig{}
-
+			// TODO: Maybe modify extraService.Ports to add the host IP
 			composeConfig.Services[serviceName] = extraService
 
 			workshopServiceConfig.DependsOn[serviceName] = composetypes.ServiceDependency{
-				Condition: composetypes.ServiceConditionStarted,
+				Condition: composetypes.ServiceConditionHealthy,
 			}
 		}
 

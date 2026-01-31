@@ -9,7 +9,7 @@ require (
 	carvel.dev/vendir v0.44.0
 	carvel.dev/ytt v0.52.1
 	github.com/adrg/xdg v0.5.3
-	github.com/compose-spec/compose-go/v2 v2.10.0
+	github.com/compose-spec/compose-go/v2 v2.10.1
 	github.com/cppforlife/go-cli-ui v0.0.0-20250603184554-47874c9078ad
 	// Docker packages must be kept aligned with docker/compose v5.0.1 requirements. This still relies on docker/docker v28.5.2
 	github.com/docker/docker v28.5.2+incompatible

@@ -325,6 +325,8 @@ github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443/go.mod h1:W+zGtBO5Y1Ig
 github.com/cncf/xds/go v0.0.0-20251022180443-0feb69152e9f/go.mod h1:HlzOvOjVBOfTGSRXRyY0OiCS/3J1akRGQQpRO/7zyF4=
 github.com/compose-spec/compose-go/v2 v2.9.1 h1:8UwI+ujNU+9Ffkf/YgAm/qM9/eU7Jn8nHzWG721W4rs=
 github.com/compose-spec/compose-go/v2 v2.9.1/go.mod h1:Oky9AZGTRB4E+0VbTPZTUu4Kp+oEMMuwZXZtPPVT1iE=
+github.com/compose-spec/compose-go/v2 v2.10.1 h1:mFbXobojGRFIVi1UknrvaDAZ+PkJfyjqkA1yseh+vAU=
+github.com/compose-spec/compose-go/v2 v2.10.1/go.mod h1:Ohac1SzhO/4fXXrzWIztIVB6ckmKBv1Nt5Z5mGVESUg=
 github.com/container-storage-interface/spec v1.8.0/go.mod h1:ROLik+GhPslwwWRNFF1KasPzroNARibH2rfz1rkg4H0=
 github.com/container-storage-interface/spec v1.9.0/go.mod h1:ZfDu+3ZRyeVqxZM0Ds19MVLkN2d1XJ5MAfi1L3VjlT0=
 github.com/containerd/accelerated-container-image v1.3.0/go.mod h1:EvKVWor6ZQNUyYp0MZm5hw4k21ropuz7EegM+m/Jb/Q=
@@ -1434,8 +1436,6 @@ sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2/go.mod h1:B+TnT182UBxE84DiCz
 sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd/go.mod h1:B8JuhiUyNFVKdsE8h686QcCxMaH6HrOAZj4vswFpcB0=
 sigs.k8s.io/kind v0.29.0 h1:3TpCsyh908IkXXpcSnsMjWdwdWjIl7o9IMZImZCWFnI=
 sigs.k8s.io/kind v0.29.0/go.mod h1:ldWQisw2NYyM6k64o/tkZng/1qQW7OlzcN5a8geJX3o=
-sigs.k8s.io/kind v0.31.0 h1:UcT4nzm+YM7YEbqiAKECk+b6dsvc/HRZZu9U0FolL1g=
-sigs.k8s.io/kind v0.31.0/go.mod h1:FSqriGaoTPruiXWfRnUXNykF8r2t+fHtK0P0m1AbGF8=
 sigs.k8s.io/knftables v0.0.14/go.mod h1:f/5ZLKYEUPUhVjUCg6l80ACdL7CIIyeL0DxfgojGRTk=
 sigs.k8s.io/knftables v0.0.17/go.mod h1:f/5ZLKYEUPUhVjUCg6l80ACdL7CIIyeL0DxfgojGRTk=
 sigs.k8s.io/kustomize/api v0.13.5-0.20230601165947-6ce0bf390ce3/go.mod h1:9n16EZKMhXBNSiUC5kSdFQJkdH3zbxS/JoO619G1VAY=

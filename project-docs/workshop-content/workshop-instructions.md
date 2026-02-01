@@ -596,7 +596,7 @@ args:
 
 The ``title`` field will be displayed as the title of the clickable action and should describe the nature of the test. If required, you can provide a ``description`` field for a longer explaination of the test. This will be displayed in the body of the clickable action but will always be shown as preformatted text.
 
-There must exist an executable program (script or compiled application), in the ``workshop/examiner/tests`` directory with name matching the value of the ``name`` field.
+There must exist an executable program (script or compiled application), in the ``workshop/examiner/tests`` directory with name matching the value of the ``name`` field. In the case where it is located in a sub directory of ``workshop/examiner/tests``, the sub directory prefix must also be included in the ``name`` field.
 
 The list of program arguments listed against the ``args`` field will be passed to the test program.
 

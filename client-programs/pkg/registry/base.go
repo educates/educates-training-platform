@@ -18,7 +18,6 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 )
 
@@ -164,22 +163,37 @@ func (b *baseContainer) stopAndRemoveContainer(cli *client.Client) error {
 	return nil
 }
 
-// addRegistryConfigToKindNodes adds the registry config to the kind nodes.
-// It is used when creating a new local registry or registry mirror.
-func addRegistryConfigToKindNodes(repositoryName string, content string) error {
+// getEducatesKindNodeContainers returns all kind node containers for the educates cluster
+func getEducatesKindNodeContainers(cli *client.Client) ([]string, error) {
 	ctx := context.Background()
 
-	fmt.Printf("Adding local image registry config (%s) to Kind nodes\n", repositoryName)
+	// Kind labels all node containers with io.x-k8s.kind.cluster=<cluster-name>
+	nodeFilters := filters.NewArgs()
+	nodeFilters.Add("label", fmt.Sprintf("io.x-k8s.kind.cluster=%s", constants.EducatesClusterName))
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	containers, err := cli.ContainerList(ctx, container.ListOptions{
+		All:     true,
+		Filters: nodeFilters,
+	})
 	if err != nil {
-		return errors.Wrap(err, "unable to create docker client")
+		return nil, errors.Wrap(err, "failed to list kind node containers")
 	}
 
-	containerID, _ := utils.GetContainerInfo(constants.EducatesControlPlaneContainer)
-	if containerID == "" {
-		return errors.New(fmt.Sprintf("%s container not found", constants.EducatesControlPlaneContainer))
+	if len(containers) == 0 {
+		return nil, errors.New("no kind node containers found for educates cluster")
 	}
+
+	containerIDs := make([]string, len(containers))
+	for i, c := range containers {
+		containerIDs[i] = c.ID
+	}
+
+	return containerIDs, nil
+}
+
+// addRegistryConfigToNode adds the registry config to a single kind node container
+func addRegistryConfigToNode(cli *client.Client, containerID, repositoryName, content string) error {
+	ctx := context.Background()
 
 	registryDir := "/etc/containerd/certs.d/" + repositoryName
 
@@ -219,22 +233,34 @@ func addRegistryConfigToKindNodes(repositoryName string, content string) error {
 	return nil
 }
 
-// removeRegistryConfigFromKindNodes removes the registry config from the kind nodes.
-// It is used when deleting a local registry mirror.
-func removeRegistryConfigFromKindNodes(repositoryName string) error {
-	ctx := context.Background()
-
-	fmt.Printf("Removing local image registry config (%s) from Kind nodes\n", repositoryName)
+// addRegistryConfigToKindNodes adds the registry config to all kind nodes.
+// It is used when creating a new local registry or registry mirror.
+func addRegistryConfigToKindNodes(repositoryName string, content string) error {
+	fmt.Printf("Adding local image registry config (%s) to Kind nodes\n", repositoryName)
 
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	containerID, _ := utils.GetContainerInfo(constants.EducatesControlPlaneContainer)
-	if containerID == "" {
-		return nil
+	containerIDs, err := getEducatesKindNodeContainers(cli)
+	if err != nil {
+		return err
 	}
+
+	// Apply config to all nodes (control-plane and workers)
+	for _, containerID := range containerIDs {
+		if err := addRegistryConfigToNode(cli, containerID, repositoryName, content); err != nil {
+			return errors.Wrapf(err, "failed to add registry config to node %s", containerID)
+		}
+	}
+
+	return nil
+}
+
+// removeRegistryConfigFromNode removes the registry config from a single kind node container
+func removeRegistryConfigFromNode(cli *client.Client, containerID, repositoryName string) error {
+	ctx := context.Background()
 
 	registryDir := "/etc/containerd/certs.d/" + repositoryName
 
@@ -257,6 +283,32 @@ func removeRegistryConfigFromKindNodes(repositoryName string) error {
 	}
 
 	hijackedResponse.Close()
+
+	return nil
+}
+
+// removeRegistryConfigFromKindNodes removes the registry config from all kind nodes.
+// It is used when deleting a local registry mirror.
+func removeRegistryConfigFromKindNodes(repositoryName string) error {
+	fmt.Printf("Removing local image registry config (%s) from Kind nodes\n", repositoryName)
+
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		return errors.Wrap(err, "unable to create docker client")
+	}
+
+	containerIDs, err := getEducatesKindNodeContainers(cli)
+	if err != nil {
+		// If nodes don't exist, nothing to remove
+		return nil
+	}
+
+	// Remove config from all nodes (control-plane and workers)
+	for _, containerID := range containerIDs {
+		if err := removeRegistryConfigFromNode(cli, containerID, repositoryName); err != nil {
+			return errors.Wrapf(err, "failed to remove registry config from node %s", containerID)
+		}
+	}
 
 	return nil
 }

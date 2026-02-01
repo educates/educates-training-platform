@@ -17,12 +17,27 @@ type VolumeMountConfig struct {
 	ReadOnly      *bool  `yaml:"readOnly,omitempty"`
 }
 
+// NodeConfig defines configuration for a single kind node
+type NodeConfig struct {
+	Role   string            `yaml:"role"`            // "control-plane" or "worker"
+	Labels map[string]string `yaml:"labels,omitempty"` // Custom labels for the node
+	Taints []TaintConfig     `yaml:"taints,omitempty"` // Taints for the node
+}
+
+// TaintConfig defines a Kubernetes taint
+type TaintConfig struct {
+	Key    string `yaml:"key"`              // Taint key
+	Value  string `yaml:"value,omitempty"`  // Taint value (optional)
+	Effect string `yaml:"effect"`           // NoSchedule, PreferNoSchedule, or NoExecute
+}
+
 type LocalKindClusterConfig struct {
 	ListenAddress   string                 `yaml:"listenAddress,omitempty"`
 	ApiServer       KindApiServerConfig    `yaml:"apiServer,omitempty"`
 	Networking      KindNetworkingConfig   `yaml:"networking,omitempty"`
 	VolumeMounts    []VolumeMountConfig    `yaml:"volumeMounts,omitempty"`
 	RegistryMirrors []RegistryMirrorConfig `yaml:"registryMirrors,omitempty"`
+	Nodes           []NodeConfig           `yaml:"nodes,omitempty"` // Nodes configuration for multi-node clusters
 }
 
 type RegistryMirrorConfig struct {
@@ -470,6 +485,13 @@ func ConfigForLocalClusters(configFile string, domain string, local bool) (fullC
 		return nil, err
 	}
 
+	// Validate nodes configuration for kind clusters
+	if local && fullConfig.ClusterInfrastructure.Provider == "kind" {
+		if err := ValidateNodesConfig(&fullConfig.LocalKindCluster.Nodes); err != nil {
+			return nil, errors.Wrap(err, "invalid nodes configuration")
+		}
+	}
+
 	return fullConfig, nil
 }
 
@@ -520,4 +542,68 @@ func ValidateProvider(provider string) error {
 	default:
 		return errors.New("Invalid ClusterInsfrastructure Provider. Valid values are (eks, gke, kind, custom, vcluster, generic, minikube, openshift)")
 	}
+}
+
+// ValidateNodesConfig validates the nodes configuration for a kind cluster
+func ValidateNodesConfig(nodes *[]NodeConfig) error {
+	if len(*nodes) == 0 {
+		// Empty is valid - will use default single control-plane
+		return nil
+	}
+
+	controlPlaneCount := 0
+	workerCount := 0
+
+	for i, node := range *nodes {
+		// Validate role
+		if node.Role != "control-plane" && node.Role != "worker" {
+			return errors.Errorf("node %d has invalid role %q, must be 'control-plane' or 'worker'", i, node.Role)
+		}
+
+		// Count nodes by role
+		if node.Role == "control-plane" {
+			controlPlaneCount++
+		} else {
+			workerCount++
+		}
+
+		// Validate taints
+		for j, taint := range node.Taints {
+			if taint.Key == "" {
+				return errors.Errorf("node %d taint %d has empty key", i, j)
+			}
+			if taint.Effect == "" {
+				return errors.Errorf("node %d taint %d (%s) has empty effect", i, j, taint.Key)
+			}
+			// Validate taint effect
+			validEffects := map[string]bool{
+				"NoSchedule":       true,
+				"PreferNoSchedule": true,
+				"NoExecute":        true,
+			}
+			if !validEffects[taint.Effect] {
+				return errors.Errorf("node %d taint %d (%s) has invalid effect %q, must be 'NoSchedule', 'PreferNoSchedule', or 'NoExecute'",
+					i, j, taint.Key, taint.Effect)
+			}
+		}
+	}
+
+	// Validate exactly one control-plane
+	if controlPlaneCount == 0 {
+		// We add a default control-plane node if no control-plane nodes are configured
+		*nodes = append(*nodes, NodeConfig{
+			Role: "control-plane",
+		})
+		controlPlaneCount = 1
+	}
+	if controlPlaneCount > 1 {
+		return errors.Errorf("nodes configuration must have exactly one control-plane node, found %d", controlPlaneCount)
+	}
+
+	// Validate maximum 5 workers
+	if workerCount > 5 {
+		return errors.Errorf("nodes configuration supports maximum 5 worker nodes, found %d", workerCount)
+	}
+
+	return nil
 }

@@ -404,7 +404,7 @@ prune-builds:
 	rm -rf project-docs/_build
 
 prune-registry:
-	docker exec educates-registry registry garbage-collect /etc/docker/registry/config.yml --delete-untagged=true
+	docker exec educates-registry registry garbage-collect /etc/distribution/config.yml --delete-untagged=true
 
 prune-all: prune-docker prune-builds prune-registry
 

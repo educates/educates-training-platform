@@ -8,7 +8,6 @@ import (
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
@@ -70,7 +69,7 @@ func (o *DockerWorkshopOpenOptions) Run() error {
 
 	ctx := context.Background()
 
-	cli, err := docker.NewDockerClient()
+	cli, err := utils.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")

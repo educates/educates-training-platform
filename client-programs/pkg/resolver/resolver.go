@@ -15,7 +15,6 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -42,7 +41,7 @@ func DeployResolver(domain string, targetAddress string, extraDomains []string) 
 
 	fmt.Println("Deploying local DNS resolver")
 
-	cli, err := docker.NewDockerClient()
+	cli, err := utils.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -127,7 +126,7 @@ func DeleteResolver() error {
 
 	fmt.Println("Deleting local DNS resolver")
 
-	cli, err := docker.NewDockerClient()
+	cli, err := utils.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -164,7 +163,7 @@ func UpdateResolver(domain string, targetAddress string, extraDomains []string) 
 
 	fmt.Println("Updating local DNS resolver configuration")
 
-	cli, err := docker.NewDockerClient()
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}

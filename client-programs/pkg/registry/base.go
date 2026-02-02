@@ -18,6 +18,7 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 )
 
@@ -45,13 +46,13 @@ func (b *baseContainer) ensureNetwork(cli *client.Client, networkName string) er
 }
 
 // containerExists checks if the container already exists.
-func (b *baseContainer) containerExists(cli *client.Client) (bool, error) {
+func (b *baseContainer) containerExists(cli *client.Client) (bool, string, error) {
 	ctx := context.Background()
-	_, err := cli.ContainerInspect(ctx, b.containerName)
+	response, err := cli.ContainerInspect(ctx, b.containerName)
 	if err == nil {
-		return true, nil
+		return true, response.ID, nil
 	}
-	return false, nil
+	return false, "", err
 }
 
 // pullRegistryImage pulls the registry image.
@@ -72,6 +73,19 @@ func (b *baseContainer) pullRegistryImage(cli *client.Client) error {
 func (b *baseContainer) createAndStartContainer(cli *client.Client) (string, error) {
 	ctx := context.Background()
 
+	containerID, err := b.createContainer(cli, ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "cannot create container")
+	}
+
+	if err := b.startContainer(cli, ctx, containerID); err != nil {
+		return "", errors.Wrap(err, "unable to start container")
+	}
+
+	return containerID, nil
+}
+
+func (b *baseContainer) createContainer(cli *client.Client, ctx context.Context) (string, error) {
 	hostConfig := &container.HostConfig{
 		PortBindings: nat.PortMap{
 			"5000/tcp": []nat.PortBinding{
@@ -98,40 +112,46 @@ func (b *baseContainer) createAndStartContainer(cli *client.Client) (string, err
 
 	resp, err := cli.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, b.containerName)
 	if err != nil {
-		return "", errors.Wrap(err, "cannot create container")
-	}
-
-	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return "", errors.Wrap(err, "unable to start container")
+		return "", err
 	}
 
 	return resp.ID, nil
 }
 
-// connectToNetwork connects the container to the specified network.
-func (b *baseContainer) connectToNetwork(cli *client.Client, networkName string) error {
-	ctx := context.Background()
-
-	cli.NetworkDisconnect(ctx, networkName, b.containerName, false)
-
-	err := cli.NetworkConnect(ctx, networkName, b.containerName, &network.EndpointSettings{})
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("unable to connect container to %s network", networkName))
+func (b *baseContainer) startContainer(cli *client.Client, ctx context.Context, containerID string) error {
+	if err := cli.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-// linkToNetwork connects the container to the specified network.
-func (b *baseContainer) linkToNetwork(cli *client.Client, networkName string) error {
+// connectToNetwork connects the container to the specified network.
+func (b *baseContainer) connectToNetwork(cli *client.Client, networkName string, fixedIP string) error {
 	ctx := context.Background()
 
-	fmt.Println("Linking local image registry to cluster")
+	containerInfo, err := cli.ContainerInspect(ctx, b.containerName)
+	if err != nil {
+		return errors.Wrap(err, "unable to inspect container")
+	}
+
+	if network, exists := containerInfo.NetworkSettings.Networks[networkName]; exists {
+		if fixedIP == "" || network.IPAddress == fixedIP {
+			return nil
+		}
+	}
 
 	cli.NetworkDisconnect(ctx, networkName, b.containerName, false)
 
-	err := cli.NetworkConnect(ctx, networkName, b.containerName, &network.EndpointSettings{})
-	if err != nil {
+	endpointSettings := &network.EndpointSettings{}
+	if fixedIP != "" {
+		endpointSettings.IPAddress = fixedIP
+		endpointSettings.IPAMConfig = &network.EndpointIPAMConfig{
+			IPv4Address: fixedIP,
+		}
+	}
+
+	if err := cli.NetworkConnect(ctx, networkName, b.containerName, endpointSettings); err != nil {
 		return errors.Wrap(err, fmt.Sprintf("unable to connect container to %s network", networkName))
 	}
 
@@ -142,7 +162,7 @@ func (b *baseContainer) linkToNetwork(cli *client.Client, networkName string) er
 func (b *baseContainer) stopAndRemoveContainer(cli *client.Client) error {
 	ctx := context.Background()
 
-	exists, _ := b.containerExists(cli)
+	exists, _, _ := b.containerExists(cli)
 	if !exists {
 		return nil
 	}
@@ -238,7 +258,7 @@ func addRegistryConfigToNode(cli *client.Client, containerID, repositoryName, co
 func addRegistryConfigToKindNodes(repositoryName string, content string) error {
 	fmt.Printf("Adding local image registry config (%s) to Kind nodes\n", repositoryName)
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
@@ -292,7 +312,7 @@ func removeRegistryConfigFromNode(cli *client.Client, containerID, repositoryNam
 func removeRegistryConfigFromKindNodes(repositoryName string) error {
 	fmt.Printf("Removing local image registry config (%s) from Kind nodes\n", repositoryName)
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}

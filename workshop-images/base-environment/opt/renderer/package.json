@@ -27,7 +27,7 @@
     "js-yaml": "^4.1.1",
     "jsonform": "^2.2.5",
     "liquidjs": "^10.9.4",
-    "lodash": ">=4.17.21",
+    "lodash": ">=4.17.23",
     "marked": "^4.2.2",
     "minimatch": "~9.0.3",
     "minimist": ">=1.2.7",

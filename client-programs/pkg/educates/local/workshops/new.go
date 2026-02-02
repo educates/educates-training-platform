@@ -52,7 +52,7 @@ func (o *WorkshopNewOptions) Run(args []string) error {
 		if _, err = os.Stat(workshopDir); err == nil {
 			ok := o.Overwrite
 			if !o.Overwrite {
-				ok = utils.YesNoPrompt(fmt.Sprintf("the directory %q already exists. All files will be overwritten. Do you want to use it?", workshopDir), true)
+				ok = utils.YesNoPrompt([]string{fmt.Sprintf("the directory %q already exists. All files will be overwritten. Do you want to use it?", workshopDir)}, true)
 			}
 			if !ok {
 				return errors.Errorf("operation cancelled")

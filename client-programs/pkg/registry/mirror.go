@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
@@ -58,7 +57,7 @@ func buildMirrorEnvVars(mirrorConfig *config.RegistryMirrorConfig) []string {
 func (m *Mirror) DeployAndLinkToCluster() error {
 	err := m.Deploy()
 	if err != nil {
-		return errors.Wrap(err, "failed to deploy registry mirror "+m.config.Mirror)
+		return err
 	}
 
 	content := fmt.Sprintf(hostMirrorTomlTemplate, m.containerName)
@@ -74,34 +73,42 @@ func (m *Mirror) DeployAndLinkToCluster() error {
 func (m *Mirror) Deploy() error {
 	fmt.Printf("Deploying local image registry mirror %s\n", m.config.Mirror)
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	exists, _ := m.containerExists(cli)
-	if exists {
-		// If we can retrieve a container of required name we assume it is
-		// running okay. Technically it could be restarting, stopping or
-		// have exited and container was not removed, but if that is the case
-		// then leave it up to the user to sort out.
-		fmt.Printf("Registry mirror %s already exists\n", m.config.Mirror)
-		return nil
+	exists, containerID, _ := m.containerExists(cli)
+	if !exists {
+		if err = m.pullRegistryImage(cli); err != nil {
+			return err
+		}
+
+		containerID, err = m.createContainer(cli, context.Background())
+		if err != nil {
+			return errors.Wrap(err, "cannot create registry mirror container")
+		}
 	}
 
 	if err = m.ensureNetwork(cli, constants.EducatesNetworkName); err != nil {
 		return err
 	}
 
-	if _, err = m.createAndStartContainer(cli); err != nil {
+	if err = m.startContainer(cli, context.Background(), containerID); err != nil {
 		return errors.Wrap(err, "cannot create local registry mirror container")
 	}
 
-	if err = m.connectToNetwork(cli, constants.EducatesNetworkName); err != nil {
+	if err = m.connectToNetwork(cli, constants.EducatesNetworkName, ""); err != nil {
 		return errors.Wrap(err, fmt.Sprintf("unable to connect local registry mirror to %s network", constants.EducatesNetworkName))
 	}
 
-	if err = m.linkToNetwork(cli, constants.ClusterNetworkName); err != nil {
+	// Resolve Mirror IP
+	mirrorIP, err := resolveLocalMirrorIP(cli, m.containerName)
+	if err != nil {
+		return errors.Wrap(err, "failed to resolve fixed kind IP for local registry mirror")
+	}
+
+	if err = m.connectToNetwork(cli, constants.ClusterNetworkName, mirrorIP); err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to link local registry mirror to %s network", constants.ClusterNetworkName))
 	}
 
@@ -112,12 +119,12 @@ func (m *Mirror) Deploy() error {
 func (m *Mirror) DeleteAndUnlinkFromCluster() error {
 	fmt.Printf("Deleting local image registry mirror %s\n", m.config.Mirror)
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	exists, _ := m.containerExists(cli)
+	exists, _, _ := m.containerExists(cli)
 	if !exists {
 		fmt.Printf("Registry mirror %s does not exist\n", m.config.Mirror)
 		return nil
@@ -141,7 +148,7 @@ func (m *Mirror) DeleteAndUnlinkFromCluster() error {
 func (m *Mirror) Delete() error {
 	fmt.Printf("Deleting local image registry mirror %s\n", m.config.Mirror)
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
@@ -155,7 +162,7 @@ func DeleteRegistryMirrors() error {
 
 	fmt.Println("Deleting local image registry mirrors")
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
@@ -188,7 +195,7 @@ func DeleteRegistryMirrors() error {
 func ListRegistryMirrors() (string, error) {
 	ctx := context.Background()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return "", errors.Wrap(err, "unable to create docker client")
 	}

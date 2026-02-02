@@ -276,7 +276,7 @@ func (m *DockerWorkshopsManager) GetDockerClient() (*client.Client, error) {
 		return m.dockerClient, nil
 	}
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to create docker client")
 	}

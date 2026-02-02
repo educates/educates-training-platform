@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
@@ -45,20 +44,20 @@ func NewRegistry(bindIP string, k8sClient *kubernetes.Clientset) *Registry {
 func (r *Registry) DeployAndLinkToCluster() error {
 	err := r.Deploy()
 	if err != nil {
-		return errors.Wrap(err, "failed to deploy registry")
+		return err
 	}
 
 	// This is needed to make containerd use the local registry
 	if err = addRegistryConfigToKindNodes("localhost:5001", fmt.Sprintf(hostRegistryTomlTemplate, constants.EducatesRegistryContainer)); err != nil {
-		return errors.Wrap(err, "failed to add registry config to kind nodes")
+		return err
 	}
 	if err = addRegistryConfigToKindNodes("registry.default.svc.cluster.local", fmt.Sprintf(hostRegistryTomlTemplate, constants.EducatesRegistryContainer)); err != nil {
-		return errors.Wrap(err, "failed to add registry config to kind nodes")
+		return err
 	}
 
 	// This is needed so that kubernetes nodes can pull images from the local registry
 	if err = r.documentLocalRegistry(); err != nil {
-		return errors.Wrap(err, "failed to document registry config in cluster")
+		return err
 	}
 
 	return nil
@@ -69,38 +68,44 @@ func (r *Registry) DeployAndLinkToCluster() error {
 func (r *Registry) Deploy() error {
 	fmt.Println("Deploying local image registry")
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	exists, _ := r.containerExists(cli)
-	if exists {
-		// If we can retrieve a container of required name we assume it is
-		// running okay. Technically it could be restarting, stopping or
-		// have exited and container was not removed, but if that is the case
-		// then leave it up to the user to sort out.
-		return nil
+	exists, containerID, _ := r.containerExists(cli)
+	if !exists {
+		if err = r.pullRegistryImage(cli); err != nil {
+			return err
+		}
+
+		containerID, err = r.createContainer(cli, context.Background())
+		if err != nil {
+			return errors.Wrap(err, "cannot create registry container")
+		}
 	}
 
-	if err = r.pullRegistryImage(cli); err != nil {
-		return err
-	}
 
 	if err = r.ensureNetwork(cli, constants.EducatesNetworkName); err != nil {
 		return err
 	}
 
-	if _, err = r.createAndStartContainer(cli); err != nil {
-		return errors.Wrap(err, "cannot create registry container")
+	if err = r.startContainer(cli, context.Background(), containerID); err != nil {
+		return errors.Wrap(err, "unable to start registry container")
 	}
 
-	if err = r.connectToNetwork(cli, constants.EducatesNetworkName); err != nil {
+	if err = r.connectToNetwork(cli, constants.EducatesNetworkName, ""); err != nil {
 		return errors.Wrap(err, fmt.Sprintf("unable to connect registry to %s network", constants.EducatesNetworkName))
 	}
 
-	if err = r.linkToNetwork(cli, constants.ClusterNetworkName); err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to link registry to %s network", constants.ClusterNetworkName))
+	registryIP, err := resolveLocalRegistryIP(cli)
+
+	if err != nil {
+		return errors.Wrap(err, "failed to resolve local registry IP")
+	}
+
+	if err = r.connectToNetwork(cli, constants.ClusterNetworkName, registryIP); err != nil {
+		return errors.Wrap(err, fmt.Sprintf("failed to connect registry to %s network at IP:%s", constants.ClusterNetworkName, registryIP	))
 	}
 
 	return nil
@@ -116,7 +121,7 @@ func (r *Registry) DeleteAndUnlinkFromCluster() error {
 func (r *Registry) Delete() error {
 	fmt.Println("Deleting local image registry")
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
@@ -148,12 +153,12 @@ func (r *Registry) documentLocalRegistry() error {
 	if _, err := r.k8sClient.CoreV1().ConfigMaps("kube-public").Get(context.TODO(), "local-registry-hosting", metav1.GetOptions{}); k8serrors.IsNotFound(err) {
 		_, err = r.k8sClient.CoreV1().ConfigMaps("kube-public").Create(context.TODO(), configMap, metav1.CreateOptions{})
 		if err != nil {
-			return errors.Wrap(err, "unable to create local registry hosting config map")
+			return errors.Wrap(err, "document local registry: unable to create local registry hosting config map")
 		}
 	} else {
 		_, err = r.k8sClient.CoreV1().ConfigMaps("kube-public").Update(context.TODO(), configMap, metav1.UpdateOptions{})
 		if err != nil {
-			return errors.Wrap(err, "unable to update local registry hosting config map")
+			return errors.Wrap(err, "document local registry: unable to update local registry hosting config map")
 		}
 	}
 
@@ -169,7 +174,7 @@ func (r *Registry) UpdateK8SService() error {
 
 	ctx := context.Background()
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
@@ -199,12 +204,12 @@ func (r *Registry) UpdateK8SService() error {
 		return errors.Wrapf(err, "unable to inspect container for registry")
 	}
 
-	kindNetwork, exists := registryInfo.NetworkSettings.Networks["kind"]
+	network, exists := registryInfo.NetworkSettings.Networks[constants.ClusterNetworkName]
 	if !exists {
-		return errors.New("registry is not attached to kind network")
+		return errors.New(fmt.Sprintf("registry is not attached to %s network", constants.ClusterNetworkName))
 	}
 
-	endpointAddresses := []string{kindNetwork.IPAddress}
+	endpointAddresses := []string{network.IPAddress}
 
 	endpointSlice := discoveryv1.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
@@ -256,13 +261,13 @@ func (r *Registry) Prune() error {
 
 	fmt.Println("Pruning local image registry")
 
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	cli, err := utils.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	containerID, _ := utils.GetContainerInfo(constants.EducatesRegistryContainer)
-	if containerID == "" {
+	exists, containerID, _ := r.containerExists(cli)
+	if !exists || containerID == "" {
 		return nil
 	}
 

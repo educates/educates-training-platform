@@ -23,7 +23,6 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -144,7 +143,7 @@ func (o *KindClusterConfig) StopCluster() error {
 		return errors.New("cluster for Educates does not exist")
 	}
 
-	cli, err := docker.NewDockerClient()
+	cli, err := utils.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -198,7 +197,7 @@ func (o *KindClusterConfig) StartCluster() error {
 		return errors.New("cluster for Educates does not exist")
 	}
 
-	cli, err := docker.NewDockerClient()
+	cli, err := utils.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -255,7 +254,7 @@ func (o *KindClusterConfig) ClusterStatus() error {
 		return errors.New("cluster for Educates does not exist")
 	}
 
-	cli, err := docker.NewDockerClient()
+	cli, err := utils.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")

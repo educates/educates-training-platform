@@ -386,7 +386,7 @@ after: 1
 ```
 ~~~
 
-Setting both ``before`` and ``after`` to ``0`` will result in the complete line which matched being highlighted instead of any region within the line.
+Setting both ``before`` and ``after`` to ``0`` will result in the complete line which matched being highlighted instead of any region within the line. When set to ``-1``, all lines before or after will be selected.
 
 To match based on a regular expression, rather than an exact match, set ``isRegex`` to ``true``.
 
@@ -422,6 +422,8 @@ stop: 12
 ~~~
 
 Absence of ``start`` means start at the beginning of the file. Absence of ``stop`` means stop at the end of the file. The line number given by ``stop`` is not included in the search.
+
+When ``start`` or ``stop`` is a negative value, it is interpreted as offset from the end of the file. Note that when the file ends with a newline, a value of ``-1`` selects the empty value after the newline and not the last line terminated by the newline.
 
 For both an exact match and regular expression, the text to be matched must all be on one line. It is not possible to match on text which spans across lines.
 

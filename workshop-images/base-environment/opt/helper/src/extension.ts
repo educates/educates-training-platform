@@ -1,16 +1,16 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
-import * as vscode from 'vscode';
-import express = require('express');
+import * as bodyParser from 'body-parser';
 import { Request, Response } from 'express-serve-static-core';
 import * as fs from 'fs';
-import * as bodyParser from 'body-parser';
+import * as vscode from 'vscode';
+import express = require('express');
 
 import * as yaml from 'yaml';
-import { Node, YAMLMap, YAMLSeq, Collection, Pair } from 'yaml/types';
+import { Node, Pair, YAMLMap, YAMLSeq } from 'yaml/types';
 
-import { SelectMatchingTextParams, selectMatchingText } from './select-matching-text'
-import { ReplaceTextSelectionParams, replaceTextSelection } from './replace-text-selection'
+import { ReplaceTextSelectionParams, replaceTextSelection } from './replace-text-selection';
+import { SelectMatchingTextParams, selectMatchingText } from './select-matching-text';
 
 const log_file_path = "/tmp/educates-vscode-helper.log";
 

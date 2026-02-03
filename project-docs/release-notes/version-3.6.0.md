@@ -7,6 +7,13 @@ New Features
 * Examiner test scripts can now be provided as part of an extension package.
   These should be placed under the `examiner/tests` directory of the package.
 
+* When using editor clickable actions which accept `start` or `stop` params,
+  you can now supply negative values. These will be interpreted as offset from
+  the end of the file.
+
+* When using editor clickable actions which accept `before` or `after`, if you
+  supply `-1`, it will be interpreted as all lines before or after.
+
 Features Changed
 ----------------
 

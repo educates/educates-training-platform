@@ -67,6 +67,11 @@
                             data-bs-toggle="modal" data-bs-target="#table-of-contents"><span class="fas fa-list fa-inverse"
                                 aria-hidden="true"></span></button>
                     </form>
+                    <form>
+                        <button class="btn btn-transparent" id="header-print-page" type="button" aria-label="Print"
+                            onclick="window.open('{{ relURL "print.html" }}', '_blank')"><span class="fas fa-print fa-inverse"
+                                aria-hidden="true"></span></button>
+                    </form>
                     <form action="{{ relURL $current_module.next_page }}">
                         <button class="btn btn-transparent" id="header-next-page" type="submit" {{ if (not
                             $current_module.next_page) }}disabled="" {{ end }} aria-label="Next"><span

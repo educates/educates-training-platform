@@ -67,6 +67,15 @@ button#header-goto-toc {
     font-size: 0.95em;
 }
 
+button#header-print-page {
+    border: 0px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 0.95em;
+}
+
 button#header-next-page {
     border: 0px;
     padding-left: 8px;

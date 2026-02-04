@@ -60,6 +60,17 @@
 
 params: #@ params
 
+outputFormats:
+  print:
+    baseName: print
+    mediaType: text/html
+    isHTML: true
+
+outputs:
+  home:
+    - HTML
+    - print
+
 module:
   mounts:
     - source: static

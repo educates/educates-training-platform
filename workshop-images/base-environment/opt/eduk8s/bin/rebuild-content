@@ -85,7 +85,7 @@ HUGO_ARGS+=(--minify)
 HUGO_ARGS+=(--config $HOME/.local/share/workshop/hugo-configuration.yaml)
 
 HUGO_ARGS+=(--themesDir /opt/eduk8s/etc/themes)
-HUGO_ARGS+=(--theme educates)
+HUGO_ARGS+=(--theme educates-standalone)
 
 HUGO_ARGS+=(--baseURL $INGRESS_PROTOCOL://$SESSION_NAMESPACE.$INGRESS_DOMAIN$INGRESS_PORT_SUFFIX/workshop/content/)
 

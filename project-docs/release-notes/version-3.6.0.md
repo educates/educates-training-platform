@@ -1,6 +1,13 @@
 Version 3.6.0
 =============
 
+Bugs Fixed
+----------
+
+* When printing workshop instructions only the first page would be printed.
+  This has only been fixed for Hugo renderer and not the deprecated classic
+  renderer.
+
 New Features
 ------------
 

@@ -328,3 +328,35 @@ span.magic-code-block-glyph {
 form.jsonform-hasrequired div.form-group {
     margin-bottom: 1rem;
 }
+
+@media print {
+    html {
+        height: auto;
+        overflow: visible;
+    }
+
+    body {
+        height: auto;
+        overflow: visible;
+    }
+
+    .main-content {
+        height: auto;
+        overflow: visible;
+        page-break-inside: avoid;
+    }
+
+    .page-content {
+        page-break-inside: avoid;
+        box-shadow: none;
+    }
+
+    .header,
+    .menu {
+        display: none;
+    }
+
+    .navigation-buttons {
+        display: none;
+    }
+}

@@ -4,9 +4,9 @@ import * as $ from "jquery"
 
 import * as bootstrap from "bootstrap"
 
-import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
+import { Terminal } from "@xterm/xterm"
 
 import { ResizeSensor } from "css-element-queries"
 
@@ -156,7 +156,16 @@ class MessagesChannel {
     private sequence: number
     private reconnecting: boolean
     private reconnectTimer: any
+    private reconnectStartTime: number
+    private reconnectDelay: number
     private shutdown: boolean
+
+    // Reconnection backoff configuration
+    private readonly initialReconnectDelay: number = 250      // Start with 250ms delay
+    private readonly maxReconnectDelay: number = 5000         // Max 5 seconds between attempts
+    private readonly fastReconnectPeriod: number = 10000      // Fast reconnects for 10 seconds
+    private readonly backoffMultiplier: number = 1.5          // Multiply delay by this after fast period
+    private readonly abandonTimeout: number = 300000          // Give up after 5 minutes
 
     constructor(id: string) {
         this.id = id
@@ -165,6 +174,8 @@ class MessagesChannel {
 
         this.shutdown = false
         this.reconnecting = false
+        this.reconnectStartTime = 0
+        this.reconnectDelay = this.initialReconnectDelay
 
         this.configure_session()
     }
@@ -217,6 +228,8 @@ class MessagesChannel {
             }
 
             this.reconnecting = false
+            this.reconnectStartTime = 0
+            this.reconnectDelay = this.initialReconnectDelay
 
             let args: MessagesHelloPacketArgs = {
             }
@@ -290,7 +303,7 @@ class MessagesChannel {
                 return
 
             function connect() {
-                if (this.shutdown)
+                if (self.shutdown)
                     return
 
                 let parsed_url = url.parse(window.location.origin)
@@ -301,7 +314,7 @@ class MessagesChannel {
 
                 let server_url = `${protocol}://${host}${pathname}`
 
-                console.log("Attempt re-connect for message channel", self.id)
+                console.log("Attempt re-connect for message channel", self.id, "delay was", self.reconnectDelay, "ms")
 
                 self.socket = new WebSocket(server_url)
 
@@ -310,7 +323,24 @@ class MessagesChannel {
 
             console.log("Messages connection was lost", self.id)
 
-            setTimeout(connect, 100)
+            // Track when reconnection started
+            if (!this.reconnecting) {
+                this.reconnectStartTime = Date.now()
+                this.reconnectDelay = this.initialReconnectDelay
+            }
+
+            // Calculate the appropriate delay based on how long we've been trying
+            let elapsed = Date.now() - this.reconnectStartTime
+
+            if (elapsed > this.fastReconnectPeriod) {
+                // After the fast reconnect period, increase the delay with backoff
+                this.reconnectDelay = Math.min(
+                    this.reconnectDelay * this.backoffMultiplier,
+                    this.maxReconnectDelay
+                )
+            }
+
+            setTimeout(connect, this.reconnectDelay)
 
             async function terminate() {
                 self.reconnectTimer = null
@@ -329,7 +359,7 @@ class MessagesChannel {
             if (!this.reconnecting) {
                 console.log("Trigger reconnection timeout for messages", self.id)
 
-                self.reconnectTimer = setTimeout(terminate, 10000)
+                self.reconnectTimer = setTimeout(terminate, self.abandonTimeout)
 
                 this.reconnecting = true
             }
@@ -434,7 +464,16 @@ class TerminalSession {
     private buffer: BufferedDataBlock[]
     private reconnecting: boolean
     private reconnectTimer: any
+    private reconnectStartTime: number
+    private reconnectDelay: number
     private shutdown: boolean
+
+    // Reconnection backoff configuration
+    private readonly initialReconnectDelay: number = 250      // Start with 250ms delay
+    private readonly maxReconnectDelay: number = 5000         // Max 5 seconds between attempts
+    private readonly fastReconnectPeriod: number = 10000      // Fast reconnects for 10 seconds
+    private readonly backoffMultiplier: number = 1.5          // Multiply delay by this after fast period
+    private readonly abandonTimeout: number = 300000          // Give up after 5 minutes
 
     constructor(context: string, id: string, element: HTMLElement, endpoint: string) {
         this.id = id
@@ -458,6 +497,8 @@ class TerminalSession {
 
         this.shutdown = false
         this.reconnecting = false
+        this.reconnectStartTime = 0
+        this.reconnectDelay = this.initialReconnectDelay
 
         this.terminal = new Terminal({
             cursorBlink: true,
@@ -572,6 +613,8 @@ class TerminalSession {
             }
 
             this.reconnecting = false
+            this.reconnectStartTime = 0
+            this.reconnectDelay = this.initialReconnectDelay
 
             this.started = new Date()
 
@@ -778,7 +821,7 @@ class TerminalSession {
                 return
 
             function connect() {
-                if (this.shutdown)
+                if (self.shutdown)
                     return
 
                 let parsed_url = url.parse(window.location.origin)
@@ -789,7 +832,7 @@ class TerminalSession {
 
                 let server_url = `${protocol}://${host}${pathname}`
 
-                console.log("Attempt re-connect to terminal", self.id)
+                console.log("Attempt re-connect to terminal", self.id, "delay was", self.reconnectDelay, "ms")
 
                 self.socket = new WebSocket(server_url)
 
@@ -807,7 +850,24 @@ class TerminalSession {
                 self.started = null
             }
 
-            setTimeout(connect, 100)
+            // Track when reconnection started
+            if (!this.reconnecting) {
+                this.reconnectStartTime = Date.now()
+                this.reconnectDelay = this.initialReconnectDelay
+            }
+
+            // Calculate the appropriate delay based on how long we've been trying
+            let elapsed = Date.now() - this.reconnectStartTime
+
+            if (elapsed > this.fastReconnectPeriod) {
+                // After the fast reconnect period, increase the delay with backoff
+                this.reconnectDelay = Math.min(
+                    this.reconnectDelay * this.backoffMultiplier,
+                    this.maxReconnectDelay
+                )
+            }
+
+            setTimeout(connect, this.reconnectDelay)
 
             async function terminate() {
                 self.reconnectTimer = null
@@ -837,7 +897,7 @@ class TerminalSession {
             if (!this.reconnecting) {
                 console.log("Trigger reconnection timeout for terminal", self.id)
 
-                self.reconnectTimer = setTimeout(terminate, 10000)
+                self.reconnectTimer = setTimeout(terminate, self.abandonTimeout)
 
                 this.reconnecting = true
             }
@@ -969,13 +1029,15 @@ class TerminalSession {
 
         this.shutdown = false
         this.sequence = 0
+        this.reconnectStartTime = 0
+        this.reconnectDelay = this.initialReconnectDelay
 
         let self = this
 
         console.log("Request to force reconnect terminal", self.id)
 
         function connect() {
-            if (this.shutdown)
+            if (self.shutdown)
                 return
 
             let parsed_url = url.parse(window.location.origin)
@@ -986,14 +1048,14 @@ class TerminalSession {
 
             let server_url = `${protocol}://${host}${pathname}`
 
-            console.log("Attempt force re-connect to terminal", self.id)
+            console.log("Attempt force re-connect to terminal", self.id, "delay was", self.reconnectDelay, "ms")
 
             self.socket = new WebSocket(server_url)
 
             self.configure_handlers()
         }
 
-        setTimeout(connect, 100)
+        setTimeout(connect, this.reconnectDelay)
 
         function terminate() {
             self.reconnectTimer = null
@@ -1012,7 +1074,7 @@ class TerminalSession {
         if (!this.reconnecting) {
             console.log("Trigger reconnection timeout for terminal", self.id)
 
-            self.reconnectTimer = setTimeout(terminate, 5000)
+            self.reconnectTimer = setTimeout(terminate, self.abandonTimeout)
 
             this.reconnecting = true
         }

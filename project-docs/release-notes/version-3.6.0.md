@@ -23,3 +23,9 @@ Features Changed
   action for the test. Checks when running test examiner scripts have also
   been beefed up to ensure that directory traversal cannot be used to execute
   a program which resides outside of the tests directories.
+
+* Enhanced session and terminal reconnection logic to prevent rapid reconnection
+  attempts. The system now implements increasing delays between retry attempts
+  using exponential backoff, eventually ceasing reconnection efforts entirely
+  after a specified duration. This prevents excessive browser activity when
+  session connectivity is disrupted.

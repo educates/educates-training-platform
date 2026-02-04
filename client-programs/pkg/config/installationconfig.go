@@ -164,6 +164,10 @@ type ClusterSecretsConfig struct {
 	PullSecretRefs []PullSecretRefConfig `yaml:"pullSecretRefs"`
 }
 
+type SessionManagerConfig struct {
+	ClusterRoles []string `yaml:"clusterRoles,omitempty"`
+}
+
 type UserCredentialsConfig struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
@@ -292,6 +296,7 @@ type TrainingPlatformConfig struct {
 	ClusterSecrets    ClusterSecretsConfig    `yaml:"clusterSecrets,omitempty"`
 	TrainingPortal    TrainingPortalConfig    `yaml:"trainingPortal,omitempty"`
 	WorkshopSecurity  WorkshopSecurityConfig  `yaml:"workshopSecurity,omitempty"`
+	SessionManager    SessionManagerConfig    `yaml:"sessionManager,omitempty"`
 	ImageRegistry     ImageRegistryConfig     `yaml:"imageRegistry,omitempty"`
 	Version           string                  `yaml:"version,omitempty"`
 	ImageVersions     []ImageVersionConfig    `yaml:"imageVersions,omitempty"`
@@ -315,6 +320,7 @@ type InstallationConfig struct {
 	SessionCookies        SessionCookiesConfig        `yaml:"sessionCookies,omitempty"`
 	ClusterStorage        ClusterStorageConfig        `yaml:"clusterStorage,omitempty"`
 	ClusterSecrets        ClusterSecretsConfig        `yaml:"clusterSecrets,omitempty"`
+	SessionManager        SessionManagerConfig        `yaml:"sessionManager,omitempty"`
 	TrainingPortal        TrainingPortalConfig        `yaml:"trainingPortal,omitempty"`
 	WorkshopSecurity      WorkshopSecurityConfig      `yaml:"workshopSecurity,omitempty"`
 	ImageRegistry         ImageRegistryConfig         `yaml:"imageRegistry,omitempty"`

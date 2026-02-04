@@ -3,6 +3,10 @@
 #! TODO: Customize certs name reference in eks
 #@ def copy_all_educates_values():
 
+#@ if/end hasattr(data.values, "sessionManager") and data.values.sessionManager != None:
+sessionManager:
+  #@ if/end hasattr(data.values.sessionManager, "clusterRoles") and data.values.sessionManager.clusterRoles != []:
+  clusterRoles: #@ data.values.sessionManager.clusterRoles
 #@ if/end hasattr(data.values, "imageRegistry") and data.values.imageRegistry != None:
 imageRegistry:
   #@ if/end hasattr(data.values.imageRegistry, "namespace") and data.values.imageRegistry.namespace != None:

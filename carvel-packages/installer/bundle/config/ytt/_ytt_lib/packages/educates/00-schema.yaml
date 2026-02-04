@@ -16,6 +16,25 @@ operator:
   statusKey: "educates"
   namePrefix: "educates"
 
+#! Overrides for customizing session manager cluster roles and behaviour.
+#! The cluster role granted to the session manager would normally always be
+#! cluster-admin to allow workshops to in turn make use of any resource types.
+#! If an alternate set of cluster roles is specified here, a minimum set of
+#! permissions will still need to be granted in order for Educates to function
+#! correctly. In addition, any additional permissions required by any workshops
+#! to be deployed will need to be added. Using this approach is highly
+#! discouraged though as any requirement for extra permissions would mean that
+#! Educates would need to be reinstalled as the session manager will only
+#! inherit the permissions defined in the cluster role at the time of
+#! installation.
+
+#@schema/nullable
+sessionManager:
+  #! Cluster role to be used for session manager. If not set the default will be
+  #! cluster-admin.
+  clusterRoles:
+    - ""
+
 #! Image registry where Educates container images and workshop content is
 #! stored. This is used internally for development, experimentation and when
 #! working on workshop content in a local Educates environment, and should not

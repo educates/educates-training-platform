@@ -1,18 +1,25 @@
 #@ load("@ytt:data", "data")
 
+#@ session_manager_cluster_roles = ["cluster-admin"]
+#@ if hasattr(data.values, "sessionManager") and data.values.sessionManager != None and hasattr(data.values.sessionManager, "clusterRoles") and data.values.sessionManager.clusterRoles != []:
+#@ session_manager_cluster_roles = data.values.sessionManager.clusterRoles
+#@ end
+
+#@ for cluster_role in session_manager_cluster_roles:
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-session-manager".format(data.values.operator.namePrefix)
+  name: #@ "{}-session-manager:{}".format(data.values.operator.namePrefix, cluster_role)
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: cluster-admin
+  name: #@ cluster_role
 subjects:
 - kind: ServiceAccount
   name: session-manager
   namespace: #@ data.values.operator.namespace
+#@ end
 
 #@ if data.values.clusterSecurity.policyEngine == "pod-security-policies":
 ---

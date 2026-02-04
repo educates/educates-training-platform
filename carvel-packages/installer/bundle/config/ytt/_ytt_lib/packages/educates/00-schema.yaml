@@ -32,6 +32,8 @@ operator:
 sessionManager:
   #! Cluster role to be used for session manager. If not set the default will be
   #! cluster-admin.
+  #@schema/validation min_len=1
+  #@schema/default ["cluster-admin"]
   clusterRoles:
     - ""
 

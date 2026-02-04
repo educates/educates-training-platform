@@ -17,22 +17,24 @@
         <div class="rendered-content">
           {{ .Content }}
         </div>
-        {{ if $current_module.next_page }}
-        <div class="page-meta clearfix">
-          <form action="{{ relURL $current_module.next_page }}">
-            <button class="btn btn-lg btn-primary float-end" id="next-page" type="submit" aria-label="continue">
-              Continue </button>
-          </form>
+        <div class="navigation-buttons">
+          {{ if $current_module.next_page }}
+          <div class="page-meta clearfix">
+            <form action="{{ relURL $current_module.next_page }}">
+              <button class="btn btn-lg btn-primary float-end" id="next-page" type="submit" aria-label="continue">
+                Continue </button>
+            </form>
+          </div>
+          {{ else if and $current_module (.Param "restart_url") }}
+          <div class="page-meta clearfix">
+            <form>
+              <button class="btn btn-lg btn-primary float-end" id="next-page" type="button" aria-label="finish"
+                onclick="educates.finished_workshop()">
+                Finish Workshop </button>
+            </form>
+          </div>
+          {{ end }}
         </div>
-        {{ else if and $current_module (.Param "restart_url") }}
-        <div class="page-meta clearfix">
-          <form>
-            <button class="btn btn-lg btn-primary float-end" id="next-page" type="button" aria-label="finish"
-              onclick="educates.finished_workshop()">
-              Finish Workshop </button>
-          </form>
-        </div>
-        {{ end }}
       </section>
     </div>
   </div>

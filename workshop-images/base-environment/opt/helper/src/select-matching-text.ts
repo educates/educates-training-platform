@@ -1,4 +1,4 @@
-import * as vscode from "vscode"
+import * as vscode from "vscode";
 
 import execWithIndices = require("regexp-match-indices")
 
@@ -16,8 +16,8 @@ export interface SelectMatchingTextParams {
 export async function selectMatchingText(params: SelectMatchingTextParams) {
     // Display the editor window for the target file.
 
-    const editor = await vscode.workspace.openTextDocument(params.file)
-        .then(doc => { return vscode.window.showTextDocument(doc) })
+    const doc = await vscode.workspace.openTextDocument(params.file)
+    const editor = await vscode.window.showTextDocument(doc)
 
     // Bail out if there was no text to match provided.
 
@@ -30,8 +30,24 @@ export async function selectMatchingText(params: SelectMatchingTextParams) {
 
     let line = 0
 
-    let startLine = (params.start === undefined) ? 0 : params.start
-    let stopLine = (params.stop === undefined) ? lines : params.stop
+    let startLine = (params.start === undefined || params.start === null) ? 0 : params.start
+    let stopLine = (params.stop === undefined || params.stop === null) ? lines : params.stop
+
+    if (startLine < 0)
+        startLine = lines + startLine
+    
+    if (startLine < 0)
+        startLine = 0
+    else if (startLine >= lines)
+        startLine = lines - 1
+
+    if (stopLine < 0)
+        stopLine = lines + stopLine
+
+    if (stopLine < 0)
+        stopLine = 0
+    else if (stopLine >= lines)
+        stopLine = lines - 1
 
     let startMatch = -1
     let stopMatch = -1
@@ -84,8 +100,27 @@ export async function selectMatchingText(params: SelectMatchingTextParams) {
 
         let linesBefore = (params.before === undefined) ? 0 : params.before
         let linesAfter = (params.after === undefined) ? 0 : params.after
-        let startPosition = new vscode.Position(line - linesBefore, 0)
-        let stopPosition = new vscode.Position(line + linesAfter + 1, 0)
+
+        // Use negative values to indicate all lines before or after.
+
+        if (linesBefore === null || linesBefore < 0)
+            linesBefore = line
+
+        if (linesAfter === null || linesAfter < 0)
+            linesAfter = lines - line - 1
+
+        let startBeforeLine = line - linesBefore
+
+        if (startBeforeLine < 0)
+            startBeforeLine = 0
+
+        let stopAfterLine = line + linesAfter
+
+        if (stopAfterLine >= lines)
+            stopAfterLine = lines - 1
+
+        let startPosition = new vscode.Position(startBeforeLine, 0)
+        let stopPosition = new vscode.Position(stopAfterLine + 1, 0)
         let selection = new vscode.Selection(startPosition, stopPosition)
         editor.selection = selection
         editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter)

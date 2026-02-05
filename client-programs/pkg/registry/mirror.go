@@ -209,12 +209,12 @@ func ListRegistryMirrors() (string, error) {
 
 	var data [][]string
 	for _, item := range mirrors {
-		name := item.Labels["mirror"]
-		url := item.Labels["url"]
+		name := item.Labels[constants.EducatesContainersMirrorLabelKey]
+		url := item.Labels[constants.EducatesContainersURLLabelKey]
 		if url == "" {
-			url = item.Labels["mirror"]
+			url = item.Labels[constants.EducatesContainersMirrorLabelKey]
 		}
-		username := item.Labels["username"]
+		username := item.Labels[constants.EducatesContainersUsernameLabelKey]
 		status := item.Status
 		containerName := utils.GetContainerName(item)
 		data = append(data, []string{name, url, username, status, containerName})

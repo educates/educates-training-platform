@@ -165,7 +165,7 @@ type ClusterSecretsConfig struct {
 }
 
 type SessionManagerConfig struct {
-	ClusterRoles []string `yaml:"clusterRoles,omitempty"`
+	ClusterAdmin bool `yaml:"clusterAdmin,omitempty"`
 }
 
 type UserCredentialsConfig struct {

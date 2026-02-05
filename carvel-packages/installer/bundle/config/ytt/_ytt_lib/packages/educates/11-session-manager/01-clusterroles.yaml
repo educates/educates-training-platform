@@ -3,6 +3,63 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  name: #@ "{}-session-manager".format(data.values.operator.namePrefix)
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.educates.dev/session-manager: "true"
+rules: []
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: #@ "{}-session-manager:core".format(data.values.operator.namePrefix)
+  labels:
+    rbac.educates.dev/session-manager: "true"
+rules:
+- apiGroups:
+    - ""
+  resources:
+    - namespaces
+  verbs:
+    - "*"
+- apiGroups:
+    - ""
+  resources:
+    - limitranges
+    - resourcequotas
+  verbs:
+    - "*"
+- apiGroups:
+    - rbac.authorization.k8s.io
+  resources:
+    - clusterroles
+    - clusterrolebindings
+  verbs:
+    - "*"
+- apiGroups:
+    - training.educates.dev
+  resources:
+    - workshops
+    - workshopsessions
+    - trainingportals
+    - workshopenvironments
+    - workshopallocations
+    - workshoprequests
+  verbs:
+    - "*"
+- apiGroups:
+    - secrets.educates.dev
+  resources:
+    - secretcopiers
+  verbs:
+    - "*"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
   name: #@ "{}-view-session-role".format(data.values.operator.namePrefix)
 rules:
   - apiGroups:

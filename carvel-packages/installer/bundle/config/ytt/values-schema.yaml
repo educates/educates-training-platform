@@ -127,6 +127,9 @@ localDNSResolver: {}
 #! This is only so that the images generates are loaded from this registry. There's a pre-proccesing step that will generate a images file
 #! so that this is not needed to be provided by the user.
 #@schema/nullable
+sessionManager:
+  clusterAdmin: true
+#@schema/nullable
 imageRegistry:
   #@schema/nullable
   #@schema/validation min_len=1

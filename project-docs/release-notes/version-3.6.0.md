@@ -11,6 +11,13 @@ Bugs Fixed
 New Features
 ------------
 
+* It is now possible to restrict permissions given to the session manager so
+  that it does not have full cluster admin access. Workshops which only need
+  access to the session namespace will still work, but workshops will not be
+  able to be setup to use cluster wide resources such as custom resources for
+  operators. For more details see
+  [Restricting session manager permissions](restricting-session-manager-permissions).
+
 * Examiner test scripts can now be provided as part of an extension package.
   These should be placed under the `examiner/tests` directory of the package.
 

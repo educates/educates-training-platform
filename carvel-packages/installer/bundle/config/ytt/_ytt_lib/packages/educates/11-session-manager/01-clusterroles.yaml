@@ -7,7 +7,7 @@ metadata:
 aggregationRule:
   clusterRoleSelectors:
   - matchLabels:
-      rbac.educates.dev/session-manager: "true"
+      rbac.educates.dev/extends-workshop-permissions: "true"
 rules: []
 
 ---
@@ -16,7 +16,7 @@ kind: ClusterRole
 metadata:
   name: #@ "{}-session-manager:core".format(data.values.operator.namePrefix)
   labels:
-    rbac.educates.dev/session-manager: "true"
+    rbac.educates.dev/extends-workshop-permissions: "true"
 rules:
 - apiGroups:
     - ""

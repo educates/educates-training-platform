@@ -224,9 +224,9 @@ When cluster admin permissions are dropped from the session manager, workshops t
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: extra-workshop-permissions
+  name: custom-workshop-permissions
   labels:
-    rbac.educates.dev/session-manager: "true"
+    rbac.educates.dev/extends-workshop-permissions: "true"
 rules:
 - apiGroups:
   - "kappctrl.k14s.io"

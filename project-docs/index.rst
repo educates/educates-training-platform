@@ -30,6 +30,7 @@ Educates
   installation-guides/cli-based-installation
   installation-guides/carvel-based-installation
   installation-guides/infrastructure-providers
+  installation-guides/secure-http-connections
   installation-guides/configuration-settings
 
 .. toctree::

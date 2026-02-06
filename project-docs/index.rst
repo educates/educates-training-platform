@@ -73,6 +73,18 @@ Educates
 
 .. toctree::
   :maxdepth: 2
+  :caption: Lookup Service:
+
+  lookup-service/service-overview
+  lookup-service/custom-resources
+  lookup-service/cluster-monitoring
+  lookup-service/client-authentication
+  lookup-service/workshops-api
+  lookup-service/portal-integration
+  lookup-service/admin-rest-api
+
+.. toctree::
+  :maxdepth: 2
   :caption: Workshop Migration:
 
   workshop-migration/learning-center

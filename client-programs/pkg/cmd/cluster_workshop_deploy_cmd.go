@@ -132,20 +132,21 @@ func (o *ClusterWorkshopDeployOptions) Run() error {
 		Registry: o.Repository,
 		Environ: o.Environ,
 		Labels: o.Labels,
-		OpenBrowser: o.OpenBrowser,
 	}
 	err = manager.DeployWorkshopResource(&deployConfig)
 
-	// TODO: Move open browser logic to separate function and extract logic here
-	// if o.OpenBrowser {
-	// 	err = manager.OpenBrowser(&deployConfig)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
-
 	if err != nil {
 		return err
+	}
+
+	openBrowserConfig := workshops.OpenBrowserConfig{
+		Portal: o.Portal,
+	}
+	if o.OpenBrowser {
+		err = manager.OpenBrowser(&openBrowserConfig)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

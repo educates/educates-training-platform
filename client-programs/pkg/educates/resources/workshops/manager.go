@@ -58,7 +58,6 @@ type DeployWorkshopConfig struct {
 	Registry string
 	Environ []string
 	Labels []string
-	OpenBrowser bool
 }
 
 type UpdateWorkshopResourceConfig struct {
@@ -81,6 +80,10 @@ type ListWorkshopResourcesConfig struct {
 type DeleteWorkshopResourceConfig struct {
 	Name string
 	Alias string
+	Portal string
+}
+
+type OpenBrowserConfig struct {
 	Portal string
 }
 
@@ -344,75 +347,6 @@ func (m *WorkshopManager) DeployWorkshopResource(o *DeployWorkshopConfig) error 
 
 	fmt.Print("Workshop added to training portal.\n")
 
-	if o.OpenBrowser {
-		// Need to refetch training portal because if was just created the URL
-		// for access may not have been set yet.
-
-		var targetUrl string
-
-		fmt.Print("Checking training portal is ready.\n")
-
-		spinner := func(iteration int) string {
-			spinners := `|/-\`
-			return string(spinners[iteration%len(spinners)])
-		}
-
-		for i := 1; i < 60; i++ {
-			fmt.Printf("\r[%s] Waiting...", spinner(i))
-
-			time.Sleep(time.Second)
-
-			trainingPortal, err = trainingPortalClient.Get(context.TODO(), o.Portal, metav1.GetOptions{})
-
-			if err != nil {
-				return errors.Wrapf(err, "unable to fetch training portal %q in cluster", o.Portal)
-			}
-
-			var found bool
-
-			targetUrl, found, _ = unstructured.NestedString(trainingPortal.Object, "status", "educates", "url")
-
-			if found {
-				break
-			}
-		}
-
-		rootUrl := targetUrl
-
-		password, _, _ := unstructured.NestedString(trainingPortal.Object, "spec", "portal", "password")
-
-		if password != "" {
-			values := url.Values{}
-			values.Add("redirect_url", "/")
-			values.Add("password", password)
-
-			targetUrl = fmt.Sprintf("%s/workshops/access/?%s", targetUrl, values.Encode())
-		}
-
-		for i := 1; i < 300; i++ {
-			fmt.Printf("\r[%s] Waiting...", spinner(i))
-
-			time.Sleep(time.Second)
-
-			resp, err := http.Get(rootUrl)
-
-			if err != nil || resp.StatusCode == 503 {
-				continue
-			}
-
-			defer resp.Body.Close()
-			io.ReadAll(resp.Body)
-
-			break
-		}
-
-		fmt.Print("\r              \r")
-
-		fmt.Printf("Opening training portal %s.\n", targetUrl)
-
-		return utils.OpenBrowser(targetUrl)
-	}
-
 	return nil
 }
 
@@ -536,6 +470,82 @@ func (m *WorkshopManager) DeleteWorkshopResource(o *DeleteWorkshopResourceConfig
 	}
 
 	return nil
+}
+
+func (m *WorkshopManager) OpenBrowser(o *OpenBrowserConfig) error {
+	trainingPortalClient := m.Client.Resource(educatesTypes.TrainingPortalResource)
+
+	// Need to refetch training portal because if was just created the URL
+	// for access may not have been set yet.
+
+	var targetUrl string
+
+	fmt.Print("Checking training portal is ready.\n")
+
+	spinner := func(iteration int) string {
+		spinners := `|/-\`
+		return string(spinners[iteration%len(spinners)])
+	}
+
+	var trainingPortal *unstructured.Unstructured
+	var found bool
+	var err error
+
+	for i := 1; i < 60; i++ {
+		fmt.Printf("\r[%s] Waiting...", spinner(i))
+
+		time.Sleep(time.Second)
+
+		trainingPortal, err = trainingPortalClient.Get(context.TODO(), o.Portal, metav1.GetOptions{})
+
+		if err != nil {
+			return errors.Wrapf(err, "unable to fetch training portal %q in cluster", o.Portal)
+		}
+
+		targetUrl, found, _ = unstructured.NestedString(trainingPortal.Object, "status", "educates", "url")
+
+		if found {
+			break
+		}
+	}
+	if !found {
+		return errors.New("training portal not found")
+	}
+
+	rootUrl := targetUrl
+
+	password, _, _ := unstructured.NestedString(trainingPortal.Object, "spec", "portal", "password")
+
+	if password != "" {
+		values := url.Values{}
+		values.Add("redirect_url", "/")
+		values.Add("password", password)
+
+		targetUrl = fmt.Sprintf("%s/workshops/access/?%s", targetUrl, values.Encode())
+	}
+
+	for i := 1; i < 300; i++ {
+		fmt.Printf("\r[%s] Waiting...", spinner(i))
+
+		time.Sleep(time.Second)
+
+		resp, err := http.Get(rootUrl)
+
+		if err != nil || resp.StatusCode == 503 {
+			continue
+		}
+
+		defer resp.Body.Close()
+		io.ReadAll(resp.Body)
+
+		break
+	}
+
+	fmt.Print("\r              \r")
+
+	fmt.Printf("Opening training portal %s.\n", targetUrl)
+
+	return utils.OpenBrowser(targetUrl)
 }
 
 func LoadWorkshopDefinition(o *WorkshopDefinitionConfig) (*unstructured.Unstructured, error) {

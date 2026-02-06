@@ -710,3 +710,19 @@ sessionCookies:
 ```
 
 The cookie domain can also be overridden on a per training portal definition in the training portal definition. This option may also have to be used in conjunction with options for specifying allowed frame ancestors when embedding.
+
+Enabling the lookup service
+---------------------------
+
+The lookup service is an optional component that provides a centralized REST API for aggregating access to workshops across multiple training portals and Kubernetes clusters. When enabled, a custom front-end portal can use the lookup service as a single entry point for discovering available workshops and requesting workshop sessions, rather than interacting with individual training portals directly.
+
+To enable the lookup service, include the following in the configuration when deploying Educates:
+
+```yaml
+lookupService:
+  enabled: true
+```
+
+Once deployed, the lookup service will be accessible via an ingress at a URL of the form ``http://educates-api.<ingress-domain>``. Before it can be used, you will need to configure monitored clusters, tenants, and client credentials using custom resources.
+
+For full details on configuring and using the lookup service, see the [Lookup Service](lookup-service-service-overview) documentation.

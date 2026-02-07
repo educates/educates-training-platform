@@ -8,6 +8,7 @@ Educates
   :caption: Project Details:
 
   project-details/project-overview
+  project-details/platform-architecture
   project-details/project-roadmap
   project-details/sample-screenshots
 

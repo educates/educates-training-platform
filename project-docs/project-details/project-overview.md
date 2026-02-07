@@ -82,25 +82,4 @@ The workshop dashboard includes:
 
 * **Custom dashboard tabs** — Additional web-based applications specific to the topic of the workshop can be integrated into the dashboard.
 
-Platform architectural overview
--------------------------------
-
-When deployed to Kubernetes, Educates uses a Kubernetes operator to manage the lifecycle of workshops and user sessions. The operator is controlled through a set of custom resource types specific to Educates.
-
-The primary deployment model is to create a training portal, which provides a web-based interface where users can browse available workshops and launch sessions on demand. The training portal also exposes a REST API, allowing custom front ends to be created that integrate with external identity providers.
-
-![](architectural-overview.png)
-
-When a user selects a workshop from the training portal, a workshop session is allocated (or created on demand) and the user is redirected to their own isolated session. Each session can be associated with one or more Kubernetes namespaces, with RBAC and resource quotas ensuring users can only access the resources they are allowed to.
-
-The custom resource types involved are:
-
-* ``Workshop`` — Defines a workshop, including where the content is hosted (Git repository, OCI image, or web server), any additional tools required, resources to be pre-created for each session or shared across all sessions, and the resource quotas and access roles for the workshop.
-
-* ``TrainingPortal`` — Triggers the deployment of a training portal instance. A training portal can provide access to one or more distinct workshops and handles user registration, session management, and the REST API.
-
-* ``WorkshopEnvironment`` — Created by the training portal to set up the environment for a particular workshop, including a namespace for shared resources and the infrastructure needed to run sessions.
-
-* ``WorkshopSession`` — Created by the training portal to provision an individual user session within a workshop environment. Sessions can be pre-created in reserve for fast allocation, or created on demand.
-
-A command line tool (``educates``) is also provided which simplifies common operations. It is particularly useful for local development of workshop content, where it can create a local Kind cluster, deploy Educates, and provide a fast iteration workflow with a local image registry. For production deployments to hosted Kubernetes clusters, administrators will typically work directly with the custom resources.
+For a detailed look at how the platform is structured, including content distribution, the workshop session dashboard, Kubernetes deployment internals, and local deployment options, see the [Platform Architecture](platform-architecture) page.

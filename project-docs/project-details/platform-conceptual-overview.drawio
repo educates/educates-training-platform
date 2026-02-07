@@ -1,0 +1,94 @@
+<mxfile host="65bd71144e">
+    <diagram id="conceptual-overview" name="Page-1">
+        <mxGraphModel dx="897" dy="827" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="author-group" value="Workshop Author" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#2875E2;strokeWidth=2;fontSize=14;fontStyle=bold;fontColor=#1a1a1a;spacing=10;verticalAlign=top;" parent="1" vertex="1">
+                    <mxGeometry x="20" y="250" width="180" height="320" as="geometry"/>
+                </mxCell>
+                <mxCell id="markdown" value="Markdown Files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=12;fontColor=white;" parent="author-group" vertex="1">
+                    <mxGeometry x="20" y="60" width="140" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="config" value="Configuration Files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=12;fontColor=white;" parent="author-group" vertex="1">
+                    <mxGeometry x="20" y="120" width="140" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="assets" value="Assets &amp; Resources" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=12;fontColor=white;" parent="author-group" vertex="1">
+                    <mxGeometry x="20" y="180" width="140" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="builds" value="Build &amp; Package" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=12;fontColor=white;" parent="author-group" vertex="1">
+                    <mxGeometry x="20" y="240" width="140" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="distribution-group" value="Content Distribution" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#2875E2;strokeWidth=2;fontSize=14;fontStyle=bold;fontColor=#1a1a1a;spacing=10;verticalAlign=top;" parent="1" vertex="1">
+                    <mxGeometry x="240" y="250" width="180" height="320" as="geometry"/>
+                </mxCell>
+                <mxCell id="git-repo" value="Git Repository" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=12;fontColor=white;" parent="distribution-group" vertex="1">
+                    <mxGeometry x="20" y="60" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="oci-registry" value="OCI Image Registry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=12;fontColor=white;" parent="distribution-group" vertex="1">
+                    <mxGeometry x="20" y="140" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="web-server" value="Web Server" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=12;fontColor=white;" parent="distribution-group" vertex="1">
+                    <mxGeometry x="20" y="220" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="admin-label" value="Platform Administrator" style="text=1;fontSize=14;fontStyle=bold;fillColor=none;strokeColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="260" width="160" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="admin-action" value="Deploys Educates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=12;fontColor=white;" parent="1" vertex="1">
+                    <mxGeometry x="460" y="290" width="160" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="platform-group" value="Educates Platform" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#2875E2;strokeWidth=2;fontSize=14;fontStyle=bold;fontColor=#1a1a1a;spacing=10;verticalAlign=top;" parent="1" vertex="1">
+                    <mxGeometry x="460" y="380" width="460" height="340" as="geometry"/>
+                </mxCell>
+                <mxCell id="training-portal" value="Training Portal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=12;fontColor=white;" parent="platform-group" vertex="1">
+                    <mxGeometry x="20" y="40" width="420" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="workshop-env-group" value="Workshop Environment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0F0F0;strokeColor=#999999;strokeWidth=1;fontSize=11;fontColor=#333333;verticalAlign=top;" parent="platform-group" vertex="1">
+                    <mxGeometry x="20" y="110" width="420" height="210" as="geometry"/>
+                </mxCell>
+                <mxCell id="session-1" value="Workshop Session 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=11;fontColor=white;verticalAlign=top;" parent="workshop-env-group" vertex="1">
+                    <mxGeometry x="13" y="40" width="190" height="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="session-1-content" value="• Instructions Panel&#xa;• Terminal&#xa;• Editor&#xa;• Web Console" style="text=1;fontSize=10;fillColor=none;strokeColor=none;fontColor=white;" parent="session-1" vertex="1">
+                    <mxGeometry x="5" y="40" width="180" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="session-2" value="Workshop Session 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=11;fontColor=white;verticalAlign=top;" parent="workshop-env-group" vertex="1">
+                    <mxGeometry x="217" y="40" width="190" height="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="session-2-content" value="• Instructions Panel&#xa;• Terminal&#xa;• Editor&#xa;• Web Console" style="text=1;fontSize=10;fillColor=none;strokeColor=none;fontColor=white;" parent="session-2" vertex="1">
+                    <mxGeometry x="5" y="40" width="180" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="learner-group" value="Learner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#2875E2;strokeWidth=2;fontSize=14;fontStyle=bold;fontColor=#1a1a1a;spacing=10;verticalAlign=top;" parent="1" vertex="1">
+                    <mxGeometry x="960" y="250" width="200" height="420" as="geometry"/>
+                </mxCell>
+                <mxCell id="access" value="Access Training Portal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=11;fontColor=white;" parent="learner-group" vertex="1">
+                    <mxGeometry x="20" y="50" width="160" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="select" value="Select Workshop" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=11;fontColor=white;" parent="learner-group" vertex="1">
+                    <mxGeometry x="20" y="114" width="160" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="launch" value="Launch Session" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=11;fontColor=white;" parent="learner-group" vertex="1">
+                    <mxGeometry x="20" y="180" width="160" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="interact" value="Interact with Environment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=11;fontColor=white;" parent="learner-group" vertex="1">
+                    <mxGeometry x="20" y="250" width="162.5" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="complete" value="Complete &amp; Review" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;strokeColor=#2875E2;strokeWidth=1;fontSize=11;fontColor=white;" parent="learner-group" vertex="1">
+                    <mxGeometry x="18.75" y="320" width="162.5" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-1" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#666666;strokeWidth=2;" parent="1" source="author-group" target="distribution-group" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-2" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#666666;strokeWidth=2;" parent="1" source="distribution-group" target="admin-action" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-3" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#666666;strokeWidth=2;" parent="1" source="admin-action" target="platform-group" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-4" value="" style="endArrow=classic;html=1;rounded=0;strokeColor=#666666;strokeWidth=2;" parent="1" source="platform-group" target="learner-group" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

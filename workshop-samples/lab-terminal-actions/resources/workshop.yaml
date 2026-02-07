@@ -1,0 +1,30 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: lab-terminal-actions
+spec:
+  title: Terminal Clickable Actions Test
+  description: Test workshop for verifying all terminal clickable action types including both current and deprecated formats.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/lab-terminal-actions-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/lab-terminal-actions-files:$(workshop_version)"
+      includePaths:
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      security:
+        token:
+          enabled: false
+    applications:
+      terminal:
+        enabled: true
+        layout: split/2
+    dashboards:
+    - name: Terminal#4
+      url: terminal:4

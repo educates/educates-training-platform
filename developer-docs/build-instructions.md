@@ -225,3 +225,10 @@ If you're working on updates or additions to the project documentation served at
 make build-project-docs
 make open-project-docs
 ```
+
+Sample workshops for testing
+----------------------------
+
+A set of sample workshops are provided for testing and demonstrating different features of the Educates platform. These are not intended for end user consumption but serve as minimal pre-canned workshops for verifying platform functionality.
+
+For details on the available sample workshops and instructions on how to deploy them, see the [workshop samples README](../workshop-samples/README.md).

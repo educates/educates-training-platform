@@ -1264,7 +1264,7 @@ const educates = (function () {
                 throw new Error("Command not provided");
             }
 
-            terminals.execute_in_terminal(command, session, clear);
+            execute_in_terminal(command, session, clear);
         }
     });
 
@@ -1284,7 +1284,7 @@ const educates = (function () {
                 throw new Error("Command not provided");
             }
 
-            terminals.execute_in_all_terminals(command, clear);
+            execute_in_all_terminals(command, clear);
         }
     });
 
@@ -1298,13 +1298,13 @@ const educates = (function () {
 
             const session = args.session;
 
-            terminals.interrupt_terminal(session);
+            interrupt_terminal(session);
         }
     });
 
     clickable_action_handler("terminal:interrupt-all", {
         handler: function (_element, _args) {
-            terminals.interrupt_all_terminals();
+            interrupt_all_terminals();
         }
     });
 
@@ -1318,13 +1318,13 @@ const educates = (function () {
 
             const session = args.session;
 
-            terminals.clear_terminal(session);
+            clear_terminal(session);
         }
     });
 
     clickable_action_handler("terminal:clear-all", {
         handler: function (_element, _args) {
-            terminals.clear_all_terminals();
+            clear_all_terminals();
         }
     });
 
@@ -1347,9 +1347,9 @@ const educates = (function () {
             }
 
             if (endl) {
-                terminals.paste_to_terminal(text + '\n', session);
+                paste_to_terminal(text + '\n', session);
             } else {
-                terminals.paste_to_terminal(text, session);
+                paste_to_terminal(text, session);
             }
         }
     });

@@ -1340,7 +1340,7 @@ const educates = (function () {
 
             const text = args.text;
             const session = args.session || "1";
-            const endl = args.endl || true;
+            const endl = args.endl;
 
             if (!text) {
                 throw new Error("Text not provided");

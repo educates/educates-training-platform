@@ -1,13 +1,15 @@
 Educates
 ========
 
-**Educates** is a system for hosting interactive workshop environments in Kubernetes (including OpenShift), or a local docker environment. It can be used for self paced or supervised workshops. It can also be useful where you need to package up demos of applications hosted in Kubernetes.
+**Educates** is a platform for hosting hands-on, interactive workshop environments. Each user gets their own isolated session with step-by-step instructions, integrated terminals, an embedded VS Code editor, and access to whatever runtime environment the workshop requires — from a simple container through to a full virtual machine. Educates can be deployed to a Kubernetes cluster (including OpenShift) to host workshops at scale, or a single workshop can be run locally using a container runtime such as Docker. It can be used for self-paced or supervised workshops, and is also useful for packaging up product demos.
 
 .. toctree::
   :maxdepth: 2
   :caption: Project Details:
 
   project-details/project-overview
+  project-details/platform-architecture
+  project-details/platform-comparison
   project-details/project-roadmap
   project-details/sample-screenshots
 

@@ -36,16 +36,10 @@ session: 1
 
 ## Setup: Start Commands in Multiple Terminals
 
-Start long-running commands in terminals 1 and 2 to test `terminal:interrupt-all`.
+Start long-running commands in all terminals to test `terminal:interrupt-all`.
 
-```terminal:execute
-command: while true; do echo "Terminal 1 running... $(date)"; sleep 1; done
-session: 1
-```
-
-```terminal:execute
-command: while true; do echo "Terminal 2 running... $(date)"; sleep 1; done
-session: 2
+```terminal:execute-all
+command: while true; do echo "Running... $(date)"; sleep 1; done
 ```
 
 ## Interrupt All Terminals
@@ -63,4 +57,29 @@ The markdown for this action is:
 Click the action below to interrupt all running commands:
 
 ```terminal:interrupt-all
+```
+
+## Interrupt All Using Session Wildcard
+
+An alternative to `terminal:interrupt-all` is to use `terminal:interrupt` with
+`session` set to `"*"`. This sends Ctrl-C to all terminal sessions in the same way.
+
+First, start long-running commands in all terminals again.
+
+```terminal:execute-all
+command: while true; do echo "Running... $(date)"; sleep 1; done
+```
+
+The markdown for this action is:
+
+~~~
+```terminal:interrupt
+session: "*"
+```
+~~~
+
+Click the action below to interrupt all running commands:
+
+```terminal:interrupt
+session: "*"
 ```

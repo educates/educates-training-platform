@@ -18,7 +18,7 @@
 # -- Project information -----------------------------------------------------
 
 project = 'Educates'
-copyright = '2020-2024 The Educates Authors'
+copyright = '2020-2026 The Educates Authors'
 author = 'Graham Dumpleton'
 
 

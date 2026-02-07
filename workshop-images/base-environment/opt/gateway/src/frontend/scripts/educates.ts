@@ -1228,9 +1228,9 @@ class Terminals {
         if (command == "<ctrl-c>" || command == "<ctrl+c>")
             return await this.interrupt_all_terminals()
 
-        await this.execute_in_terminal(command, "1")
-        await this.execute_in_terminal(command, "2")
-        await this.execute_in_terminal(command, "3")
+        await this.execute_in_terminal(command, "1", clear)
+        await this.execute_in_terminal(command, "2", clear)
+        await this.execute_in_terminal(command, "3", clear)
 
         this.select_terminal("1")
     }

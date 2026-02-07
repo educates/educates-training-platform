@@ -35,3 +35,5 @@ pages:
 - `execute` — Legacy equivalent of `terminal:execute`
 - `execute-1`, `execute-2`, `execute-3` — Legacy terminal-specific execution
 - `execute-all` — Legacy equivalent of `terminal:execute-all`
+- `copy` — Legacy equivalent of `workshop:copy`
+- `copy-and-edit` — Legacy equivalent of `workshop:copy-and-edit`

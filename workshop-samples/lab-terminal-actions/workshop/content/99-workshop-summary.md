@@ -27,6 +27,8 @@ Educates.
 - `execute` — Legacy command execution and `<ctrl+c>` interrupt
 - `execute-1`, `execute-2`, `execute-3` — Legacy terminal-specific execution
 - `execute-all` — Legacy execution across all terminals
+- `copy` — Legacy copy text to paste buffer
+- `copy-and-edit` — Legacy copy text to paste buffer with edit indicator
 
 All deprecated actions remain functional for backward compatibility but should
 not be used in new workshop content. Use the `terminal:*` namespaced actions

@@ -8,6 +8,9 @@ Bugs Fixed
   This has only been fixed for Hugo renderer and not the deprecated classic
   renderer.
 
+* When using the `terminal:execute-all` clickable action, if `clear` was set
+  to `true`, the terminals were not being cleared.
+
 New Features
 ------------
 

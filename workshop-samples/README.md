@@ -1,0 +1,41 @@
+Workshop Samples
+================
+
+This directory contains various workshop samples. These are not intended for
+end user consumption and are intended to provide some minimal pre-canned
+workshops which can be used to test and demonstrate different features of
+the Educates platform.
+
+Deploying Workshops
+-------------------
+
+To deploy a workshop from one of the sub directories, first ensure you have
+an Educates cluster available and the `educates` CLI installed. Then from the
+root of the workshop sub directory, run the following commands.
+
+Publish the workshop to the Educates cluster:
+
+```
+educates publish-workshop
+```
+
+Deploy the workshop so that it is available to users:
+
+```
+educates deploy-workshop
+```
+
+Once deployed, you can browse available workshops and access them by running:
+
+```
+educates browse-workshops
+```
+
+This will open a browser window where you can select and launch the workshop.
+
+Available Workshops
+-------------------
+
+* [lab-terminal-actions](lab-terminal-actions/) - Test workshop for verifying
+  all terminal clickable action types including both the current preferred
+  action formats and deprecated legacy formats.

@@ -14,6 +14,13 @@ Educates.
 - `terminal:interrupt-all` — Interrupt all terminal sessions
 - `terminal:clear` — Clear specific terminal buffer
 - `terminal:clear-all` — Clear all terminal buffers
+- `terminal:select` — Switch focus to specific terminal session
+
+**Workshop actions and shortcodes tested:**
+
+- `workshop:copy` — Copy single and multi-line text to paste buffer
+- `workshop:copy-and-edit` — Copy text to paste buffer with edit indicator
+- `{{</* copy */>}}` — Inline copy shortcode for code spans
 
 **Deprecated actions tested:**
 

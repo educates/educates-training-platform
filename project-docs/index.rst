@@ -9,6 +9,7 @@ Educates
 
   project-details/project-overview
   project-details/platform-architecture
+  project-details/platform-comparison
   project-details/project-roadmap
   project-details/sample-screenshots
 

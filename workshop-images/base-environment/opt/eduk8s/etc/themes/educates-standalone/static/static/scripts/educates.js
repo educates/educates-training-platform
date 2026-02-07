@@ -1072,7 +1072,7 @@ const educates = (function () {
         if (!enabled) {
             console.log(`Action ${action_id} is disabled`);
             if (args.cascade) {
-                const pause = args.pause * 1000 || ACTION_CASCADE_MS;
+                const pause = args.pause !== undefined ? args.pause * 1000 : ACTION_CASCADE_MS;
                 setTimeout(() => trigger_next_action(element), pause);
             }
             return;
@@ -1167,7 +1167,7 @@ const educates = (function () {
             // Handle cascade if configured (after finish callback completes).
 
             if (args.cascade) {
-                const pause = args.pause * 1000 || ACTION_CASCADE_MS;
+                const pause = args.pause !== undefined ? args.pause * 1000 : ACTION_CASCADE_MS;
                 setTimeout(() => trigger_next_action(element), pause);
             }
 

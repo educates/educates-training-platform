@@ -1,0 +1,76 @@
+<mxfile host="65bd71144e">
+    <diagram id="session-environment" name="Page-1">
+        <mxGraphModel dx="897" dy="827" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="learner" value="Learner" style="ellipse;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=12;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="20" y="340" width="80" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="browser-label" value="Web Browser" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=0;align=center" parent="1" vertex="1">
+                    <mxGeometry x="15" y="410" width="90" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="learner-arrow" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;endArrow=classic;endFill=1" parent="1" source="learner" target="dashboard-container" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="dashboard-container" value="Workshop Dashboard" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#2875E2;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#333333;verticalAlign=top;" parent="1" vertex="1">
+                    <mxGeometry x="140" y="50" width="420" height="720" as="geometry"/>
+                </mxCell>
+                <mxCell id="instructions" value="Instructions Panel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="160" y="100" width="180" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="terminals" value="Terminal(s)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="360" y="100" width="180" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="editor" value="Embedded Editor (VS Code)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="160" y="230" width="180" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="k8s-console" value="Kubernetes Web Console" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="360" y="230" width="180" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="slides" value="Slide Deck" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="160" y="360" width="180" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="custom-tabs" value="Custom Tabs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="360" y="360" width="180" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="dashboard-to-env" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;endArrow=classic;endFill=1" parent="1" source="dashboard-container" target="env-container" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="env-container" value="Session Environment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#2875E2;strokeWidth=2;fontSize=13;fontStyle=1;fontColor=#333333" parent="1" vertex="1">
+                    <mxGeometry x="640" y="50" width="400" height="720" as="geometry"/>
+                </mxCell>
+                <mxCell id="container" value="Container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1;strokeWidth=2;strokeColor=#2875E2" parent="1" vertex="1">
+                    <mxGeometry x="670" y="100" width="340" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="container-note" value="(Always Present)" style="text;html=1;strokeColor=none;fillColor=none;fontSize=9;fontStyle=2;align=center;fontColor=#666666" parent="1" vertex="1">
+                    <mxGeometry x="670" y="180" width="340" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="k8s-namespace" value="Kubernetes Namespace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1;strokeWidth=2;strokeDasharray=5,5;strokeColor=#2875E2" parent="1" vertex="1">
+                    <mxGeometry x="670" y="230" width="340" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="optional-1" value="(Optional)" style="text;html=1;strokeColor=none;fillColor=none;fontSize=9;fontStyle=2;align=center;fontColor=#999999" parent="1" vertex="1">
+                    <mxGeometry x="670" y="310" width="340" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="vcluster" value="Virtual Cluster / vcluster" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1;strokeWidth=2;strokeDasharray=5,5;strokeColor=#2875E2" parent="1" vertex="1">
+                    <mxGeometry x="670" y="360" width="340" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="optional-2" value="(Optional)" style="text;html=1;strokeColor=none;fillColor=none;fontSize=9;fontStyle=2;align=center;fontColor=#999999" parent="1" vertex="1">
+                    <mxGeometry x="670" y="440" width="340" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="local-vm" value="Local VM / KubeVirt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1;strokeWidth=2;strokeDasharray=5,5;strokeColor=#2875E2" parent="1" vertex="1">
+                    <mxGeometry x="670" y="490" width="340" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="optional-3" value="(Optional)" style="text;html=1;strokeColor=none;fillColor=none;fontSize=9;fontStyle=2;align=center;fontColor=#999999" parent="1" vertex="1">
+                    <mxGeometry x="670" y="570" width="340" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="remote-vm" value="Remote VM / Crossplane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2875E2;fontColor=#FFFFFF;fontSize=11;fontStyle=1;strokeWidth=2;strokeDasharray=5,5;strokeColor=#2875E2" parent="1" vertex="1">
+                    <mxGeometry x="670" y="620" width="340" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="optional-4" value="(Optional)" style="text;html=1;strokeColor=none;fillColor=none;fontSize=9;fontStyle=2;align=center;fontColor=#999999" parent="1" vertex="1">
+                    <mxGeometry x="670" y="700" width="340" height="20" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

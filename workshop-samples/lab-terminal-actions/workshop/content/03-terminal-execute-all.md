@@ -42,3 +42,46 @@ Click the action below to test it:
 command: echo "All terminals cleared then this ran"
 clear: true
 ```
+
+## Execute All Using Session Wildcard
+
+An alternative to `terminal:execute-all` is to use `terminal:execute` with `session`
+set to `"*"`. This targets all terminal sessions in the same way.
+
+The markdown for this action is:
+
+~~~
+```terminal:execute
+command: echo "Executed in all terminals using wildcard"
+session: "*"
+```
+~~~
+
+Click the action below to test it:
+
+```terminal:execute
+command: echo "Executed in all terminals using wildcard"
+session: "*"
+```
+
+## Execute All with Clear Using Session Wildcard
+
+The `clear` property also works when using the session wildcard approach.
+
+The markdown for this action is:
+
+~~~
+```terminal:execute
+command: echo "All terminals cleared then this ran using wildcard"
+session: "*"
+clear: true
+```
+~~~
+
+Click the action below to test it:
+
+```terminal:execute
+command: echo "All terminals cleared then this ran using wildcard"
+session: "*"
+clear: true
+```

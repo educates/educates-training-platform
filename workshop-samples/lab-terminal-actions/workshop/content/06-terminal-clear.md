@@ -13,16 +13,10 @@ instead.
 
 ## Setup: Generate Output
 
-First, generate some output in terminals 1 and 2 so there is content to clear.
+First, generate some output in all terminals so there is content to clear.
 
-```terminal:execute
-command: for i in $(seq 1 20); do echo "Terminal 1 - Line $i"; done
-session: 1
-```
-
-```terminal:execute
-command: for i in $(seq 1 20); do echo "Terminal 2 - Line $i"; done
-session: 2
+```terminal:execute-all
+command: for i in $(seq 1 20); do echo "Line $i"; done
 ```
 
 ## Clear Terminal 1
@@ -53,4 +47,29 @@ The markdown for this action is:
 Click the action below to clear all terminals:
 
 ```terminal:clear-all
+```
+
+## Clear All Using Session Wildcard
+
+An alternative to `terminal:clear-all` is to use `terminal:clear` with `session` set
+to `"*"`. This clears all terminal sessions in the same way.
+
+First, generate some output in all terminals again so there is content to clear.
+
+```terminal:execute-all
+command: for i in $(seq 1 20); do echo "Line $i"; done
+```
+
+The markdown for this action is:
+
+~~~
+```terminal:clear
+session: "*"
+```
+~~~
+
+Click the action below to clear all terminals:
+
+```terminal:clear
+session: "*"
 ```

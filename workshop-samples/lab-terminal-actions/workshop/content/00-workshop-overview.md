@@ -22,6 +22,13 @@ pages:
 - `terminal:interrupt-all` — Send Ctrl-C to all terminal sessions
 - `terminal:clear` — Clear a specific terminal session
 - `terminal:clear-all` — Clear all terminal sessions
+- `terminal:select` — Switch focus to a specific terminal session
+
+**Workshop clickable actions and shortcodes:**
+
+- `workshop:copy` — Copy text to the system paste buffer
+- `workshop:copy-and-edit` — Copy text to paste buffer, indicating editing is needed
+- `{{</* copy */>}}` — Inline shortcode to copy preceding code span to paste buffer
 
 **Deprecated clickable actions (legacy format):**
 

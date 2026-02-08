@@ -1146,7 +1146,7 @@ const educates = (function () {
             if (result instanceof Promise) {
                 // Apply timeout using Promise.race.
 
-                const timeout = args.timeout || ACTION_TIMEOUT_MS;
+                const timeout = args.timeout ? args.timeout * 1000 : ACTION_TIMEOUT_MS;
 
                 await Promise.race([
                     result,

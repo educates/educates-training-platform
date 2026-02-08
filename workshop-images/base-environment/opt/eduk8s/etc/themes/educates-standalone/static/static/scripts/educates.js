@@ -1086,7 +1086,7 @@ const educates = (function () {
         // Check cooldown to prevent rapid re-triggering. Get cooldown from args
         // (seconds) and convert to ms, or use global default.
 
-        const cooldown_ms = args.cooldown !== undefined ? args.cooldown * 1000 : ACTION_COOLDOWN_MS;
+        const cooldown_ms = args.cooldown !== undefined ? (args.cooldown < 0 ? Infinity : args.cooldown * 1000) : ACTION_COOLDOWN_MS;
 
         if (!check_cooldown(element, cooldown_ms)) {
             console.log(`Action ${action_id} in cooldown period`);
@@ -1792,7 +1792,7 @@ const educates = (function () {
                 args: args.args,
                 form: form_values,
                 timeout: args.timeout,
-                retries: args.retries,
+                retries: args.retries < 0 ? Infinity : args.retries,
                 delay: args.delay
             });
         }

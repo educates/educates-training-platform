@@ -1,5 +1,10 @@
 {{- $defaults := dict "cooldown" 3 -}}
 {{- $args := merge $defaults (.Inner | default "{}" | unmarshal) -}}
+{{- if isset $args "retries" -}}
+    {{- if or (eq (printf "%v" $args.retries) "+Inf") (eq (printf "%v" $args.retries) "-Inf") -}}
+        {{- $args = merge $args (dict "retries" -1) -}}
+    {{- end -}}
+{{- end -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "examiner:execute-test" -}}
 {{- $glyph := "fa-tasks" -}}

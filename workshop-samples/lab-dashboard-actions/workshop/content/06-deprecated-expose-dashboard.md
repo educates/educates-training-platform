@@ -11,7 +11,7 @@ supported for backward compatibility but should not be used in new workshops.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```dashboard:expose-dashboard
 name: Example
 ```

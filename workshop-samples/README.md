@@ -40,6 +40,11 @@ Available Workshops
   all dashboard clickable action types including both the current preferred
   action formats and deprecated legacy formats.
 
+* [lab-section-actions](lab-section-actions/) - Test workshop for verifying
+  all section clickable action types including collapsible sections, nested
+  sections, autostart within sections, cascade-triggered section closing,
+  and section headings.
+
 * [lab-terminal-actions](lab-terminal-actions/) - Test workshop for verifying
   all terminal clickable action types including both the current preferred
   action formats and deprecated legacy formats.

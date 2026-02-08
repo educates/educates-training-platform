@@ -14,7 +14,7 @@ spans within paragraph text.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```workshop:copy
 text: echo "Hello from the paste buffer!"
 ```
@@ -33,7 +33,7 @@ The `text` property supports multi-line content using YAML block scalars.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```workshop:copy
 text: |-
   echo "Line 1"
@@ -59,7 +59,7 @@ that should be changed before use.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```workshop:copy-and-edit
 text: export MY_VARIABLE=<insert-value-here>
 ```
@@ -80,7 +80,7 @@ momentarily show in an inverted style to indicate the content has been copied.
 
 The markdown for this is:
 
-~~~
+~~~markdown
 Run the command `echo "inline copy test"`{{</* copy */>}} to verify.
 ~~~
 

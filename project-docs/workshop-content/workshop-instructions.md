@@ -739,7 +739,7 @@ To show you understand ...
 
 The ``title`` should be set to the text you want included in the banner for the clickable action.
 
-A clickable action will only be shown for the beginning of the section and that for the end will always be hidden. Clicking on the action for the begining will expand the section. The section can be collapsed again by clicking on the action.
+A clickable action will only be shown for the beginning of the section and that for the end will always be hidden. Clicking on the action for the beginning will expand the section. The section can be collapsed again by clicking on the action.
 
 If desired, it is possible to create nested sections but you should name the action blocks for the beginning and end so they can be correctly matched.
 
@@ -770,7 +770,7 @@ name: questions
 
 The ``prefix`` attribute allows you to override the default ``Section`` prefix used on the title for the action.
 
-If a collapsible section includes an examiner action block and it is set to automatically run, it will only start when the collapsible section is expanded.
+If a collapsible section includes a clickable action with ``autostart`` set to ``true``, it will only start when the collapsible section is expanded.
 
 In case you want a section header showing in the same style as other clickable actions, you can use:
 
@@ -786,7 +786,7 @@ Clicking on this will still mark the action as having been completed, but will n
 Automatically triggering actions
 --------------------------------
 
-Rather than require a workshop user to click on a clickable action, you can have the action triggered automatically as soon as the page is loaded, or when a section it is contained in is expanded, by setting ``autostart`` to ``true``.
+Rather than require a workshop user to click on a clickable action, you can have the action triggered automatically as soon as the page is loaded, or when a section it is contained in is expanded, by setting ``autostart`` to ``true``. This can be used with any clickable action that accepts YAML in the body of the action block, including ``terminal:execute``, ``dashboard:reload-dashboard``, ``examiner:execute-test``, ``section:begin``, and others.
 
 For example, if using the clickable action for examiner tests, you could use:
 
@@ -803,7 +803,7 @@ autostart: true
 ```
 ~~~
 
-When a test succeeds, if you want to have the next clickable action in the same page automatically triggered, you can set ``cascade`` to ``true``. This could be another test as shown or any other clickable action.
+When a clickable action succeeds, if you want to have the next clickable action in the same page automatically triggered, you can set ``cascade`` to ``true``. Although shown here with examiner tests, ``cascade`` can be used with any clickable action that accepts YAML in the body of the action block.
 
 ~~~
 ```examiner:execute-test
@@ -825,6 +825,24 @@ args:
 - one
 retries: .INF
 delay: 1
+```
+~~~
+
+When ``cascade`` is used on the last clickable action inside a collapsible section, the next action in the page is the ``section:end`` block. Triggering ``section:end`` in this way causes the section to automatically collapse after the action completes. This can be combined with ``autostart`` to create sections that automatically run a command and then close themselves when expanded.
+
+~~~
+```section:begin
+name: setup
+title: Run Setup
+```
+
+```terminal:execute
+command: echo "Running setup"
+cascade: true
+```
+
+```section:end
+name: setup
 ```
 ~~~
 

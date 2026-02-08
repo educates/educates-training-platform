@@ -21,7 +21,7 @@ url: https://www.example.com
 
 Now delete it. The markdown for the delete action is:
 
-~~~
+~~~markdown
 ```dashboard:delete-dashboard
 name: Temporary
 ```
@@ -56,7 +56,7 @@ session: temp
 
 Now delete the dashboard:
 
-~~~
+~~~markdown
 ```dashboard:delete-dashboard
 name: Temp Terminal
 ```

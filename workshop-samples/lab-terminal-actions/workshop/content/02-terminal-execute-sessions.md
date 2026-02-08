@@ -11,7 +11,7 @@ terminal accessible via the "Terminal#4" dashboard tab.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: echo "Executed in terminal 1"
 session: 1
@@ -29,7 +29,7 @@ session: 1
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: echo "Executed in terminal 2"
 session: 2
@@ -49,7 +49,7 @@ Terminal 3 is the third terminal in the `split/2` layout.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: echo "Executed in terminal 3"
 session: 3
@@ -72,7 +72,7 @@ URL is `4`, the session name used to target it is also `4`.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: echo "Executed in terminal 4"
 session: 4

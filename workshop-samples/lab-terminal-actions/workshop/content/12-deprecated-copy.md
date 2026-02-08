@@ -15,7 +15,7 @@ itself (not YAML).
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```copy
 echo "Hello from deprecated copy"
 ```
@@ -31,7 +31,7 @@ echo "Hello from deprecated copy"
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```copy-and-edit
 export MY_VARIABLE=<insert-value-here>
 ```

@@ -11,7 +11,7 @@ block is the command itself rather than YAML.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```execute-all
 echo "Hello from deprecated execute-all"
 ```
@@ -31,7 +31,7 @@ A common use of the original `execute-all` was to clear all terminals.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```execute-all
 clear
 ```

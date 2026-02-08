@@ -646,7 +646,7 @@ delay: 1
 
 When retries are being used, the testing will be stopped as soon as the test program returns that it was sucessful.
 
-If you want to have retries go on for as long as the page of the workshop instructions is displayed, you can set ``retries`` to the special YAML value of ``.INF``.
+If you want to have retries go on for as long as the page of the workshop instructions is displayed, you can set ``retries`` to the special YAML value of ``.INF`` or to ``-1``.
 
 ~~~
 ```examiner:execute-test
@@ -852,7 +852,7 @@ Overriding action cooldown period
 
 For the majority of clickable actions a cooldown period is applied of 3 seconds. This means one is blocked from clicking on the same clickable action a second time until the cooldown period has expired. This is intended to avoid problems caused by accidental double clicks.
 
-This cooldown period can be overridden if it is desired to block a user from using the clickable action again for a longer period of time, by setting the `cooldown` property. The value of the period should be in seconds. One can also use the special value `.INF` if wanting to block it from being clicked a second time.
+This cooldown period can be overridden if it is desired to block a user from using the clickable action again for a longer period of time, by setting the `cooldown` property. The value of the period should be in seconds. One can also use the special value `.INF` or `-1` if wanting to block it from being clicked a second time.
 
 ~~~
 ```examiner:execute-test

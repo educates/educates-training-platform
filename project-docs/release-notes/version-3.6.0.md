@@ -46,3 +46,10 @@ Features Changed
   using exponential backoff, eventually ceasing reconnection efforts entirely
   after a specified duration. This prevents excessive browser activity when
   session connectivity is disrupted.
+
+* When using `cooldown` value for any clickable action, you can now use `-1`
+  to indicate an infinite period of time, ie., block triggering clickable
+  action again.
+
+* When using `retries` value with `examiner:execute-test` clickable action,
+  you can now use `-1` to indicate an infinite number of retries.

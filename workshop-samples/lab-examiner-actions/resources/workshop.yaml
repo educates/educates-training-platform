@@ -1,0 +1,28 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: lab-examiner-actions
+spec:
+  title: Examiner Clickable Actions Test
+  description: Test workshop for verifying all examiner:execute-test clickable action types including basic pass/fail, arguments, timeout, retries, form inputs, autostart, cascade, and cooldown.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/lab-examiner-actions-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/lab-examiner-actions-files:$(workshop_version)"
+      includePaths:
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      security:
+        token:
+          enabled: false
+    applications:
+      terminal:
+        enabled: true
+      examiner:
+        enabled: true

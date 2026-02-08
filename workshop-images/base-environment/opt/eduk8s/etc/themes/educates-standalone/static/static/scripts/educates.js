@@ -2261,6 +2261,7 @@ const educates = (function () {
                 if (sibling.classList.contains('clickable-action') &&
                     sibling.dataset.handler === 'section:begin' &&
                     sibling.dataset.sectionName === name) {
+                    delete sibling.dataset.actionCompleted;
                     sibling.click();
                     break;
                 }

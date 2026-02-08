@@ -271,10 +271,10 @@ name: Terminal
 ```
 ~~~
 
-Note that in the case of a dashboard tab embedding a terminal session, the terminal is not given focus. If you want to select a terminal session and ensure it has focus ready for entering text, you can use the ``dashboard:expose-terminal`` clickable action instead.
+Note that in the case of a dashboard tab embedding a terminal session, the terminal is not given focus. If you want to select a terminal session and ensure it has focus ready for entering text, you can use the ``terminal:select`` clickable action instead.
 
 ~~~text
-```dashboard:expose-terminal
+```terminal:select
 session: 1
 ```
 ~~~
@@ -1393,7 +1393,7 @@ Names for actions which can be targeted are the same as the clickable actions us
 * ``terminal:interrupt``
 * ``terminal:interrupt-all``
 * ``terminal:input``
-* ``dashboard:expose-terminal``
+* ``terminal:select``
 * ``dashboard:open-dashboard``
 * ``dashboard:create-dashboard``
 * ``dashboard:delete-dashboard``

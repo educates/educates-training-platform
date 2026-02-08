@@ -1,0 +1,17 @@
+#!/bin/bash
+
+CONFIG=$(cat -)
+
+echo "$CONFIG" > "$HOME/examiner-form-input.json"
+
+NAME=$(echo "$CONFIG" | jq -r -e ".name" 2>/dev/null)
+
+if [ "$?" != "0" ]; then
+    exit 1
+fi
+
+if [ -z "$NAME" ]; then
+    exit 1
+fi
+
+exit 0

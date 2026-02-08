@@ -1,0 +1,7 @@
+#!/bin/bash
+
+if [ "$1" = "hello" ]; then
+    exit 0
+fi
+
+exit 1

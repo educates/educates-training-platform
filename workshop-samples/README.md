@@ -40,6 +40,10 @@ Available Workshops
   all dashboard clickable action types including both the current preferred
   action formats and deprecated legacy formats.
 
+* [lab-examiner-actions](lab-examiner-actions/) - Test workshop for verifying
+  all examiner clickable action types including basic pass/fail tests, arguments,
+  timeout, retries, form inputs, autostart, cascade, and cooldown.
+
 * [lab-section-actions](lab-section-actions/) - Test workshop for verifying
   all section clickable action types including collapsible sections, nested
   sections, autostart within sections, cascade-triggered section closing,

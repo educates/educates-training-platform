@@ -1,4 +1,4 @@
-{{- $args := .Inner | unmarshal -}}
+{{- $args := .Inner | default "{}" | unmarshal -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "editor:insert-value-into-yaml" -}}
 {{- $glyph := "fa-file-import" -}}

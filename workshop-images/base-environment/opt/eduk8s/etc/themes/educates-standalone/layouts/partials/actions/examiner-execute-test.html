@@ -1,5 +1,5 @@
 {{- $defaults := dict "cooldown" 3 -}}
-{{- $args := merge $defaults (.Inner | unmarshal) -}}
+{{- $args := merge $defaults (.Inner | default "{}" | unmarshal) -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "examiner:execute-test" -}}
 {{- $glyph := "fa-tasks" -}}

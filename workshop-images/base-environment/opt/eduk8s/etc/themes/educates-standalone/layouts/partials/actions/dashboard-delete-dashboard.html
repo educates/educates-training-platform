@@ -1,4 +1,4 @@
-{{- $args := .Inner | unmarshal -}}
+{{- $args := .Inner | default "{}" | unmarshal -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "dashboard:delete-dashboard" -}}
 {{- $glyph := "fa-trash-alt" -}}

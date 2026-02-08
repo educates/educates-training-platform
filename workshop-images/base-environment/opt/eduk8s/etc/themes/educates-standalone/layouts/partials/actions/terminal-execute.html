@@ -1,4 +1,4 @@
-{{- $args := .Inner | unmarshal -}}
+{{- $args := .Inner | default "{}" | unmarshal -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "terminal:execute" -}}
 {{- $glyph := "fa-running" -}}

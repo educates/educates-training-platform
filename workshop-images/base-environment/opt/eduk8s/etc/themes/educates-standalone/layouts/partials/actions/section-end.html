@@ -1,5 +1,5 @@
 {{- $defaults := dict "pause" 0 -}}
-{{- $args := merge $defaults (.Inner | unmarshal) -}}
+{{- $args := merge $defaults (.Inner | default "{}" | unmarshal) -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "section:end" -}}
 {{- $glyph := "fa-ban" -}}

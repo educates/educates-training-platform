@@ -12,7 +12,7 @@ This test reloads the pre-configured "Example" dashboard using its current URL.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```dashboard:reload-dashboard
 name: Example
 ```
@@ -33,7 +33,7 @@ not sure whether the dashboard already exists.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```dashboard:reload-dashboard
 name: Example
 url: https://docs.educates.dev
@@ -62,7 +62,7 @@ switching to it.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```dashboard:reload-dashboard
 name: Example
 url: https://docs.educates.dev

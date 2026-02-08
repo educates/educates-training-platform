@@ -11,7 +11,7 @@ various nesting levels.
 
 The markdown for a section containing an autostart action is:
 
-~~~text
+~~~markdown
 ```section:begin
 name: autostart-basic
 title: Expand to Auto-Run Command

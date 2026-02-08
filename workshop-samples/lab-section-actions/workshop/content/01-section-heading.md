@@ -11,7 +11,7 @@ in the same style as other clickable actions.
 
 The markdown for a basic section heading with default prefix is:
 
-~~~text
+~~~markdown
 ```section:heading
 title: Instructions
 ```
@@ -27,7 +27,7 @@ title: Instructions
 
 The `prefix` property can be used to override the default "Section" prefix:
 
-~~~text
+~~~markdown
 ```section:heading
 prefix: Task
 title: Deploy the Application
@@ -45,7 +45,7 @@ title: Deploy the Application
 
 A `description` can be provided to display text in the body of the action:
 
-~~~text
+~~~markdown
 ```section:heading
 title: Prerequisites
 description: Ensure you have completed the previous steps before continuing.

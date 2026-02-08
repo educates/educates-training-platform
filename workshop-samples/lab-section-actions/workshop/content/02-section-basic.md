@@ -11,7 +11,7 @@ again will collapse the section.
 
 The markdown for a basic collapsible section is:
 
-~~~text
+~~~markdown
 ```section:begin
 title: Click to Expand
 ```
@@ -42,7 +42,7 @@ be visible when the section is expanded.
 
 The markdown for this is:
 
-~~~text
+~~~markdown
 ```section:begin
 title: Run a Command
 ```
@@ -78,7 +78,7 @@ command: echo "Hello from inside a collapsible section"
 
 A section can contain multiple paragraphs, code blocks, and clickable actions:
 
-~~~text
+~~~markdown
 ```section:begin
 title: Multiple Elements
 ```

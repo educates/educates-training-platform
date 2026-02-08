@@ -12,7 +12,7 @@ to collapse, effectively auto-closing the section after the action completes.
 
 The markdown for a section that auto-closes after executing a command is:
 
-~~~text
+~~~markdown
 ```section:begin
 name: cascade-basic
 title: Run Command and Auto-Close
@@ -57,7 +57,7 @@ name: cascade-basic
 When multiple actions are chained with `cascade: true`, they execute in
 sequence, with the final one triggering `section:end` to close the section:
 
-~~~text
+~~~markdown
 ```section:begin
 name: cascade-chain
 title: Run Two Commands Then Auto-Close
@@ -111,7 +111,7 @@ Combining `autostart` and `cascade` allows a section to automatically run a
 command and then close itself when expanded. This can be useful for one-time
 setup actions.
 
-~~~text
+~~~markdown
 ```section:begin
 name: autostart-cascade
 title: Auto-Run and Auto-Close

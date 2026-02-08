@@ -12,7 +12,7 @@ property. The banner displays as "Prefix: Title".
 
 The markdown for a section with custom prefix is:
 
-~~~text
+~~~markdown
 ```section:begin
 name: question-prefix
 prefix: Question
@@ -44,7 +44,7 @@ name: question-prefix
 
 The `title` property sets the text displayed after the prefix:
 
-~~~text
+~~~markdown
 ```section:begin
 name: custom-title
 title: Optional Advanced Configuration
@@ -76,7 +76,7 @@ name: custom-title
 The `description` property sets the text displayed in the body of the action
 block instead of it being empty:
 
-~~~text
+~~~markdown
 ```section:begin
 name: with-desc
 title: Setup Steps
@@ -116,7 +116,7 @@ name: with-desc
 
 All three properties can be used together:
 
-~~~text
+~~~markdown
 ```section:begin
 name: combined
 prefix: Task

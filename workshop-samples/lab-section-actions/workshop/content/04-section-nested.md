@@ -10,7 +10,7 @@ so they can be correctly matched.
 
 The markdown for nested sections is:
 
-~~~text
+~~~markdown
 ```section:begin
 name: outer
 title: Outer Section

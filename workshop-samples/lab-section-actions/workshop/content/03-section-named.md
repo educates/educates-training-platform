@@ -11,7 +11,7 @@ the name `*` which can cause incorrect matching.
 
 The markdown for two independent named sections is:
 
-~~~text
+~~~markdown
 ```section:begin
 name: first
 title: First Section

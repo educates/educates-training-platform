@@ -13,7 +13,7 @@ This test opens the Educates documentation in a new browser window.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```dashboard:open-url
 url: https://docs.educates.dev
 ```

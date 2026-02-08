@@ -12,7 +12,7 @@ This test executes a simple echo command in the default terminal (session 1).
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: |-
   echo "Hello from terminal:execute"
@@ -34,7 +34,7 @@ the visible portion.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: echo "Terminal was cleared before this command"
 clear: true
@@ -57,7 +57,7 @@ are not treated as a single compound command.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: |-
   echo "First command"
@@ -85,7 +85,7 @@ command.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: |-
   echo "First command"; \
@@ -112,7 +112,7 @@ heredoc body is sent as standard input to the command.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: |-
   cat << 'EOF' > /tmp/sample.txt

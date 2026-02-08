@@ -12,7 +12,7 @@ This test opens the pre-configured "Example" dashboard tab.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```dashboard:open-dashboard
 name: Example
 ```
@@ -31,7 +31,7 @@ sessions.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```dashboard:open-dashboard
 name: Terminal
 ```

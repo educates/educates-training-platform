@@ -14,7 +14,7 @@ to expand, revealing its content without showing the section toggle.
 
 The markdown for this pattern is:
 
-~~~text
+~~~markdown
 ```terminal:execute
 command: echo "Running setup"
 cascade: true
@@ -112,7 +112,7 @@ A hidden section with `autostart: true` will auto-expand when the page loads,
 revealing its content without showing any section toggle. This can be used to
 conditionally display content that is always visible.
 
-~~~text
+~~~markdown
 ```section:begin
 hidden: true
 autostart: true

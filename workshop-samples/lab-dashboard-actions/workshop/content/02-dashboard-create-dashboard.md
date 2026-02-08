@@ -13,7 +13,7 @@ documentation site.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```dashboard:create-dashboard
 name: Docs
 url: https://docs.educates.dev
@@ -36,7 +36,7 @@ are used for the default terminal sessions.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```dashboard:create-dashboard
 name: Extra Terminal
 url: terminal:4
@@ -57,7 +57,7 @@ switching to it. The tab is created in the background.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```dashboard:create-dashboard
 name: Background
 url: https://www.example.com

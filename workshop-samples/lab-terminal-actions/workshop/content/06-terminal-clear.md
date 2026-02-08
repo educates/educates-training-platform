@@ -23,7 +23,7 @@ command: for i in $(seq 1 20); do echo "Line $i"; done
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:clear
 session: 1
 ```
@@ -39,7 +39,7 @@ session: 1
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:clear-all
 ```
 ~~~
@@ -62,7 +62,7 @@ command: for i in $(seq 1 20); do echo "Line $i"; done
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:clear
 session: "*"
 ```

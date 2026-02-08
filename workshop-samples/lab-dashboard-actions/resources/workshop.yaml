@@ -1,0 +1,29 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: lab-dashboard-actions
+spec:
+  title: Dashboard Clickable Actions Test
+  description: Test workshop for verifying all dashboard clickable action types including both current and deprecated formats.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/lab-dashboard-actions-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/lab-dashboard-actions-files:$(workshop_version)"
+      includePaths:
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      security:
+        token:
+          enabled: false
+    applications:
+      terminal:
+        enabled: true
+    dashboards:
+    - name: Example
+      url: https://www.example.com

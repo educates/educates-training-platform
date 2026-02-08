@@ -36,6 +36,10 @@ This will open a browser window where you can select and launch the workshop.
 Available Workshops
 -------------------
 
+* [lab-dashboard-actions](lab-dashboard-actions/) - Test workshop for verifying
+  all dashboard clickable action types including both the current preferred
+  action formats and deprecated legacy formats.
+
 * [lab-terminal-actions](lab-terminal-actions/) - Test workshop for verifying
   all terminal clickable action types including both the current preferred
   action formats and deprecated legacy formats.

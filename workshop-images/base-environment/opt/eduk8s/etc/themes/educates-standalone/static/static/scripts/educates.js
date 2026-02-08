@@ -986,6 +986,11 @@ const educates = (function () {
 
         console.log("register_clickable_action", handler, action);
 
+        if (!args || typeof args !== 'object') {
+            console.error(`Action ${action} (${handler}): args is ${args}, likely a Hugo serialization failure`);
+            return;
+        }
+
         // Store the glyph element's original icon class for state restoration.
 
         const glyph_element = element.querySelector('.clickable-action__icon');

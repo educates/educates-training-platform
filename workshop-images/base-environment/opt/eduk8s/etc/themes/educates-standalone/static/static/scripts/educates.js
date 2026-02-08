@@ -1466,10 +1466,6 @@ const educates = (function () {
                 throw new Error("Dashboard name not provided");
             }
 
-            if (!url) {
-                throw new Error("Dashboard URL not provided");
-            }
-
             dashboard.reload_dashboard(name, url, focus);
         }
     });

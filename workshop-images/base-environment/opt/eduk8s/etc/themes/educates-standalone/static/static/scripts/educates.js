@@ -570,13 +570,6 @@ const educates = (function () {
                     })
                     .then(result => {
                         if (!result.success) {
-                            if (remaining_retries > 0) {
-                                return new Promise(resolve => {
-                                    setTimeout(() => {
-                                        resolve(attempt_call(remaining_retries - 1));
-                                    }, delay * 1000);
-                                });
-                            }
                             throw new Error(result.message || 'Test failed');
                         }
                         return result;

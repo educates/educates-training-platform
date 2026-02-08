@@ -13,7 +13,7 @@ The test script for processing form inputs reads JSON from stdin. In this
 workshop the `test-process-inputs` script is used. It saves the raw JSON to a
 file and then checks that a `name` field is present:
 
-~~~
+~~~bash
 #!/bin/bash
 
 CONFIG=$(cat -)

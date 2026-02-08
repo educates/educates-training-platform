@@ -22,7 +22,7 @@ optionally specify the `session` property.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:interrupt
 session: 1
 ```
@@ -49,7 +49,7 @@ Terminal tab.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:interrupt-all
 ```
 ~~~
@@ -72,7 +72,7 @@ command: while true; do echo "Running... $(date)"; sleep 1; done
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:interrupt
 session: "*"
 ```

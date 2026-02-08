@@ -14,7 +14,7 @@ With the deprecated format, the body of the code block is the command itself
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```execute
 echo "Hello from deprecated execute"
 ```
@@ -40,7 +40,7 @@ while true; do echo "Running... $(date)"; sleep 1; done
 
 The markdown for the deprecated interrupt is:
 
-~~~
+~~~markdown
 ```execute
 <ctrl+c>
 ```

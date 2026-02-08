@@ -12,7 +12,7 @@ property.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```execute-1
 echo "Hello from deprecated execute-1"
 ```
@@ -28,7 +28,7 @@ echo "Hello from deprecated execute-1"
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```execute-2
 echo "Hello from deprecated execute-2"
 ```
@@ -44,7 +44,7 @@ echo "Hello from deprecated execute-2"
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```execute-3
 echo "Hello from deprecated execute-3"
 ```

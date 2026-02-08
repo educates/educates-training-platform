@@ -10,7 +10,7 @@ that tab will be brought to the foreground.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:select
 session: 1
 ```
@@ -26,7 +26,7 @@ session: 1
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:select
 session: 2
 ```
@@ -42,7 +42,7 @@ session: 2
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:select
 session: 3
 ```
@@ -62,7 +62,7 @@ switch to the Terminal#4 dashboard tab.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:select
 session: 4
 ```

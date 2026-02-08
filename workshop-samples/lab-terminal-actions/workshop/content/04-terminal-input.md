@@ -38,7 +38,7 @@ completing the input.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:input
 text: World
 ```
@@ -67,7 +67,7 @@ command: |-
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:input
 text: blue
 endl: false
@@ -100,7 +100,7 @@ session: 2
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:input
 text: hello from session 2
 session: 2
@@ -123,7 +123,7 @@ process the pasted text until Enter is pressed manually.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:input
 text: echo "This was pasted, not executed"
 ```

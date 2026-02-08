@@ -10,7 +10,7 @@ first terminal session is left selected.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute-all
 command: echo "Executed in all terminals"
 ```
@@ -29,7 +29,7 @@ full buffer of every terminal session before executing the command.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute-all
 command: echo "All terminals cleared then this ran"
 clear: true
@@ -50,7 +50,7 @@ set to `"*"`. This targets all terminal sessions in the same way.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: echo "Executed in all terminals using wildcard"
 session: "*"
@@ -70,7 +70,7 @@ The `clear` property also works when using the session wildcard approach.
 
 The markdown for this action is:
 
-~~~
+~~~markdown
 ```terminal:execute
 command: echo "All terminals cleared then this ran using wildcard"
 session: "*"

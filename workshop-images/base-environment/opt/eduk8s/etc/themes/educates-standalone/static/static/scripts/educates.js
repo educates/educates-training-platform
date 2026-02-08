@@ -1060,7 +1060,7 @@ const educates = (function () {
         // If action is disabled, skip execution, but still trigger next
         // action in cascade if configured.
 
-        enabled = args.enabled !== undefined ? args.enabled : true;
+        const enabled = args.enabled !== undefined ? args.enabled : true;
 
         if (!enabled) {
             console.log(`Action ${action_id} is disabled`);

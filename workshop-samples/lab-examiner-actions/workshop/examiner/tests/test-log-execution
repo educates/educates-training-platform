@@ -1,0 +1,5 @@
+#!/bin/bash
+
+echo "$(date '+%H:%M:%S') - Test executed" >> "$HOME/examiner-cooldown.log"
+
+exit 0

@@ -939,6 +939,7 @@ const educates = (function () {
                     }
                     glyph_element.classList.remove('fa-cog', 'fa-spin');
                     glyph_element.classList.add('fa-check-circle');
+                    element.dataset.originalGlyph = 'fa-check-circle';
                 }
                 break;
 
@@ -947,9 +948,8 @@ const educates = (function () {
                 element.dataset.actionCompleted = Date.now().toString();
                 if (glyph_element) {
                     glyph_element.classList.remove('fa-cog', 'fa-spin');
-                    if (original_glyph) {
-                        glyph_element.classList.add(original_glyph);
-                    }
+                    element.dataset.originalGlyph = 'fa-times-circle';
+                    glyph_element.classList.add('fa-times-circle');
                 }
                 if (error) {
                     console.error(`Action failed: ${error.message || error}`);

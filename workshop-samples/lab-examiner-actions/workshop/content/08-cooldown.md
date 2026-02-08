@@ -65,7 +65,7 @@ title: Test with 10 second cooldown
 cooldown: 10
 ```
 
-## Infinite Cooldown
+## Infinite Cooldown Using .INF
 
 Setting `cooldown` to `.INF` prevents the action from being clicked a second
 time. The markdown for this is:
@@ -83,8 +83,30 @@ no matter how many times you click:
 
 ```examiner:execute-test
 name: test-log-execution
-title: Test that can only run once
+title: Test that can only run once (using .INF)
 cooldown: .INF
+```
+
+## Infinite Cooldown Using -1
+
+The same behaviour can be achieved by setting `cooldown` to `-1` instead of
+`.INF`.
+
+~~~markdown
+```examiner:execute-test
+name: test-log-execution
+title: Test that can only run once
+cooldown: -1
+```
+~~~
+
+Click the action below. Watch the terminal to confirm only one log line appears
+no matter how many times you click:
+
+```examiner:execute-test
+name: test-log-execution
+title: Test that can only run once (using -1)
+cooldown: -1
 ```
 
 When done, interrupt the tail command:

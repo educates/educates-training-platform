@@ -1,16 +1,16 @@
-import * as path from "path"
-import * as yaml from "js-yaml"
-import * as $ from "jquery"
-import "bootstrap"
 import * as amplitude from '@amplitude/analytics-browser'
+import "bootstrap"
+import * as $ from "jquery"
+import * as yaml from "js-yaml"
+import * as path from "path"
 
 // Hack to get jsonform working.
 
 declare var window: any
 window.$ = window.jQuery = $
 
-import "underscore"
 import "jsonform"
+import "underscore"
 
 declare var gtag: Function
 declare var clarity: Function
@@ -757,7 +757,7 @@ export function register_action(options: any) {
                         let cooldown_period = cooldown
 
                         if (action_args.cooldown !== undefined)
-                            cooldown_period = action_args.cooldown
+                            cooldown_period = action_args.cooldown < 0 ? Infinity : action_args.cooldown
 
                         if (cooldown_period) {
                             if (triggered && !completed) {
@@ -1647,7 +1647,7 @@ $(document).ready(async () => {
                 args.args || [],
                 form_values,
                 args.timeout || 15,
-                args.retries || 0,
+                (args.retries !== undefined && args.retries < 0) ? Infinity : (args.retries || 0),
                 args.delay || 1,
                 args.cascade || false,
                 done,

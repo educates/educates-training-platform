@@ -28,3 +28,10 @@ Educates.
 - `hidden` sections revealed by cascade
 - `hidden` sections with `autostart` for auto-expanded content on page load
 - Hidden sections nested inside visible sections
+- Cascade fallthrough from `section:end` to actions after the section
+- Fallthrough without closing using `toggle: false` on `section:end`
+- Sections open by default with `open: true`
+- Open sections with clickable actions visible immediately
+- Hidden open sections — content displayed with no visible toggle
+- Content swapping using hidden open sections with cascade, `cooldown`, and `pause`
+- Multi-step content swap through sequential hidden sections

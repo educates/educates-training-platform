@@ -23,3 +23,7 @@ The following clickable actions are tested across the workshop pages:
 - `autostart` — Automatically trigger actions when a section is expanded
 - `cascade` — Trigger the next clickable action after successful completion
 - `hidden` — Hide a clickable action from view while still allowing programmatic triggering
+- `open` — Section is expanded by default when the page loads
+- `toggle` — Control whether `section:end` toggles the section closed during cascade
+- `cooldown` — Control how long a triggered state persists (`-1` for permanent)
+- `pause` — Control delay before cascade continues to the next action

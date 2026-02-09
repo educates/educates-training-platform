@@ -2251,6 +2251,9 @@ const educates = (function () {
         handler: function (element, args) {
             const name = args.name || '';
 
+            if (args.toggle === false)
+                return;
+
             // Find the matching section:begin element and trigger click on it.
 
             let sibling = element.previousElementSibling;

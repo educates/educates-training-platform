@@ -1,7 +1,7 @@
 {{- $args := .Inner | default "{}" | unmarshal -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "section:begin" -}}
-{{- $glyph := "fa-chevron-down" -}}
+{{- $glyph := "fa-chevron-up" -}}
 {{- $prefix := default "Section" $args.prefix -}}
 {{- $title := default "Instructions" $args.title -}}
 {{- $body := "" -}}

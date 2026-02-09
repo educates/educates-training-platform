@@ -2113,7 +2113,22 @@ const educates = (function () {
             const name = args.name || '';
 
             element.dataset.sectionName = name;
-            element.dataset.contentState = 'hidden';
+            element.dataset.sectionOpen = args.open ? 'true' : '';
+
+            if (element.dataset.sectionOpen === 'true') {
+                element.dataset.contentState = 'visible';
+            } else {
+                element.dataset.contentState = 'hidden';
+            }
+
+            if (!args.open) {
+                const glyph_element = element.querySelector('.clickable-action__icon');
+                if (glyph_element) {
+                    glyph_element.classList.remove('fa-chevron-up');
+                    glyph_element.classList.add('fa-chevron-down');
+                    element.dataset.originalGlyph = 'fa-chevron-down';
+                }
+            }
         },
         handler: function (element, args) {
             const name = args.name || '';
@@ -2224,17 +2239,35 @@ const educates = (function () {
             const preceding_elements = [];
             let sibling = element.previousElementSibling;
 
+            let section_begin_element = null;
+
             while (sibling) {
                 // Check if this is the matching section:begin.
 
                 if (sibling.classList.contains('clickable-action') &&
                     sibling.dataset.handler === 'section:begin' &&
                     sibling.dataset.sectionName === name) {
+                    section_begin_element = sibling;
                     break;
                 }
 
                 preceding_elements.push(sibling);
                 sibling = sibling.previousElementSibling;
+            }
+
+            // If matching section:begin sets open argument to true, don't hide
+            // content and set contentState to visible.
+
+            if (section_begin_element && section_begin_element.dataset.sectionOpen === 'true') {
+                preceding_elements
+                    .filter(el => !el.dataset.contentBody)
+                    .forEach(el => {
+                        el.dataset.contentBody = name;
+                        el.dataset.contentState = 'visible';
+                        el.style.display = '';
+                    });
+
+                return;
             }
 
             // Filter out elements that already have contentBody set, then set

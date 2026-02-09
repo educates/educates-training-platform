@@ -44,6 +44,10 @@ Available Workshops
   all examiner clickable action types including basic pass/fail tests, arguments,
   timeout, retries, form inputs, autostart, cascade, and cooldown.
 
+* [lab-markdown-basics](lab-markdown-basics/) - Test workshop for verifying
+  rendering of common markdown formatting including headings, text styles, lists,
+  links, code blocks, tables, blockquotes, and admonition shortcodes.
+
 * [lab-section-actions](lab-section-actions/) - Test workshop for verifying
   all section clickable action types including collapsible sections, nested
   sections, autostart within sections, cascade-triggered section closing,

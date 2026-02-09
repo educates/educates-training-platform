@@ -274,7 +274,14 @@ div.magic-code-block-upload {
 }
 
 .clickable-action__form {
-    padding-top: 0.5em;
+    background-color: lightyellow;
+    padding: 8px;
+    border: 0;
+    border-style: solid;
+    border-right-color: #eee;
+    border-left-color: #eee;
+    border-bottom-color: #eee;
+    margin-bottom: 1em;
 }
 
 #preview-image-dialog>.modal-dialog {

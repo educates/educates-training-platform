@@ -183,6 +183,12 @@ button#header-next-page {
     box-sizing: border-box;
 }
 
+.page-content blockquote {
+    border-left: .25em solid #dfe2e5;
+    color: #6a737d;
+    padding: 0 0.5em;
+}
+
 .page-content code {
     color: #555;
     background-color: lightyellow;

@@ -31,6 +31,13 @@ New Features
 * When using editor clickable actions which accept `before` or `after`, if you
   supply `-1`, it will be interpreted as all lines before or after.
 
+* You can now set `toggle: false` on `section:end` clickable action. In this
+  case if have prior clickable action which cascades to `section:end`, the
+  section will not be closed. If also have `cascade` set on `section:end`
+  then, clickable action following `section:end` will still be triggered. Thus
+  can automatically trigger clickable action after a section without closing
+  the section.
+
 Features Changed
 ----------------
 

@@ -846,6 +846,53 @@ name: setup
 ```
 ~~~
 
+If ``cascade`` is also set on ``section:end`` itself, after the section is collapsed the cascade will continue to trigger the next clickable action following the ``section:end`` block. Note that in this case the section will still be collapsed before the following action is triggered.
+
+~~~
+```section:begin
+name: setup
+title: Run Setup
+```
+
+```terminal:execute
+command: echo "Running setup"
+cascade: true
+```
+
+```section:end
+name: setup
+cascade: true
+```
+
+```terminal:execute
+command: echo "Follow up action"
+```
+~~~
+
+If you want cascade to fall through to the action after ``section:end`` without collapsing the section, you can set ``toggle`` to ``false`` on the ``section:end`` block. This prevents the section from being collapsed while still allowing the cascade to continue.
+
+~~~
+```section:begin
+name: setup
+title: Run Setup
+```
+
+```terminal:execute
+command: echo "Running setup"
+cascade: true
+```
+
+```section:end
+name: setup
+cascade: true
+toggle: false
+```
+
+```terminal:execute
+command: echo "Follow up action"
+```
+~~~
+
 (overriding-action-cooldown-period)=
 Overriding action cooldown period
 ---------------------------------

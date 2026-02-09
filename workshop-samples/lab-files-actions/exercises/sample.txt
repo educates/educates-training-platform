@@ -1,0 +1,9 @@
+This is a sample text file used for testing file download and copy
+clickable actions in Educates workshop instructions.
+
+It contains multiple lines of text to verify that file content is
+correctly handled when downloading or copying to the clipboard.
+
+Line 1: Lorem ipsum dolor sit amet.
+Line 2: Consectetur adipiscing elit.
+Line 3: Sed do eiusmod tempor incididunt.

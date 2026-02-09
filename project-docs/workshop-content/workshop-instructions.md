@@ -772,6 +772,8 @@ The ``prefix`` attribute allows you to override the default ``Section`` prefix u
 
 If a collapsible section includes a clickable action with ``autostart`` set to ``true``, it will only start when the collapsible section is expanded.
 
+If you want a section to be expanded by default rather than closed, set ``open`` to ``true`` on ``section:begin``. Any clickable actions within the section that have ``autostart`` set to ``true`` will be triggered automatically when the section becomes visible, whether that is on initial page load for a top-level section, or when a parent section containing it is expanded.
+
 In case you want a section header showing in the same style as other clickable actions, you can use:
 
 ~~~

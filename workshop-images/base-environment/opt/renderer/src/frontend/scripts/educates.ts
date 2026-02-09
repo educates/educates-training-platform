@@ -839,7 +839,7 @@ export function register_action(options: any) {
                                     else {
                                         parent_element.nextAll(`*[data-action-name]`).first().trigger("click")
                                     }
-                                }, action_args.pause || pause)
+                                }, action_args.pause !== undefined ? action_args.pause : pause)
                             }
                         }, (error) => {
                             console.log(`[${title_string}] Failure: ${error}`)
@@ -1978,7 +1978,7 @@ $(document).ready(async () => {
 
     register_action({
         name: "section:begin",
-        glyph: "fa-chevron-down",
+        glyph: "fa-chevron-up",
         args: "yaml",
         title: (args) => {
             let prefix = args.prefix || "Section"
@@ -2046,12 +2046,16 @@ $(document).ready(async () => {
         setup: (args, element) => {
             let parent_element = element
             let name = args.name || "*"
+            let open = args.open ? "true" : "false"
             if (generator.startsWith("Educates (asciidoc)")) {
                 let root_element = parent_element.parent().parent()
                 root_element.attr("data-section-name", name)
+                root_element.attr("data-section-open", open)
             }
-            else
+            else {
                 parent_element.attr("data-section-name", name)
+                parent_element.attr("data-section-open", open)
+            }
         },
         finish: (args, element, error) => {
             let parent_element = element
@@ -2065,6 +2069,7 @@ $(document).ready(async () => {
             if (!error) {
                 if (state_element.attr("data-section-state") == "visible") {
                     glyph_element.addClass("fa-chevron-up")
+                    glyph_element.removeClass("fa-chevron-down")
                     glyph_element.removeClass("fa-check-circle")
                     setTimeout(() => {
                         if (state_element.attr("data-section-state") == "visible") {
@@ -2077,6 +2082,12 @@ $(document).ready(async () => {
                     glyph_element.addClass("fa-chevron-down")
                     glyph_element.removeClass("fa-chevron-up")
                     glyph_element.removeClass("fa-check-circle")
+                    setTimeout(() => {
+                        if (state_element.attr("data-section-state") == "hidden") {
+                            glyph_element.addClass("fa-check-circle")
+                            glyph_element.removeClass("fa-chevron-down")
+                        }
+                    }, 1000)
                 }
             }
         }
@@ -2158,8 +2169,18 @@ $(document).ready(async () => {
                 let start = element_range.last().prev()
                 if (start.data("action-name") == "section:begin" && start.data("section-name") == name) {
                     element_range.not("[data-content-name]").attr("data-content-name", name)
-                    element_range.hide()
                     root_element.hide()
+                    if (start.attr("data-section-open") == "true") {
+                        start.attr("data-section-state", "visible")
+                        element_range.filter("[data-action-name][data-action-autostart]").trigger("click")
+                    }
+                    else {
+                        element_range.hide()
+                        let glyph_element = start.find(".magic-code-block-glyph")
+                        glyph_element.addClass("fa-chevron-down")
+                        glyph_element.removeClass("fa-chevron-up")
+                        start.attr("data-section-state", "hidden")
+                    }
                 }
             }
             else {
@@ -2169,8 +2190,20 @@ $(document).ready(async () => {
                 let start = element_range.last().prev()
                 if (start.data("action-name") == "section:begin" && start.data("section-name") == name) {
                     element_range.not("[data-content-name]").attr("data-content-name", name)
-                    element_range.hide()
+                    let title_element = start.prev()
+                    parent_element.prev().hide()
                     parent_element.hide()
+                    if (start.attr("data-section-open") == "true") {
+                        title_element.attr("data-section-state", "visible")
+                        element_range.filter("[data-action-name][data-action-autostart]").trigger("click")
+                    }
+                    else {
+                        element_range.hide()
+                        let glyph_element = title_element.children(".magic-code-block-glyph")
+                        glyph_element.addClass("fa-chevron-down")
+                        glyph_element.removeClass("fa-chevron-up")
+                        title_element.attr("data-section-state", "hidden")
+                    }
                 }
             }
         },

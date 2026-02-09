@@ -38,6 +38,9 @@ New Features
   can automatically trigger clickable action after a section without closing
   the section.
 
+* You can now set `open: true` on `section:begin` and the section will start in
+  the expanded state.
+
 Features Changed
 ----------------
 

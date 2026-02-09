@@ -1,0 +1,31 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: lab-files-actions
+spec:
+  title: Files Clickable Actions Test
+  description: Test workshop for verifying all files clickable action types including file download, download with custom name, download with preview, copy file to clipboard, single file upload, and multiple file upload.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/lab-files-actions-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/lab-files-actions-files:$(workshop_version)"
+      includePaths:
+      - /exercises/**
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      security:
+        token:
+          enabled: false
+    applications:
+      terminal:
+        enabled: true
+      files:
+        enabled: true
+      uploads:
+        enabled: true

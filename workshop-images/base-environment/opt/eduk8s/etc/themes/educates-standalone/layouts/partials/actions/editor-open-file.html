@@ -1,4 +1,5 @@
-{{- $args := .Inner | default "{}" | unmarshal -}}
+{{- $defaults := dict "cooldown" 3 -}}
+{{- $args := merge $defaults (.Inner | default "{}" | unmarshal) -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "editor:open-file" -}}
 {{- $glyph := "fa-edit" -}}

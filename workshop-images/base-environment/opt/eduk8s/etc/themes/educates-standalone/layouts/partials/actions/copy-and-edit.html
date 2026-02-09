@@ -4,6 +4,6 @@
 {{- $prefix := "Workshop" -}}
 {{- $title := "Copy text to paste buffer, change values before use" -}}
 {{- $body := .Inner -}}
-{{- $args := dict "text" .Inner -}}
+{{- $args := dict "text" .Inner "cooldown" 0 -}}
 {{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
 {{- partial "clickable-action.html" $context -}}

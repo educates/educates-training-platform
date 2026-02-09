@@ -2093,6 +2093,8 @@ $(document).ready(async () => {
             return ""
         },
         trigger: (args, element) => {
+            if (args.toggle === false)
+                return
             let name = args.name || "*"
             if (generator.startsWith("Educates (asciidoc)")) {
                 let root_element = element.parent().parent().prevAll(`.magic-code-block-root[data-action-name='section:begin'][data-section-name='${name}']`).first()

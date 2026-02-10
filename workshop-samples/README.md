@@ -45,6 +45,12 @@ Available Workshops
   name, download with preview, copy file to clipboard, single file upload, and
   multiple file upload.
 
+* [lab-editor-actions](lab-editor-actions/) - Test workshop for verifying
+  all editor clickable action types including open file, create file, append
+  lines, insert lines before/after line, insert lines after match, select
+  matching text, replace text selection, replace matching text, insert value
+  into YAML, and execute command.
+
 * [lab-examiner-actions](lab-examiner-actions/) - Test workshop for verifying
   all examiner clickable action types including basic pass/fail tests, arguments,
   timeout, retries, form inputs, autostart, cascade, and cooldown.

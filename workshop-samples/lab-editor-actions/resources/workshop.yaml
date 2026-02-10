@@ -1,0 +1,29 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: lab-editor-actions
+spec:
+  title: Editor Clickable Actions Test
+  description: Test workshop for verifying all editor clickable action types including open file, create file, append lines, insert lines before/after line, insert lines after match, select matching text, replace text selection, replace matching text, insert value into YAML, and execute command.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/lab-editor-actions-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/lab-editor-actions-files:$(workshop_version)"
+      includePaths:
+      - /exercises/**
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      security:
+        token:
+          enabled: false
+    applications:
+      terminal:
+        enabled: true
+      editor:
+        enabled: true

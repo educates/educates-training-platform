@@ -436,6 +436,30 @@ text: nginx:latest
 ```
 ~~~
 
+To find and replace text in a single step, without needing to first select the text and then replace it separately, use:
+
+~~~text
+```editor:replace-matching-text
+file: ~/exercises/sample.txt
+match: "nginx:1.19"
+replacement: "nginx:1.21"
+```
+~~~
+
+The ``match`` property specifies the text to find and the ``replacement`` property specifies what to replace it with. As with ``editor:select-matching-text``, you can use regular expressions by setting ``isRegex`` to ``true``, select a specific match group using the ``group`` property, and limit the search range using ``start`` and ``stop`` properties.
+
+~~~text
+```editor:replace-matching-text
+file: ~/exercises/sample.txt
+match: "image: (.*)"
+replacement: "image: nginx:latest"
+isRegex: true
+group: 0
+start: 8
+stop: 20
+```
+~~~
+
 To append lines to the end of a file, use:
 
 ~~~text
@@ -447,12 +471,39 @@ text: |
 ```
 ~~~
 
-If you use ``editor:append-to-lines-to-file`` and the file doesn't exist it will be created for you. You can therefore use this to create new files.
+If you use ``editor:append-lines-to-file`` and the file doesn't exist it will be created for you. You can therefore use this to create new files.
+
+To create a new file with specific content, or to overwrite the contents of an existing file, use:
+
+~~~text
+```editor:create-file
+file: ~/exercises/sample.txt
+text: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: example
+```
+~~~
+
+If the file already exists, all of its content will be replaced with the new text. If the file does not exist, it will be created. This is useful when workshop instructions need to provide the complete contents of a file.
 
 To insert lines before a specified line in the file, use:
 
 ~~~text
 ```editor:insert-lines-before-line
+file: ~/exercises/sample.txt
+line: 8
+text: |
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed
+    do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+```
+~~~
+
+To insert lines after a specified line in the file, use:
+
+~~~text
+```editor:insert-lines-after-line
 file: ~/exercises/sample.txt
 line: 8
 text: |

@@ -244,7 +244,19 @@ class Editor {
 
         file = this.fixup_path(file)
         let data = JSON.stringify({ file, line })
-        this.execute_call("/editor/line", data, done, fail)
+        this.execute_call("/editor/open-file", data, done, fail)
+    }
+
+    create_file(file: string, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, text })
+        this.execute_call("/editor/create-file", data, done, fail)
     }
 
     select_matching_text(file: string, text: string, start: number, stop: number, isRegex: boolean, group: number, before: number, after: number, done, fail) {
@@ -277,6 +289,24 @@ class Editor {
         this.execute_call("/editor/replace-text-selection", data, done, fail)
     }
 
+    replace_matching_text(file: string, match: string, replacement: string, start: number, stop: number, isRegex: boolean, group: number, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!match)
+            return fail("No text to match provided")
+
+        if (replacement === undefined)
+            return fail("No replacement text provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, match, replacement, start, stop, isRegex, group })
+        this.execute_call("/editor/replace-matching-text", data, done, fail)
+    }
+
     append_lines_to_file(file: string, text: string, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -285,8 +315,8 @@ class Editor {
             return fail("No file name provided")
 
         file = this.fixup_path(file)
-        let data = JSON.stringify({ file, paste: text })
-        this.execute_call("/editor/paste", data, done, fail)
+        let data = JSON.stringify({ file, text })
+        this.execute_call("/editor/append-to-file", data, done, fail)
     }
 
     insert_lines_before_line(file: string, line: number, text: string, done, fail) {
@@ -297,8 +327,20 @@ class Editor {
             return fail("No file name provided")
 
         file = this.fixup_path(file)
-        let data = JSON.stringify({ file, line, paste: text })
-        this.execute_call("/editor/paste", data, done, fail)
+        let data = JSON.stringify({ file, line, text })
+        this.execute_call("/editor/insert-before-line", data, done, fail)
+    }
+
+    insert_lines_after_line(file: string, line: number, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, line, text })
+        this.execute_call("/editor/insert-after-line", data, done, fail)
     }
 
     append_lines_after_match(file: string, match: string, text: string, done, fail) {
@@ -312,8 +354,8 @@ class Editor {
             return fail("No string to match provided")
 
         file = this.fixup_path(file)
-        let data = JSON.stringify({ file, prefix: match, paste: text })
-        this.execute_call("/editor/paste", data, done, fail)
+        let data = JSON.stringify({ file, match, text })
+        this.execute_call("/editor/insert-after-match", data, done, fail)
     }
 
     insert_value_into_yaml(file: string, path: string, value: any, done, fail) {
@@ -1600,6 +1642,77 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.execute_command(args.command, args.args || [], done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    // Register handlers for new editor actions.
+
+    register_action({
+        name: "editor:create-file",
+        glyph: "fa-file-alt",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Create file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.create_file(args.file, args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:replace-matching-text",
+        glyph: "fa-exchange-alt",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Replace matching text in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return `${args.match} → ${args.replacement}`
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.replace_matching_text(args.file, args.match, args.replacement, args.start, args.stop, args.isRegex, args.group, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:insert-lines-after-line",
+        glyph: "fa-file-import",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Insert lines after line ${args.line} in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.insert_lines_after_line(args.file, args.line || "", args.text || "", done, fail)
         },
         waiting: "fa-cog",
         spinner: true,

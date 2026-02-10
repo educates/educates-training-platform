@@ -31,6 +31,12 @@ New Features
 * When using editor clickable actions which accept `before` or `after`, if you
   supply `-1`, it will be interpreted as all lines before or after.
 
+* New editor clickable actions have been added: `editor:create-file` for
+  creating a new file or overwriting an existing file, `editor:insert-lines-after-line`
+  for inserting lines after a specified line number, and `editor:replace-matching-text`
+  for finding and replacing text in a single step without needing to first select
+  the text and then replace it separately.
+
 * You can now set `toggle: false` on `section:end` clickable action. In this
   case if have prior clickable action which cascades to `section:end`, the
   section will not be closed. If also have `cascade` set on `section:end`

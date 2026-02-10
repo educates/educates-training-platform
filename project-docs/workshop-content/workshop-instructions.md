@@ -460,6 +460,19 @@ stop: 20
 ```
 ~~~
 
+By default only the first match in the file is replaced. The ``count`` property controls how many matches to replace. Setting ``count`` to ``-1`` replaces all matches in the file (or within the search range if ``start`` and ``stop`` are specified). Setting ``count`` to a specific positive number replaces up to that many matches.
+
+~~~text
+```editor:replace-matching-text
+file: ~/exercises/sample.txt
+match: "image: (.*)"
+replacement: "image: nginx:latest"
+isRegex: true
+group: 0
+count: -1
+```
+~~~
+
 To append lines to the end of a file, use:
 
 ~~~text

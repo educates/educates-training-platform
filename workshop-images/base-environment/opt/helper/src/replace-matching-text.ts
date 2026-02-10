@@ -9,7 +9,8 @@ export interface ReplaceMatchingTextParams {
     start?: number,
     stop?: number,
     isRegex?: boolean,
-    group?: number
+    group?: number,
+    count?: number
 }
 
 export async function replaceMatchingText(params: ReplaceMatchingTextParams) {
@@ -30,8 +31,6 @@ export async function replaceMatchingText(params: ReplaceMatchingTextParams) {
 
     const lines = editor.document.lineCount
 
-    let line = 0
-
     let startLine = (params.start === undefined || params.start === null) ? 0 : params.start
     let stopLine = (params.stop === undefined || params.stop === null) ? lines : params.stop
 
@@ -51,47 +50,73 @@ export async function replaceMatchingText(params: ReplaceMatchingTextParams) {
     else if (stopLine >= lines)
         stopLine = lines - 1
 
-    let startMatch = -1
-    let stopMatch = -1
+    // Determine how many matches to replace. Default is 1 (first match
+    // only). A value of -1 means replace all matches.
+
+    let maxCount = (params.count === undefined || params.count === null || params.count === 0) ? 1 : params.count
+    let replaceAll = maxCount < 0
+
+    // Collect all matches to replace.
+
+    let matches: { line: number, start: number, stop: number }[] = []
 
     if (params.isRegex) {
         let regex = new RegExp(params.match)
         let group = params.group || 0
-        for (line = startLine; line < stopLine; line++) {
+        for (let line = startLine; line < stopLine; line++) {
             let currentLine = editor.document.lineAt(line)
             let match = execWithIndices(regex, currentLine.text)
             if (match) {
-                startMatch = match.indices[group][0]
-                stopMatch = match.indices[group][1]
-                break
+                matches.push({
+                    line,
+                    start: match.indices[group][0],
+                    stop: match.indices[group][1]
+                })
+                if (!replaceAll && matches.length >= maxCount)
+                    break
             }
         }
     }
     else {
-        for (line = startLine; line < stopLine; line++) {
+        for (let line = startLine; line < stopLine; line++) {
             let currentLine = editor.document.lineAt(line)
             let offset = currentLine.text.indexOf(params.match)
             if (offset >= 0) {
-                startMatch = offset
-                stopMatch = offset + params.match.length
-                break
+                matches.push({
+                    line,
+                    start: offset,
+                    stop: offset + params.match.length
+                })
+                if (!replaceAll && matches.length >= maxCount)
+                    break
             }
         }
     }
 
-    // Bail out if there was no match found anywhere in the file.
+    // Bail out if there were no matches found anywhere in the file.
 
-    if (startMatch == -1)
+    if (matches.length === 0)
         return
 
-    // Select the matched text and replace it with the replacement text.
+    // Replace all matched text with the replacement text. Apply in
+    // reverse order so line/column offsets remain valid.
 
-    let startPosition = new vscode.Position(line, startMatch)
-    let stopPosition = new vscode.Position(line, stopMatch)
-    let selection = new vscode.Selection(startPosition, stopPosition)
-    editor.selection = selection
+    await editor.edit(builder => {
+        for (let i = matches.length - 1; i >= 0; i--) {
+            let m = matches[i]
+            let startPosition = new vscode.Position(m.line, m.start)
+            let stopPosition = new vscode.Position(m.line, m.stop)
+            let range = new vscode.Range(startPosition, stopPosition)
+            builder.replace(range, params.replacement)
+        }
+    })
 
-    await editor.edit(builder => builder.replace(editor.selection, params.replacement))
+    // Select and reveal the last replacement.
+
+    let last = matches[matches.length - 1]
+    let startPosition = new vscode.Position(last.line, last.start)
+    let stopPosition = new vscode.Position(last.line, last.start + params.replacement.length)
+    editor.selection = new vscode.Selection(startPosition, stopPosition)
 
     editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter)
 

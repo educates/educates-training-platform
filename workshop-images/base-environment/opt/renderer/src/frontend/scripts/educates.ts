@@ -289,7 +289,7 @@ class Editor {
         this.execute_call("/editor/replace-text-selection", data, done, fail)
     }
 
-    replace_matching_text(file: string, match: string, replacement: string, start: number, stop: number, isRegex: boolean, group: number, done, fail) {
+    replace_matching_text(file: string, match: string, replacement: string, start: number, stop: number, isRegex: boolean, group: number, count: number, done, fail) {
         if (!this.url)
             return fail("Editor not available")
 
@@ -303,7 +303,7 @@ class Editor {
             return fail("No replacement text provided")
 
         file = this.fixup_path(file)
-        let data = JSON.stringify({ file, match, replacement, start, stop, isRegex, group })
+        let data = JSON.stringify({ file, match, replacement, start, stop, isRegex, group, count })
         this.execute_call("/editor/replace-matching-text", data, done, fail)
     }
 
@@ -1734,7 +1734,7 @@ $(document).ready(async () => {
         },
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
-            editor.replace_matching_text(args.file, args.match, args.replacement, args.start, args.stop, args.isRegex, args.group, done, fail)
+            editor.replace_matching_text(args.file, args.match, args.replacement, args.start, args.stop, args.isRegex, args.group, args.count, done, fail)
         },
         waiting: "fa-cog",
         spinner: true,

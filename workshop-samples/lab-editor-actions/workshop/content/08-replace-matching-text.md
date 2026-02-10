@@ -131,3 +131,57 @@ group: 0
 start: 14
 stop: 18
 ```
+
+## Replace All Matches
+
+By default only the first match is replaced. The `count` property controls how
+many matches to replace. Setting `count` to `-1` replaces all matches.
+
+Reset the file first:
+
+```editor:create-file
+file: ~/exercises/replace-match-test.txt
+text: |
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: myapp
+  spec:
+    replicas: 1
+    template:
+      spec:
+        containers:
+        - name: nginx
+          image: nginx:1.19
+          ports:
+          - containerPort: 80
+        - name: sidecar
+          image: busybox:1.35
+```
+
+The markdown for replacing all matches is:
+
+~~~markdown
+```editor:replace-matching-text
+file: ~/exercises/replace-match-test.txt
+match: "image: (.*)"
+replacement: "image: updated:latest"
+isRegex: true
+group: 0
+count: -1
+```
+~~~
+
+Click the action below to replace all image lines at once:
+
+```editor:replace-matching-text
+file: ~/exercises/replace-match-test.txt
+match: "image: (.*)"
+replacement: "image: updated:latest"
+isRegex: true
+group: 0
+count: -1
+```
+
+You can also set `count` to a specific number to limit how many matches are
+replaced. For example, `count: 2` would replace the first two matches.

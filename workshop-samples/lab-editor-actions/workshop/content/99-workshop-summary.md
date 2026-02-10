@@ -10,6 +10,8 @@ This workshop tested the following editor clickable action features:
 - Open a file at a specific line
 - Open with path variations (`~/`, `$HOME/`, relative)
 - Create a new file (`editor:create-file`)
+- Create a directory (`editor:create-directory`)
+- Create a file in a new directory
 - Overwrite an existing file
 - Append lines to a file (`editor:append-lines-to-file`)
 - Append to a non-existent file (creates it)

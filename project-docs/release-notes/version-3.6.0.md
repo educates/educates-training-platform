@@ -45,6 +45,9 @@ New Features
   `editor:close-file` for closing a file tab in the editor, and
   `editor:delete-file` for deleting a file from the file system.
 
+* A new editor clickable action `editor:create-directory` has been added for
+  creating a directory on the file system.
+
 * When using editor clickable actions which accept `start` or `stop` params,
   you can now supply negative values. These will be interpreted as offset from
   the end of the file.

@@ -259,6 +259,18 @@ class Editor {
         this.execute_call("/editor/create-file", data, done, fail)
     }
 
+    create_directory(directory: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!directory)
+            return fail("No directory provided")
+
+        directory = this.fixup_path(directory)
+        let data = JSON.stringify({ directory })
+        this.execute_call("/editor/create-directory", data, done, fail)
+    }
+
     select_matching_text(file: string, text: string, start: number, stop: number, isRegex: boolean, group: number, before: number, after: number, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -1763,6 +1775,29 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.create_file(args.file, args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:create-directory",
+        glyph: "fa-folder-plus",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Create directory "${args.directory}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.directory
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.create_directory(args.directory, done, fail)
         },
         waiting: "fa-cog",
         spinner: true,

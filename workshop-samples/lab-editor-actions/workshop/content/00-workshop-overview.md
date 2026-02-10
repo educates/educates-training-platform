@@ -13,6 +13,7 @@ The following features are tested across the workshop pages:
 
 - `editor:open-file` — Open a file, optionally at a specific line
 - `editor:create-file` — Create a new file or overwrite an existing file
+- `editor:create-directory` — Create a new directory
 - `editor:append-lines-to-file` — Append lines to the end of a file
 
 **Line insertion:**

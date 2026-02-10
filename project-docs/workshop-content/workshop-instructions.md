@@ -513,6 +513,14 @@ text: |
 
 If the file already exists, all of its content will be replaced with the new text. If the file does not exist, it will be created. This is useful when workshop instructions need to provide the complete contents of a file.
 
+In any situation where a file needs to be created, if the containing directory does not exist the operation will fail. To create a directory first use:
+
+~~~text
+```editor:create-directory
+directory: ~/exercises
+```
+~~~
+
 To insert lines before a specified line in the file, use:
 
 ~~~text

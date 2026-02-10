@@ -178,6 +178,20 @@ async function handleCreateFile(params: CreateFileParams) {
     }
 }
 
+// --- Handler: create-directory ---
+
+interface CreateDirectoryParams {
+    directory: string;
+}
+
+async function handleCreateDirectory(params: CreateDirectoryParams) {
+    log('Requesting to create directory:');
+    log(`  directory = ${params.directory}`);
+
+    const uri = vscode.Uri.file(params.directory);
+    await vscode.workspace.fs.createDirectory(uri);
+}
+
 // --- Handler: append-to-file ---
 
 interface AppendToFileParams {
@@ -933,6 +947,11 @@ export function activate(context: vscode.ExtensionContext) {
     app.post('/editor/create-file', (req, res) => {
         const parameters = req.body as CreateFileParams;
         createResponse(handleCreateFile(parameters), req, res);
+    });
+
+    app.post('/editor/create-directory', (req, res) => {
+        const parameters = req.body as CreateDirectoryParams;
+        createResponse(handleCreateDirectory(parameters), req, res);
     });
 
     app.post('/editor/append-to-file', (req, res) => {

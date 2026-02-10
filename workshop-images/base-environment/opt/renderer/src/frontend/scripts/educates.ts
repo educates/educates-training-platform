@@ -358,6 +358,45 @@ class Editor {
         this.execute_call("/editor/insert-after-match", data, done, fail)
     }
 
+    delete_lines_in_range(file: string, start: number, stop: number, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, start, stop })
+        this.execute_call("/editor/delete-lines", data, done, fail)
+    }
+
+    delete_matching_lines(file: string, match: string, isRegex: boolean, count: number, before: number, after: number, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!match)
+            return fail("No text to match provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, match, isRegex, count, before, after })
+        this.execute_call("/editor/delete-matching-lines", data, done, fail)
+    }
+
+    replace_lines_in_range(file: string, start: number, stop: number, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, start, stop, text })
+        this.execute_call("/editor/replace-lines", data, done, fail)
+    }
+
     insert_value_into_yaml(file: string, path: string, value: any, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -1713,6 +1752,77 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.insert_lines_after_line(args.file, args.line || "", args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:delete-lines-in-range",
+        glyph: "fa-eraser",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Delete lines ${args.start}-${args.stop || args.start} in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            if (args.stop && args.stop !== args.start)
+                return `Delete lines ${args.start} to ${args.stop}`
+            return `Delete line ${args.start}`
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.delete_lines_in_range(args.file, args.start, args.stop, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:delete-matching-lines",
+        glyph: "fa-eraser",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Delete lines matching "${args.match}" in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.match
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.delete_matching_lines(args.file, args.match, args.isRegex, args.count, args.before, args.after, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:replace-lines-in-range",
+        glyph: "fa-exchange-alt",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Replace lines ${args.start}-${args.stop} in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.replace_lines_in_range(args.file, args.start, args.stop, args.text || "", done, fail)
         },
         waiting: "fa-cog",
         spinner: true,

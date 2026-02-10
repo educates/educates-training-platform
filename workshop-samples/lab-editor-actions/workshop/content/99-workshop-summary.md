@@ -41,6 +41,20 @@ This workshop tested the following editor clickable action features:
 - Replace using regular expression
 - Replace within a search range
 
+**Line deletion and replacement:**
+
+- Delete a single line by number (`editor:delete-lines-in-range`)
+- Delete a range of lines
+- Delete lines at end of file
+- Delete a matching line (`editor:delete-matching-lines`)
+- Delete multiple lines from match (using `count`)
+- Delete lines before and after match (using `before` and `after`)
+- Delete lines matching a regex
+- Replace a range of lines (`editor:replace-lines-in-range`)
+- Replace a single line
+- Replace lines at end of file
+- Replace with more or fewer lines than original
+
 **YAML operations:**
 
 - Insert a value at a YAML path (`editor:insert-value-into-yaml`)

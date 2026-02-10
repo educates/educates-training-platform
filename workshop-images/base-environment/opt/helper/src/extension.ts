@@ -256,6 +256,247 @@ async function handleInsertAfterLine(params: InsertAfterLineParams) {
     }
 }
 
+// --- Handler: delete-lines ---
+
+interface DeleteLinesParams {
+    file: string;
+    start: number;
+    stop?: number;
+}
+
+async function handleDeleteLines(params: DeleteLinesParams) {
+    log('Requesting to delete lines:');
+    log(`  file = ${params.file}`);
+    log(`  start = ${params.start}`);
+    log(`  stop = ${params.stop}`);
+
+    const editor = await showEditor(params.file);
+    const doc = editor.document;
+    const lines = doc.lineCount;
+
+    // Convert 1-based line numbers to 0-based.
+    let startLine = params.start - 1;
+    let stopLine = (params.stop === undefined || params.stop === null) ? startLine : params.stop - 1;
+
+    // Clamp to valid range.
+    if (startLine < 0)
+        startLine = 0;
+    if (startLine >= lines)
+        startLine = lines - 1;
+    if (stopLine < 0)
+        stopLine = 0;
+    if (stopLine >= lines)
+        stopLine = lines - 1;
+
+    // Ensure start <= stop.
+    if (startLine > stopLine) {
+        let temp = startLine;
+        startLine = stopLine;
+        stopLine = temp;
+    }
+
+    // Delete from start of startLine to start of line after stopLine.
+    let startPosition = new vscode.Position(startLine, 0);
+    let endPosition: vscode.Position;
+
+    if (stopLine + 1 < lines) {
+        endPosition = new vscode.Position(stopLine + 1, 0);
+    } else {
+        // Deleting to end of file — include from end of previous line if possible.
+        let lastLine = doc.lineAt(stopLine);
+        endPosition = new vscode.Position(stopLine, lastLine.text.length);
+        if (startLine > 0) {
+            let prevLine = doc.lineAt(startLine - 1);
+            startPosition = new vscode.Position(startLine - 1, prevLine.text.length);
+        }
+    }
+
+    let range = new vscode.Range(startPosition, endPosition);
+
+    await editor.edit(editBuilder => {
+        editBuilder.delete(range);
+    });
+
+    editor.revealRange(new vscode.Range(startPosition, startPosition), vscode.TextEditorRevealType.InCenter);
+
+    await doc.save();
+}
+
+// --- Handler: delete-matching-lines ---
+
+interface DeleteMatchingLinesParams {
+    file: string;
+    match: string;
+    isRegex?: boolean;
+    count?: number;
+    before?: number;
+    after?: number;
+}
+
+async function handleDeleteMatchingLines(params: DeleteMatchingLinesParams) {
+    log('Requesting to delete matching lines:');
+    log(`  file = ${params.file}`);
+    log(`  match = ${params.match}`);
+    log(`  isRegex = ${params.isRegex}`);
+    log(`  count = ${params.count}`);
+    log(`  before = ${params.before}`);
+    log(`  after = ${params.after}`);
+
+    if (!params.match)
+        return;
+
+    const editor = await showEditor(params.file);
+    const doc = editor.document;
+    const lines = doc.lineCount;
+
+    // Find the matching line.
+    let matchLine = -1;
+
+    if (params.isRegex) {
+        let regex = new RegExp(params.match);
+        for (let line = 0; line < lines; line++) {
+            if (regex.test(doc.lineAt(line).text)) {
+                matchLine = line;
+                break;
+            }
+        }
+    } else {
+        let text = params.match.trim();
+        for (let line = 0; line < lines; line++) {
+            if (doc.lineAt(line).text.includes(text)) {
+                matchLine = line;
+                break;
+            }
+        }
+    }
+
+    if (matchLine === -1)
+        return;
+
+    // Calculate the range of lines to delete.
+    let linesBefore = (params.before === undefined || params.before === null) ? 0 : params.before;
+    let linesAfter = (params.after === undefined || params.after === null) ? 0 : params.after;
+    let count = (params.count === undefined || params.count === null) ? 1 : params.count;
+
+    // Use -1 to indicate all lines before or after.
+    if (linesBefore < 0)
+        linesBefore = matchLine;
+    if (linesAfter < 0)
+        linesAfter = lines - matchLine - 1;
+
+    // Count is how many lines from match onwards (minimum 1).
+    if (count < 0)
+        count = lines - matchLine;
+    if (count < 1)
+        count = 1;
+
+    let startLine = matchLine - linesBefore;
+    let stopLine = matchLine + count - 1 + linesAfter;
+
+    if (startLine < 0)
+        startLine = 0;
+    if (stopLine >= lines)
+        stopLine = lines - 1;
+
+    // Delete the range.
+    let startPosition = new vscode.Position(startLine, 0);
+    let endPosition: vscode.Position;
+
+    if (stopLine + 1 < lines) {
+        endPosition = new vscode.Position(stopLine + 1, 0);
+    } else {
+        let lastLine = doc.lineAt(stopLine);
+        endPosition = new vscode.Position(stopLine, lastLine.text.length);
+        if (startLine > 0) {
+            let prevLine = doc.lineAt(startLine - 1);
+            startPosition = new vscode.Position(startLine - 1, prevLine.text.length);
+        }
+    }
+
+    let range = new vscode.Range(startPosition, endPosition);
+
+    await editor.edit(editBuilder => {
+        editBuilder.delete(range);
+    });
+
+    editor.revealRange(new vscode.Range(startPosition, startPosition), vscode.TextEditorRevealType.InCenter);
+
+    await doc.save();
+}
+
+// --- Handler: replace-lines ---
+
+interface ReplaceLinesParams {
+    file: string;
+    start: number;
+    stop: number;
+    text: string;
+}
+
+async function handleReplaceLines(params: ReplaceLinesParams) {
+    log('Requesting to replace lines:');
+    log(`  file = ${params.file}`);
+    log(`  start = ${params.start}`);
+    log(`  stop = ${params.stop}`);
+
+    const editor = await showEditor(params.file);
+    const doc = editor.document;
+    const lines = doc.lineCount;
+
+    // Convert 1-based line numbers to 0-based.
+    let startLine = params.start - 1;
+    let stopLine = params.stop - 1;
+
+    // Clamp to valid range.
+    if (startLine < 0)
+        startLine = 0;
+    if (startLine >= lines)
+        startLine = lines - 1;
+    if (stopLine < 0)
+        stopLine = 0;
+    if (stopLine >= lines)
+        stopLine = lines - 1;
+
+    // Ensure start <= stop.
+    if (startLine > stopLine) {
+        let temp = startLine;
+        startLine = stopLine;
+        stopLine = temp;
+    }
+
+    let replacement = ensureNewlineTerminated(params.text || "");
+
+    // Replace from start of startLine to start of line after stopLine.
+    let startPosition = new vscode.Position(startLine, 0);
+    let endPosition: vscode.Position;
+
+    if (stopLine + 1 < lines) {
+        endPosition = new vscode.Position(stopLine + 1, 0);
+    } else {
+        let lastLine = doc.lineAt(stopLine);
+        endPosition = new vscode.Position(stopLine, lastLine.text.length);
+        // When replacing the last lines, we need a leading newline instead of trailing.
+        if (startLine > 0) {
+            let prevLine = doc.lineAt(startLine - 1);
+            startPosition = new vscode.Position(startLine - 1, prevLine.text.length);
+            replacement = "\n" + replacement;
+            if (replacement.endsWith("\n")) {
+                replacement = replacement.slice(0, -1);
+            }
+        }
+    }
+
+    let range = new vscode.Range(startPosition, endPosition);
+
+    await editor.edit(editBuilder => {
+        editBuilder.replace(range, replacement);
+    });
+
+    editor.revealRange(new vscode.Range(startPosition, startPosition), vscode.TextEditorRevealType.InCenter);
+
+    await doc.save();
+}
+
 // --- Handler: insert-after-match ---
 
 interface InsertAfterMatchParams {
@@ -570,6 +811,21 @@ export function activate(context: vscode.ExtensionContext) {
     app.post('/editor/replace-matching-text', (req, res) => {
         const parameters = req.body as ReplaceMatchingTextParams;
         createResponse(replaceMatchingText(parameters), req, res);
+    });
+
+    app.post('/editor/delete-lines', (req, res) => {
+        const parameters = req.body as DeleteLinesParams;
+        createResponse(handleDeleteLines(parameters), req, res);
+    });
+
+    app.post('/editor/delete-matching-lines', (req, res) => {
+        const parameters = req.body as DeleteMatchingLinesParams;
+        createResponse(handleDeleteMatchingLines(parameters), req, res);
+    });
+
+    app.post('/editor/replace-lines', (req, res) => {
+        const parameters = req.body as ReplaceLinesParams;
+        createResponse(handleReplaceLines(parameters), req, res);
     });
 
     // YAML path insertion — kept on /editor/paste for now (excluded from refactoring).

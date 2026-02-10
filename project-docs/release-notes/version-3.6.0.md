@@ -37,6 +37,11 @@ New Features
   for finding and replacing text in a single step without needing to first select
   the text and then replace it separately.
 
+* New editor clickable actions have been added: `editor:delete-lines-in-range` for
+  deleting a range of lines based on line number, `editor:delete-matching-lines` for
+  delete a range of lines around matched text, and `editor:replace-lines-in-range`
+  for replace a range of lines with new content.
+
 * You can now set `toggle: false` on `section:end` clickable action. In this
   case if have prior clickable action which cascades to `section:end`, the
   section will not be closed. If also have `cascade` set on `section:end`

@@ -524,6 +524,64 @@ text: |
 ```
 ~~~
 
+To delete a range of lines from a file by line number, use:
+
+~~~text
+```editor:delete-lines-in-range
+file: ~/exercises/sample.txt
+start: 5
+stop: 10
+```
+~~~
+
+The ``start`` property specifies the first line to delete and ``stop`` specifies the last line to delete. Both are inclusive. If ``stop`` is omitted, only the single line specified by ``start`` will be deleted. Line numbers start at ``1``.
+
+To delete lines that match a specified string or regular expression, use:
+
+~~~text
+```editor:delete-matching-lines
+file: ~/exercises/sample.txt
+match: "# TODO: remove this"
+```
+~~~
+
+This will find the first line containing the match text and delete it. To delete additional lines around the match, you can specify the ``before`` and ``after`` properties to include lines before and after the matched line. Setting ``before`` or ``after`` to ``-1`` will include all lines before or after the match respectively.
+
+~~~text
+```editor:delete-matching-lines
+file: ~/exercises/sample.txt
+match: "# TODO: remove this"
+before: 1
+after: 2
+```
+~~~
+
+The ``count`` property specifies how many lines to delete starting from the matched line (default is ``1``). Setting ``count`` to ``-1`` will delete all lines from the match to the end of the file. To match using a regular expression, set ``isRegex`` to ``true``.
+
+~~~text
+```editor:delete-matching-lines
+file: ~/exercises/sample.txt
+match: "TODO.*"
+isRegex: true
+count: 3
+```
+~~~
+
+To replace a range of lines in a file with new content, use:
+
+~~~text
+```editor:replace-lines-in-range
+file: ~/exercises/sample.txt
+start: 5
+stop: 10
+text: |
+    new content line 1
+    new content line 2
+```
+~~~
+
+The ``start`` and ``stop`` properties specify the first and last line to replace (both inclusive). The ``text`` property contains the replacement content. Line numbers start at ``1``.
+
 Where the file contains YAML, to insert a new YAML value into an existing structure, use:
 
 ~~~text

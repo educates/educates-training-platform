@@ -27,6 +27,12 @@ The following features are tested across the workshop pages:
 - `editor:replace-text-selection` — Replace the currently selected text
 - `editor:replace-matching-text` — Find and replace text in a single step
 
+**Line deletion and replacement:**
+
+- `editor:delete-lines-in-range` — Delete lines by line number range
+- `editor:delete-matching-lines` — Delete lines matching a string or pattern
+- `editor:replace-lines-in-range` — Replace a range of lines with new content
+
 **Other:**
 
 - `editor:insert-value-into-yaml` — Insert a value into a YAML structure

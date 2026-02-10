@@ -62,6 +62,16 @@ New Features
 * You can now set `open: true` on `section:begin` and the section will start in
   the expanded state.
 
+* New YAML editing clickable actions have been added for structured manipulation
+  of YAML files with comment preservation: `editor:yaml-set` for setting or
+  updating a value at a YAML path, `editor:yaml-add-item` for appending an item
+  to a sequence, `editor:yaml-insert-item` for inserting an item at a specific
+  position in a sequence, `editor:yaml-replace-item` for replacing a sequence
+  item by index or attribute match, `editor:yaml-delete` for deleting a key or
+  sequence item, and `editor:yaml-merge` for merging key-value pairs into an
+  existing mapping. These use the YAML library's document API for round-trip
+  editing, correctly handling all YAML styles including flow/inline syntax.
+
 Features Changed
 ----------------
 

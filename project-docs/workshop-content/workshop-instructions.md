@@ -661,6 +661,81 @@ value:
 ```
 ~~~
 
+For more precise YAML manipulation that preserves comments and handles all YAML styles (block, flow, inline), the following actions are available.
+
+To set or update a YAML value at a specific path, creating intermediate keys if they don't exist:
+
+~~~text
+```editor:yaml-set
+file: ~/exercises/deployment.yaml
+path: spec.replicas
+value: 3
+```
+~~~
+
+To append an item to the end of a YAML sequence:
+
+~~~text
+```editor:yaml-add-item
+file: ~/exercises/deployment.yaml
+path: spec.template.spec.containers
+value:
+  name: sidecar
+  image: busybox:latest
+```
+~~~
+
+To insert an item at a specific position in a YAML sequence:
+
+~~~text
+```editor:yaml-insert-item
+file: ~/exercises/deployment.yaml
+path: spec.template.spec.containers
+index: 0
+value:
+  name: init
+  image: alpine:latest
+```
+~~~
+
+To replace a specific item in a YAML sequence, identified by index or attribute match:
+
+~~~text
+```editor:yaml-replace-item
+file: ~/exercises/deployment.yaml
+path: spec.template.spec.containers[name=nginx]
+value:
+  name: nginx
+  image: nginx:1.25
+  ports:
+  - containerPort: 8080
+```
+~~~
+
+To delete a key from a YAML mapping or an item from a sequence:
+
+~~~text
+```editor:yaml-delete
+file: ~/exercises/deployment.yaml
+path: spec.template.metadata.labels.app
+```
+~~~
+
+To merge multiple key-value pairs into an existing YAML mapping:
+
+~~~text
+```editor:yaml-merge
+file: ~/exercises/deployment.yaml
+path: metadata.labels
+value:
+  app: myapp
+  version: v2
+  tier: frontend
+```
+~~~
+
+The YAML path uses dot notation for mapping keys (``spec.template``), bracket notation with integers for sequence indices (``containers[0]``), and bracket notation with key=value for matching sequence items by attribute (``containers[name=nginx]``).
+
 To execute a registered VS code command, you can use:
 
 ~~~

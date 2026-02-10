@@ -10,6 +10,9 @@ import { Node, Pair, YAMLMap, YAMLSeq } from 'yaml/types';
 import { ReplaceTextSelectionParams, replaceTextSelection } from './replace-text-selection';
 import { SelectMatchingTextParams, selectMatchingText } from './select-matching-text';
 import { ReplaceMatchingTextParams, replaceMatchingText } from './replace-matching-text';
+import { YamlSetParams, handleYamlSet, YamlAddItemParams, handleYamlAddItem,
+    YamlInsertItemParams, handleYamlInsertItem, YamlReplaceItemParams, handleYamlReplaceItem,
+    YamlDeleteParams, handleYamlDelete, YamlMergeParams, handleYamlMerge } from './yaml-operations';
 
 const log_file_path = "/tmp/educates-vscode-helper.log";
 
@@ -1008,6 +1011,38 @@ export function activate(context: vscode.ExtensionContext) {
     app.post('/editor/paste', (req, res) => {
         const parameters = req.body as PasteAtYamlPathParams;
         createResponse(handlePasteAtYamlPath(parameters), req, res);
+    });
+
+    // YAML document manipulation endpoints.
+
+    app.post('/editor/yaml-set', (req, res) => {
+        const parameters = req.body as YamlSetParams;
+        createResponse(handleYamlSet(parameters), req, res);
+    });
+
+    app.post('/editor/yaml-add-item', (req, res) => {
+        const parameters = req.body as YamlAddItemParams;
+        createResponse(handleYamlAddItem(parameters), req, res);
+    });
+
+    app.post('/editor/yaml-insert-item', (req, res) => {
+        const parameters = req.body as YamlInsertItemParams;
+        createResponse(handleYamlInsertItem(parameters), req, res);
+    });
+
+    app.post('/editor/yaml-replace-item', (req, res) => {
+        const parameters = req.body as YamlReplaceItemParams;
+        createResponse(handleYamlReplaceItem(parameters), req, res);
+    });
+
+    app.post('/editor/yaml-delete', (req, res) => {
+        const parameters = req.body as YamlDeleteParams;
+        createResponse(handleYamlDelete(parameters), req, res);
+    });
+
+    app.post('/editor/yaml-merge', (req, res) => {
+        const parameters = req.body as YamlMergeParams;
+        createResponse(handleYamlMerge(parameters), req, res);
     });
 
     let server = app.listen(port, () => {

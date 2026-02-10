@@ -130,7 +130,7 @@ export interface YamlSetParams {
     value: any
 }
 
-export async function handleYamlSet(params: YamlSetParams): Promise<void> {
+export async function handleYamlSetValue(params: YamlSetParams): Promise<void> {
     log("Requesting yaml-set:")
     log(`  file = ${params.file}`)
     log(`  path = ${params.path}`)
@@ -307,7 +307,7 @@ export interface YamlDeleteParams {
     path: string
 }
 
-export async function handleYamlDelete(params: YamlDeleteParams): Promise<void> {
+export async function handleYamlDeleteValue(params: YamlDeleteParams): Promise<void> {
     log("Requesting yaml-delete:")
     log(`  file = ${params.file}`)
     log(`  path = ${params.path}`)
@@ -336,7 +336,7 @@ export interface YamlMergeParams {
     value: any
 }
 
-export async function handleYamlMerge(params: YamlMergeParams): Promise<void> {
+export async function handleYamlMergeValues(params: YamlMergeParams): Promise<void> {
     log("Requesting yaml-merge:")
     log(`  file = ${params.file}`)
     log(`  path = ${params.path}`)
@@ -372,7 +372,7 @@ export interface YamlSelectParams {
     path: string
 }
 
-export async function handleYamlSelect(params: YamlSelectParams): Promise<void> {
+export async function handleYamlSelectPath(params: YamlSelectParams): Promise<void> {
     log("Requesting yaml-select:")
     log(`  file = ${params.file}`)
     log(`  path = ${params.path}`)

@@ -666,7 +666,7 @@ For more precise YAML manipulation that preserves comments and handles all YAML 
 To set or update a YAML value at a specific path, creating intermediate keys if they don't exist:
 
 ~~~text
-```editor:yaml-set
+```editor:yaml-set-value
 file: ~/exercises/deployment.yaml
 path: spec.replicas
 value: 3
@@ -715,7 +715,7 @@ value:
 To delete a key from a YAML mapping or an item from a sequence:
 
 ~~~text
-```editor:yaml-delete
+```editor:yaml-delete-value
 file: ~/exercises/deployment.yaml
 path: spec.template.metadata.labels.app
 ```
@@ -724,7 +724,7 @@ path: spec.template.metadata.labels.app
 To merge multiple key-value pairs into an existing YAML mapping:
 
 ~~~text
-```editor:yaml-merge
+```editor:yaml-merge-values
 file: ~/exercises/deployment.yaml
 path: metadata.labels
 value:
@@ -737,7 +737,7 @@ value:
 To select (highlight) a YAML node at a specific path in the editor, including both the key and its value for mapping entries:
 
 ~~~text
-```editor:yaml-select
+```editor:yaml-select-path
 file: ~/exercises/deployment.yaml
 path: spec.template.spec.containers
 ```
@@ -746,7 +746,7 @@ path: spec.template.spec.containers
 This will open the file and select the region spanning from the key through all of its value content. For a sequence, this means the key and all list items will be highlighted. For a scalar value, the key and its value will be highlighted. For a sequence item identified by index or attribute match, only the item content will be selected.
 
 ~~~text
-```editor:yaml-select
+```editor:yaml-select-path
 file: ~/exercises/deployment.yaml
 path: spec.template.spec.containers[name=nginx]
 ```

@@ -218,8 +218,8 @@ Replace the selected lines with new content:
 
 ```editor:replace-text-selection
 file: ~/exercises/replace-test.txt
-text: |2
-    line 2: BRAVO
-    line 3: CHARLIE
-    line 4: DELTA
+text: |
+  line 2: BRAVO
+  line 3: CHARLIE
+  line 4: DELTA
 ```

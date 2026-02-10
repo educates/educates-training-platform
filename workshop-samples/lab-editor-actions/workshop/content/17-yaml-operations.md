@@ -32,13 +32,13 @@ text: |
 
 ## Set a Value
 
-The `editor:yaml-set` action sets or updates a value at a YAML path. If
+The `editor:yaml-set-value` action sets or updates a value at a YAML path. If
 intermediate keys don't exist, they will be created.
 
 The markdown for setting a value is:
 
 ~~~markdown
-```editor:yaml-set
+```editor:yaml-set-value
 file: ~/exercises/config.yaml
 path: spec.replicas
 value: 3
@@ -47,7 +47,7 @@ value: 3
 
 Click the action below to change the replica count:
 
-```editor:yaml-set
+```editor:yaml-set-value
 file: ~/exercises/config.yaml
 path: spec.replicas
 value: 3
@@ -57,7 +57,7 @@ Note that the comment on the labels line is preserved.
 
 Set a nested value that creates intermediate keys:
 
-```editor:yaml-set
+```editor:yaml-set-value
 file: ~/exercises/config.yaml
 path: spec.selector.matchLabels.app
 value: myapp
@@ -164,13 +164,13 @@ value:
 
 ## Delete a Key or Item
 
-The `editor:yaml-delete` action deletes a key from a mapping or an item from a
+The `editor:yaml-delete-value` action deletes a key from a mapping or an item from a
 sequence.
 
 Delete a mapping key:
 
 ~~~markdown
-```editor:yaml-delete
+```editor:yaml-delete-value
 file: ~/exercises/config.yaml
 path: metadata.labels.app
 ```
@@ -178,27 +178,27 @@ path: metadata.labels.app
 
 Click the action below to delete the `app` label:
 
-```editor:yaml-delete
+```editor:yaml-delete-value
 file: ~/exercises/config.yaml
 path: metadata.labels.app
 ```
 
 Delete a sequence item by attribute match:
 
-```editor:yaml-delete
+```editor:yaml-delete-value
 file: ~/exercises/config.yaml
 path: spec.template.spec.containers[name=sidecar]
 ```
 
 ## Merge Values into Mapping
 
-The `editor:yaml-merge` action merges multiple key-value pairs into an existing
+The `editor:yaml-merge-values` action merges multiple key-value pairs into an existing
 YAML mapping. Existing keys are updated, new keys are added.
 
 The markdown for merging values is:
 
 ~~~markdown
-```editor:yaml-merge
+```editor:yaml-merge-values
 file: ~/exercises/config.yaml
 path: metadata.labels
 value:
@@ -210,7 +210,7 @@ value:
 
 Click the action below to merge labels:
 
-```editor:yaml-merge
+```editor:yaml-merge-values
 file: ~/exercises/config.yaml
 path: metadata.labels
 value:
@@ -221,7 +221,7 @@ value:
 
 ## Select a YAML Path
 
-The `editor:yaml-select` action selects (highlights) a YAML node at a specific
+The `editor:yaml-select-path` action selects (highlights) a YAML node at a specific
 path in the editor. For mapping entries, both the key and its value are selected.
 
 First, recreate the sample file so we have a clean starting point:
@@ -252,7 +252,7 @@ text: |
 The markdown for selecting a YAML path is:
 
 ~~~markdown
-```editor:yaml-select
+```editor:yaml-select-path
 file: ~/exercises/config.yaml
 path: spec.template.spec.containers
 ```
@@ -260,42 +260,42 @@ path: spec.template.spec.containers
 
 Select a scalar value (key and value will be highlighted):
 
-```editor:yaml-select
+```editor:yaml-select-path
 file: ~/exercises/config.yaml
 path: spec.replicas
 ```
 
 Select a mapping (key and all nested content):
 
-```editor:yaml-select
+```editor:yaml-select-path
 file: ~/exercises/config.yaml
 path: metadata.labels
 ```
 
 Select a sequence (key and all list items):
 
-```editor:yaml-select
+```editor:yaml-select-path
 file: ~/exercises/config.yaml
 path: spec.template.spec.containers
 ```
 
 Select a sequence item by index:
 
-```editor:yaml-select
+```editor:yaml-select-path
 file: ~/exercises/config.yaml
 path: spec.template.spec.containers[0]
 ```
 
 Select a sequence item by attribute match:
 
-```editor:yaml-select
+```editor:yaml-select-path
 file: ~/exercises/config.yaml
 path: spec.template.spec.containers[name=sidecar]
 ```
 
 Select a deeply nested value:
 
-```editor:yaml-select
+```editor:yaml-select-path
 file: ~/exercises/config.yaml
 path: spec.template.spec.containers[name=nginx].image
 ```
@@ -316,7 +316,7 @@ text: |
 
 Set a value in the flow-style mapping:
 
-```editor:yaml-set
+```editor:yaml-set-value
 file: ~/exercises/flow-style.yaml
 path: config.debug
 value: false
@@ -324,7 +324,7 @@ value: false
 
 Delete from the flow-style mapping:
 
-```editor:yaml-delete
+```editor:yaml-delete-value
 file: ~/exercises/flow-style.yaml
 path: config.verbose
 ```

@@ -43,13 +43,13 @@ The following features are tested across the workshop pages:
 
 **YAML operations:**
 
-- `editor:insert-value-into-yaml` — Insert a value into a YAML structure (legacy)
-- `editor:yaml-set` — Set or update a value at a YAML path
+- `editor:insert-value-into-yaml` — Insert a value into a YAML structure (deprecated)
+- `editor:yaml-set-value` — Set or update a value at a YAML path
 - `editor:yaml-add-item` — Append an item to a YAML sequence
 - `editor:yaml-insert-item` — Insert an item at a specific position in a sequence
 - `editor:yaml-replace-item` — Replace a sequence item by index or attribute match
-- `editor:yaml-delete` — Delete a key or sequence item from a YAML file
-- `editor:yaml-merge` — Merge key-value pairs into an existing mapping
+- `editor:yaml-delete-value` — Delete a key or sequence item from a YAML file
+- `editor:yaml-merge-values` — Merge key-value pairs into an existing mapping
 
 **Other:**
 

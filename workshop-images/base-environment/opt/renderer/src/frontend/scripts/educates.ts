@@ -483,7 +483,7 @@ class Editor {
         this.execute_call("/editor/paste", data, done, fail)
     }
 
-    yaml_set(file: string, path: string, value: any, done, fail) {
+    yaml_set_value(file: string, path: string, value: any, done, fail) {
         if (!this.url)
             return fail("Editor not available")
 
@@ -498,7 +498,7 @@ class Editor {
 
         file = this.fixup_path(file)
         let data = JSON.stringify({ file, path, value })
-        this.execute_call("/editor/yaml-set", data, done, fail)
+        this.execute_call("/editor/yaml-set-value", data, done, fail)
     }
 
     yaml_add_item(file: string, path: string, value: any, done, fail) {
@@ -570,6 +570,21 @@ class Editor {
         this.execute_call("/editor/yaml-delete", data, done, fail)
     }
 
+    yaml_delete_value(file: string, path: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!path)
+            return fail("No property path provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path })
+        this.execute_call("/editor/yaml-delete-value", data, done, fail)
+    }
+
     yaml_merge(file: string, path: string, value: any, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -588,6 +603,24 @@ class Editor {
         this.execute_call("/editor/yaml-merge", data, done, fail)
     }
 
+    yaml_merge_values(file: string, path: string, value: any, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!path)
+            return fail("No property path provided")
+
+        if (value === undefined)
+            return fail("No value provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path, value })
+        this.execute_call("/editor/yaml-merge-values", data, done, fail)
+    }
+
     yaml_select(file: string, path: string, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -598,6 +631,18 @@ class Editor {
         file = this.fixup_path(file)
         let data = JSON.stringify({ file, path: path || "" })
         this.execute_call("/editor/yaml-select", data, done, fail)
+    }
+
+    yaml_select_path(file: string, path: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path: path || "" })
+        this.execute_call("/editor/yaml-select-path", data, done, fail)
     }
 
     execute_command(command: string, args: string[], done, fail) {
@@ -2103,7 +2148,7 @@ $(document).ready(async () => {
     })
 
     register_action({
-        name: "editor:yaml-set",
+        name: "editor:yaml-set-value",
         glyph: "fa-edit",
         args: "yaml",
         title: (args) => {
@@ -2118,7 +2163,7 @@ $(document).ready(async () => {
         },
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
-            editor.yaml_set(args.file, args.path, args.value, done, fail)
+            editor.yaml_set_value(args.file, args.path, args.value, done, fail)
         },
         waiting: "fa-cog",
         spinner: true,
@@ -2218,7 +2263,30 @@ $(document).ready(async () => {
     })
 
     register_action({
-        name: "editor:yaml-merge",
+        name: "editor:yaml-delete-value",
+        glyph: "fa-minus-circle",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Delete "${args.path}" from "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.path
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.yaml_delete_value(args.file, args.path, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:yaml-merge-values",
         glyph: "fa-layer-group",
         args: "yaml",
         title: (args) => {
@@ -2233,7 +2301,7 @@ $(document).ready(async () => {
         },
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
-            editor.yaml_merge(args.file, args.path, args.value, done, fail)
+            editor.yaml_merge_values(args.file, args.path, args.value, done, fail)
         },
         waiting: "fa-cog",
         spinner: true,
@@ -2241,7 +2309,7 @@ $(document).ready(async () => {
     })
 
     register_action({
-        name: "editor:yaml-select",
+        name: "editor:yaml-select-path",
         glyph: "fa-i-cursor",
         args: "yaml",
         title: (args) => {
@@ -2256,7 +2324,7 @@ $(document).ready(async () => {
         },
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
-            editor.yaml_select(args.file, args.path, done, fail)
+            editor.yaml_select_path(args.file, args.path, done, fail)
         },
         waiting: "fa-cog",
         spinner: true,
@@ -2356,6 +2424,7 @@ $(document).ready(async () => {
                 form_element.on("keydown", ":input:not(textarea)", function (event) {
                     if (event.key == "Enter") {
                         event.preventDefault()
+                   
                     }
                 })
                 element.before(div_element)

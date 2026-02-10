@@ -7,13 +7,25 @@ import express = require('express');
 import * as yaml from 'yaml';
 import { Node, Pair, YAMLMap, YAMLSeq } from 'yaml/types';
 
+import { ReplaceMatchingTextParams, replaceMatchingText } from './replace-matching-text';
 import { ReplaceTextSelectionParams, replaceTextSelection } from './replace-text-selection';
 import { SelectMatchingTextParams, selectMatchingText } from './select-matching-text';
-import { ReplaceMatchingTextParams, replaceMatchingText } from './replace-matching-text';
-import { YamlSetParams, handleYamlSet, YamlAddItemParams, handleYamlAddItem,
-    YamlInsertItemParams, handleYamlInsertItem, YamlReplaceItemParams, handleYamlReplaceItem,
-    YamlDeleteParams, handleYamlDelete, YamlMergeParams, handleYamlMerge,
-    YamlSelectParams, handleYamlSelect } from './yaml-operations';
+import {
+    YamlAddItemParams,
+    YamlDeleteParams,
+    YamlInsertItemParams,
+    YamlMergeParams,
+    YamlReplaceItemParams,
+    YamlSelectParams,
+    YamlSetParams,
+    handleYamlAddItem,
+    handleYamlDeleteValue,
+    handleYamlInsertItem,
+    handleYamlMergeValues,
+    handleYamlReplaceItem,
+    handleYamlSelectPath,
+    handleYamlSetValue
+} from './yaml-operations';
 
 const log_file_path = "/tmp/educates-vscode-helper.log";
 
@@ -1016,39 +1028,39 @@ export function activate(context: vscode.ExtensionContext) {
 
     // YAML document manipulation endpoints.
 
-    app.post('/editor/yaml-set', (req, res) => {
+    app.post("/editor/yaml-set-value", async (req, res) => {
         const parameters = req.body as YamlSetParams;
-        createResponse(handleYamlSet(parameters), req, res);
+        createResponse(handleYamlSetValue(parameters), req, res);
     });
 
-    app.post('/editor/yaml-add-item', (req, res) => {
+    app.post("/editor/yaml-add-item", async (req, res) => {
         const parameters = req.body as YamlAddItemParams;
         createResponse(handleYamlAddItem(parameters), req, res);
     });
 
-    app.post('/editor/yaml-insert-item', (req, res) => {
+    app.post("/editor/yaml-insert-item", async (req, res) => {
         const parameters = req.body as YamlInsertItemParams;
         createResponse(handleYamlInsertItem(parameters), req, res);
     });
 
-    app.post('/editor/yaml-replace-item', (req, res) => {
+    app.post("/editor/yaml-replace-item", async (req, res) => {
         const parameters = req.body as YamlReplaceItemParams;
         createResponse(handleYamlReplaceItem(parameters), req, res);
     });
 
-    app.post('/editor/yaml-delete', (req, res) => {
+    app.post("/editor/yaml-delete-value", async (req, res) => {
         const parameters = req.body as YamlDeleteParams;
-        createResponse(handleYamlDelete(parameters), req, res);
+        createResponse(handleYamlDeleteValue(parameters), req, res);
     });
 
-    app.post('/editor/yaml-merge', (req, res) => {
+    app.post("/editor/yaml-merge-values", async (req, res) => {
         const parameters = req.body as YamlMergeParams;
-        createResponse(handleYamlMerge(parameters), req, res);
+        createResponse(handleYamlMergeValues(parameters), req, res);
     });
 
-    app.post('/editor/yaml-select', (req, res) => {
+    app.post("/editor/yaml-select-path", async (req, res) => {
         const parameters = req.body as YamlSelectParams;
-        createResponse(handleYamlSelect(parameters), req, res);
+        createResponse(handleYamlSelectPath(parameters), req, res);
     });
 
     let server = app.listen(port, () => {

@@ -94,3 +94,11 @@ Features Changed
 
 * When using `retries` value with `examiner:execute-test` clickable action,
   you can now use `-1` to indicate an infinite number of retries.
+
+Features Deprecated
+-------------------
+
+* The `editor:insert-value-into-yaml` clickable action is now deprecated and
+  will be removed in a future version. This clickable function never functioned
+  properly and provided limit use. Use the new `editor:yaml` set of clickable
+  actions instead.

@@ -149,10 +149,16 @@ async function handleCreateFile(params: CreateFileParams) {
             editBuilder.replace(entireRange, content);
         });
         await doc.save();
+        // Clear any selection so it doesn't carry over to new content.
+        const origin = new vscode.Position(0, 0);
+        editor.selection = new vscode.Selection(origin, origin);
     } else {
         // File does not exist — create it with the content.
         await writeFile(params.file, content);
-        await showEditor(params.file);
+        const editor = await showEditor(params.file);
+        // Clear any selection carried over from a previous editor tab.
+        const origin = new vscode.Position(0, 0);
+        editor.selection = new vscode.Selection(origin, origin);
     }
 }
 

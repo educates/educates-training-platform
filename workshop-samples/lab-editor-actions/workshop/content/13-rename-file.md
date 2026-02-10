@@ -68,12 +68,6 @@ The file should be renamed but not opened in the editor.
 
 Rename can also be used to move a file to a different directory.
 
-Create a file and a target directory:
-
-```terminal:execute
-command: mkdir -p ~/exercises/subdir
-```
-
 ```editor:create-file
 file: ~/exercises/move-me.txt
 text: |

@@ -52,6 +52,14 @@ The following features are tested across the workshop pages:
 - `editor:yaml-delete-value` — Delete a key or sequence item from a YAML file
 - `editor:yaml-merge-values` — Merge key-value pairs into an existing mapping
 
+**Terminal operations:**
+
+- `editor:open-terminal` — Open or create a terminal in the VS Code editor
+- `editor:close-terminal` — Close a terminal in the VS Code editor
+- `editor:send-to-terminal` — Send text or commands to a terminal
+- `editor:interrupt-terminal` — Interrupt a running command in a terminal
+- `editor:clear-terminal` — Clear a terminal buffer
+
 **Other:**
 
 - `editor:execute-command` — Execute a registered VS Code command

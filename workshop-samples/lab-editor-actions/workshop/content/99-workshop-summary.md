@@ -89,6 +89,19 @@ This workshop tested the following editor clickable action features:
 - Comment preservation across operations
 - Flow-style (inline) YAML support
 
+**Terminal operations:**
+
+- Open a terminal with default session (`editor:open-terminal`)
+- Open a terminal with a numeric session name (string coercion)
+- Open a terminal with a named session
+- Send a command to a terminal (`editor:send-to-terminal`)
+- Send a command using a numeric session
+- Send text without appending newline (`endl: false`)
+- Interrupt a running command (`editor:interrupt-terminal`)
+- Clear a terminal (`editor:clear-terminal`)
+- Close a terminal (`editor:close-terminal`)
+- Close the default terminal
+
 **Other:**
 
 - Execute VS Code commands (`editor:execute-command`)

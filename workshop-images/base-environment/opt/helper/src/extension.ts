@@ -11,6 +11,19 @@ import { ReplaceMatchingTextParams, replaceMatchingText } from './replace-matchi
 import { ReplaceTextSelectionParams, replaceTextSelection } from './replace-text-selection';
 import { SelectMatchingTextParams, selectMatchingText } from './select-matching-text';
 import {
+    TerminalClearParams,
+    TerminalCloseParams,
+    TerminalInterruptParams,
+    TerminalOpenParams,
+    TerminalSendParams,
+    handleTerminalClear,
+    handleTerminalClose,
+    handleTerminalInterrupt,
+    handleTerminalOpen,
+    handleTerminalSend,
+    initTerminalOperations
+} from './terminal-operations';
+import {
     YamlAddItemParams,
     YamlDeleteParams,
     YamlInsertItemParams,
@@ -1071,6 +1084,35 @@ export function activate(context: vscode.ExtensionContext) {
     app.post("/editor/yaml-select-path", async (req, res) => {
         const parameters = req.body as YamlSelectParams;
         createResponse(handleYamlSelectPath(parameters), req, res);
+    });
+
+    // Terminal operation endpoints.
+
+    context.subscriptions.push(initTerminalOperations());
+
+    app.post('/editor/terminal-open', (req, res) => {
+        const parameters = req.body as TerminalOpenParams;
+        createResponse(handleTerminalOpen(parameters), req, res);
+    });
+
+    app.post('/editor/terminal-close', (req, res) => {
+        const parameters = req.body as TerminalCloseParams;
+        createResponse(handleTerminalClose(parameters), req, res);
+    });
+
+    app.post('/editor/terminal-send', (req, res) => {
+        const parameters = req.body as TerminalSendParams;
+        createResponse(handleTerminalSend(parameters), req, res);
+    });
+
+    app.post('/editor/terminal-interrupt', (req, res) => {
+        const parameters = req.body as TerminalInterruptParams;
+        createResponse(handleTerminalInterrupt(parameters), req, res);
+    });
+
+    app.post('/editor/terminal-clear', (req, res) => {
+        const parameters = req.body as TerminalClearParams;
+        createResponse(handleTerminalClear(parameters), req, res);
     });
 
     let server = app.listen(port, () => {

@@ -78,6 +78,15 @@ New Features
 * New YAML clickable action `editor:yaml-select-path` for selecting part of a
   YAML definition based on the path to the object.
 
+* New editor clickable actions have been added for managing terminals within the
+  VS Code editor: `editor:open-terminal` for opening or creating a named terminal,
+  `editor:close-terminal` for closing a terminal, `editor:send-to-terminal` for
+  sending text or commands to a terminal with optional newline control via the
+  `endl` property, `editor:interrupt-terminal` for sending an interrupt signal,
+  and `editor:clear-terminal` for clearing the terminal buffer. These are distinct
+  from the dashboard `terminal:*` actions which manage terminals on the terminals
+  tab.
+
 Features Changed
 ----------------
 

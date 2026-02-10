@@ -4,7 +4,7 @@ metadata:
   name: lab-editor-actions
 spec:
   title: Editor Clickable Actions Test
-  description: Test workshop for verifying all editor clickable action types including open file, create file, append lines, insert lines before/after line, insert lines after match, select matching text, replace text selection, replace matching text, delete lines in range, delete matching lines, replace lines in range, copy file, rename file, close file, delete file, insert value into YAML, and execute command.
+  description: Test workshop for verifying all editor clickable action types including open file, create file, append lines, insert lines before/after line, insert lines after match, select matching text, replace text selection, replace matching text, delete lines in range, delete matching lines, replace lines in range, copy file, rename file, close file, delete file, insert value into YAML, execute command, and terminal operations (open, close, send to, interrupt, and clear terminals).
   duration: 15m
   difficulty: beginner
   publish:

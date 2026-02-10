@@ -667,6 +667,46 @@ class Editor {
         let data = JSON.stringify(args)
         this.execute_call("/command/" + encodeURIComponent(command), data, done, fail)
     }
+
+    open_terminal(session: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        let data = JSON.stringify({ session })
+        this.execute_call("/editor/terminal-open", data, done, fail)
+    }
+
+    close_terminal(session: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        let data = JSON.stringify({ session })
+        this.execute_call("/editor/terminal-close", data, done, fail)
+    }
+
+    send_to_terminal(session: string, text: string, endl: boolean, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        let data = JSON.stringify({ session, text, endl })
+        this.execute_call("/editor/terminal-send", data, done, fail)
+    }
+
+    interrupt_terminal(session: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        let data = JSON.stringify({ session })
+        this.execute_call("/editor/terminal-interrupt", data, done, fail)
+    }
+
+    clear_terminal(session: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        let data = JSON.stringify({ session })
+        this.execute_call("/editor/terminal-clear", data, done, fail)
+    }
 }
 
 export let editor: Editor
@@ -2385,6 +2425,132 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.execute_command(args.command, args.args || [], done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    // Register handlers for editor terminal actions.
+
+    register_action({
+        name: "editor:open-terminal",
+        glyph: "fa-terminal",
+        args: "yaml",
+        title: (args) => {
+            let session = String(args.session || "educates")
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Open terminal "${session}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return ""
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.open_terminal(String(args.session || "educates"), done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:close-terminal",
+        glyph: "fa-times",
+        args: "yaml",
+        title: (args) => {
+            let session = String(args.session || "educates")
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Close terminal "${session}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return ""
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.close_terminal(String(args.session || "educates"), done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:send-to-terminal",
+        glyph: "fa-terminal",
+        args: "yaml",
+        title: (args) => {
+            let session = String(args.session || "educates")
+            let prefix = args.prefix || "Editor"
+            let subject
+            if (args.endl === false)
+                subject = args.title || `Send text to terminal "${session}"`
+            else
+                subject = args.title || `Send text with newline to terminal "${session}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.send_to_terminal(String(args.session || "educates"), args.text, args.endl, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:interrupt-terminal",
+        glyph: "fa-terminal",
+        args: "yaml",
+        title: (args) => {
+            let session = String(args.session || "educates")
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Interrupt terminal "${session}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return "<ctrl+c>"
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.interrupt_terminal(String(args.session || "educates"), done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:clear-terminal",
+        glyph: "fa-terminal",
+        args: "yaml",
+        title: (args) => {
+            let session = String(args.session || "educates")
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Clear terminal "${session}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return ""
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.clear_terminal(String(args.session || "educates"), done, fail)
         },
         waiting: "fa-cog",
         spinner: true,

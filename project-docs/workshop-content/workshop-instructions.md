@@ -743,6 +743,63 @@ The YAML path uses dot notation for mapping keys (``spec.template``), bracket no
 
 The above YAML clickable actions replace the existing ``editor:insert-value-into-yaml`` clickable action which didn't work correctly except in very specific cases and has now been deprecated.
 
+To open or create a terminal within the VS Code editor, you can use:
+
+~~~text
+```editor:open-terminal
+session: build
+```
+~~~
+
+The ``session`` property specifies the name of the terminal. If omitted it defaults to ``"educates"``. If a terminal with that name already exists it will be shown, otherwise a new terminal will be created.
+
+Note that these ``editor:*-terminal`` clickable actions manage terminals within the VS Code editor and are separate from the dashboard ``terminal:*`` clickable actions which manage terminals on the terminals tab of the dashboard.
+
+To send text or a command to a terminal within the VS Code editor, you can use:
+
+~~~text
+```editor:send-to-terminal
+text: echo "Hello from VS Code terminal"
+session: build
+```
+~~~
+
+By default a newline will be appended, causing the text to be executed as a command. If you do not want a newline appended, set the ``endl`` property to ``false``.
+
+~~~text
+```editor:send-to-terminal
+text: some input
+session: build
+endl: false
+```
+~~~
+
+You can specify the ``session`` property to target a specific terminal. If the terminal does not exist it will be created.
+
+To interrupt a running command in a terminal within the VS Code editor, you can use:
+
+~~~text
+```editor:interrupt-terminal
+session: build
+```
+~~~
+
+To clear the terminal buffer of a terminal within the VS Code editor, you can use:
+
+~~~text
+```editor:clear-terminal
+session: build
+```
+~~~
+
+To close and dispose of a terminal within the VS Code editor, you can use:
+
+~~~text
+```editor:close-terminal
+session: build
+```
+~~~
+
 To execute a registered VS code command, you can use:
 
 ~~~

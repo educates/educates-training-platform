@@ -382,7 +382,7 @@ class Editor {
         this.execute_call("/editor/delete-lines", data, done, fail)
     }
 
-    delete_matching_lines(file: string, match: string, isRegex: boolean, count: number, before: number, after: number, done, fail) {
+    delete_matching_lines(file: string, match: string, isRegex: boolean, before: number, after: number, done, fail) {
         if (!this.url)
             return fail("Editor not available")
 
@@ -393,7 +393,7 @@ class Editor {
             return fail("No text to match provided")
 
         file = this.fixup_path(file)
-        let data = JSON.stringify({ file, match, isRegex, count, before, after })
+        let data = JSON.stringify({ file, match, isRegex, before, after })
         this.execute_call("/editor/delete-matching-lines", data, done, fail)
     }
 
@@ -2004,7 +2004,7 @@ $(document).ready(async () => {
         },
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
-            editor.delete_matching_lines(args.file, args.match, args.isRegex, args.count, args.before, args.after, done, fail)
+            editor.delete_matching_lines(args.file, args.match, args.isRegex, args.before, args.after, done, fail)
         },
         waiting: "fa-cog",
         spinner: true,

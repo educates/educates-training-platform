@@ -581,17 +581,6 @@ after: 2
 ```
 ~~~
 
-The ``count`` property specifies how many lines to delete starting from the matched line (default is ``1``). Setting ``count`` to ``-1`` will delete all lines from the match to the end of the file. To match using a regular expression, set ``isRegex`` to ``true``.
-
-~~~text
-```editor:delete-matching-lines
-file: ~/exercises/sample.txt
-match: "TODO.*"
-isRegex: true
-count: 3
-```
-~~~
-
 To replace a range of lines in a file with new content, use:
 
 ~~~text

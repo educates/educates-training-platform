@@ -50,7 +50,6 @@ This workshop tested the following editor clickable action features:
 - Delete a range of lines
 - Delete lines at end of file
 - Delete a matching line (`editor:delete-matching-lines`)
-- Delete multiple lines from match (using `count`)
 - Delete lines before and after match (using `before` and `after`)
 - Delete lines matching a regex
 - Replace a range of lines (`editor:replace-lines-in-range`)

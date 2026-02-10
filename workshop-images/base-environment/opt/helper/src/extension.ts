@@ -404,7 +404,6 @@ interface DeleteMatchingLinesParams {
     file: string;
     match: string;
     isRegex?: boolean;
-    count?: number;
     before?: number;
     after?: number;
 }
@@ -414,7 +413,6 @@ async function handleDeleteMatchingLines(params: DeleteMatchingLinesParams) {
     log(`  file = ${params.file}`);
     log(`  match = ${params.match}`);
     log(`  isRegex = ${params.isRegex}`);
-    log(`  count = ${params.count}`);
     log(`  before = ${params.before}`);
     log(`  after = ${params.after}`);
 
@@ -452,7 +450,6 @@ async function handleDeleteMatchingLines(params: DeleteMatchingLinesParams) {
     // Calculate the range of lines to delete.
     let linesBefore = (params.before === undefined || params.before === null) ? 0 : params.before;
     let linesAfter = (params.after === undefined || params.after === null) ? 0 : params.after;
-    let count = (params.count === undefined || params.count === null) ? 1 : params.count;
 
     // Use -1 to indicate all lines before or after.
     if (linesBefore < 0)
@@ -460,14 +457,8 @@ async function handleDeleteMatchingLines(params: DeleteMatchingLinesParams) {
     if (linesAfter < 0)
         linesAfter = lines - matchLine - 1;
 
-    // Count is how many lines from match onwards (minimum 1).
-    if (count < 0)
-        count = lines - matchLine;
-    if (count < 1)
-        count = 1;
-
     let startLine = matchLine - linesBefore;
-    let stopLine = matchLine + count - 1 + linesAfter;
+    let stopLine = matchLine + linesAfter;
 
     if (startLine < 0)
         startLine = 0;

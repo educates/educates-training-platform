@@ -588,6 +588,18 @@ class Editor {
         this.execute_call("/editor/yaml-merge", data, done, fail)
     }
 
+    yaml_select(file: string, path: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path: path || "" })
+        this.execute_call("/editor/yaml-select", data, done, fail)
+    }
+
     execute_command(command: string, args: string[], done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -2222,6 +2234,29 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.yaml_merge(args.file, args.path, args.value, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:yaml-select",
+        glyph: "fa-i-cursor",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Select YAML path "${args.path}" in "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.path
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.yaml_select(args.file, args.path, done, fail)
         },
         waiting: "fa-cog",
         spinner: true,

@@ -1,7 +1,7 @@
 import * as fs from "fs"
 import * as vscode from "vscode"
 import * as yaml from "yaml"
-import { YAMLMap, YAMLSeq } from "yaml/types"
+import { Pair, YAMLMap, YAMLSeq } from "yaml/types"
 
 const log_file_path = "/tmp/educates-vscode-helper.log"
 
@@ -363,4 +363,105 @@ export async function handleYamlMerge(params: YamlMergeParams): Promise<void> {
 
     const newContent = doc.toString()
     await replaceEditorContent(editor, newContent)
+}
+
+// --- Handler: yaml-select ---
+
+export interface YamlSelectParams {
+    file: string
+    path: string
+}
+
+export async function handleYamlSelect(params: YamlSelectParams): Promise<void> {
+    log("Requesting yaml-select:")
+    log(`  file = ${params.file}`)
+    log(`  path = ${params.path}`)
+
+    const editor = await showEditor(params.file)
+    const text = editor.document.getText()
+    const doc = parseYamlDocument(text)
+
+    let startOffset: number = 0
+    let endOffset: number = 0
+
+    if (!params.path) {
+        // Empty path — select entire document contents.
+        const node = doc.contents
+        if (node && node.range) {
+            startOffset = node.range[0]
+            endOffset = node.range[1]
+        } else {
+            startOffset = 0
+            endOffset = text.length
+        }
+    } else {
+        const segments = parsePathToSegments(params.path)
+        const resolved = resolvePathSegments(doc, segments)
+
+        // Navigate to the parent node so we can find the Pair (key+value)
+        // for mapping entries, or the item node for sequence entries.
+        const parentPath = resolved.slice(0, -1)
+        const lastSegment = resolved[resolved.length - 1]
+        const parentNode = parentPath.length === 0
+            ? doc.contents
+            : doc.getIn(parentPath, true)
+
+        if (parentNode instanceof YAMLMap) {
+            // Find the Pair whose key matches lastSegment, so we select
+            // both the key and its value (e.g. "containers:\n- name: ...").
+            let found = false
+            for (const item of parentNode.items) {
+                if (item instanceof Pair) {
+                    const keyStr = item.key && typeof item.key === "object" && "value" in item.key
+                        ? String((item.key as any).value)
+                        : String(item.key)
+                    if (keyStr === String(lastSegment)) {
+                        const keyRange = (item.key as any)?.range
+                        const valRange = (item.value as any)?.range
+                        if (keyRange && valRange) {
+                            startOffset = keyRange[0]
+                            endOffset = valRange[1]
+                        } else if (keyRange) {
+                            startOffset = keyRange[0]
+                            endOffset = keyRange[1]
+                        } else {
+                            throw new Error("Pair has no range information")
+                        }
+                        found = true
+                        break
+                    }
+                }
+            }
+            if (!found) {
+                throw new Error(`Key "${lastSegment}" not found in mapping`)
+            }
+        } else if (parentNode instanceof YAMLSeq) {
+            const index = lastSegment as number
+            const item = parentNode.items[index]
+            if (!item) {
+                throw new Error(`Index ${index} out of range`)
+            }
+            if ((item as any).range) {
+                startOffset = (item as any).range[0]
+                endOffset = (item as any).range[1]
+            } else {
+                throw new Error("Sequence item has no range information")
+            }
+        } else {
+            throw new Error(`Parent of "${params.path}" is not a mapping or sequence`)
+        }
+    }
+
+    // Trim trailing newlines/whitespace from the selection end.
+    while (endOffset > startOffset && (text[endOffset - 1] === "\n" || text[endOffset - 1] === "\r")) {
+        endOffset--
+    }
+
+    log(`  startOffset = ${startOffset}, endOffset = ${endOffset}`)
+
+    const startPos = editor.document.positionAt(startOffset)
+    const endPos = editor.document.positionAt(endOffset)
+
+    editor.selection = new vscode.Selection(startPos, endPos)
+    editor.revealRange(new vscode.Range(startPos, endPos), vscode.TextEditorRevealType.InCenter)
 }

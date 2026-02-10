@@ -219,6 +219,87 @@ value:
   tier: frontend
 ```
 
+## Select a YAML Path
+
+The `editor:yaml-select` action selects (highlights) a YAML node at a specific
+path in the editor. For mapping entries, both the key and its value are selected.
+
+First, recreate the sample file so we have a clean starting point:
+
+```editor:create-file
+file: ~/exercises/config.yaml
+text: |
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: myapp
+    # Environment labels
+    labels:
+      app: myapp
+  spec:
+    replicas: 1
+    template:
+      spec:
+        containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+          - containerPort: 80
+        - name: sidecar
+          image: busybox:latest
+```
+
+The markdown for selecting a YAML path is:
+
+~~~markdown
+```editor:yaml-select
+file: ~/exercises/config.yaml
+path: spec.template.spec.containers
+```
+~~~
+
+Select a scalar value (key and value will be highlighted):
+
+```editor:yaml-select
+file: ~/exercises/config.yaml
+path: spec.replicas
+```
+
+Select a mapping (key and all nested content):
+
+```editor:yaml-select
+file: ~/exercises/config.yaml
+path: metadata.labels
+```
+
+Select a sequence (key and all list items):
+
+```editor:yaml-select
+file: ~/exercises/config.yaml
+path: spec.template.spec.containers
+```
+
+Select a sequence item by index:
+
+```editor:yaml-select
+file: ~/exercises/config.yaml
+path: spec.template.spec.containers[0]
+```
+
+Select a sequence item by attribute match:
+
+```editor:yaml-select
+file: ~/exercises/config.yaml
+path: spec.template.spec.containers[name=sidecar]
+```
+
+Select a deeply nested value:
+
+```editor:yaml-select
+file: ~/exercises/config.yaml
+path: spec.template.spec.containers[name=nginx].image
+```
+
 ## Flow Style YAML
 
 These actions also work correctly with flow-style (inline) YAML. Create a file

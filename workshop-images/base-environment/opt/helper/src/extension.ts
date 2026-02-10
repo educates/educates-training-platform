@@ -12,7 +12,8 @@ import { SelectMatchingTextParams, selectMatchingText } from './select-matching-
 import { ReplaceMatchingTextParams, replaceMatchingText } from './replace-matching-text';
 import { YamlSetParams, handleYamlSet, YamlAddItemParams, handleYamlAddItem,
     YamlInsertItemParams, handleYamlInsertItem, YamlReplaceItemParams, handleYamlReplaceItem,
-    YamlDeleteParams, handleYamlDelete, YamlMergeParams, handleYamlMerge } from './yaml-operations';
+    YamlDeleteParams, handleYamlDelete, YamlMergeParams, handleYamlMerge,
+    YamlSelectParams, handleYamlSelect } from './yaml-operations';
 
 const log_file_path = "/tmp/educates-vscode-helper.log";
 
@@ -1043,6 +1044,11 @@ export function activate(context: vscode.ExtensionContext) {
     app.post('/editor/yaml-merge', (req, res) => {
         const parameters = req.body as YamlMergeParams;
         createResponse(handleYamlMerge(parameters), req, res);
+    });
+
+    app.post('/editor/yaml-select', (req, res) => {
+        const parameters = req.body as YamlSelectParams;
+        createResponse(handleYamlSelect(parameters), req, res);
     });
 
     let server = app.listen(port, () => {

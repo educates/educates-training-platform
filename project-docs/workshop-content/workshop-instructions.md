@@ -734,6 +734,26 @@ value:
 ```
 ~~~
 
+To select (highlight) a YAML node at a specific path in the editor, including both the key and its value for mapping entries:
+
+~~~text
+```editor:yaml-select
+file: ~/exercises/deployment.yaml
+path: spec.template.spec.containers
+```
+~~~
+
+This will open the file and select the region spanning from the key through all of its value content. For a sequence, this means the key and all list items will be highlighted. For a scalar value, the key and its value will be highlighted. For a sequence item identified by index or attribute match, only the item content will be selected.
+
+~~~text
+```editor:yaml-select
+file: ~/exercises/deployment.yaml
+path: spec.template.spec.containers[name=nginx]
+```
+~~~
+
+If ``path`` is omitted or empty, the entire document contents will be selected.
+
 The YAML path uses dot notation for mapping keys (``spec.template``), bracket notation with integers for sequence indices (``containers[0]``), and bracket notation with key=value for matching sequence items by attribute (``containers[name=nginx]``).
 
 To execute a registered VS code command, you can use:

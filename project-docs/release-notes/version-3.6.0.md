@@ -75,6 +75,9 @@ New Features
   existing mapping. These use the YAML library's document API for round-trip
   editing, correctly handling all YAML styles including flow/inline syntax.
 
+* New YAML clickable action `editor:yaml-select-path` for selecting part of a
+  YAML definition based on the path to the object.
+
 Features Changed
 ----------------
 

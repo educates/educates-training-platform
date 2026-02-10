@@ -646,18 +646,6 @@ file: ~/exercises/sample.txt
 
 If the file is open in the editor it will be closed before being deleted.
 
-Where the file contains YAML, to insert a new YAML value into an existing structure, use:
-
-~~~text
-```editor:insert-value-into-yaml
-file: ~/exercises/deployment.yaml
-path: spec.template.spec.containers
-value:
-- name: nginx
-  image: nginx:latest
-```
-~~~
-
 For more precise YAML manipulation that preserves comments and handles all YAML styles (block, flow, inline), the following actions are available.
 
 To set or update a YAML value at a specific path, creating intermediate keys if they don't exist:
@@ -752,6 +740,8 @@ path: spec.template.spec.containers[name=nginx]
 If ``path`` is omitted or empty, the entire document contents will be selected.
 
 The YAML path uses dot notation for mapping keys (``spec.template``), bracket notation with integers for sequence indices (``containers[0]``), and bracket notation with key=value for matching sequence items by attribute (``containers[name=nginx]``).
+
+The above YAML clickable actions replace the existing ``editor:insert-value-into-yaml`` clickable action which didn't work correctly except in very specific cases and has now been deprecated.
 
 To execute a registered VS code command, you can use:
 

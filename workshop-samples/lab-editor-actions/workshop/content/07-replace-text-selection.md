@@ -160,3 +160,66 @@ Replace the selected group with a new image:
 file: ~/exercises/replace-test.txt
 text: alpine:3.18
 ```
+
+## Select Lines by Range
+
+The `editor:select-lines-in-range` clickable action selects a range of lines by
+line number. This can be combined with `editor:replace-text-selection` to replace
+specific lines.
+
+Reset the file:
+
+```editor:create-file
+file: ~/exercises/replace-test.txt
+text: |
+  line 1: alpha
+  line 2: bravo
+  line 3: charlie
+  line 4: delta
+  line 5: echo
+  line 6: foxtrot
+```
+
+Select a single line (line 3). The markdown is:
+
+~~~markdown
+```editor:select-lines-in-range
+file: ~/exercises/replace-test.txt
+start: 3
+```
+~~~
+
+Click the action below to select line 3:
+
+```editor:select-lines-in-range
+file: ~/exercises/replace-test.txt
+start: 3
+```
+
+Now select a range of lines (lines 2 to 4). The markdown is:
+
+~~~markdown
+```editor:select-lines-in-range
+file: ~/exercises/replace-test.txt
+start: 2
+stop: 4
+```
+~~~
+
+Click the action below to select lines 2 to 4:
+
+```editor:select-lines-in-range
+file: ~/exercises/replace-test.txt
+start: 2
+stop: 4
+```
+
+Replace the selected lines with new content:
+
+```editor:replace-text-selection
+file: ~/exercises/replace-test.txt
+text: |2
+    line 2: BRAVO
+    line 3: CHARLIE
+    line 4: DELTA
+```

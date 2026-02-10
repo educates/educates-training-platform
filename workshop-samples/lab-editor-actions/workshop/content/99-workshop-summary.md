@@ -31,6 +31,9 @@ This workshop tested the following editor clickable action features:
 - Select a regex subgroup (`group`)
 - Limit search range (`start` and `stop`)
 - Negative line offsets for search range
+- Select a range of lines by number (`editor:select-lines-in-range`)
+- Select a single line by number
+- Select then replace lines
 
 **Text replacement:**
 

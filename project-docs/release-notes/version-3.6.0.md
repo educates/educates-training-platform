@@ -24,13 +24,6 @@ New Features
 * Examiner test scripts can now be provided as part of an extension package.
   These should be placed under the `examiner/tests` directory of the package.
 
-* When using editor clickable actions which accept `start` or `stop` params,
-  you can now supply negative values. These will be interpreted as offset from
-  the end of the file.
-
-* When using editor clickable actions which accept `before` or `after`, if you
-  supply `-1`, it will be interpreted as all lines before or after.
-
 * New editor clickable actions have been added: `editor:create-file` for
   creating a new file or overwriting an existing file, `editor:insert-lines-after-line`
   for inserting lines after a specified line number, and `editor:replace-matching-text`
@@ -42,11 +35,22 @@ New Features
   delete a range of lines around matched text, and `editor:replace-lines-in-range`
   for replace a range of lines with new content.
 
+* A new editor clickable action `editor:select-lines-in-range` has been added for
+  selecting a range of lines by line number. This can be used with
+  `editor:replace-text-selection` to replace specific lines.
+
 * New editor clickable actions have been added for file management:
   `editor:copy-file` for copying a file to a new location,
   `editor:rename-file` for renaming or moving a file,
   `editor:close-file` for closing a file tab in the editor, and
   `editor:delete-file` for deleting a file from the file system.
+
+* When using editor clickable actions which accept `start` or `stop` params,
+  you can now supply negative values. These will be interpreted as offset from
+  the end of the file.
+
+* When using editor clickable actions which accept `before` or `after`, if you
+  supply `-1`, it will be interpreted as all lines before or after.
 
 * You can now set `toggle: false` on `section:end` clickable action. In this
   case if have prior clickable action which cascades to `section:end`, the

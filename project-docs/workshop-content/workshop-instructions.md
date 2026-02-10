@@ -427,6 +427,18 @@ When ``start`` or ``stop`` is a negative value, it is interpreted as offset from
 
 For both an exact match and regular expression, the text to be matched must all be on one line. It is not possible to match on text which spans across lines.
 
+To select a range of lines by line number, use:
+
+~~~text
+```editor:select-lines-in-range
+file: ~/exercises/sample.txt
+start: 5
+stop: 10
+```
+~~~
+
+The ``start`` property specifies the first line to select and ``stop`` specifies the last line to select. Both are inclusive. If ``stop`` is omitted, only the single line specified by ``start`` will be selected. Line numbers start at ``1``. The selected text can then be replaced using ``editor:replace-text-selection``.
+
 To replace text within the file, first match it exactly or using a regular expression so it is marked as selected, then use:
 
 ~~~text

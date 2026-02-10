@@ -24,6 +24,7 @@ The following features are tested across the workshop pages:
 **Text matching and replacement:**
 
 - `editor:select-matching-text` — Select text by exact match or regular expression
+- `editor:select-lines-in-range` — Select a range of lines by line number
 - `editor:replace-text-selection` — Replace the currently selected text
 - `editor:replace-matching-text` — Find and replace text in a single step
 

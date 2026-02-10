@@ -262,6 +262,60 @@ async function handleInsertAfterLine(params: InsertAfterLineParams) {
     }
 }
 
+// --- Handler: select-lines-in-range ---
+
+interface SelectLinesInRangeParams {
+    file: string;
+    start: number;
+    stop?: number;
+}
+
+async function handleSelectLinesInRange(params: SelectLinesInRangeParams) {
+    log('Requesting to select lines in range:');
+    log(`  file = ${params.file}`);
+    log(`  start = ${params.start}`);
+    log(`  stop = ${params.stop}`);
+
+    const editor = await showEditor(params.file);
+    const doc = editor.document;
+    const lines = doc.lineCount;
+
+    // Convert 1-based line numbers to 0-based.
+    let startLine = params.start - 1;
+    let stopLine = (params.stop === undefined || params.stop === null) ? startLine : params.stop - 1;
+
+    // Clamp to valid range.
+    if (startLine < 0)
+        startLine = 0;
+    if (startLine >= lines)
+        startLine = lines - 1;
+    if (stopLine < 0)
+        stopLine = 0;
+    if (stopLine >= lines)
+        stopLine = lines - 1;
+
+    // Ensure start <= stop.
+    if (startLine > stopLine) {
+        let temp = startLine;
+        startLine = stopLine;
+        stopLine = temp;
+    }
+
+    // Select from start of startLine to end of stopLine.
+    let startPosition = new vscode.Position(startLine, 0);
+    let endPosition: vscode.Position;
+
+    if (stopLine + 1 < lines) {
+        endPosition = new vscode.Position(stopLine + 1, 0);
+    } else {
+        let lastLine = doc.lineAt(stopLine);
+        endPosition = new vscode.Position(stopLine, lastLine.text.length);
+    }
+
+    editor.selection = new vscode.Selection(startPosition, endPosition);
+    editor.revealRange(new vscode.Range(startPosition, endPosition), vscode.TextEditorRevealType.InCenter);
+}
+
 // --- Handler: delete-lines ---
 
 interface DeleteLinesParams {
@@ -907,6 +961,11 @@ export function activate(context: vscode.ExtensionContext) {
     app.post('/editor/replace-matching-text', (req, res) => {
         const parameters = req.body as ReplaceMatchingTextParams;
         createResponse(replaceMatchingText(parameters), req, res);
+    });
+
+    app.post('/editor/select-lines-in-range', (req, res) => {
+        const parameters = req.body as SelectLinesInRangeParams;
+        createResponse(handleSelectLinesInRange(parameters), req, res);
     });
 
     app.post('/editor/delete-lines', (req, res) => {

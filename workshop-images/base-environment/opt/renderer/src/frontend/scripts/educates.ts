@@ -358,6 +358,18 @@ class Editor {
         this.execute_call("/editor/insert-after-match", data, done, fail)
     }
 
+    select_lines_in_range(file: string, start: number, stop: number, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, start, stop })
+        this.execute_call("/editor/select-lines-in-range", data, done, fail)
+    }
+
     delete_lines_in_range(file: string, start: number, stop: number, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -1758,6 +1770,31 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.insert_lines_after_line(args.file, args.line || "", args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:select-lines-in-range",
+        glyph: "fa-i-cursor",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Select lines ${args.start}-${args.stop || args.start} in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            if (args.stop && args.stop !== args.start)
+                return `Select lines ${args.start} to ${args.stop}`
+            return `Select line ${args.start}`
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.select_lines_in_range(args.file, args.start, args.stop, done, fail)
         },
         waiting: "fa-cog",
         spinner: true,

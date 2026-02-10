@@ -582,6 +582,48 @@ text: |
 
 The ``start`` and ``stop`` properties specify the first and last line to replace (both inclusive). The ``text`` property contains the replacement content. Line numbers start at ``1``.
 
+To copy a file to a new location, use:
+
+~~~text
+```editor:copy-file
+src: ~/exercises/template.yaml
+dest: ~/exercises/deployment.yaml
+```
+~~~
+
+The ``src`` property is the path to the source file and ``dest`` is the path for the copy. By default the destination file will be opened in the editor. Set ``open`` to ``false`` to copy the file without opening it. If the destination file already exists it will be overwritten.
+
+To rename or move a file, use:
+
+~~~text
+```editor:rename-file
+src: ~/exercises/old-name.txt
+dest: ~/exercises/new-name.txt
+```
+~~~
+
+The ``src`` property is the current file path and ``dest`` is the new path. This can also be used to move a file to a different directory. By default the file will be opened in the editor after renaming. Set ``open`` to ``false`` to rename without opening.
+
+To close a file tab in the editor, use:
+
+~~~text
+```editor:close-file
+file: ~/exercises/sample.txt
+```
+~~~
+
+If the file is not currently open in the editor, the action is a no-op.
+
+To delete a file from the file system, use:
+
+~~~text
+```editor:delete-file
+file: ~/exercises/sample.txt
+```
+~~~
+
+If the file is open in the editor it will be closed before being deleted.
+
 Where the file contains YAML, to insert a new YAML value into an existing structure, use:
 
 ~~~text

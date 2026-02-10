@@ -55,6 +55,20 @@ This workshop tested the following editor clickable action features:
 - Replace lines at end of file
 - Replace with more or fewer lines than original
 
+**File management:**
+
+- Copy a file (`editor:copy-file`)
+- Copy without opening in editor
+- Copy overwrites existing destination
+- Rename a file (`editor:rename-file`)
+- Rename without opening in editor
+- Move a file to a different directory
+- Close a file tab (`editor:close-file`)
+- Close a file that is not open (no-op)
+- Delete a file (`editor:delete-file`)
+- Delete an open file (closes tab and deletes)
+- Delete a closed file
+
 **YAML operations:**
 
 - Insert a value at a YAML path (`editor:insert-value-into-yaml`)

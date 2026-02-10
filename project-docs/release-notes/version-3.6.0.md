@@ -42,6 +42,12 @@ New Features
   delete a range of lines around matched text, and `editor:replace-lines-in-range`
   for replace a range of lines with new content.
 
+* New editor clickable actions have been added for file management:
+  `editor:copy-file` for copying a file to a new location,
+  `editor:rename-file` for renaming or moving a file,
+  `editor:close-file` for closing a file tab in the editor, and
+  `editor:delete-file` for deleting a file from the file system.
+
 * You can now set `toggle: false` on `section:end` clickable action. In this
   case if have prior clickable action which cascades to `section:end`, the
   section will not be closed. If also have `cascade` set on `section:end`

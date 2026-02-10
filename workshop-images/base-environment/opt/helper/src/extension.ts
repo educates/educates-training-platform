@@ -527,6 +527,96 @@ async function handleInsertAfterMatch(params: InsertAfterMatchParams) {
     }
 }
 
+// --- Handler: copy-file ---
+
+interface CopyFileParams {
+    src: string;
+    dest: string;
+    open?: boolean;
+}
+
+async function handleCopyFile(params: CopyFileParams) {
+    log('Requesting to copy file:');
+    log(`  src = ${params.src}`);
+    log(`  dest = ${params.dest}`);
+
+    const srcUri = vscode.Uri.file(params.src);
+    const destUri = vscode.Uri.file(params.dest);
+
+    await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: true });
+
+    if (params.open !== false) {
+        await showEditor(params.dest);
+    }
+}
+
+// --- Handler: rename-file ---
+
+interface RenameFileParams {
+    src: string;
+    dest: string;
+    open?: boolean;
+}
+
+async function handleRenameFile(params: RenameFileParams) {
+    log('Requesting to rename file:');
+    log(`  src = ${params.src}`);
+    log(`  dest = ${params.dest}`);
+
+    const srcUri = vscode.Uri.file(params.src);
+    const destUri = vscode.Uri.file(params.dest);
+
+    await vscode.workspace.fs.rename(srcUri, destUri, { overwrite: true });
+
+    if (params.open !== false) {
+        await showEditor(params.dest);
+    }
+}
+
+// --- Handler: close-file ---
+
+interface CloseFileParams {
+    file: string;
+}
+
+async function handleCloseFile(params: CloseFileParams) {
+    log('Requesting to close file:');
+    log(`  file = ${params.file}`);
+
+    const targetUri = vscode.Uri.file(params.file);
+
+    // Find the tab for this file and close it.
+    for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+            if (tab.input instanceof vscode.TabInputText) {
+                if (tab.input.uri.fsPath === targetUri.fsPath) {
+                    await vscode.window.tabGroups.close(tab);
+                    return;
+                }
+            }
+        }
+    }
+}
+
+// --- Handler: delete-file ---
+
+interface DeleteFileParams {
+    file: string;
+}
+
+async function handleDeleteFile(params: DeleteFileParams) {
+    log('Requesting to delete file:');
+    log(`  file = ${params.file}`);
+
+    const fileUri = vscode.Uri.file(params.file);
+
+    // Close the file first if it's open.
+    await handleCloseFile({ file: params.file });
+
+    // Delete the file.
+    await vscode.workspace.fs.delete(fileUri);
+}
+
 // --- Handler: paste (YAML path insertion only — kept for insert-value-into-yaml) ---
 
 interface PasteAtYamlPathParams {
@@ -826,6 +916,26 @@ export function activate(context: vscode.ExtensionContext) {
     app.post('/editor/replace-lines', (req, res) => {
         const parameters = req.body as ReplaceLinesParams;
         createResponse(handleReplaceLines(parameters), req, res);
+    });
+
+    app.post('/editor/copy-file', (req, res) => {
+        const parameters = req.body as CopyFileParams;
+        createResponse(handleCopyFile(parameters), req, res);
+    });
+
+    app.post('/editor/rename-file', (req, res) => {
+        const parameters = req.body as RenameFileParams;
+        createResponse(handleRenameFile(parameters), req, res);
+    });
+
+    app.post('/editor/close-file', (req, res) => {
+        const parameters = req.body as CloseFileParams;
+        createResponse(handleCloseFile(parameters), req, res);
+    });
+
+    app.post('/editor/delete-file', (req, res) => {
+        const parameters = req.body as DeleteFileParams;
+        createResponse(handleDeleteFile(parameters), req, res);
     });
 
     // YAML path insertion — kept on /editor/paste for now (excluded from refactoring).

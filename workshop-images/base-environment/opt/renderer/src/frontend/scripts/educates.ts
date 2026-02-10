@@ -397,6 +397,62 @@ class Editor {
         this.execute_call("/editor/replace-lines", data, done, fail)
     }
 
+    copy_file(src: string, dest: string, open: boolean, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!src)
+            return fail("No source file provided")
+
+        if (!dest)
+            return fail("No destination file provided")
+
+        src = this.fixup_path(src)
+        dest = this.fixup_path(dest)
+        let data = JSON.stringify({ src, dest, open })
+        this.execute_call("/editor/copy-file", data, done, fail)
+    }
+
+    rename_file(src: string, dest: string, open: boolean, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!src)
+            return fail("No source file provided")
+
+        if (!dest)
+            return fail("No destination file provided")
+
+        src = this.fixup_path(src)
+        dest = this.fixup_path(dest)
+        let data = JSON.stringify({ src, dest, open })
+        this.execute_call("/editor/rename-file", data, done, fail)
+    }
+
+    close_file(file: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file })
+        this.execute_call("/editor/close-file", data, done, fail)
+    }
+
+    delete_file(file: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file })
+        this.execute_call("/editor/delete-file", data, done, fail)
+    }
+
     insert_value_into_yaml(file: string, path: string, value: any, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -1517,6 +1573,29 @@ $(document).ready(async () => {
     })
 
     register_action({
+        name: "editor:create-file",
+        glyph: "fa-file-alt",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Create file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.create_file(args.file, args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
         name: "editor:select-matching-text",
         glyph: "fa-search",
         args: "yaml",
@@ -1640,79 +1719,6 @@ $(document).ready(async () => {
     })
 
     register_action({
-        name: "editor:insert-value-into-yaml",
-        glyph: "fa-file-import",
-        args: "yaml",
-        title: (args) => {
-            let prefix = args.prefix || "Editor"
-            let subject = args.title || `Insert value into YAML file "${args.file}" at "${args.path}"`
-            return `${prefix}: ${subject}`
-        },
-        body: (args) => {
-            if (args.description !== undefined)
-                return args.description
-            return yaml.dump(args.value)
-        },
-        handler: (args, element, done, fail) => {
-            expose_dashboard("editor")
-            editor.insert_value_into_yaml(args.file, args.path, args.value, done, fail)
-        },
-        waiting: "fa-cog",
-        spinner: true,
-        cooldown: 3
-    })
-
-    register_action({
-        name: "editor:execute-command",
-        glyph: "fa-play",
-        args: "yaml",
-        title: (args) => {
-            let prefix = args.prefix || "Editor"
-            let subject = args.title || `Execute command "${args.command}"`
-            return `${prefix}: ${subject}`
-        },
-        body: (args) => {
-            if (args.description !== undefined)
-                return args.description
-            if (!args.args)
-                return ""
-            return yaml.dump(args.args)
-        },
-        handler: (args, element, done, fail) => {
-            expose_dashboard("editor")
-            editor.execute_command(args.command, args.args || [], done, fail)
-        },
-        waiting: "fa-cog",
-        spinner: true,
-        cooldown: 3
-    })
-
-    // Register handlers for new editor actions.
-
-    register_action({
-        name: "editor:create-file",
-        glyph: "fa-file-alt",
-        args: "yaml",
-        title: (args) => {
-            let prefix = args.prefix || "Editor"
-            let subject = args.title || `Create file "${args.file}"`
-            return `${prefix}: ${subject}`
-        },
-        body: (args) => {
-            if (args.description !== undefined)
-                return args.description
-            return args.text
-        },
-        handler: (args, element, done, fail) => {
-            expose_dashboard("editor")
-            editor.create_file(args.file, args.text || "", done, fail)
-        },
-        waiting: "fa-cog",
-        spinner: true,
-        cooldown: 3
-    })
-
-    register_action({
         name: "editor:replace-matching-text",
         glyph: "fa-exchange-alt",
         args: "yaml",
@@ -1823,6 +1829,144 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.replace_lines_in_range(args.file, args.start, args.stop, args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:copy-file",
+        glyph: "fa-copy",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Copy file "${args.src}" to "${args.dest}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return `${args.src} → ${args.dest}`
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.copy_file(args.src, args.dest, args.open, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:rename-file",
+        glyph: "fa-file-export",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Rename file "${args.src}" to "${args.dest}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return `${args.src} → ${args.dest}`
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.rename_file(args.src, args.dest, args.open, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:close-file",
+        glyph: "fa-times",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Close file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.file
+        },
+        handler: (args, element, done, fail) => {
+            editor.close_file(args.file, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:delete-file",
+        glyph: "fa-trash",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Delete file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.file
+        },
+        handler: (args, element, done, fail) => {
+            editor.delete_file(args.file, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+        register_action({
+        name: "editor:insert-value-into-yaml",
+        glyph: "fa-file-import",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Insert value into YAML file "${args.file}" at "${args.path}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return yaml.dump(args.value)
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.insert_value_into_yaml(args.file, args.path, args.value, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:execute-command",
+        glyph: "fa-play",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Execute command "${args.command}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            if (!args.args)
+                return ""
+            return yaml.dump(args.args)
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.execute_command(args.command, args.args || [], done, fail)
         },
         waiting: "fa-cog",
         spinner: true,

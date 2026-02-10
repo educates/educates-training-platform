@@ -33,6 +33,13 @@ The following features are tested across the workshop pages:
 - `editor:delete-matching-lines` — Delete lines matching a string or pattern
 - `editor:replace-lines-in-range` — Replace a range of lines with new content
 
+**File management:**
+
+- `editor:copy-file` — Copy a file to a new location
+- `editor:rename-file` — Rename or move a file
+- `editor:close-file` — Close a file tab in the editor
+- `editor:delete-file` — Delete a file from the file system
+
 **Other:**
 
 - `editor:insert-value-into-yaml` — Insert a value into a YAML structure

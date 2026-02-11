@@ -75,15 +75,15 @@ This workshop tested the following editor clickable action features:
 
 **YAML operations:**
 
-- Set a value at a YAML path (`editor:yaml-set-value`)
+- Set a value at a YAML path (`editor:set-yaml-value`)
 - Set nested values with automatic intermediate key creation
-- Add an item to a sequence (`editor:yaml-add-item`)
-- Insert an item at a specific index (`editor:yaml-insert-item`)
-- Replace a sequence item by index or attribute match (`editor:yaml-replace-item`)
-- Delete a mapping key or sequence item (`editor:yaml-delete-value`)
+- Add an item to a sequence (`editor:add-yaml-item`)
+- Insert an item at a specific index (`editor:insert-yaml-item`)
+- Replace a sequence item by index or attribute match (`editor:replace-yaml-item`)
+- Delete a mapping key or sequence item (`editor:delete-yaml-value`)
 - Delete by attribute match (`[key=value]` syntax)
-- Merge values into a mapping (`editor:yaml-merge-values`)
-- Select a YAML path (`editor:yaml-select-path`)
+- Merge values into a mapping (`editor:merge-yaml-values`)
+- Select a YAML path (`editor:select-yaml-path`)
 - Select scalars, mappings, sequences, and nested values
 - Select sequence items by index or attribute match
 - Comment preservation across operations

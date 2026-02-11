@@ -1042,7 +1042,7 @@ export function activate(context: vscode.ExtensionContext) {
         createResponse(handleDeleteFile(parameters), req, res);
     });
 
-    // YAML path insertion — kept on /editor/paste for now (excluded from refactoring).
+    // YAML path insertion — kept on /editor/paste for now (deprecated).
 
     app.post('/editor/paste', (req, res) => {
         const parameters = req.body as PasteAtYamlPathParams;
@@ -1051,37 +1051,37 @@ export function activate(context: vscode.ExtensionContext) {
 
     // YAML document manipulation endpoints.
 
-    app.post("/editor/yaml-set-value", async (req, res) => {
+    app.post("/editor/set-yaml-value", async (req, res) => {
         const parameters = req.body as YamlSetParams;
         createResponse(handleYamlSetValue(parameters), req, res);
     });
 
-    app.post("/editor/yaml-add-item", async (req, res) => {
+    app.post("/editor/add-yaml-item", async (req, res) => {
         const parameters = req.body as YamlAddItemParams;
         createResponse(handleYamlAddItem(parameters), req, res);
     });
 
-    app.post("/editor/yaml-insert-item", async (req, res) => {
+    app.post("/editor/insert-yaml-item", async (req, res) => {
         const parameters = req.body as YamlInsertItemParams;
         createResponse(handleYamlInsertItem(parameters), req, res);
     });
 
-    app.post("/editor/yaml-replace-item", async (req, res) => {
+    app.post("/editor/replace-yaml-item", async (req, res) => {
         const parameters = req.body as YamlReplaceItemParams;
         createResponse(handleYamlReplaceItem(parameters), req, res);
     });
 
-    app.post("/editor/yaml-delete-value", async (req, res) => {
+    app.post("/editor/delete-yaml-value", async (req, res) => {
         const parameters = req.body as YamlDeleteParams;
         createResponse(handleYamlDeleteValue(parameters), req, res);
     });
 
-    app.post("/editor/yaml-merge-values", async (req, res) => {
+    app.post("/editor/merge-yaml-values", async (req, res) => {
         const parameters = req.body as YamlMergeParams;
         createResponse(handleYamlMergeValues(parameters), req, res);
     });
 
-    app.post("/editor/yaml-select-path", async (req, res) => {
+    app.post("/editor/select-yaml-path", async (req, res) => {
         const parameters = req.body as YamlSelectParams;
         createResponse(handleYamlSelectPath(parameters), req, res);
     });

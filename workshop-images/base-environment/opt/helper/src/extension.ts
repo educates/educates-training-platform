@@ -1,5 +1,3 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as bodyParser from 'body-parser';
 import { Request, Response } from 'express-serve-static-core';
 import * as fs from 'fs';
@@ -9,8 +7,38 @@ import express = require('express');
 import * as yaml from 'yaml';
 import { Node, Pair, YAMLMap, YAMLSeq } from 'yaml/types';
 
+import { ReplaceMatchingTextParams, replaceMatchingText } from './replace-matching-text';
 import { ReplaceTextSelectionParams, replaceTextSelection } from './replace-text-selection';
 import { SelectMatchingTextParams, selectMatchingText } from './select-matching-text';
+import {
+    TerminalClearParams,
+    TerminalCloseParams,
+    TerminalInterruptParams,
+    TerminalOpenParams,
+    TerminalSendParams,
+    handleTerminalClear,
+    handleTerminalClose,
+    handleTerminalInterrupt,
+    handleTerminalOpen,
+    handleTerminalSend,
+    initTerminalOperations
+} from './terminal-operations';
+import {
+    YamlAddItemParams,
+    YamlDeleteParams,
+    YamlInsertItemParams,
+    YamlMergeParams,
+    YamlReplaceItemParams,
+    YamlSelectParams,
+    YamlSetParams,
+    handleYamlAddItem,
+    handleYamlDeleteValue,
+    handleYamlInsertItem,
+    handleYamlMergeValues,
+    handleYamlReplaceItem,
+    handleYamlSelectPath,
+    handleYamlSetValue
+} from './yaml-operations';
 
 const log_file_path = "/tmp/educates-vscode-helper.log";
 
@@ -20,43 +48,42 @@ function log(message: string) {
 
 log('Loading educates-vscode-helper');
 
+// --- Utility functions ---
+
 function showEditor(file: string): Thenable<vscode.TextEditor> {
     return vscode.workspace.openTextDocument(file)
         .then(doc => {
             log("Opened document");
-            //TODO: select line? How?
             return vscode.window.showTextDocument(doc);
         });
 }
 
-function pasteAtLine(editor: vscode.TextEditor, line: number, paste: string): Thenable<any> {
-    log(`called pasteAtLine(${line})`);
+function insertTextAtLine(editor: vscode.TextEditor, line: number, text: string): Thenable<any> {
+    log(`called insertTextAtLine(${line})`);
     let lines = editor.document.lineCount;
     while (lines <= line) {
         lines++;
-        paste = "\n" + paste;
+        text = "\n" + text;
     }
     return editor.edit(editBuilder => {
         const loc = new vscode.Position(line, 0);
-        editBuilder.insert(loc, paste);
+        editBuilder.insert(loc, text);
     })
-        .then(editApplies => gotoLine(editor, line));
+        .then(() => revealLine(editor, line));
 }
 
-function gotoLine(editor: vscode.TextEditor, line: number, before: number = 0, after: number = 0): void {
-    log(`called gotoLine(${line})`);
+function revealLine(editor: vscode.TextEditor, line: number, before: number = 0, after: number = 0): void {
+    log(`called revealLine(${line})`);
     let lineStart = new vscode.Position(line - before, 0);
     let lineEnd = new vscode.Position(line + after, 0);
     let sel = new vscode.Selection(lineStart, lineEnd);
-    log("Setting selection");
     editor.selection = sel;
-    log("Revealing selection");
     editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter);
 }
 
-function findLine(editor: vscode.TextEditor, text: string, isRegex: boolean = false): number {
+function findLineContaining(editor: vscode.TextEditor, text: string, isRegex: boolean = false): number {
     if (!isRegex)
-        text = text.trim(); //ignore trailing and leading whitespace
+        text = text.trim();
 
     let regex = new RegExp(text);
 
@@ -70,19 +97,18 @@ function findLine(editor: vscode.TextEditor, text: string, isRegex: boolean = fa
         else if (currentLine.text.includes(text))
             return line;
     }
-    return lines - 1; // pretend we found the snippet on the last line. 
-    // pasting there is probably better than just dropping the paste text silently.
+    return lines - 1;
 }
 
-function exists(file: string): Promise<boolean> {
-    return new Promise((resolve, reject) => {
+function fileExists(file: string): Promise<boolean> {
+    return new Promise((resolve) => {
         fs.access(file, fs.constants.F_OK, (err) => {
             resolve(err ? false : true);
         });
     });
 }
 
-function createFile(file: string, content: string): Promise<any> {
+function writeFile(file: string, content: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
         fs.writeFile(file, content, (err) => {
             if (err) {
@@ -94,12 +120,626 @@ function createFile(file: string, content: string): Promise<any> {
     });
 }
 
+function ensureNewlineTerminated(text: string): string {
+    if (!text.endsWith("\n")) {
+        log("Adding missing newline terminator to text");
+        text += "\n";
+    }
+    return text;
+}
+
+// --- Handler: open-file ---
+
+interface OpenFileParams {
+    file: string;
+    line?: number;
+}
+
+async function handleOpenFile(params: OpenFileParams) {
+    if (typeof params.line === 'number' && params.line > 0) {
+        params.line--;
+    }
+    log('Requesting to open:');
+    log(`  file = ${params.file}`);
+    log(`  line = ${params.line}`);
+    const editor = await showEditor(params.file);
+    log("Showed document");
+    if (typeof params.line === 'number' && params.line >= 0) {
+        revealLine(editor, params.line);
+    }
+}
+
+// --- Handler: create-file ---
+
+interface CreateFileParams {
+    file: string;
+    text: string;
+}
+
+async function handleCreateFile(params: CreateFileParams) {
+    log('Requesting to create file:');
+    log(`  file = ${params.file}`);
+
+    let content = params.text || "";
+
+    if (content && !content.endsWith("\n")) {
+        content += "\n";
+    }
+
+    if (await fileExists(params.file)) {
+        // File exists — open it, select all content, replace with new content.
+        const editor = await showEditor(params.file);
+        const doc = editor.document;
+        const entireRange = new vscode.Range(
+            new vscode.Position(0, 0),
+            new vscode.Position(doc.lineCount, 0)
+        );
+        await editor.edit(editBuilder => {
+            editBuilder.replace(entireRange, content);
+        });
+        await doc.save();
+        // Clear any selection so it doesn't carry over to new content.
+        const origin = new vscode.Position(0, 0);
+        editor.selection = new vscode.Selection(origin, origin);
+    } else {
+        // File does not exist — create it with the content.
+        await writeFile(params.file, content);
+        const editor = await showEditor(params.file);
+        // Clear any selection carried over from a previous editor tab.
+        const origin = new vscode.Position(0, 0);
+        editor.selection = new vscode.Selection(origin, origin);
+    }
+}
+
+// --- Handler: create-directory ---
+
+interface CreateDirectoryParams {
+    directory: string;
+}
+
+async function handleCreateDirectory(params: CreateDirectoryParams) {
+    log('Requesting to create directory:');
+    log(`  directory = ${params.directory}`);
+
+    const uri = vscode.Uri.file(params.directory);
+    await vscode.workspace.fs.createDirectory(uri);
+}
+
+// --- Handler: append-to-file ---
+
+interface AppendToFileParams {
+    file: string;
+    text: string;
+}
+
+async function handleAppendToFile(params: AppendToFileParams) {
+    let text = ensureNewlineTerminated(params.text || "");
+
+    log('Requesting to append to file:');
+    log(`  file = ${params.file}`);
+    log(`  text = ${text}`);
+
+    if (await fileExists(params.file)) {
+        const editor = await showEditor(params.file);
+
+        // Handle special case when last line of the document is empty.
+        let lines = editor.document.lineCount;
+        const lastLine = editor.document.getText(new vscode.Range(
+            new vscode.Position(lines - 1, 0),
+            new vscode.Position(lines, 0)
+        ));
+        if (!lastLine) {
+            lines--;
+        }
+        await insertTextAtLine(editor, lines, text);
+        await editor.document.save();
+    } else {
+        await writeFile(params.file, text);
+        await showEditor(params.file);
+    }
+}
+
+// --- Handler: insert-before-line ---
+
+interface InsertBeforeLineParams {
+    file: string;
+    line: number;
+    text: string;
+}
+
+async function handleInsertBeforeLine(params: InsertBeforeLineParams) {
+    let line = params.line;
+    if (typeof line === 'number') {
+        line--;
+    }
+
+    let text = ensureNewlineTerminated(params.text || "");
+
+    log('Requesting to insert before line:');
+    log(`  file = ${params.file}`);
+    log(`  line = ${line}`);
+    log(`  text = ${text}`);
+
+    if (await fileExists(params.file)) {
+        const editor = await showEditor(params.file);
+        if (typeof line === 'number' && line >= 0) {
+            await insertTextAtLine(editor, line, text);
+        }
+        await editor.document.save();
+    } else {
+        await writeFile(params.file, text);
+        await showEditor(params.file);
+    }
+}
+
+// --- Handler: insert-after-line ---
+
+interface InsertAfterLineParams {
+    file: string;
+    line: number;
+    text: string;
+}
+
+async function handleInsertAfterLine(params: InsertAfterLineParams) {
+    // Insert after line N means insert before line N+1.
+    // The line number from the frontend is 1-based, so after converting to
+    // 0-based by subtracting 1, we add 1 to get the position after.
+    // Net effect: use the line number as-is (it's already the 0-based position after).
+
+    let text = ensureNewlineTerminated(params.text || "");
+
+    log('Requesting to insert after line:');
+    log(`  file = ${params.file}`);
+    log(`  line = ${params.line}`);
+    log(`  text = ${text}`);
+
+    if (await fileExists(params.file)) {
+        const editor = await showEditor(params.file);
+        if (typeof params.line === 'number' && params.line >= 0) {
+            await insertTextAtLine(editor, params.line, text);
+        }
+        await editor.document.save();
+    } else {
+        await writeFile(params.file, text);
+        await showEditor(params.file);
+    }
+}
+
+// --- Handler: select-lines-in-range ---
+
+interface SelectLinesInRangeParams {
+    file: string;
+    start: number;
+    stop?: number;
+}
+
+async function handleSelectLinesInRange(params: SelectLinesInRangeParams) {
+    log('Requesting to select lines in range:');
+    log(`  file = ${params.file}`);
+    log(`  start = ${params.start}`);
+    log(`  stop = ${params.stop}`);
+
+    const editor = await showEditor(params.file);
+    const doc = editor.document;
+    const lines = doc.lineCount;
+
+    // Convert 1-based line numbers to 0-based.
+    let startLine = params.start - 1;
+    let stopLine = (params.stop === undefined || params.stop === null) ? startLine : params.stop - 1;
+
+    // Clamp to valid range.
+    if (startLine < 0)
+        startLine = 0;
+    if (startLine >= lines)
+        startLine = lines - 1;
+    if (stopLine < 0)
+        stopLine = 0;
+    if (stopLine >= lines)
+        stopLine = lines - 1;
+
+    // Ensure start <= stop.
+    if (startLine > stopLine) {
+        let temp = startLine;
+        startLine = stopLine;
+        stopLine = temp;
+    }
+
+    // Select from start of startLine to end of stopLine.
+    let startPosition = new vscode.Position(startLine, 0);
+    let endPosition: vscode.Position;
+
+    if (stopLine + 1 < lines) {
+        endPosition = new vscode.Position(stopLine + 1, 0);
+    } else {
+        let lastLine = doc.lineAt(stopLine);
+        endPosition = new vscode.Position(stopLine, lastLine.text.length);
+    }
+
+    editor.selection = new vscode.Selection(startPosition, endPosition);
+    editor.revealRange(new vscode.Range(startPosition, endPosition), vscode.TextEditorRevealType.InCenter);
+}
+
+// --- Handler: delete-lines ---
+
+interface DeleteLinesParams {
+    file: string;
+    start: number;
+    stop?: number;
+}
+
+async function handleDeleteLines(params: DeleteLinesParams) {
+    log('Requesting to delete lines:');
+    log(`  file = ${params.file}`);
+    log(`  start = ${params.start}`);
+    log(`  stop = ${params.stop}`);
+
+    const editor = await showEditor(params.file);
+    const doc = editor.document;
+    const lines = doc.lineCount;
+
+    // Convert 1-based line numbers to 0-based.
+    let startLine = params.start - 1;
+    let stopLine = (params.stop === undefined || params.stop === null) ? startLine : params.stop - 1;
+
+    // Clamp to valid range.
+    if (startLine < 0)
+        startLine = 0;
+    if (startLine >= lines)
+        startLine = lines - 1;
+    if (stopLine < 0)
+        stopLine = 0;
+    if (stopLine >= lines)
+        stopLine = lines - 1;
+
+    // Ensure start <= stop.
+    if (startLine > stopLine) {
+        let temp = startLine;
+        startLine = stopLine;
+        stopLine = temp;
+    }
+
+    // Delete from start of startLine to start of line after stopLine.
+    let startPosition = new vscode.Position(startLine, 0);
+    let endPosition: vscode.Position;
+
+    if (stopLine + 1 < lines) {
+        endPosition = new vscode.Position(stopLine + 1, 0);
+    } else {
+        // Deleting to end of file — include from end of previous line if possible.
+        let lastLine = doc.lineAt(stopLine);
+        endPosition = new vscode.Position(stopLine, lastLine.text.length);
+        if (startLine > 0) {
+            let prevLine = doc.lineAt(startLine - 1);
+            startPosition = new vscode.Position(startLine - 1, prevLine.text.length);
+        }
+    }
+
+    let range = new vscode.Range(startPosition, endPosition);
+
+    await editor.edit(editBuilder => {
+        editBuilder.delete(range);
+    });
+
+    editor.revealRange(new vscode.Range(startPosition, startPosition), vscode.TextEditorRevealType.InCenter);
+
+    await doc.save();
+}
+
+// --- Handler: delete-matching-lines ---
+
+interface DeleteMatchingLinesParams {
+    file: string;
+    match: string;
+    isRegex?: boolean;
+    before?: number;
+    after?: number;
+}
+
+async function handleDeleteMatchingLines(params: DeleteMatchingLinesParams) {
+    log('Requesting to delete matching lines:');
+    log(`  file = ${params.file}`);
+    log(`  match = ${params.match}`);
+    log(`  isRegex = ${params.isRegex}`);
+    log(`  before = ${params.before}`);
+    log(`  after = ${params.after}`);
+
+    if (!params.match)
+        return;
+
+    const editor = await showEditor(params.file);
+    const doc = editor.document;
+    const lines = doc.lineCount;
+
+    // Find the matching line.
+    let matchLine = -1;
+
+    if (params.isRegex) {
+        let regex = new RegExp(params.match);
+        for (let line = 0; line < lines; line++) {
+            if (regex.test(doc.lineAt(line).text)) {
+                matchLine = line;
+                break;
+            }
+        }
+    } else {
+        let text = params.match.trim();
+        for (let line = 0; line < lines; line++) {
+            if (doc.lineAt(line).text.includes(text)) {
+                matchLine = line;
+                break;
+            }
+        }
+    }
+
+    if (matchLine === -1)
+        return;
+
+    // Calculate the range of lines to delete.
+    let linesBefore = (params.before === undefined || params.before === null) ? 0 : params.before;
+    let linesAfter = (params.after === undefined || params.after === null) ? 0 : params.after;
+
+    // Use -1 to indicate all lines before or after.
+    if (linesBefore < 0)
+        linesBefore = matchLine;
+    if (linesAfter < 0)
+        linesAfter = lines - matchLine - 1;
+
+    let startLine = matchLine - linesBefore;
+    let stopLine = matchLine + linesAfter;
+
+    if (startLine < 0)
+        startLine = 0;
+    if (stopLine >= lines)
+        stopLine = lines - 1;
+
+    // Delete the range.
+    let startPosition = new vscode.Position(startLine, 0);
+    let endPosition: vscode.Position;
+
+    if (stopLine + 1 < lines) {
+        endPosition = new vscode.Position(stopLine + 1, 0);
+    } else {
+        let lastLine = doc.lineAt(stopLine);
+        endPosition = new vscode.Position(stopLine, lastLine.text.length);
+        if (startLine > 0) {
+            let prevLine = doc.lineAt(startLine - 1);
+            startPosition = new vscode.Position(startLine - 1, prevLine.text.length);
+        }
+    }
+
+    let range = new vscode.Range(startPosition, endPosition);
+
+    await editor.edit(editBuilder => {
+        editBuilder.delete(range);
+    });
+
+    editor.revealRange(new vscode.Range(startPosition, startPosition), vscode.TextEditorRevealType.InCenter);
+
+    await doc.save();
+}
+
+// --- Handler: replace-lines ---
+
+interface ReplaceLinesParams {
+    file: string;
+    start: number;
+    stop: number;
+    text: string;
+}
+
+async function handleReplaceLines(params: ReplaceLinesParams) {
+    log('Requesting to replace lines:');
+    log(`  file = ${params.file}`);
+    log(`  start = ${params.start}`);
+    log(`  stop = ${params.stop}`);
+
+    const editor = await showEditor(params.file);
+    const doc = editor.document;
+    const lines = doc.lineCount;
+
+    // Convert 1-based line numbers to 0-based.
+    let startLine = params.start - 1;
+    let stopLine = params.stop - 1;
+
+    // Clamp to valid range.
+    if (startLine < 0)
+        startLine = 0;
+    if (startLine >= lines)
+        startLine = lines - 1;
+    if (stopLine < 0)
+        stopLine = 0;
+    if (stopLine >= lines)
+        stopLine = lines - 1;
+
+    // Ensure start <= stop.
+    if (startLine > stopLine) {
+        let temp = startLine;
+        startLine = stopLine;
+        stopLine = temp;
+    }
+
+    let replacement = ensureNewlineTerminated(params.text || "");
+
+    // Replace from start of startLine to start of line after stopLine.
+    let startPosition = new vscode.Position(startLine, 0);
+    let endPosition: vscode.Position;
+
+    if (stopLine + 1 < lines) {
+        endPosition = new vscode.Position(stopLine + 1, 0);
+    } else {
+        let lastLine = doc.lineAt(stopLine);
+        endPosition = new vscode.Position(stopLine, lastLine.text.length);
+        // When replacing the last lines, we need a leading newline instead of trailing.
+        if (startLine > 0) {
+            let prevLine = doc.lineAt(startLine - 1);
+            startPosition = new vscode.Position(startLine - 1, prevLine.text.length);
+            replacement = "\n" + replacement;
+            if (replacement.endsWith("\n")) {
+                replacement = replacement.slice(0, -1);
+            }
+        }
+    }
+
+    let range = new vscode.Range(startPosition, endPosition);
+
+    await editor.edit(editBuilder => {
+        editBuilder.replace(range, replacement);
+    });
+
+    editor.revealRange(new vscode.Range(startPosition, startPosition), vscode.TextEditorRevealType.InCenter);
+
+    await doc.save();
+}
+
+// --- Handler: insert-after-match ---
+
+interface InsertAfterMatchParams {
+    file: string;
+    match: string;
+    text: string;
+}
+
+async function handleInsertAfterMatch(params: InsertAfterMatchParams) {
+    let text = ensureNewlineTerminated(params.text || "");
+
+    log('Requesting to insert after match:');
+    log(`  file = ${params.file}`);
+    log(`  match = ${params.match}`);
+    log(`  text = ${text}`);
+
+    if (await fileExists(params.file)) {
+        const editor = await showEditor(params.file);
+        const line = findLineContaining(editor, params.match);
+        log("line = " + line);
+        if (line >= 0) {
+            await insertTextAtLine(editor, line + 1, text);
+        }
+        await editor.document.save();
+    } else {
+        await writeFile(params.file, text);
+        await showEditor(params.file);
+    }
+}
+
+// --- Handler: copy-file ---
+
+interface CopyFileParams {
+    src: string;
+    dest: string;
+    open?: boolean;
+}
+
+async function handleCopyFile(params: CopyFileParams) {
+    log('Requesting to copy file:');
+    log(`  src = ${params.src}`);
+    log(`  dest = ${params.dest}`);
+
+    const srcUri = vscode.Uri.file(params.src);
+    const destUri = vscode.Uri.file(params.dest);
+
+    await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: true });
+
+    if (params.open !== false) {
+        await showEditor(params.dest);
+    }
+}
+
+// --- Handler: rename-file ---
+
+interface RenameFileParams {
+    src: string;
+    dest: string;
+    open?: boolean;
+}
+
+async function handleRenameFile(params: RenameFileParams) {
+    log('Requesting to rename file:');
+    log(`  src = ${params.src}`);
+    log(`  dest = ${params.dest}`);
+
+    const srcUri = vscode.Uri.file(params.src);
+    const destUri = vscode.Uri.file(params.dest);
+
+    await vscode.workspace.fs.rename(srcUri, destUri, { overwrite: true });
+
+    if (params.open !== false) {
+        await showEditor(params.dest);
+    }
+}
+
+// --- Handler: close-file ---
+
+interface CloseFileParams {
+    file: string;
+}
+
+async function handleCloseFile(params: CloseFileParams) {
+    log('Requesting to close file:');
+    log(`  file = ${params.file}`);
+
+    const targetUri = vscode.Uri.file(params.file);
+
+    // Find the tab for this file and close it.
+    for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+            if (tab.input instanceof vscode.TabInputText) {
+                if (tab.input.uri.fsPath === targetUri.fsPath) {
+                    await vscode.window.tabGroups.close(tab);
+                    return;
+                }
+            }
+        }
+    }
+}
+
+// --- Handler: delete-file ---
+
+interface DeleteFileParams {
+    file: string;
+}
+
+async function handleDeleteFile(params: DeleteFileParams) {
+    log('Requesting to delete file:');
+    log(`  file = ${params.file}`);
+
+    const fileUri = vscode.Uri.file(params.file);
+
+    // Close the file first if it's open.
+    await handleCloseFile({ file: params.file });
+
+    // Delete the file.
+    await vscode.workspace.fs.delete(fileUri);
+}
+
+// --- Handler: paste (YAML path insertion only — kept for insert-value-into-yaml) ---
+
+interface PasteAtYamlPathParams {
+    file: string;
+    yamlPath: string;
+    paste: string;
+}
+
+async function handlePasteAtYamlPath(params: PasteAtYamlPathParams) {
+    let paste = ensureNewlineTerminated(params.paste);
+
+    log('Requesting to paste at yaml path:');
+    log(`  file = ${params.file}`);
+    log(`  yamlPath = ${params.yamlPath}`);
+    log(`  paste = ${paste}`);
+
+    if (await fileExists(params.file)) {
+        await pasteAtYamlPath(params.file, params.yamlPath, paste);
+    } else {
+        await writeFile(params.file, paste);
+        await showEditor(params.file);
+    }
+}
+
 async function pasteAtYamlPath(file: string, yamlPath: string, paste: string): Promise<any> {
     let editor = await showEditor(file);
     let text = editor.document.getText();
     let opts: yaml.Options = {
     };
-    //TODO: deal with multi docs properly. For now we just assume one document.
     let doc = yaml.parseAllDocuments(text, opts)[0];
     let target = findNode(doc, yamlPath);
     log("Found target node with range: " + target?.range);
@@ -113,7 +753,6 @@ async function pasteAtYamlPath(file: string, yamlPath: string, paste: string): P
     if (rng) {
         let startPos = editor.document.positionAt(rng[0]);
         let end = rng[1];
-        //find the real end not (i.e not including whitespace)
         while (end > 0 && text[end - 1].trim() === '') {
             end--;
         }
@@ -122,9 +761,12 @@ async function pasteAtYamlPath(file: string, yamlPath: string, paste: string): P
         if (indent) {
             paste = indent + paste.trim().replace(new RegExp('\n', 'g'), '\n' + indent) + '\n';
         }
-        return pasteAtLine(editor, endPos.line + 1, paste);
+        await insertTextAtLine(editor, endPos.line + 1, paste);
+        await editor.document.save();
     }
 }
+
+// --- YAML navigation utilities (kept for insert-value-into-yaml) ---
 
 function rangeOf(item: any): [number, number] | null {
     if (item instanceof Pair) {
@@ -151,7 +793,6 @@ function navigate(node: Node, path: string): Node {
         return node;
     } else {
         let head = parsePath(path);
-        let tp = node.type;
         if (head.key) {
             if (node.type === 'MAP') {
                 let map = node as YAMLMap;
@@ -162,7 +803,6 @@ function navigate(node: Node, path: string): Node {
             }
             throw new Error("Key not found: " + head.key);
         }
-        //careful, head.index may be 0 so which is falsy
         if (typeof (head.index) === 'number') {
             if (node.type === 'SEQ') {
                 let seq = node as YAMLSeq;
@@ -237,7 +877,7 @@ function parsePath(path: string): Path {
                     key: path.substring(0, sep),
                     tail: path.substring(sep + 1)
                 };
-            } else { // path[sep]==='['
+            } else {
                 return {
                     key: path.substring(0, sep),
                     tail: path.substring(sep)
@@ -253,90 +893,7 @@ function parsePath(path: string): Path {
     throw new Error("invalid yaml path syntax");
 }
 
-interface PasteParams {
-    file: string;
-    prefix?: string;
-    line?: number;
-    paste: string;
-    yamlPath?: string;
-}
-
-async function handlePaste(params: PasteParams) {
-    if (typeof params.line === 'number') {
-        params.line--;
-    }
-
-    if (!params.paste.endsWith("\n")) {
-        log("Adding missing newline terminator to paste string");
-        params.paste += "\n";
-    }
-
-    log('Requesting to paste:');
-    log(` file = ${params.file}`);
-    log(`  pre = ${params.prefix}`);
-    log(` line = ${params.line}`);
-    log(`paste = ${params.paste}`);
-    log(` yamlPath = ${params.yamlPath}`);
-
-    if (await exists(params.file)) {
-        log(`File '${params.file}' exists`);
-        const editor = await showEditor(params.file);
-
-        log("Editor shown");
-        if (params.yamlPath) {
-            log("Paste at yaml codepath");
-            await pasteAtYamlPath(params.file, params.yamlPath, params.paste);
-        } else if (typeof params.line === 'number' && params.line >= 0) {
-            log("Paste at line codepath");
-            await pasteAtLine(editor, params.line, params.paste);
-        } else if (params.prefix) {
-            log("Paste at prefix codepath");
-            const line = findLine(editor, params.prefix);
-            log("line = " + line);
-            if (line >= 0) {
-                //paste it on the *next* line after the found line
-                await pasteAtLine(editor, line + 1, params.paste);
-            }
-        } else {
-            //handle special case when last line of the document is empty
-            let lines = editor.document.lineCount;
-            const lastLine = editor.document.getText(new vscode.Range(
-                new vscode.Position(lines - 1, 0),
-                new vscode.Position(lines, 0)
-            ));
-            if (!lastLine) {
-                lines--;
-            }
-            await pasteAtLine(editor, lines, params.paste);
-        }
-
-        await editor.document.save()
-    } else {
-        log("File does not exist");
-        await createFile(params.file, params.paste);
-        log("Created file");
-        return await showEditor(params.file);
-    }
-}
-
-interface GoToLineParams {
-    file: string;
-    line?: number;
-}
-
-async function handleGoToLine(params: GoToLineParams) {
-    if (typeof params.line === 'number' && params.line > 0) {
-        params.line--;
-    }
-    log('Requesting to open:');
-    log(`  file = ${params.file}`);
-    log(`  line = ${params.line}`);
-    const editor = await showEditor(params.file);
-    log("Showed document");
-    if (typeof params.line === 'number' && params.line >= 0) {
-        gotoLine(editor, params.line);
-    }
-}
+// --- HTTP response helper ---
 
 function createResponse(result: Promise<any>, req: Request<any>, res: Response<any>) {
     res.setHeader('Content-Type', 'text/plain');
@@ -351,8 +908,8 @@ function createResponse(result: Promise<any>, req: Request<any>, res: Response<a
         });
 }
 
-// this method is called when your extension is activated
-// your extension is activated the very first time the command is executed
+// --- Extension activation ---
+
 export function activate(context: vscode.ExtensionContext) {
 
     log('Activating Educates helper');
@@ -363,10 +920,13 @@ export function activate(context: vscode.ExtensionContext) {
 
     app.use(bodyParser.json());
 
+    // Health check endpoint.
+
     app.get("/hello", (req, res) => {
-        res.send('Hello World V5 with POST requests accepting JSON body!\n');
-        const pre = req.query.pre;
+        res.send('Educates VS Code helper is running.\n');
     });
+
+    // VS Code command execution endpoint (excluded from refactoring).
 
     let commandInProgress = false;
     app.post('/command/:id', (req, res) => {
@@ -390,36 +950,41 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    app.post('/editor/paste', (req, res) => {
-        const parameters = req.body || {} as PasteParams;
-        createResponse(handlePaste(parameters), req, res);
+    // Editor endpoints — each has a clear, single purpose.
+
+    app.post('/editor/open-file', (req, res) => {
+        const parameters = req.body as OpenFileParams;
+        createResponse(handleOpenFile(parameters), req, res);
     });
 
-    app.get('/editor/paste', (req, res) => {
-        const parameters: PasteParams = {
-            file: req.query.file as string,
-            prefix: req.query.prefix as string,
-            line: req.query.line ? parseInt(req.query.line as string) : undefined,
-            yamlPath: req.query.yamlPath as string,
-            paste: req.query.paste as string
-        };
-        createResponse(handlePaste(parameters), req, res);
+    app.post('/editor/create-file', (req, res) => {
+        const parameters = req.body as CreateFileParams;
+        createResponse(handleCreateFile(parameters), req, res);
     });
 
-    app.post('/editor/line', (req, res) => {
-        const parameters = req.body as GoToLineParams;
-        createResponse(handleGoToLine(parameters), req, res);
+    app.post('/editor/create-directory', (req, res) => {
+        const parameters = req.body as CreateDirectoryParams;
+        createResponse(handleCreateDirectory(parameters), req, res);
     });
 
-    //TODO: change to a 'put' or 'update' request?
-    app.get('/editor/line', (req, res) => {
-        const file: string = req.query.file as string;
-        const line = req.query.line ? parseInt(req.query.line as string) : undefined;
+    app.post('/editor/append-to-file', (req, res) => {
+        const parameters = req.body as AppendToFileParams;
+        createResponse(handleAppendToFile(parameters), req, res);
+    });
 
-        createResponse(handleGoToLine({
-            file,
-            line
-        }), req, res);
+    app.post('/editor/insert-before-line', (req, res) => {
+        const parameters = req.body as InsertBeforeLineParams;
+        createResponse(handleInsertBeforeLine(parameters), req, res);
+    });
+
+    app.post('/editor/insert-after-line', (req, res) => {
+        const parameters = req.body as InsertAfterLineParams;
+        createResponse(handleInsertAfterLine(parameters), req, res);
+    });
+
+    app.post('/editor/insert-after-match', (req, res) => {
+        const parameters = req.body as InsertAfterMatchParams;
+        createResponse(handleInsertAfterMatch(parameters), req, res);
     });
 
     app.post('/editor/select-matching-text', (req, res) => {
@@ -430,6 +995,124 @@ export function activate(context: vscode.ExtensionContext) {
     app.post('/editor/replace-text-selection', (req, res) => {
         const parameters = req.body as ReplaceTextSelectionParams;
         createResponse(replaceTextSelection(parameters), req, res);
+    });
+
+    app.post('/editor/replace-matching-text', (req, res) => {
+        const parameters = req.body as ReplaceMatchingTextParams;
+        createResponse(replaceMatchingText(parameters), req, res);
+    });
+
+    app.post('/editor/select-lines-in-range', (req, res) => {
+        const parameters = req.body as SelectLinesInRangeParams;
+        createResponse(handleSelectLinesInRange(parameters), req, res);
+    });
+
+    app.post('/editor/delete-lines', (req, res) => {
+        const parameters = req.body as DeleteLinesParams;
+        createResponse(handleDeleteLines(parameters), req, res);
+    });
+
+    app.post('/editor/delete-matching-lines', (req, res) => {
+        const parameters = req.body as DeleteMatchingLinesParams;
+        createResponse(handleDeleteMatchingLines(parameters), req, res);
+    });
+
+    app.post('/editor/replace-lines', (req, res) => {
+        const parameters = req.body as ReplaceLinesParams;
+        createResponse(handleReplaceLines(parameters), req, res);
+    });
+
+    app.post('/editor/copy-file', (req, res) => {
+        const parameters = req.body as CopyFileParams;
+        createResponse(handleCopyFile(parameters), req, res);
+    });
+
+    app.post('/editor/rename-file', (req, res) => {
+        const parameters = req.body as RenameFileParams;
+        createResponse(handleRenameFile(parameters), req, res);
+    });
+
+    app.post('/editor/close-file', (req, res) => {
+        const parameters = req.body as CloseFileParams;
+        createResponse(handleCloseFile(parameters), req, res);
+    });
+
+    app.post('/editor/delete-file', (req, res) => {
+        const parameters = req.body as DeleteFileParams;
+        createResponse(handleDeleteFile(parameters), req, res);
+    });
+
+    // YAML path insertion — kept on /editor/paste for now (deprecated).
+
+    app.post('/editor/paste', (req, res) => {
+        const parameters = req.body as PasteAtYamlPathParams;
+        createResponse(handlePasteAtYamlPath(parameters), req, res);
+    });
+
+    // YAML document manipulation endpoints.
+
+    app.post("/editor/set-yaml-value", async (req, res) => {
+        const parameters = req.body as YamlSetParams;
+        createResponse(handleYamlSetValue(parameters), req, res);
+    });
+
+    app.post("/editor/add-yaml-item", async (req, res) => {
+        const parameters = req.body as YamlAddItemParams;
+        createResponse(handleYamlAddItem(parameters), req, res);
+    });
+
+    app.post("/editor/insert-yaml-item", async (req, res) => {
+        const parameters = req.body as YamlInsertItemParams;
+        createResponse(handleYamlInsertItem(parameters), req, res);
+    });
+
+    app.post("/editor/replace-yaml-item", async (req, res) => {
+        const parameters = req.body as YamlReplaceItemParams;
+        createResponse(handleYamlReplaceItem(parameters), req, res);
+    });
+
+    app.post("/editor/delete-yaml-value", async (req, res) => {
+        const parameters = req.body as YamlDeleteParams;
+        createResponse(handleYamlDeleteValue(parameters), req, res);
+    });
+
+    app.post("/editor/merge-yaml-values", async (req, res) => {
+        const parameters = req.body as YamlMergeParams;
+        createResponse(handleYamlMergeValues(parameters), req, res);
+    });
+
+    app.post("/editor/select-yaml-path", async (req, res) => {
+        const parameters = req.body as YamlSelectParams;
+        createResponse(handleYamlSelectPath(parameters), req, res);
+    });
+
+    // Terminal operation endpoints.
+
+    context.subscriptions.push(initTerminalOperations());
+
+    app.post('/editor/terminal-open', (req, res) => {
+        const parameters = req.body as TerminalOpenParams;
+        createResponse(handleTerminalOpen(parameters), req, res);
+    });
+
+    app.post('/editor/terminal-close', (req, res) => {
+        const parameters = req.body as TerminalCloseParams;
+        createResponse(handleTerminalClose(parameters), req, res);
+    });
+
+    app.post('/editor/terminal-send', (req, res) => {
+        const parameters = req.body as TerminalSendParams;
+        createResponse(handleTerminalSend(parameters), req, res);
+    });
+
+    app.post('/editor/terminal-interrupt', (req, res) => {
+        const parameters = req.body as TerminalInterruptParams;
+        createResponse(handleTerminalInterrupt(parameters), req, res);
+    });
+
+    app.post('/editor/terminal-clear', (req, res) => {
+        const parameters = req.body as TerminalClearParams;
+        createResponse(handleTerminalClear(parameters), req, res);
     });
 
     let server = app.listen(port, () => {
@@ -443,5 +1126,4 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push({ dispose: () => server.close() });
 }
 
-// this method is called when your extension is deactivated
 export function deactivate() { }

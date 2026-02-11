@@ -244,7 +244,31 @@ class Editor {
 
         file = this.fixup_path(file)
         let data = JSON.stringify({ file, line })
-        this.execute_call("/editor/line", data, done, fail)
+        this.execute_call("/editor/open-file", data, done, fail)
+    }
+
+    create_file(file: string, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, text })
+        this.execute_call("/editor/create-file", data, done, fail)
+    }
+
+    create_directory(directory: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!directory)
+            return fail("No directory provided")
+
+        directory = this.fixup_path(directory)
+        let data = JSON.stringify({ directory })
+        this.execute_call("/editor/create-directory", data, done, fail)
     }
 
     select_matching_text(file: string, text: string, start: number, stop: number, isRegex: boolean, group: number, before: number, after: number, done, fail) {
@@ -277,6 +301,24 @@ class Editor {
         this.execute_call("/editor/replace-text-selection", data, done, fail)
     }
 
+    replace_matching_text(file: string, match: string, replacement: string, start: number, stop: number, isRegex: boolean, group: number, count: number, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!match)
+            return fail("No text to match provided")
+
+        if (replacement === undefined)
+            return fail("No replacement text provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, match, replacement, start, stop, isRegex, group, count })
+        this.execute_call("/editor/replace-matching-text", data, done, fail)
+    }
+
     append_lines_to_file(file: string, text: string, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -285,8 +327,8 @@ class Editor {
             return fail("No file name provided")
 
         file = this.fixup_path(file)
-        let data = JSON.stringify({ file, paste: text })
-        this.execute_call("/editor/paste", data, done, fail)
+        let data = JSON.stringify({ file, text })
+        this.execute_call("/editor/append-to-file", data, done, fail)
     }
 
     insert_lines_before_line(file: string, line: number, text: string, done, fail) {
@@ -297,8 +339,20 @@ class Editor {
             return fail("No file name provided")
 
         file = this.fixup_path(file)
-        let data = JSON.stringify({ file, line, paste: text })
-        this.execute_call("/editor/paste", data, done, fail)
+        let data = JSON.stringify({ file, line, text })
+        this.execute_call("/editor/insert-before-line", data, done, fail)
+    }
+
+    insert_lines_after_line(file: string, line: number, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, line, text })
+        this.execute_call("/editor/insert-after-line", data, done, fail)
     }
 
     append_lines_after_match(file: string, match: string, text: string, done, fail) {
@@ -312,8 +366,115 @@ class Editor {
             return fail("No string to match provided")
 
         file = this.fixup_path(file)
-        let data = JSON.stringify({ file, prefix: match, paste: text })
-        this.execute_call("/editor/paste", data, done, fail)
+        let data = JSON.stringify({ file, match, text })
+        this.execute_call("/editor/insert-after-match", data, done, fail)
+    }
+
+    select_lines_in_range(file: string, start: number, stop: number, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, start, stop })
+        this.execute_call("/editor/select-lines-in-range", data, done, fail)
+    }
+
+    delete_lines_in_range(file: string, start: number, stop: number, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, start, stop })
+        this.execute_call("/editor/delete-lines", data, done, fail)
+    }
+
+    delete_matching_lines(file: string, match: string, isRegex: boolean, before: number, after: number, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!match)
+            return fail("No text to match provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, match, isRegex, before, after })
+        this.execute_call("/editor/delete-matching-lines", data, done, fail)
+    }
+
+    replace_lines_in_range(file: string, start: number, stop: number, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, start, stop, text })
+        this.execute_call("/editor/replace-lines", data, done, fail)
+    }
+
+    copy_file(src: string, dest: string, open: boolean, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!src)
+            return fail("No source file provided")
+
+        if (!dest)
+            return fail("No destination file provided")
+
+        src = this.fixup_path(src)
+        dest = this.fixup_path(dest)
+        let data = JSON.stringify({ src, dest, open })
+        this.execute_call("/editor/copy-file", data, done, fail)
+    }
+
+    rename_file(src: string, dest: string, open: boolean, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!src)
+            return fail("No source file provided")
+
+        if (!dest)
+            return fail("No destination file provided")
+
+        src = this.fixup_path(src)
+        dest = this.fixup_path(dest)
+        let data = JSON.stringify({ src, dest, open })
+        this.execute_call("/editor/rename-file", data, done, fail)
+    }
+
+    close_file(file: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file })
+        this.execute_call("/editor/close-file", data, done, fail)
+    }
+
+    delete_file(file: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file })
+        this.execute_call("/editor/delete-file", data, done, fail)
     }
 
     insert_value_into_yaml(file: string, path: string, value: any, done, fail) {
@@ -334,6 +495,123 @@ class Editor {
         this.execute_call("/editor/paste", data, done, fail)
     }
 
+    set_yaml_value(file: string, path: string, value: any, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!path)
+            return fail("No property path provided")
+
+        if (value === undefined)
+            return fail("No value provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path, value })
+        this.execute_call("/editor/set-yaml-value", data, done, fail)
+    }
+
+    add_yaml_item(file: string, path: string, value: any, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!path)
+            return fail("No property path provided")
+
+        if (value === undefined)
+            return fail("No value provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path, value })
+        this.execute_call("/editor/add-yaml-item", data, done, fail)
+    }
+
+    insert_yaml_item(file: string, path: string, index: number, value: any, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!path)
+            return fail("No property path provided")
+
+        if (value === undefined)
+            return fail("No value provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path, index, value })
+        this.execute_call("/editor/insert-yaml-item", data, done, fail)
+    }
+
+    replace_yaml_item(file: string, path: string, value: any, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!path)
+            return fail("No property path provided")
+
+        if (value === undefined)
+            return fail("No value provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path, value })
+        this.execute_call("/editor/replace-yaml-item", data, done, fail)
+    }
+
+    delete_yaml_value(file: string, path: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!path)
+            return fail("No property path provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path })
+        this.execute_call("/editor/delete-yaml-value", data, done, fail)
+    }
+
+    merge_yaml_values(file: string, path: string, value: any, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!path)
+            return fail("No property path provided")
+
+        if (value === undefined)
+            return fail("No value provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path, value })
+        this.execute_call("/editor/merge-yaml-values", data, done, fail)
+    }
+
+    select_yaml_path(file: string, path: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, path: path || "" })
+        this.execute_call("/editor/select-yaml-path", data, done, fail)
+    }
+
     execute_command(command: string, args: string[], done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -343,6 +621,46 @@ class Editor {
 
         let data = JSON.stringify(args)
         this.execute_call("/command/" + encodeURIComponent(command), data, done, fail)
+    }
+
+    open_terminal(session: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        let data = JSON.stringify({ session })
+        this.execute_call("/editor/terminal-open", data, done, fail)
+    }
+
+    close_terminal(session: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        let data = JSON.stringify({ session })
+        this.execute_call("/editor/terminal-close", data, done, fail)
+    }
+
+    send_to_terminal(session: string, text: string, endl: boolean, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        let data = JSON.stringify({ session, text, endl })
+        this.execute_call("/editor/terminal-send", data, done, fail)
+    }
+
+    interrupt_terminal(session: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        let data = JSON.stringify({ session })
+        this.execute_call("/editor/terminal-interrupt", data, done, fail)
+    }
+
+    clear_terminal(session: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        let data = JSON.stringify({ session })
+        this.execute_call("/editor/terminal-clear", data, done, fail)
     }
 }
 
@@ -1436,6 +1754,52 @@ $(document).ready(async () => {
     })
 
     register_action({
+        name: "editor:create-file",
+        glyph: "fa-file-alt",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Create file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.create_file(args.file, args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:create-directory",
+        glyph: "fa-folder-plus",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Create directory "${args.directory}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.directory
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.create_directory(args.directory, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
         name: "editor:select-matching-text",
         glyph: "fa-search",
         args: "yaml",
@@ -1559,6 +1923,238 @@ $(document).ready(async () => {
     })
 
     register_action({
+        name: "editor:replace-matching-text",
+        glyph: "fa-exchange-alt",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Replace matching text in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return `${args.match} → ${args.replacement}`
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.replace_matching_text(args.file, args.match, args.replacement, args.start, args.stop, args.isRegex, args.group, args.count, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:insert-lines-after-line",
+        glyph: "fa-file-import",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Insert lines after line ${args.line} in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.insert_lines_after_line(args.file, args.line || "", args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:select-lines-in-range",
+        glyph: "fa-i-cursor",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Select lines ${args.start}-${args.stop || args.start} in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            if (args.stop && args.stop !== args.start)
+                return `Select lines ${args.start} to ${args.stop}`
+            return `Select line ${args.start}`
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.select_lines_in_range(args.file, args.start, args.stop, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:delete-lines-in-range",
+        glyph: "fa-eraser",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Delete lines ${args.start}-${args.stop || args.start} in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            if (args.stop && args.stop !== args.start)
+                return `Delete lines ${args.start} to ${args.stop}`
+            return `Delete line ${args.start}`
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.delete_lines_in_range(args.file, args.start, args.stop, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:delete-matching-lines",
+        glyph: "fa-eraser",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Delete lines matching "${args.match}" in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.match
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.delete_matching_lines(args.file, args.match, args.isRegex, args.before, args.after, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:replace-lines-in-range",
+        glyph: "fa-exchange-alt",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Replace lines ${args.start}-${args.stop} in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.replace_lines_in_range(args.file, args.start, args.stop, args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:copy-file",
+        glyph: "fa-copy",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Copy file "${args.src}" to "${args.dest}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return `${args.src} → ${args.dest}`
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.copy_file(args.src, args.dest, args.open, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:rename-file",
+        glyph: "fa-file-export",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Rename file "${args.src}" to "${args.dest}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return `${args.src} → ${args.dest}`
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.rename_file(args.src, args.dest, args.open, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:close-file",
+        glyph: "fa-times",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Close file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.file
+        },
+        handler: (args, element, done, fail) => {
+            editor.close_file(args.file, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:delete-file",
+        glyph: "fa-trash",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Delete file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.file
+        },
+        handler: (args, element, done, fail) => {
+            editor.delete_file(args.file, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+        register_action({
         name: "editor:insert-value-into-yaml",
         glyph: "fa-file-import",
         args: "yaml",
@@ -1575,6 +2171,167 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.insert_value_into_yaml(args.file, args.path, args.value, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:set-yaml-value",
+        glyph: "fa-edit",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Set YAML value at "${args.path}" in "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return yaml.dump(args.value)
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.set_yaml_value(args.file, args.path, args.value, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:add-yaml-item",
+        glyph: "fa-plus",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Add item to "${args.path}" in "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return yaml.dump(args.value)
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.add_yaml_item(args.file, args.path, args.value, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:insert-yaml-item",
+        glyph: "fa-plus-circle",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Insert item at index ${args.index || 0} in "${args.path}" in "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return yaml.dump(args.value)
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.insert_yaml_item(args.file, args.path, args.index || 0, args.value, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:replace-yaml-item",
+        glyph: "fa-exchange-alt",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Replace item at "${args.path}" in "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return yaml.dump(args.value)
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.replace_yaml_item(args.file, args.path, args.value, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:delete-yaml-value",
+        glyph: "fa-minus-circle",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Delete "${args.path}" from "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.path
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.delete_yaml_value(args.file, args.path, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:merge-yaml-values",
+        glyph: "fa-layer-group",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Merge values into "${args.path}" in "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return yaml.dump(args.value)
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.merge_yaml_values(args.file, args.path, args.value, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:select-yaml-path",
+        glyph: "fa-i-cursor",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Select YAML path "${args.path}" in "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.path
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.select_yaml_path(args.file, args.path, done, fail)
         },
         waiting: "fa-cog",
         spinner: true,
@@ -1600,6 +2357,132 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.execute_command(args.command, args.args || [], done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    // Register handlers for editor terminal actions.
+
+    register_action({
+        name: "editor:open-terminal",
+        glyph: "fa-terminal",
+        args: "yaml",
+        title: (args) => {
+            let session = String(args.session || "educates")
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Open terminal "${session}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return ""
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.open_terminal(String(args.session || "educates"), done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:close-terminal",
+        glyph: "fa-times",
+        args: "yaml",
+        title: (args) => {
+            let session = String(args.session || "educates")
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Close terminal "${session}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return ""
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.close_terminal(String(args.session || "educates"), done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:send-to-terminal",
+        glyph: "fa-terminal",
+        args: "yaml",
+        title: (args) => {
+            let session = String(args.session || "educates")
+            let prefix = args.prefix || "Editor"
+            let subject
+            if (args.endl === false)
+                subject = args.title || `Send text to terminal "${session}"`
+            else
+                subject = args.title || `Send text with newline to terminal "${session}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.send_to_terminal(String(args.session || "educates"), args.text, args.endl, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:interrupt-terminal",
+        glyph: "fa-terminal",
+        args: "yaml",
+        title: (args) => {
+            let session = String(args.session || "educates")
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Interrupt terminal "${session}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return "<ctrl+c>"
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.interrupt_terminal(String(args.session || "educates"), done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:clear-terminal",
+        glyph: "fa-terminal",
+        args: "yaml",
+        title: (args) => {
+            let session = String(args.session || "educates")
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Clear terminal "${session}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return ""
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.clear_terminal(String(args.session || "educates"), done, fail)
         },
         waiting: "fa-cog",
         spinner: true,
@@ -1674,6 +2557,7 @@ $(document).ready(async () => {
                 form_element.on("keydown", ":input:not(textarea)", function (event) {
                     if (event.key == "Enter") {
                         event.preventDefault()
+                   
                     }
                 })
                 element.before(div_element)

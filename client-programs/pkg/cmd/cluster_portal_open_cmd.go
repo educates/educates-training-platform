@@ -67,6 +67,7 @@ func (o *ClusterPortalOpenOptions) Run() error {
 		return err
 	}
 
+	// TODO: Most of this logic is similar to workshops.OpenBrowser, so we should refactor it to a common function.
 	fmt.Printf("Training portal %q.\n", o.Portal)
 
 	fmt.Print("Checking training portal is ready.\n")

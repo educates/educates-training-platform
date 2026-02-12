@@ -324,6 +324,11 @@ type TrainingPlatformConfig struct {
 	LookupService     LookupServiceConfig     `yaml:"lookupService,omitempty"`
 }
 
+type InstallerImagesConfig struct {
+	Bundle string `yaml:"bundle,omitempty"`
+	Overlays []string `yaml:"overlays,omitempty"`
+}
+
 type InstallationConfig struct {
 	Debug                 *bool                       `yaml:"debug,omitempty"`
 	LocalKindCluster      LocalKindClusterConfig      `yaml:"localKindCluster,omitempty"`
@@ -348,6 +353,7 @@ type InstallationConfig struct {
 	WebsiteStyling        WebsiteStylingConfig        `yaml:"websiteStyling,omitempty"`
 	ImagePuller           ImagePullerConfig           `yaml:"imagePuller,omitempty"`
 	LookupService         LookupServiceConfig         `yaml:"lookupService,omitempty"`
+	InstallerImages       InstallerImagesConfig       `yaml:"installerImages,omitempty"`
 }
 
 type EducatesDomainStruct struct {

@@ -48,6 +48,18 @@
 #   Default: latest
 #   Examples: v1.0.0, dev, latest
 #
+# IMGPKG_IMAGE_REPOSITORY
+#   Description: Registry/repository used for image refs inside the installer bundle (kbld-images).
+#   Default: same as IMAGE_REPOSITORY
+#   Override when developing installer carvel-packages to use released images in the bundle
+#   instead of local images (e.g. IMGPKG_IMAGE_REPOSITORY=ghcr.io/educates).
+#
+# IMGPKG_PACKAGE_VERSION
+#   Description: Version tag used for image refs inside the installer bundle (kbld-images).
+#   Default: same as PACKAGE_VERSION
+#   Override when developing installer to pin bundle to a released version's images
+#   (e.g. IMGPKG_PACKAGE_VERSION=3.5.1).
+#
 # =============================================================================
 # BUILD TARGETS
 # =============================================================================
@@ -129,6 +141,10 @@
 IMAGE_REPOSITORY = localhost:5001
 PACKAGE_VERSION = latest
 RELEASE_VERSION = 0.0.1
+
+# Installer bundle image refs: default to same as build repo/version; override to use released images when developing installer
+IMGPKG_IMAGE_REPOSITORY ?= $(IMAGE_REPOSITORY)
+IMGPKG_PACKAGE_VERSION ?= $(PACKAGE_VERSION)
 
 UNAME_SYSTEM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 UNAME_MACHINE := $(shell uname -m)
@@ -297,7 +313,7 @@ else
 endif
 
 push-installer-bundle:
-	ytt -f carvel-packages/installer/config/images.yaml -f carvel-packages/installer/config/schema.yaml -v imageRegistry.host=$(IMAGE_REPOSITORY) -v version=$(PACKAGE_VERSION) > carvel-packages/installer/bundle/kbld/kbld-images.yaml
+	ytt -f carvel-packages/installer/config/images.yaml -f carvel-packages/installer/config/schema.yaml -v imageRegistry.host=$(IMGPKG_IMAGE_REPOSITORY) -v version=$(IMGPKG_PACKAGE_VERSION) > carvel-packages/installer/bundle/kbld/kbld-images.yaml
    # For local development, we just need to lock educates images. Everything else can be referenced by tag from real origin.
 	cat carvel-packages/installer/bundle/kbld/kbld-images.yaml | kbld -f - --imgpkg-lock-output carvel-packages/installer/bundle/.imgpkg/images.yml
 	imgpkg push -b $(IMAGE_REPOSITORY)/educates-installer:$(RELEASE_VERSION) -f carvel-packages/installer/bundle

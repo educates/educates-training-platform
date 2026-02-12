@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
@@ -68,7 +69,7 @@ func (inst *Installer) DryRun(version string, packageRepository string, fullConf
 	}
 
 	// Fetch
-	prevDir, err := inst.fetch(tempDir, version, packageRepository, verbose)
+	prevDir, err := inst.fetch(tempDir, version, packageRepository, fullConfig, verbose)
 	if err != nil {
 		return err
 	}
@@ -120,7 +121,7 @@ func (inst *Installer) Run(version string, packageRepository string, fullConfig 
 	}
 
 	// Fetch
-	prevDir, err := inst.fetch(tempDir, version, packageRepository, verbose)
+	prevDir, err := inst.fetch(tempDir, version, packageRepository, fullConfig, verbose)
 	if err != nil {
 		return err
 	}
@@ -210,25 +211,59 @@ func (inst *Installer) GetConfigFromCluster(kubeconfig string, kubeContext strin
 	return string(valuesData), nil
 }
 
-func (inst *Installer) fetch(tempDir string, version string, packageRepository string, verbose bool) (string, error) {
+func (inst *Installer) fetch(tempDir string, version string, packageRepository string, fullConfig *config.InstallationConfig, verbose bool) (string, error) {
 	if verbose {
 		fmt.Println("Running fetch ...")
 	}
 
-	pullOpts := imgpkgv1.PullOpts{
+	pullOptsAsImage := imgpkgv1.PullOpts{
+		Logger:   logger.NewNullLogger(),
+		AsImage:  true,
+		IsBundle: false,
+	}
+	pullOptsAsBundle := imgpkgv1.PullOpts{
 		Logger:   logger.NewNullLogger(),
 		AsImage:  false,
 		IsBundle: true,
 	}
 	// TODO: Remove some logging from here
 	fetchOutputDir := filepath.Join(tempDir, "fetch")
-	installerImageRef := inst.getBundleImageRef(version, packageRepository)
+	installerImageRef := fullConfig.InstallerImages.Bundle
+	if installerImageRef == "" {
+		installerImageRef = inst.getBundleImageRef(version, packageRepository)
+	}
 	fmt.Println("Using installer image: ", installerImageRef)
-	_, err := imgpkgv1.Pull(installerImageRef, fetchOutputDir, pullOpts, registry.Opts{})
+	_, err := imgpkgv1.Pull(installerImageRef, fetchOutputDir, pullOptsAsBundle, registry.Opts{})
 	if err != nil {
 		// TODO: There might be more potential issues here
 		return "", errors.Wrapf(err, "Installer image not found")
 	}
+
+	// Fetch installer overlay bundles when configured
+	if fullConfig != nil && len(fullConfig.InstallerImages.Overlays) > 0 {
+		overlaysDir := filepath.Join(tempDir, "overlays")
+		for i, ref := range fullConfig.InstallerImages.Overlays {
+			overlayDir := filepath.Join(overlaysDir, strconv.Itoa(i))
+			if err := os.MkdirAll(overlayDir, 0755); err != nil {
+				return "", errors.Wrapf(err, "create overlay directory for %s", ref)
+			}
+			if verbose {
+				fmt.Println("Using installer overlay image: ", ref)
+			}
+			status, err := imgpkgv1.Pull(ref, overlayDir, pullOptsAsBundle, registry.Opts{})
+			if err != nil {
+				if !status.IsBundle {
+					_, err := imgpkgv1.Pull(ref, overlayDir, pullOptsAsImage, registry.Opts{})
+					if err != nil {
+						return "", errors.Wrapf(err, "installer overlay image %d (%s) not found", i, ref)
+					}
+				} else {
+					return "", errors.Wrapf(err, "installer overlay image %d (%s) not found", i, ref)
+				}
+			}
+		}
+	}
+
 	return fetchOutputDir, nil
 }
 
@@ -240,6 +275,15 @@ func (inst *Installer) template(tempDir string, inputDir string, fullConfig *con
 	paths := []string{filepath.Join(inputDir, "config/ytt/")}
 	if !showPackagesValues && !skipImageResolution {
 		paths = append(paths, filepath.Join(inputDir, "kbld/kbld-bundle.yaml"))
+	}
+	// Add installer overlay bundle roots as ytt paths (any structure in each bundle works)
+	if fullConfig != nil && len(fullConfig.InstallerImages.Overlays) > 0 {
+		for i := 0; i < len(fullConfig.InstallerImages.Overlays); i++ {
+			overlayPath := filepath.Join(tempDir, "overlays", strconv.Itoa(i))
+			if _, err := os.Stat(overlayPath); err == nil {
+				paths = append(paths, overlayPath)
+			}
+		}
 	}
 	filesToProcess, err := files.NewSortedFilesFromPaths(paths, files.SymlinkAllowOpts{})
 	if err != nil {

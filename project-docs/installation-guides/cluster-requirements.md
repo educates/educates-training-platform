@@ -34,6 +34,13 @@ If delivering workshops to users where you expect many to be using the Safari we
 
 Whatever the ingress controller is that is used, it should be configured as the default ingress provider. It is possible to configure Educates to use a specific named ingress class in order to select a different ingress provider, however this only applies to Educates own use of ingresses and any workshop you want to use which creates ingresses, would need to be customized to use the non standard ingress class.
 
+Wildcard DNS record for hosts
+-----------------------------
+
+Educates requires wildcard DNS for the ingress domain because each workshop session is assigned its own primary hostname, so each user accesses their session through a separate URL. A session can also receive additional hostnames under the same root domain for web applications bundled with the workshop. This is important because many web applications expect to run on a dedicated hostname and do not function correctly when served from a sub-URL path of another site. In DNS, you typically provision a wildcard record (commonly a `CNAME` such as `*.workshops.example.com`) that points to the platform ingress/load balancer hostname so any session-specific hostname resolves automatically.
+
+If you want secure HTTPS access for workshop sessions, you also need a matching wildcard TLS/SSL certificate for that same wildcard domain (for example, `*.workshops.example.com`). This is required because TLS validation happens before application routing, and the certificate presented by the ingress must match the exact hostname the user opens. Without a wildcard certificate (or equivalent per-host certificates), browsers will show certificate mismatch warnings and secure access will fail.
+
 Kubernetes persistent volumes
 -----------------------------
 

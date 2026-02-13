@@ -38,11 +38,25 @@ function parsePathToSegments(path: string): PathSegment[] {
             if (close < 0) throw new Error("Unclosed bracket in path")
             const inner = path.substring(i + 1, close)
             const eq = inner.indexOf("=")
+
             if (eq >= 0) {
+                // [key=value]
                 segments.push({ key: inner.substring(0, eq), value: inner.substring(eq + 1) })
-            } else {
+            } else if (/^-?\d+$/.test(inner)) {
+                // [0], [1], ...
                 segments.push(parseInt(inner, 10))
+            } else if (
+                (inner.startsWith("\"") && inner.endsWith("\"")) ||
+                (inner.startsWith("'") && inner.endsWith("'"))
+            ) {
+                // ["index.html"] / ['index.html']
+                segments.push(inner.substring(1, inner.length - 1))
+            } else {
+                throw new Error(
+                    `Invalid bracket segment "[${inner}]". Use [index], [key=value], or quoted key syntax like ["index.html"].`
+                )
             }
+
             i = close + 1
         } else {
             let end = i

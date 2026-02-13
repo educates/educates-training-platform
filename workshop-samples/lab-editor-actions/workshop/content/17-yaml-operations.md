@@ -272,6 +272,20 @@ file: ~/exercises/config.yaml
 path: metadata.labels
 ```
 
+Select using quoted key lookup in square brackets (equivalent to dot notation):
+
+```editor:select-yaml-path
+file: ~/exercises/config.yaml
+path: metadata["labels"]
+```
+
+Select a nested value using quoted key lookup:
+
+```editor:select-yaml-path
+file: ~/exercises/config.yaml
+path: metadata["labels"].app
+```
+
 Select a sequence (key and all list items):
 
 ```editor:select-yaml-path

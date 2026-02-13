@@ -739,7 +739,8 @@ path: spec.template.spec.containers[name=nginx]
 
 If ``path`` is omitted or empty, the entire document contents will be selected.
 
-The YAML path uses dot notation for mapping keys (``spec.template``), bracket notation with integers for sequence indices (``containers[0]``), and bracket notation with key=value for matching sequence items by attribute (``containers[name=nginx]``).
+The YAML path uses dot notation for mapping keys (``spec.template``), bracket notation with integers for sequence indices (``containers[0]``), and bracket notation with key=value for matching sequence items by attribute (``containers[name=nginx]``).  
+For mapping keys that include special characters used by path syntax (such as ``.``), use a quoted key inside square brackets, for example ``data["index.html"]``.
 
 The above YAML clickable actions replace the existing ``editor:insert-value-into-yaml`` clickable action which didn't work correctly except in very specific cases and has now been deprecated.
 

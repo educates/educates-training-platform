@@ -110,6 +110,9 @@ Features Changed
 * When using `retries` value with `examiner:execute-test` clickable action,
   you can now use `-1` to indicate an infinite number of retries.
 
+* The `editor:select-matching-text` clickable action now handles multi line
+  matches for exact text match and regex.
+
 Features Deprecated
 -------------------
 

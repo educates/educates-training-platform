@@ -58,9 +58,71 @@ export async function replaceMatchingText(params: ReplaceMatchingTextParams) {
 
     // Collect all matches to replace.
 
-    let matches: { line: number, start: number, stop: number }[] = []
+    let matches: { startLine: number, startCol: number, endLine: number, endCol: number }[] = []
 
-    if (params.isRegex) {
+    // Check whether the match string spans multiple lines.
+
+    let isMultiLine = params.match.indexOf('\n') >= 0
+
+    if (isMultiLine) {
+        // For multi-line matching, extract the text block within the
+        // start/stop range and search within it as a single string.
+
+        let lastLine = stopLine - 1
+
+        if (lastLine < startLine)
+            lastLine = startLine
+
+        let rangeStart = new vscode.Position(startLine, 0)
+        let rangeEnd = new vscode.Position(lastLine, editor.document.lineAt(lastLine).text.length)
+        let searchRange = new vscode.Range(rangeStart, rangeEnd)
+        let blockText = editor.document.getText(searchRange)
+        let blockOffset = editor.document.offsetAt(rangeStart)
+
+        if (params.isRegex) {
+            let regex = new RegExp(params.match)
+            let group = params.group || 0
+            let searchStart = 0
+            while (true) {
+                let match = execWithIndices(regex, blockText.substring(searchStart))
+                if (!match)
+                    break
+                let matchStart = searchStart + match.indices[group][0]
+                let matchEnd = searchStart + match.indices[group][1]
+                let startPos = editor.document.positionAt(blockOffset + matchStart)
+                let endPos = editor.document.positionAt(blockOffset + matchEnd)
+                matches.push({
+                    startLine: startPos.line,
+                    startCol: startPos.character,
+                    endLine: endPos.line,
+                    endCol: endPos.character
+                })
+                if (!replaceAll && matches.length >= maxCount)
+                    break
+                searchStart = matchStart + 1
+            }
+        }
+        else {
+            let searchStart = 0
+            while (true) {
+                let offset = blockText.indexOf(params.match, searchStart)
+                if (offset < 0)
+                    break
+                let startPos = editor.document.positionAt(blockOffset + offset)
+                let endPos = editor.document.positionAt(blockOffset + offset + params.match.length)
+                matches.push({
+                    startLine: startPos.line,
+                    startCol: startPos.character,
+                    endLine: endPos.line,
+                    endCol: endPos.character
+                })
+                if (!replaceAll && matches.length >= maxCount)
+                    break
+                searchStart = offset + 1
+            }
+        }
+    }
+    else if (params.isRegex) {
         let regex = new RegExp(params.match)
         let group = params.group || 0
         for (let line = startLine; line < stopLine; line++) {
@@ -68,9 +130,10 @@ export async function replaceMatchingText(params: ReplaceMatchingTextParams) {
             let match = execWithIndices(regex, currentLine.text)
             if (match) {
                 matches.push({
-                    line,
-                    start: match.indices[group][0],
-                    stop: match.indices[group][1]
+                    startLine: line,
+                    startCol: match.indices[group][0],
+                    endLine: line,
+                    endCol: match.indices[group][1]
                 })
                 if (!replaceAll && matches.length >= maxCount)
                     break
@@ -83,9 +146,10 @@ export async function replaceMatchingText(params: ReplaceMatchingTextParams) {
             let offset = currentLine.text.indexOf(params.match)
             if (offset >= 0) {
                 matches.push({
-                    line,
-                    start: offset,
-                    stop: offset + params.match.length
+                    startLine: line,
+                    startCol: offset,
+                    endLine: line,
+                    endCol: offset + params.match.length
                 })
                 if (!replaceAll && matches.length >= maxCount)
                     break
@@ -104,8 +168,8 @@ export async function replaceMatchingText(params: ReplaceMatchingTextParams) {
     await editor.edit(builder => {
         for (let i = matches.length - 1; i >= 0; i--) {
             let m = matches[i]
-            let startPosition = new vscode.Position(m.line, m.start)
-            let stopPosition = new vscode.Position(m.line, m.stop)
+            let startPosition = new vscode.Position(m.startLine, m.startCol)
+            let stopPosition = new vscode.Position(m.endLine, m.endCol)
             let range = new vscode.Range(startPosition, stopPosition)
             builder.replace(range, params.replacement)
         }
@@ -114,8 +178,13 @@ export async function replaceMatchingText(params: ReplaceMatchingTextParams) {
     // Select and reveal the last replacement.
 
     let last = matches[matches.length - 1]
-    let startPosition = new vscode.Position(last.line, last.start)
-    let stopPosition = new vscode.Position(last.line, last.start + params.replacement.length)
+    let replacementLines = params.replacement.split('\n')
+    let startPosition = new vscode.Position(last.startLine, last.startCol)
+    let endLine = last.startLine + replacementLines.length - 1
+    let endCol = replacementLines.length === 1
+        ? last.startCol + replacementLines[0].length
+        : replacementLines[replacementLines.length - 1].length
+    let stopPosition = new vscode.Position(endLine, endCol)
     editor.selection = new vscode.Selection(startPosition, stopPosition)
 
     editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter)

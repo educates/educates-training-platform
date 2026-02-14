@@ -8,7 +8,7 @@ import (
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -49,7 +49,7 @@ func (o *DockerWorkshopOpenOptions) Run() error {
 
 		// Load the workshop definition. The path can be a HTTP/HTTPS URL for a
 		// local file system path for a directory or file.
-		definitionConfig := workshops.WorkshopDefinitionConfig{
+		definitionConfig := educates.WorkshopDefinitionConfig{
 			Name: o.Name,
 			Path: path,
 			Portal: constants.DefaultPortalName,
@@ -57,7 +57,7 @@ func (o *DockerWorkshopOpenOptions) Run() error {
 			WorkshopVersion: o.WorkshopVersion,
 			DataValueFlags: o.DataValuesFlags,
 		}
-		workshop, err := workshops.LoadWorkshopDefinition(&definitionConfig)
+		workshop, err := educates.LoadWorkshopDefinition(&definitionConfig)
 		if err != nil {
 			return err
 		}

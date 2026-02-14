@@ -26,7 +26,7 @@ import (
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	eduk8sWorkshops "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"go.yaml.in/yaml/v2"
@@ -115,7 +115,6 @@ type DockerWorkshopDeployConfig struct {
 	Host               string
 	Port               uint
 	LocalRepository    string
-	DisableOpenBrowser bool
 	ImageRepository    string
 	ImageVersion       string
 	Cluster            string
@@ -347,7 +346,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 
 	var workshop *unstructured.Unstructured
 
-	definitionConfig := eduk8sWorkshops.WorkshopDefinitionConfig{
+	definitionConfig := educates.WorkshopDefinitionConfig{
 		Name: "",
 		Path: o.Path,
 		Portal: constants.DefaultPortalName,
@@ -355,7 +354,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 		WorkshopVersion: o.WorkshopVersion,
 		DataValueFlags: o.DataValuesFlags,
 	}
-	if workshop, err = eduk8sWorkshops.LoadWorkshopDefinition(&definitionConfig); err != nil {
+	if workshop, err = educates.LoadWorkshopDefinition(&definitionConfig); err != nil {
 		return "", err
 	}
 

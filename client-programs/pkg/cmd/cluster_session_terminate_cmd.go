@@ -5,7 +5,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/sessions"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -32,8 +32,8 @@ func (o *ClusterSessionTerminateOptions) Run() error {
 
 	clusterConfig := cluster.NewClusterConfig(o.Kubeconfig, o.Context)
 
-	manager := sessions.NewSessionManager()
-	result, err := manager.TerminateSession(sessions.TerminateSessionConfig{
+	manager := educatesResources.NewSessionManager()
+	result, err := manager.TerminateSession(educatesResources.TerminateSessionConfig{
 		ClusterConfig: clusterConfig,
 		Portal: o.Portal,
 		Name: o.Name,

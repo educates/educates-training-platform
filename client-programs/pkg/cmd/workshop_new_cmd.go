@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/local/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -130,8 +130,8 @@ func (p *ProjectInfo) NewWorkshopNewCmd() *cobra.Command {
 				}
 			}
 
-			manager := workshops.NewWorkshopManager()
-			err = manager.NewWorkshop(workshopDir, &workshops.WorkshopNewConfig{
+			manager := educates.NewWorkshopDefinitionManager()
+			err = manager.New(workshopDir, &educates.NewWorkshopDefinitionConfig{
 				Template: o.Template,
 				Name: name,
 				Title: o.Title,

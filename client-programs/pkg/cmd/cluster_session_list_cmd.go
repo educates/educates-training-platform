@@ -5,7 +5,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/sessions"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -42,9 +42,9 @@ func (o *ClusterSessionListOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	manager := sessions.NewSessionManager()
+	manager := educatesResources.NewSessionManager()
 
-	list, err := manager.ListSessions(sessions.ListSessionsConfig{
+	list, err := manager.ListSessions(educatesResources.ListSessionsConfig{
 		Client: dynamicClient,
 		Portal: o.Portal,
 		Environment: o.Environment,

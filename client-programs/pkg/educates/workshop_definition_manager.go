@@ -1,4 +1,4 @@
-package workshops
+package educates
 
 import (
 	"fmt"
@@ -12,7 +12,6 @@ import (
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	eduk8sWorkshops "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
 	"github.com/educates/educates-training-platform/client-programs/pkg/logger"
 	"github.com/educates/educates-training-platform/client-programs/pkg/templates"
 	"github.com/pkg/errors"
@@ -23,11 +22,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-type WorkshopManager struct {
+type WorkshopDefinitionManager struct {
 
 }
 
-type WorkshopNewConfig struct {
+type NewWorkshopDefinitionConfig struct {
 	Template              string
 	Name                  string
 	Title                 string
@@ -45,14 +44,14 @@ type WorkshopNewConfig struct {
 	WithTerminal          bool
 }
 
-type WorkshopExportConfig struct {
+type ExportWorkshopDefinitionConfig struct {
 	Repository      string
 	WorkshopFile    string
 	WorkshopVersion string
 	DataValuesFlags yttcmd.DataValuesFlags
 }
 
-type WorkshopPublishConfig struct {
+type PublishWorkshopDefinitionConfig struct {
 	Image           string
 	Repository      string
 	WorkshopFile    string
@@ -62,11 +61,11 @@ type WorkshopPublishConfig struct {
 	DataValuesFlags yttcmd.DataValuesFlags
 }
 
-func NewWorkshopManager() *WorkshopManager {
-	return &WorkshopManager{}
+func NewWorkshopDefinitionManager() *WorkshopDefinitionManager {
+	return &WorkshopDefinitionManager{}
 }
 
-func (m *WorkshopManager) NewWorkshop(directory string,o *WorkshopNewConfig) error {
+func (m *WorkshopDefinitionManager) New(directory string,o *NewWorkshopDefinitionConfig) error {
 	var err error
 
 	parameters := map[string]string{
@@ -99,7 +98,7 @@ func (m *WorkshopManager) NewWorkshop(directory string,o *WorkshopNewConfig) err
 	return err
 }
 
-func (m *WorkshopManager) Export(directory string,o *WorkshopExportConfig) (string, error) {
+func (m *WorkshopDefinitionManager) Export(directory string,o *ExportWorkshopDefinitionConfig) (string, error) {
 	// If image name hasn't been supplied read workshop definition file and
 	// try to work out image name to Export workshop as.
 
@@ -118,7 +117,7 @@ func (m *WorkshopManager) Export(directory string,o *WorkshopExportConfig) (stri
 
 	// Process the workshop YAML data for ytt templating and data variables.
 
-	if workshopFileData, err = eduk8sWorkshops.ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
+	if workshopFileData, err = ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
 		return "", errors.Wrap(err, "unable to process workshop definition as template")
 	}
 
@@ -162,7 +161,7 @@ func (m *WorkshopManager) Export(directory string,o *WorkshopExportConfig) (stri
 	return string(workshopFileData), nil
 }
 
-func (m *WorkshopManager) Publish(directory string,o *WorkshopPublishConfig) error {
+func (m *WorkshopDefinitionManager) Publish(directory string,o *PublishWorkshopDefinitionConfig) error {
 	// If image name hasn't been supplied read workshop definition file and
 	// try to work out image name to publish workshop as.
 
@@ -190,7 +189,7 @@ func (m *WorkshopManager) Publish(directory string,o *WorkshopPublishConfig) err
 
 	// Process the workshop YAML data for ytt templating and data variables.
 
-	if workshopFileData, err = eduk8sWorkshops.ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
+	if workshopFileData, err = ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
 		return errors.Wrap(err, "unable to process workshop definition as template")
 	}
 

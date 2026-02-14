@@ -56,6 +56,7 @@ func (p *ProjectInfo) NewEducatesCmdGroup() *cobra.Command {
 				overrideCommandName(p.NewClusterPortalPasswordCmd(), "view-credentials"),
 
 				overrideCommandName(p.NewClusterPortalCreateCmd(), "create-portal"),
+				overrideCommandName(p.NewClusterPortalExportCmd(), "export-portal"),
 				overrideCommandName(p.NewClusterPortalListCmd(), "list-portals"),
 				overrideCommandName(p.NewClusterPortalDeleteCmd(), "delete-portal"),
 

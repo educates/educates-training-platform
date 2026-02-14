@@ -6,7 +6,8 @@ import (
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -74,7 +75,7 @@ func (o *ClusterWorkshopDeployOptions) Run() error {
 
 	var workshop *unstructured.Unstructured
 
-	loadConfig := workshops.WorkshopDefinitionConfig{
+	loadConfig := educates.WorkshopDefinitionConfig{
 		Name: o.Name,
 		Path: path,
 		Portal: o.Portal,
@@ -83,7 +84,7 @@ func (o *ClusterWorkshopDeployOptions) Run() error {
 		DataValueFlags: o.DataValuesFlags,
 	}
 
-	if workshop, err = workshops.LoadWorkshopDefinition(&loadConfig); err != nil {
+	if workshop, err = educates.LoadWorkshopDefinition(&loadConfig); err != nil {
 		return err
 	}
 
@@ -99,10 +100,10 @@ func (o *ClusterWorkshopDeployOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	manager := workshops.NewWorkshopManager(dynamicClient)
+	manager := educatesResources.NewWorkshopManager(dynamicClient)
 
 	// Update the workshop resource in the Kubernetes cluster.
-	updateConfig := workshops.UpdateWorkshopResourceConfig{
+	updateConfig := educatesResources.UpdateWorkshopResourceConfig{
 		Workshop: workshop,
 	}
 
@@ -116,7 +117,7 @@ func (o *ClusterWorkshopDeployOptions) Run() error {
 
 	// Update the training portal, creating it if necessary.
 
-	deployConfig := workshops.DeployWorkshopConfig{
+	deployConfig := educatesResources.DeployWorkshopConfig{
 		Workshop: workshop,
 		Alias: o.Alias,
 		Portal: o.Portal,
@@ -139,7 +140,7 @@ func (o *ClusterWorkshopDeployOptions) Run() error {
 		return err
 	}
 
-	openBrowserConfig := workshops.OpenBrowserConfig{
+	openBrowserConfig := educatesResources.OpenBrowserConfig{
 		Portal: o.Portal,
 	}
 	if o.OpenBrowser {

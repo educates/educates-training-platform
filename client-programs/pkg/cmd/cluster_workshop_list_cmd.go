@@ -5,7 +5,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -48,9 +48,9 @@ func (o *ClusterWorkshopsListOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	manager := workshops.NewWorkshopManager(dynamicClient)
+	manager := educatesResources.NewWorkshopManager(dynamicClient)
 
-	list, err := manager.ListWorkshopResources(&workshops.ListWorkshopResourcesConfig{
+	list, err := manager.ListWorkshopResources(&educatesResources.ListWorkshopResourcesConfig{
 		Portal: o.Portal,
 	})
 

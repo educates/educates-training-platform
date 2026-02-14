@@ -21,6 +21,7 @@ func (p *ProjectInfo) NewClusterPortalCmdGroup() *cobra.Command {
 			Message: "Available Commands:",
 			Commands: []*cobra.Command{
 				p.NewClusterPortalCreateCmd(),
+				p.NewClusterPortalExportCmd(),
 				p.NewClusterPortalListCmd(),
 				p.NewClusterPortalOpenCmd(),
 				p.NewClusterPortalDeleteCmd(),

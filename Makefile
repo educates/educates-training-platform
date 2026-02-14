@@ -142,12 +142,16 @@ IMAGE_REPOSITORY = localhost:5001
 PACKAGE_VERSION = latest
 RELEASE_VERSION = 0.0.1
 
+# Export variables to recursive make invocations so CLI/env overrides
+# (for example TARGET_PLATFORMS, PUSH_IMAGES, IMAGE_REPOSITORY) are inherited.
+.EXPORT_ALL_VARIABLES:
+
 # Installer bundle image refs: default to same as build repo/version; override to use released images when developing installer
 IMGPKG_IMAGE_REPOSITORY ?= $(IMAGE_REPOSITORY)
 IMGPKG_PACKAGE_VERSION ?= $(PACKAGE_VERSION)
 
-UNAME_SYSTEM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
-UNAME_MACHINE := $(shell uname -m)
+UNAME_SYSTEM ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+UNAME_MACHINE ?= $(shell uname -m)
 
 TARGET_SYSTEM = $(UNAME_SYSTEM)
 TARGET_MACHINE = $(UNAME_MACHINE)
@@ -158,6 +162,8 @@ endif
 
 TARGET_PLATFORM = $(TARGET_SYSTEM)-$(TARGET_MACHINE)
 BUILDX_BUILDER = educates-multiarch-builder
+
+TARGET_PLATFORMS ?= $(TARGET_PLATFORMS)
 
 # Platform configuration - can be overridden by TARGET_PLATFORMS env var or make parameter
 ifeq ($(TARGET_PLATFORMS),)
@@ -179,6 +185,19 @@ else
 # Push images to registry when PUSH_IMAGES is true
 DOCKER_BUILDER = --builder ${BUILDX_BUILDER} --push
 endif
+
+print-vars:
+	@echo "--- Makefile Variables ---"
+	@echo "OS:      $(UNAME_SYSTEM)"
+	@echo "Arch:    $(UNAME_MACHINE)"
+	@echo "Shell:   $(SHELL)"
+	@echo "TARGET_SYSTEM: $(TARGET_SYSTEM)"
+	@echo "TARGET_MACHINE: $(TARGET_MACHINE)"
+	@echo "TARGET_PLATFORM: $(TARGET_PLATFORM)"
+	@echo "DOCKER_PLATFORM: $(DOCKER_PLATFORM)"
+	@echo "MULTIARCH_PLATFORMS: $(MULTIARCH_PLATFORMS)"
+	@echo "DOCKER_BUILDER: $(DOCKER_BUILDER)"
+	@echo "PUSH_IMAGES: $(PUSH_IMAGES)"
 
 all: build-all-images # deploy-installer deploy-workshop
 
@@ -372,13 +391,13 @@ build-cli-image: build-base-environment
 		client-programs
 
 build-docker-extension : build-cli-image
-	$(MAKE) -C docker-extension build-extension REPOSITORY=$(IMAGE_REPOSITORY) TAG=$(PACKAGE_VERSION)
+	$(MAKE) -C docker-extension build-extension
 
 install-docker-extension : build-docker-extension
-	$(MAKE) -C docker-extension install-extension REPOSITORY=$(IMAGE_REPOSITORY) TAG=$(PACKAGE_VERSION)
+	$(MAKE) -C docker-extension install-extension
 
 update-docker-extension : build-docker-extension
-	$(MAKE) -C docker-extension update-extension REPOSITORY=$(IMAGE_REPOSITORY) TAG=$(PACKAGE_VERSION)
+	$(MAKE) -C docker-extension update-extension
 
 project-docs/venv :
 	python3 -m venv project-docs/venv

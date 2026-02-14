@@ -7,7 +7,7 @@ import (
 
 	imgpkgcmd "carvel.dev/imgpkg/pkg/imgpkg/cmd"
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/local/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -57,7 +57,7 @@ func (o *FilesPublishOptions) Run(args []string) error {
 		return errors.New("workshop directory does not exist or path is not a directory")
 	}
 
-	config := workshops.WorkshopPublishConfig{
+	config := educates.PublishWorkshopDefinitionConfig{
 		Image: o.Image,
 		Repository: o.Repository,
 		WorkshopFile: o.WorkshopFile,
@@ -67,7 +67,7 @@ func (o *FilesPublishOptions) Run(args []string) error {
 		DataValuesFlags: o.DataValuesFlags,
 	}
 
-	m := workshops.NewWorkshopManager()
+	m := educates.NewWorkshopDefinitionManager()
 
 	return m.Publish(directory, &config)
 }

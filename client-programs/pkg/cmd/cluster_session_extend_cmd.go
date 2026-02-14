@@ -5,7 +5,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/sessions"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -36,8 +36,8 @@ func (o *ClusterSessionExtendOptions) Run() error {
 		return err
 	}
 
-	manager := sessions.NewSessionManager()
-	result, err := manager.ExtendSession(sessions.ExtendSessionConfig{
+	manager := educatesResources.NewSessionManager()
+	result, err := manager.ExtendSession(educatesResources.ExtendSessionConfig{
 		ClusterConfig: clusterConfig,
 		Portal: o.Portal,
 		Name: o.Name,

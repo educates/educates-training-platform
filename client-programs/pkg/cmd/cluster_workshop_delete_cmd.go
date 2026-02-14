@@ -4,7 +4,8 @@ import (
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -64,7 +65,7 @@ func (o *ClusterWorkshopDeleteOptions) Run() error {
 
 		var workshop *unstructured.Unstructured
 
-		definitionConfig := workshops.WorkshopDefinitionConfig{
+		definitionConfig := educates.WorkshopDefinitionConfig{
 			Name: o.Name,
 			Path: path,
 			Portal: o.Portal,
@@ -73,7 +74,7 @@ func (o *ClusterWorkshopDeleteOptions) Run() error {
 			DataValueFlags: o.DataValuesFlags,
 		}
 
-		if workshop, err = workshops.LoadWorkshopDefinition(&definitionConfig); err != nil {
+		if workshop, err = educates.LoadWorkshopDefinition(&definitionConfig); err != nil {
 			return err
 		}
 
@@ -92,10 +93,10 @@ func (o *ClusterWorkshopDeleteOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	manager := workshops.NewWorkshopManager(dynamicClient)
+	manager := educatesResources.NewWorkshopManager(dynamicClient)
 
 	// Delete the deployed workshop from the Kubernetes cluster.
-	deleteConfig := workshops.DeleteWorkshopResourceConfig{
+	deleteConfig := educatesResources.DeleteWorkshopResourceConfig{
 		Name: name,
 		Alias: o.Alias,
 		Portal: o.Portal,

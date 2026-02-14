@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/portal"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -36,7 +36,7 @@ func (o *ClusterPortalListOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	manager := portal.NewPortalManager(dynamicClient)
+	manager := educatesResources.NewPortalManager(dynamicClient)
 
 	list, err := manager.ListTrainingPortals(nil)
 

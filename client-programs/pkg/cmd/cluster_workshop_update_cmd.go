@@ -6,7 +6,8 @@ import (
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -57,7 +58,7 @@ func (o *ClusterWorkshopUpdateOptions) Run() error {
 
 	var workshop *unstructured.Unstructured
 
-	definitionConfig := workshops.WorkshopDefinitionConfig{
+	definitionConfig := educates.WorkshopDefinitionConfig{
 		Name: o.Name,
 		Path: o.Path,
 		Portal: o.Portal,
@@ -66,7 +67,7 @@ func (o *ClusterWorkshopUpdateOptions) Run() error {
 		DataValueFlags: o.DataValuesFlags,
 	}
 
-	if workshop, err = workshops.LoadWorkshopDefinition(&definitionConfig); err != nil {
+	if workshop, err = educates.LoadWorkshopDefinition(&definitionConfig); err != nil {
 		return err
 	}
 
@@ -82,10 +83,10 @@ func (o *ClusterWorkshopUpdateOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	manager := workshops.NewWorkshopManager(dynamicClient)
+	manager := educatesResources.NewWorkshopManager(dynamicClient)
 
 	// Update the workshop resource in the Kubernetes cluster.
-	updateConfig := workshops.UpdateWorkshopResourceConfig{
+	updateConfig := educatesResources.UpdateWorkshopResourceConfig{
 		Workshop: workshop,
 	}
 

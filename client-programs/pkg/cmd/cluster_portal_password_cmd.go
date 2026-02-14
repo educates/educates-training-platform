@@ -5,7 +5,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/portal"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -51,12 +51,12 @@ func (o *ClusterPortalPasswordOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	config := portal.TrainingPortalPasswordConfig{
+	config := educatesResources.TrainingPortalPasswordConfig{
 		Portal: o.Portal,
 		Admin: o.Admin,
 	}
 
-	manager := portal.NewPortalManager(dynamicClient)
+	manager := educatesResources.NewPortalManager(dynamicClient)
 
 	password, err := manager.GetTrainingPortalPassword(&config)
 

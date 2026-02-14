@@ -12,7 +12,8 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/educates/educates-training-platform/client-programs/pkg/renderer"
 )
 
@@ -100,7 +101,7 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 
 	var workshop *unstructured.Unstructured
 
-	definitionConfig := workshops.WorkshopDefinitionConfig{
+	definitionConfig := educates.WorkshopDefinitionConfig{
 		Name: name,
 		Path: path,
 		Portal: portal,
@@ -108,7 +109,7 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 		WorkshopVersion: o.WorkshopVersion,
 		DataValueFlags: o.DataValuesFlags,
 	}
-	if workshop, err = workshops.LoadWorkshopDefinition(&definitionConfig); err != nil {
+	if workshop, err = educates.LoadWorkshopDefinition(&definitionConfig); err != nil {
 		return err
 	}
 
@@ -157,9 +158,9 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 			return errors.Wrapf(err, "unable to create Kubernetes client")
 		}
 
-		manager := workshops.NewWorkshopManager(dynamicClient)
+		manager := educatesResources.NewWorkshopManager(dynamicClient)
 		// Update the workshop resource in the Kubernetes cluster.
-		err = manager.UpdateWorkshopResource(&workshops.UpdateWorkshopResourceConfig{
+		err = manager.UpdateWorkshopResource(&educatesResources.UpdateWorkshopResourceConfig{
 			Workshop: patchedWorkshop,
 		})
 
@@ -178,8 +179,8 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 
 		if err == nil {
 			// Update the workshop resource in the Kubernetes cluster.
-			manager := workshops.NewWorkshopManager(dynamicClient)
-			err = manager.UpdateWorkshopResource(&workshops.UpdateWorkshopResourceConfig{
+			manager := educatesResources.NewWorkshopManager(dynamicClient)
+			err = manager.UpdateWorkshopResource(&educatesResources.UpdateWorkshopResourceConfig{
 				Workshop: workshop,
 			})
 			if err != nil {

@@ -9,7 +9,7 @@ import (
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
 	educatesrestapi "github.com/educates/educates-training-platform/client-programs/pkg/educates/restapi"
 	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
@@ -124,7 +124,7 @@ func (o *ClusterWorkshopRequestOptions) Run() error {
 
 		var workshop *unstructured.Unstructured
 
-		definitionConfig := workshops.WorkshopDefinitionConfig{
+		definitionConfig := educates.WorkshopDefinitionConfig{
 			Name: o.Name,
 			Path: path,
 			Portal: o.Portal,
@@ -133,7 +133,7 @@ func (o *ClusterWorkshopRequestOptions) Run() error {
 			DataValueFlags: o.DataValuesFlags,
 		}
 
-		if workshop, err = workshops.LoadWorkshopDefinition(&definitionConfig); err != nil {
+		if workshop, err = educates.LoadWorkshopDefinition(&definitionConfig); err != nil {
 			return err
 		}
 

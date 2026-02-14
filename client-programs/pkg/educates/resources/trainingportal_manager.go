@@ -1,4 +1,4 @@
-package portal
+package resources
 
 import (
 	"context"
@@ -47,6 +47,10 @@ type TrainingPortalOpenConfig struct {
 type TrainingPortalPasswordConfig struct {
 	Portal string
 	Admin  bool
+}
+
+type TrainingPortalExportConfig struct {
+	Portal string
 }
 
 func NewPortalManager(client dynamic.Interface) *PortalManager {
@@ -280,4 +284,55 @@ func (m *PortalManager) GetTrainingPortalPassword(cfg *TrainingPortalPasswordCon
 
 		return password, nil
 	}
+}
+
+
+func (m *PortalManager) GetTrainingPortalYAMLDocumentsForExport(cfg *TrainingPortalExportConfig) ([]utils.ExportedYAMLDocument, error) {
+	trainingPortalClient := m.client.Resource(educatesTypes.TrainingPortalResource)
+	trainingPortal, err := trainingPortalClient.Get(context.TODO(), cfg.Portal, metav1.GetOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, errors.Errorf("training portal %q does not exist", cfg.Portal)
+		}
+		return nil, errors.Wrapf(err, "unable to fetch training portal %q in cluster", cfg.Portal)
+	}
+
+	workshopNames, err := ExtractWorkshopNamesFromTrainingPortalResource(trainingPortal)
+	if err != nil {
+		return nil, err
+	}
+
+	documents := make([]utils.ExportedYAMLDocument, 0, len(workshopNames)+1)
+
+	trainingPortalData, err := utils.RenderResourceAsYAMLDocument(utils.SanitizeTrainingPortalResourceForExport(utils.SanitizeResourceForExport(trainingPortal)))
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to generate YAML for training portal %q", trainingPortal.GetName())
+	}
+	documents = append(documents, utils.ExportedYAMLDocument{
+		Name: "trainingportal.yaml",
+		Data: trainingPortalData,
+	})
+
+	workshopsClient := m.client.Resource(educatesTypes.WorkshopResource)
+
+	for _, name := range workshopNames {
+		workshop, err := workshopsClient.Get(context.TODO(), name, metav1.GetOptions{})
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return nil, errors.Errorf("workshop %q referenced by training portal %q does not exist", name, cfg.Portal)
+			}
+			return nil, errors.Wrapf(err, "unable to fetch workshop %q in cluster", name)
+		}
+
+		workshopData, err := utils.RenderResourceAsYAMLDocument(utils.SanitizeResourceForExport(workshop))
+		if err != nil {
+			return nil, errors.Wrapf(err, "unable to generate YAML for workshop %q", name)
+		}
+
+		documents = append(documents, utils.ExportedYAMLDocument{
+			Name: fmt.Sprintf("%s.yaml", name),
+			Data: workshopData,
+		})
+	}
+	return documents, nil
 }

@@ -61,7 +61,6 @@ func (o *DockerWorkshopDeployOptions) Run(cmd *cobra.Command) error {
 		Host: o.Host,
 		Port: o.Port,
 		LocalRepository: o.LocalRepository,
-		DisableOpenBrowser: o.DisableOpenBrowser,
 		ImageRepository: o.ImageRepository,
 		ImageVersion: o.ImageVersion,
 		WorkshopFile: o.WorkshopFile,

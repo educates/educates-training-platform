@@ -4,7 +4,7 @@ import (
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/resources/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
 	"github.com/spf13/cobra"
 )
 
@@ -43,7 +43,7 @@ func (o *DockerWorkshopDeleteOptions) Run(cmd *cobra.Command) error {
 
 		// Load the workshop definition. The path can be a HTTP/HTTPS URL for a
 		// local file system path for a directory or file.
-		workshop, err := workshops.LoadWorkshopDefinition(&workshops.WorkshopDefinitionConfig{
+		workshop, err := educates.LoadWorkshopDefinition(&educates.WorkshopDefinitionConfig{
 			Name: o.Name,
 			Path: path,
 			Portal: constants.DefaultPortalName,

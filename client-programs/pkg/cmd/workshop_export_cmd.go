@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educates/local/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -53,14 +53,14 @@ func (o *FilesExportOptions) Run(args []string) error {
 	if err != nil || !fileInfo.IsDir() {
 		return errors.New("workshop directory does not exist or path is not a directory")
 	}
-	config := workshops.WorkshopExportConfig{
+	config := educates.ExportWorkshopDefinitionConfig{
 		Repository:      o.Repository,
 		WorkshopFile:    o.WorkshopFile,
 		WorkshopVersion: o.WorkshopVersion,
 		DataValuesFlags: o.DataValuesFlags,
 	}
 
-	manager := workshops.NewWorkshopManager()
+	manager := educates.NewWorkshopDefinitionManager()
 
 	workshop, err := manager.Export(directory, &config)
 	if err != nil {

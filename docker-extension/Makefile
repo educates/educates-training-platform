@@ -1,6 +1,10 @@
 IMAGE_REPOSITORY = localhost:5001
 PACKAGE_VERSION = latest
 
+# Export variables to recursive make invocations and shell commands so
+# env/CLI overrides are inherited consistently.
+.EXPORT_ALL_VARIABLES:
+
 # Create an alias for the image repository that sanitizes invalid characters
 # Docker Compose project names must consist only of lowercase alphanumeric characters,
 # hyphens, and underscores, and start with a letter or number
@@ -8,8 +12,8 @@ IMAGE_ALIAS := $(shell echo $(IMAGE_REPOSITORY) | tr '[:upper:]' '[:lower:]' | s
 IMAGE = $(IMAGE_REPOSITORY)/educates-docker-extension:$(PACKAGE_VERSION)
 IMAGE_ALIAS_FULL = $(IMAGE_ALIAS)/educates-docker-extension:$(PACKAGE_VERSION)
 
-UNAME_SYSTEM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
-UNAME_MACHINE := $(shell uname -m)
+UNAME_SYSTEM ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+UNAME_MACHINE ?= $(shell uname -m)
 
 TARGET_SYSTEM = $(UNAME_SYSTEM)
 TARGET_MACHINE = $(UNAME_MACHINE)
@@ -21,21 +25,23 @@ endif
 TARGET_PLATFORM = $(TARGET_SYSTEM)-$(TARGET_MACHINE)
 BUILDX_BUILDER = educates-multiarch-builder
 
-# Platform configuration - can be overridden by BUILD_PLATFORMS env var or make parameter
-ifeq ($(BUILD_PLATFORMS),)
-# Default to current platform when BUILD_PLATFORMS is not set
+TARGET_PLATFORMS ?= $(TARGET_PLATFORMS)
+
+# Platform configuration - can be overridden by TARGET_PLATFORMS env var or make parameter
+ifeq ($(TARGET_PLATFORMS),)
+# Default to current platform when TARGET_PLATFORMS is not set
 DOCKER_PLATFORM = linux/$(TARGET_MACHINE)
 MULTIARCH_PLATFORMS = linux/amd64,linux/arm64
 else
-# Use BUILD_PLATFORMS when set (allows for custom multiarch builds)
-DOCKER_PLATFORM = $(BUILD_PLATFORMS)
-MULTIARCH_PLATFORMS = $(BUILD_PLATFORMS)
+# Use TARGET_PLATFORMS when set (allows for custom multiarch builds)
+DOCKER_PLATFORM = $(TARGET_PLATFORMS)
+MULTIARCH_PLATFORMS = $(TARGET_PLATFORMS)
 endif
 
 # Push/Load configuration - can be overridden by PUSH_IMAGES env var or make parameter
 ifeq ($(PUSH_IMAGES),false)
 # Load images locally when PUSH_IMAGES is not true (default)
-DOCKER_BUILDER =
+DOCKER_BUILDER = --builder ${BUILDX_BUILDER} --load
 MULTIARCH_PLATFORMS = $(DOCKER_PLATFORM)
 else
 # Push images to registry when PUSH_IMAGES is true
@@ -46,9 +52,23 @@ INFO_COLOR = \033[0;36m
 NO_COLOR   = \033[m
 DEV_UI_SOURCE?=http://localhost:3000
 
+print-vars:
+	@echo "--- Makefile Variables ---"
+	@echo "OS:      $(UNAME_SYSTEM)"
+	@echo "Arch:    $(UNAME_MACHINE)"
+	@echo "Shell:   $(SHELL)"
+	@echo "TARGET_SYSTEM: $(TARGET_SYSTEM)"
+	@echo "TARGET_MACHINE: $(TARGET_MACHINE)"
+	@echo "TARGET_PLATFORM: $(TARGET_PLATFORM)"
+	@echo "DOCKER_PLATFORM: $(DOCKER_PLATFORM)"
+	@echo "MULTIARCH_PLATFORMS: $(MULTIARCH_PLATFORMS)"
+	@echo "DOCKER_BUILDER: $(DOCKER_BUILDER)"
+	@echo "PUSH_IMAGES: $(PUSH_IMAGES)"
+
+
 build-extension: setup-buildx ## Build service image to be deployed as a desktop extension
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
-	    $(if $(DOCKER_BUILDER),$(DOCKER_BUILDER)) \
+	    $(DOCKER_BUILDER) \
 		-t $(IMAGE) \
 		.
 
@@ -68,9 +88,13 @@ install-extension: _ensure-alias-tag ## Install the extension
 update-extension: _ensure-alias-tag ## Update the extension
 	docker extension update --force $(IMAGE_ALIAS_FULL)
 
-setup-buildx: ## Create buildx builder for multi-arch build, if not exists
+# builder management
+setup-buildx: ## Setup builder for multiarch builds
 	docker buildx create --name $(BUILDX_BUILDER) --driver docker-container --driver-opt default-load=true --driver-opt network=host --use || true
 	docker buildx inspect $(BUILDX_BUILDER) --bootstrap
+
+clean-buildx: ## Clean up builder
+	docker buildx rm $(BUILDX_BUILDER) || true
 
 .PHONY: debug
 debug: _ensure-alias-tag ## Enable debug in the extension

@@ -72,7 +72,6 @@ func (b *DockerWorkshopsApi) DeployWorkshop(w http.ResponseWriter, r *http.Reque
 		Host:               "127.0.0.1",
 		Port:               uint(port),
 		LocalRepository:    "localhost:5001",
-		DisableOpenBrowser: false,
 		ImageRepository:    b.ImageRepository,
 		ImageVersion:       b.ImageVersion,
 		Cluster:            "",

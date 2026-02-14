@@ -185,3 +185,127 @@ count: -1
 
 You can also set `count` to a specific number to limit how many matches are
 replaced. For example, `count: 2` would replace the first two matches.
+
+## Multi-line Find and Replace
+
+Both the `match` and `replacement` properties can span multiple lines using the
+YAML block scalar syntax. This allows replacing entire blocks of text in a
+single step.
+
+Reset the file first:
+
+```editor:create-file
+file: ~/exercises/replace-match-test.txt
+text: |
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: myapp
+  spec:
+    replicas: 1
+    template:
+      spec:
+        containers:
+        - name: nginx
+          image: nginx:1.19
+          ports:
+          - containerPort: 80
+        - name: sidecar
+          image: busybox:1.35
+```
+
+The markdown for a multi-line find and replace is:
+
+~~~markdown
+```editor:replace-matching-text
+file: ~/exercises/replace-match-test.txt
+match: |2-
+        - name: nginx
+          image: nginx:1.19
+          ports:
+          - containerPort: 80
+replacement: |2-
+        - name: nginx
+          image: nginx:1.25
+          ports:
+          - containerPort: 8080
+```
+~~~
+
+Note the use of `|2-` with an indentation indicator to preserve the leading
+whitespace that appears in the file. The indicator value `2` tells the YAML
+parser how many characters of indentation belong to the YAML structure rather
+than the content, so remaining spaces become part of the matched string.
+
+Click the action below to replace the entire nginx container block:
+
+```editor:replace-matching-text
+file: ~/exercises/replace-match-test.txt
+match: |2-
+        - name: nginx
+          image: nginx:1.19
+          ports:
+          - containerPort: 80
+replacement: |2-
+        - name: nginx
+          image: nginx:1.25
+          ports:
+          - containerPort: 8080
+```
+
+## Multi-line Regex Replace
+
+Regular expressions can also span multiple lines. Literal newlines in the
+pattern match newlines in the file, while `.` matches any character except a
+newline.
+
+Reset the file first:
+
+```editor:create-file
+file: ~/exercises/replace-match-test.txt
+text: |
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: myapp
+  spec:
+    replicas: 1
+    template:
+      spec:
+        containers:
+        - name: nginx
+          image: nginx:1.19
+          ports:
+          - containerPort: 80
+        - name: sidecar
+          image: busybox:1.35
+```
+
+The markdown for a multi-line regex replacement is:
+
+~~~markdown
+```editor:replace-matching-text
+file: ~/exercises/replace-match-test.txt
+match: |2-
+        - name: (.*)
+          image: busybox:(.*)
+replacement: |2-
+        - name: helper
+          image: alpine:3.18
+isRegex: true
+```
+~~~
+
+Click the action below to replace the sidecar container name and image using a
+multi-line regex:
+
+```editor:replace-matching-text
+file: ~/exercises/replace-match-test.txt
+match: |2-
+        - name: (.*)
+          image: busybox:(.*)
+replacement: |2-
+        - name: helper
+          image: alpine:3.18
+isRegex: true
+```

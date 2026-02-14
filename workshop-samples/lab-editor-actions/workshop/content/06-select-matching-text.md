@@ -217,3 +217,64 @@ text: "image: (.*)"
 isRegex: true
 start: -5
 ```
+
+## Multi-line Exact Match
+
+The `text` property can span multiple lines using the YAML block scalar syntax.
+This allows selecting a block of text that crosses line boundaries.
+
+The markdown for a multi-line exact match is:
+
+~~~markdown
+```editor:select-matching-text
+file: ~/exercises/select-test.txt
+text: |2-
+        containers:
+        - name: nginx
+          image: nginx:1.19
+```
+~~~
+
+Note the use of `|2-` with an indentation indicator to preserve the leading
+whitespace that appears in the file. The indicator value `2` tells the YAML
+parser how many characters of indentation belong to the YAML structure rather
+than the content, so remaining spaces become part of the matched string.
+
+Click the action below to select the multi-line block:
+
+```editor:select-matching-text
+file: ~/exercises/select-test.txt
+text: |2-
+        containers:
+        - name: nginx
+          image: nginx:1.19
+```
+
+## Multi-line Regex Match
+
+Regular expressions can also span multiple lines. Literal newlines in the
+pattern match newlines in the file, while `.` still matches any character
+except a newline, so patterns behave predictably across line boundaries.
+
+The markdown for a multi-line regex match is:
+
+~~~markdown
+```editor:select-matching-text
+file: ~/exercises/select-test.txt
+text: |2-
+        - name: (.*)
+          image: (.*)
+isRegex: true
+```
+~~~
+
+Click the action below to match a container name and image pair across two
+lines:
+
+```editor:select-matching-text
+file: ~/exercises/select-test.txt
+text: |2-
+        - name: (.*)
+          image: (.*)
+isRegex: true
+```

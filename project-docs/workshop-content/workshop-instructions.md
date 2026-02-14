@@ -425,7 +425,20 @@ Absence of ``start`` means start at the beginning of the file. Absence of ``stop
 
 When ``start`` or ``stop`` is a negative value, it is interpreted as offset from the end of the file. Note that when the file ends with a newline, a value of ``-1`` selects the empty value after the newline and not the last line terminated by the newline.
 
-For both an exact match and regular expression, the text to be matched must all be on one line. It is not possible to match on text which spans across lines.
+For both an exact match and regular expression, the text to be matched can span multiple lines using the YAML block scalar syntax. For example, to select a multi-line block of code:
+
+~~~text
+```editor:select-matching-text
+file: ~/exercises/factory.py
+text: |-
+  def make_multiplier(n):
+      def multiplier(x):
+          return x * n
+      return multiplier
+```
+~~~
+
+When ``before`` and ``after`` are used with a multi-line match, they are relative to the first and last lines of the matched text respectively.
 
 To select a range of lines by line number, use:
 
@@ -458,7 +471,25 @@ replacement: "nginx:1.21"
 ```
 ~~~
 
-The ``match`` property specifies the text to find and the ``replacement`` property specifies what to replace it with. As with ``editor:select-matching-text``, you can use regular expressions by setting ``isRegex`` to ``true``, select a specific match group using the ``group`` property, and limit the search range using ``start`` and ``stop`` properties.
+The ``match`` property specifies the text to find and the ``replacement`` property specifies what to replace it with. Both ``match`` and ``replacement`` can span multiple lines using the YAML block scalar syntax. For example, to replace an entire function definition:
+
+~~~text
+```editor:replace-matching-text
+file: ~/exercises/factory.py
+match: |-
+  def make_multiplier(n):
+      def multiplier(x):
+          return x * n
+      return multiplier
+replacement: |-
+  def make_multiplier(n, offset=0):
+      def multiplier(x):
+          return x * n + offset
+      return multiplier
+```
+~~~
+
+As with ``editor:select-matching-text``, you can use regular expressions by setting ``isRegex`` to ``true``, select a specific match group using the ``group`` property, and limit the search range using ``start`` and ``stop`` properties.
 
 ~~~text
 ```editor:replace-matching-text

@@ -49,6 +49,57 @@ button#header-goto-home {
     font-size: 0.95em;
 }
 
+.header-step-counter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.7em;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 0.75rem;
+    padding: 0.25em 0.6em;
+    line-height: 1;
+    margin: 0 0.15rem;
+    box-sizing: border-box;
+}
+
+.page-navbar .row {
+    display: flex;
+    align-items: center;
+}
+
+.page-navbar .col-sm-12 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.page-navbar .btn-toolbar {
+    display: flex;
+    align-items: center;
+}
+
+.page-navbar .btn-group {
+    display: flex;
+    align-items: center;
+}
+
+.header-progress-track {
+    width: 100%;
+    height: 3px;
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+.header-progress-bar {
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8);
+    transition: width 0.3s ease;
+}
+
 button#header-prev-page {
     border: 0px;
     padding-left: 8px;

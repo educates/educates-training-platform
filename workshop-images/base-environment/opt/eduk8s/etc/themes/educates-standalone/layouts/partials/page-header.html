@@ -67,6 +67,9 @@
                             data-bs-toggle="modal" data-bs-target="#table-of-contents"><span class="fas fa-list fa-inverse"
                                 aria-hidden="true"></span></button>
                     </form>
+                    <span class="header-step-counter" aria-label="Progress">
+                        {{ $current_module.step }} / {{ len $modules }}
+                    </span>
                     <form>
                         <button class="btn btn-transparent" id="header-print-page" type="button" aria-label="Print"
                             onclick="window.open('{{ relURL "print.html" }}', '_blank')"><span class="fas fa-print fa-inverse"
@@ -80,5 +83,8 @@
                 </div>
             </div>
         </div>
+    </div>
+    <div class="header-progress-track">
+        <div class="header-progress-bar" style="width: {{ math.Round (mul (div (float $current_module.step) (len $modules)) 100) }}%;"></div>
     </div>
 </div>

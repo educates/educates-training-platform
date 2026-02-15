@@ -345,7 +345,7 @@ const educates = (function () {
 
             file = this.fixup_path(file);
             const data = JSON.stringify({ file, line });
-            return this.execute_call('/editor/line', data);
+            return this.execute_call('/editor/open-file', data);
         }
 
         // Select matching text in a file. Supports regex patterns with groups.
@@ -388,8 +388,8 @@ const educates = (function () {
             }
 
             file = this.fixup_path(file);
-            const data = JSON.stringify({ file, paste: text });
-            return this.execute_call('/editor/paste', data);
+            const data = JSON.stringify({ file, text });
+            return this.execute_call('/editor/append-to-file', data);
         }
 
         // Insert lines before a specific line number.
@@ -400,8 +400,8 @@ const educates = (function () {
             }
 
             file = this.fixup_path(file);
-            const data = JSON.stringify({ file, line, paste: text });
-            return this.execute_call('/editor/paste', data);
+            const data = JSON.stringify({ file, line, text });
+            return this.execute_call('/editor/insert-before-line', data);
         }
 
         // Append lines after a matching string.
@@ -416,8 +416,8 @@ const educates = (function () {
             }
 
             file = this.fixup_path(file);
-            const data = JSON.stringify({ file, prefix: match, paste: text });
-            return this.execute_call('/editor/paste', data);
+            const data = JSON.stringify({ file, match, text });
+            return this.execute_call('/editor/insert-after-match', data);
         }
 
         // Insert a value into a YAML file at a specified path.

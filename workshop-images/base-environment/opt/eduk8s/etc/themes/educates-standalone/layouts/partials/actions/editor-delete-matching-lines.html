@@ -11,22 +11,11 @@
     {{- end -}}
 {{- end -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
-{{- $name := "editor:select-matching-text" -}}
-{{- $glyph := "fa-search" -}}
+{{- $name := "editor:delete-matching-lines" -}}
+{{- $glyph := "fa-eraser" -}}
 {{- $prefix := default "Editor" $args.prefix -}}
-{{- $title := "" -}}
-{{- if $args.title -}}
-{{- $title = $args.title -}}
-{{- else if $args.isRegex -}}
-{{- if $args.group -}}
-{{- $title = printf "Match pattern group %v in file \"%s\"" $args.group $args.file -}}
-{{- else -}}
-{{- $title = printf "Match pattern in file \"%s\"" $args.file -}}
-{{- end -}}
-{{- else -}}
-{{- $title = printf "Select text in file \"%s\"" $args.file -}}
-{{- end -}}
-{{- $body := $args.text -}}
+{{- $title := default (printf "Delete lines matching \"%s\" in file \"%s\"" $args.match $args.file) $args.title -}}
+{{- $body := $args.match -}}
 {{- if isset $args "description" -}}
 {{- $body = $args.description -}}
 {{- end -}}

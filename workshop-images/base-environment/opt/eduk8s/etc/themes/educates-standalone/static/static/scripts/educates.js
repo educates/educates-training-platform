@@ -511,6 +511,335 @@ const educates = (function () {
             return String(value);
         }
 
+        // Create a file with the specified content.
+
+        create_file(file, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, text });
+            return this.execute_call('/editor/create-file', data);
+        }
+
+        // Create a directory.
+
+        create_directory(directory) {
+            if (!directory) {
+                return Promise.reject(new Error('No directory provided'));
+            }
+
+            directory = this.fixup_path(directory);
+            const data = JSON.stringify({ directory });
+            return this.execute_call('/editor/create-directory', data);
+        }
+
+        // Replace matching text in a file.
+
+        replace_matching_text(file, match, replacement, start, stop, isRegex, group, count) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!match) {
+                return Promise.reject(new Error('No text to match provided'));
+            }
+
+            if (replacement === undefined) {
+                return Promise.reject(new Error('No replacement text provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, match, replacement, start, stop, isRegex, group, count });
+            return this.execute_call('/editor/replace-matching-text', data);
+        }
+
+        // Insert lines after a specific line number.
+
+        insert_lines_after_line(file, line, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, line, text });
+            return this.execute_call('/editor/insert-after-line', data);
+        }
+
+        // Select lines in a range.
+
+        select_lines_in_range(file, start, stop) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, start, stop });
+            return this.execute_call('/editor/select-lines-in-range', data);
+        }
+
+        // Delete lines in a range.
+
+        delete_lines_in_range(file, start, stop) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, start, stop });
+            return this.execute_call('/editor/delete-lines', data);
+        }
+
+        // Delete lines matching a pattern.
+
+        delete_matching_lines(file, match, isRegex, before, after) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!match) {
+                return Promise.reject(new Error('No text to match provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, match, isRegex, before, after });
+            return this.execute_call('/editor/delete-matching-lines', data);
+        }
+
+        // Replace lines in a range with new text.
+
+        replace_lines_in_range(file, start, stop, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, start, stop, text });
+            return this.execute_call('/editor/replace-lines', data);
+        }
+
+        // Copy a file from source to destination.
+
+        copy_file(src, dest, open) {
+            if (!src) {
+                return Promise.reject(new Error('No source file provided'));
+            }
+
+            if (!dest) {
+                return Promise.reject(new Error('No destination file provided'));
+            }
+
+            src = this.fixup_path(src);
+            dest = this.fixup_path(dest);
+            const data = JSON.stringify({ src, dest, open });
+            return this.execute_call('/editor/copy-file', data);
+        }
+
+        // Rename a file from source to destination.
+
+        rename_file(src, dest, open) {
+            if (!src) {
+                return Promise.reject(new Error('No source file provided'));
+            }
+
+            if (!dest) {
+                return Promise.reject(new Error('No destination file provided'));
+            }
+
+            src = this.fixup_path(src);
+            dest = this.fixup_path(dest);
+            const data = JSON.stringify({ src, dest, open });
+            return this.execute_call('/editor/rename-file', data);
+        }
+
+        // Close a file in the editor.
+
+        close_file(file) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file });
+            return this.execute_call('/editor/close-file', data);
+        }
+
+        // Delete a file.
+
+        delete_file(file) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file });
+            return this.execute_call('/editor/delete-file', data);
+        }
+
+        // Set a value at a YAML path.
+
+        set_yaml_value(file, path, value) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!path) {
+                return Promise.reject(new Error('No property path provided'));
+            }
+
+            if (value === undefined) {
+                return Promise.reject(new Error('No value provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, path, value });
+            return this.execute_call('/editor/set-yaml-value', data);
+        }
+
+        // Add an item to a YAML array.
+
+        add_yaml_item(file, path, value) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!path) {
+                return Promise.reject(new Error('No property path provided'));
+            }
+
+            if (value === undefined) {
+                return Promise.reject(new Error('No value provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, path, value });
+            return this.execute_call('/editor/add-yaml-item', data);
+        }
+
+        // Insert an item into a YAML array at a specific index.
+
+        insert_yaml_item(file, path, index, value) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!path) {
+                return Promise.reject(new Error('No property path provided'));
+            }
+
+            if (value === undefined) {
+                return Promise.reject(new Error('No value provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, path, index, value });
+            return this.execute_call('/editor/insert-yaml-item', data);
+        }
+
+        // Replace an item in a YAML structure.
+
+        replace_yaml_item(file, path, value) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!path) {
+                return Promise.reject(new Error('No property path provided'));
+            }
+
+            if (value === undefined) {
+                return Promise.reject(new Error('No value provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, path, value });
+            return this.execute_call('/editor/replace-yaml-item', data);
+        }
+
+        // Delete a value at a YAML path.
+
+        delete_yaml_value(file, path) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!path) {
+                return Promise.reject(new Error('No property path provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, path });
+            return this.execute_call('/editor/delete-yaml-value', data);
+        }
+
+        // Merge values into a YAML structure at a path.
+
+        merge_yaml_values(file, path, value) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!path) {
+                return Promise.reject(new Error('No property path provided'));
+            }
+
+            if (value === undefined) {
+                return Promise.reject(new Error('No value provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, path, value });
+            return this.execute_call('/editor/merge-yaml-values', data);
+        }
+
+        // Select a YAML path in a file.
+
+        select_yaml_path(file, path) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, path: path || '' });
+            return this.execute_call('/editor/select-yaml-path', data);
+        }
+
+        // Open a terminal in the editor.
+
+        open_terminal(session) {
+            const data = JSON.stringify({ session });
+            return this.execute_call('/editor/terminal-open', data);
+        }
+
+        // Close a terminal in the editor.
+
+        close_terminal(session) {
+            const data = JSON.stringify({ session });
+            return this.execute_call('/editor/terminal-close', data);
+        }
+
+        // Send text to a terminal in the editor.
+
+        send_to_terminal(session, text, endl) {
+            const data = JSON.stringify({ session, text, endl });
+            return this.execute_call('/editor/terminal-send', data);
+        }
+
+        // Interrupt a terminal in the editor.
+
+        interrupt_terminal(session) {
+            const data = JSON.stringify({ session });
+            return this.execute_call('/editor/terminal-interrupt', data);
+        }
+
+        // Clear a terminal in the editor.
+
+        clear_terminal(session) {
+            const data = JSON.stringify({ session });
+            return this.execute_call('/editor/terminal-clear', data);
+        }
+
         // Execute an editor command with optional arguments.
 
         execute_command(command, args = []) {
@@ -1505,6 +1834,25 @@ const educates = (function () {
         }
     });
 
+    clickable_action_handler("editor:create-file", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.create_file(args.file, args.text);
+        }
+    });
+
     clickable_action_handler("editor:select-matching-text", {
         handler: function (_element, args) {
             const defaults = {
@@ -1676,6 +2024,587 @@ const educates = (function () {
             dashboard.expose_dashboard("editor");
 
             return editor.insert_value_into_yaml(args.file, args.path, args.value);
+        }
+    });
+
+    clickable_action_handler("editor:create-directory", {
+        handler: function (_element, args) {
+            const defaults = {
+                "directory": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.directory) {
+                throw new Error("Directory not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.create_directory(args.directory);
+        }
+    });
+
+    clickable_action_handler("editor:replace-matching-text", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "match": undefined,
+                "replacement": undefined,
+                "start": undefined,
+                "stop": undefined,
+                "isRegex": false,
+                "group": undefined,
+                "count": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.match) {
+                throw new Error("Match text not provided");
+            }
+
+            if (args.replacement === undefined) {
+                throw new Error("Replacement text not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.replace_matching_text(
+                args.file,
+                args.match,
+                args.replacement,
+                args.start,
+                args.stop,
+                args.isRegex,
+                args.group,
+                args.count
+            );
+        }
+    });
+
+    clickable_action_handler("editor:insert-lines-after-line", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "line": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (args.line === undefined) {
+                throw new Error("Line number not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.insert_lines_after_line(args.file, args.line, args.text);
+        }
+    });
+
+    clickable_action_handler("editor:select-lines-in-range", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "start": undefined,
+                "stop": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.select_lines_in_range(args.file, args.start, args.stop);
+        }
+    });
+
+    clickable_action_handler("editor:delete-lines-in-range", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "start": undefined,
+                "stop": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.delete_lines_in_range(args.file, args.start, args.stop);
+        }
+    });
+
+    clickable_action_handler("editor:delete-matching-lines", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "match": undefined,
+                "isRegex": false,
+                "before": undefined,
+                "after": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.match) {
+                throw new Error("Match text not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.delete_matching_lines(
+                args.file,
+                args.match,
+                args.isRegex,
+                args.before,
+                args.after
+            );
+        }
+    });
+
+    clickable_action_handler("editor:replace-lines-in-range", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "start": undefined,
+                "stop": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.replace_lines_in_range(args.file, args.start, args.stop, args.text);
+        }
+    });
+
+    clickable_action_handler("editor:copy-file", {
+        handler: function (_element, args) {
+            const defaults = {
+                "src": undefined,
+                "dest": undefined,
+                "open": false
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.src) {
+                throw new Error("Source file not provided");
+            }
+
+            if (!args.dest) {
+                throw new Error("Destination file not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.copy_file(args.src, args.dest, args.open);
+        }
+    });
+
+    clickable_action_handler("editor:rename-file", {
+        handler: function (_element, args) {
+            const defaults = {
+                "src": undefined,
+                "dest": undefined,
+                "open": false
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.src) {
+                throw new Error("Source file not provided");
+            }
+
+            if (!args.dest) {
+                throw new Error("Destination file not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.rename_file(args.src, args.dest, args.open);
+        }
+    });
+
+    clickable_action_handler("editor:close-file", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            return editor.close_file(args.file);
+        }
+    });
+
+    clickable_action_handler("editor:delete-file", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            return editor.delete_file(args.file);
+        }
+    });
+
+    clickable_action_handler("editor:set-yaml-value", {
+        setup: function (element, args) {
+            const body_element = element.querySelector('.clickable-action__body code');
+
+            if (body_element) {
+                try {
+                    const json_data = JSON.parse(body_element.textContent);
+                    const yaml_data = jsyaml.dump(json_data);
+                    body_element.textContent = yaml_data;
+                } catch (error) {
+                    console.error("Failed to convert JSON to YAML in action body:", error);
+                }
+            }
+        },
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "path": undefined,
+                "value": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.path) {
+                throw new Error("YAML path not provided");
+            }
+
+            if (args.value === undefined) {
+                throw new Error("Value not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.set_yaml_value(args.file, args.path, args.value);
+        }
+    });
+
+    clickable_action_handler("editor:add-yaml-item", {
+        setup: function (element, args) {
+            const body_element = element.querySelector('.clickable-action__body code');
+
+            if (body_element) {
+                try {
+                    const json_data = JSON.parse(body_element.textContent);
+                    const yaml_data = jsyaml.dump(json_data);
+                    body_element.textContent = yaml_data;
+                } catch (error) {
+                    console.error("Failed to convert JSON to YAML in action body:", error);
+                }
+            }
+        },
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "path": undefined,
+                "value": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.path) {
+                throw new Error("YAML path not provided");
+            }
+
+            if (args.value === undefined) {
+                throw new Error("Value not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.add_yaml_item(args.file, args.path, args.value);
+        }
+    });
+
+    clickable_action_handler("editor:insert-yaml-item", {
+        setup: function (element, args) {
+            const body_element = element.querySelector('.clickable-action__body code');
+
+            if (body_element) {
+                try {
+                    const json_data = JSON.parse(body_element.textContent);
+                    const yaml_data = jsyaml.dump(json_data);
+                    body_element.textContent = yaml_data;
+                } catch (error) {
+                    console.error("Failed to convert JSON to YAML in action body:", error);
+                }
+            }
+        },
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "path": undefined,
+                "index": 0,
+                "value": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.path) {
+                throw new Error("YAML path not provided");
+            }
+
+            if (args.value === undefined) {
+                throw new Error("Value not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.insert_yaml_item(args.file, args.path, args.index, args.value);
+        }
+    });
+
+    clickable_action_handler("editor:replace-yaml-item", {
+        setup: function (element, args) {
+            const body_element = element.querySelector('.clickable-action__body code');
+
+            if (body_element) {
+                try {
+                    const json_data = JSON.parse(body_element.textContent);
+                    const yaml_data = jsyaml.dump(json_data);
+                    body_element.textContent = yaml_data;
+                } catch (error) {
+                    console.error("Failed to convert JSON to YAML in action body:", error);
+                }
+            }
+        },
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "path": undefined,
+                "value": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.path) {
+                throw new Error("YAML path not provided");
+            }
+
+            if (args.value === undefined) {
+                throw new Error("Value not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.replace_yaml_item(args.file, args.path, args.value);
+        }
+    });
+
+    clickable_action_handler("editor:delete-yaml-value", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "path": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.path) {
+                throw new Error("YAML path not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.delete_yaml_value(args.file, args.path);
+        }
+    });
+
+    clickable_action_handler("editor:merge-yaml-values", {
+        setup: function (element, args) {
+            const body_element = element.querySelector('.clickable-action__body code');
+
+            if (body_element) {
+                try {
+                    const json_data = JSON.parse(body_element.textContent);
+                    const yaml_data = jsyaml.dump(json_data);
+                    body_element.textContent = yaml_data;
+                } catch (error) {
+                    console.error("Failed to convert JSON to YAML in action body:", error);
+                }
+            }
+        },
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "path": undefined,
+                "value": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.path) {
+                throw new Error("YAML path not provided");
+            }
+
+            if (args.value === undefined) {
+                throw new Error("Value not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.merge_yaml_values(args.file, args.path, args.value);
+        }
+    });
+
+    clickable_action_handler("editor:select-yaml-path", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "path": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.select_yaml_path(args.file, args.path);
+        }
+    });
+
+    clickable_action_handler("editor:open-terminal", {
+        handler: function (_element, args) {
+            const defaults = {
+                "session": "educates"
+            };
+
+            args = { ...defaults, ...args };
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.open_terminal(String(args.session));
+        }
+    });
+
+    clickable_action_handler("editor:close-terminal", {
+        handler: function (_element, args) {
+            const defaults = {
+                "session": "educates"
+            };
+
+            args = { ...defaults, ...args };
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.close_terminal(String(args.session));
+        }
+    });
+
+    clickable_action_handler("editor:send-to-terminal", {
+        handler: function (_element, args) {
+            const defaults = {
+                "session": "educates",
+                "text": undefined,
+                "endl": true
+            };
+
+            args = { ...defaults, ...args };
+
+            if (args.text === undefined) {
+                throw new Error("Text not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.send_to_terminal(String(args.session), args.text, args.endl);
+        }
+    });
+
+    clickable_action_handler("editor:interrupt-terminal", {
+        handler: function (_element, args) {
+            const defaults = {
+                "session": "educates"
+            };
+
+            args = { ...defaults, ...args };
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.interrupt_terminal(String(args.session));
+        }
+    });
+
+    clickable_action_handler("editor:clear-terminal", {
+        handler: function (_element, args) {
+            const defaults = {
+                "session": "educates"
+            };
+
+            args = { ...defaults, ...args };
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.clear_terminal(String(args.session));
         }
     });
 

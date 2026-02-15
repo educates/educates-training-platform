@@ -1,5 +1,5 @@
 {{- $defaults := dict "cooldown" 0 -}}
-{{- $args := merge $defaults (.Inner | default "{}" | unmarshal) -}}
+{{- $args := merge $defaults (.Inner | default "{}" | printf "%s\n" | unmarshal) -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "workshop:copy" -}}
 {{- $glyph := "fa-user-edit" -}}

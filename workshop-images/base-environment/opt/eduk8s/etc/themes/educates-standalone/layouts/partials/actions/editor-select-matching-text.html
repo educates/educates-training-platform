@@ -1,5 +1,5 @@
 {{- $defaults := dict "cooldown" 3 -}}
-{{- $args := merge $defaults (.Inner | default "{}" | unmarshal) -}}
+{{- $args := merge $defaults (.Inner | default "{}" | printf "%s\n" | unmarshal) -}}
 {{- if isset $args "before" -}}
     {{- if or (eq (printf "%v" $args.before) "+Inf") (eq (printf "%v" $args.before) "-Inf") -}}
         {{- $args = merge $args (dict "before" -1) -}}

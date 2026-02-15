@@ -1,5 +1,5 @@
 {{- $defaults := dict "cooldown" 3 -}}
-{{- $args := merge $defaults (.Inner | default "{}" | unmarshal) -}}
+{{- $args := merge $defaults (.Inner | default "{}" | printf "%s\n" | unmarshal) -}}
 {{- $action := .Page.Scratch.Get "action_counter" -}}
 {{- $name := "editor:create-directory" -}}
 {{- $glyph := "fa-folder-plus" -}}

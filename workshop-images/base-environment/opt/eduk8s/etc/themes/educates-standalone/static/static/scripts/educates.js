@@ -1117,6 +1117,80 @@ const educates = (function () {
 
             updateScrollProgress();
         }
+
+        // Clickable action pulse hint: visually guide users to the next
+        // clickable action that needs their attention. The pulse is applied
+        // to the first visible clickable action on the page that has not
+        // yet been completed (success) and is not currently pending. A
+        // MutationObserver watches for data-action-result changes to move
+        // the pulse forward as actions are completed.
+
+        function updateActionPulse() {
+            // Collect all visible clickable actions in document order.
+
+            const allActions = Array.from(
+                document.querySelectorAll('.clickable-action:not([hidden]):not([data-content-body])')
+            );
+
+            // Remove pulse classes from all actions first.
+
+            allActions.forEach(el => {
+                el.classList.remove('action-pulse-hint', 'action-pulse-hint-failure');
+            });
+
+            // Find the first action that needs attention: not success and
+            // not pending.
+
+            for (const action of allActions) {
+                const result = action.dataset.actionResult;
+
+                if (result === 'pending') {
+                    // Currently running — don't pulse it or anything after
+                    // it; just wait.
+                    break;
+                }
+
+                if (result === 'success') {
+                    // Already done — skip to next.
+                    continue;
+                }
+
+                if (result === 'failure') {
+                    // Failed — pulse with warning colour to draw retry
+                    // attention.
+                    action.classList.add('action-pulse-hint-failure');
+                    break;
+                }
+
+                // No result yet (idle) — this is the next action to do.
+
+                action.classList.add('action-pulse-hint');
+                break;
+            }
+        }
+
+        // Run once on page load after a short delay so that any autostart
+        // actions have time to set their initial state.
+
+        setTimeout(updateActionPulse, 500);
+
+        // Observe data-action-result attribute changes on all clickable
+        // actions to move the pulse forward.
+
+        const actionObserver = new MutationObserver(function (mutations) {
+            // Debounce slightly so rapid state changes (pending -> success)
+            // don't cause flicker.
+
+            clearTimeout(actionObserver._debounce);
+            actionObserver._debounce = setTimeout(updateActionPulse, 150);
+        });
+
+        document.querySelectorAll('.clickable-action').forEach(el => {
+            actionObserver.observe(el, {
+                attributes: true,
+                attributeFilter: ['data-action-result']
+            });
+        });
     });
 
     // Table of clickable actions and their handlers. Clickable actions will

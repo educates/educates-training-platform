@@ -395,6 +395,42 @@ div.magic-code-block-upload {
     background-color: orangered;
 }
 
+/* Pulse animation for the next clickable action needing attention */
+
+@keyframes action-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(135, 206, 250, 0.6);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(135, 206, 250, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(135, 206, 250, 0);
+    }
+}
+
+@keyframes action-pulse-failure {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 165, 0, 0.6);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(255, 165, 0, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 165, 0, 0);
+    }
+}
+
+.clickable-action.action-pulse-hint {
+    animation: action-pulse 2s ease-in-out 3;
+    border-radius: 2px;
+}
+
+.clickable-action.action-pulse-hint-failure {
+    animation: action-pulse-failure 2s ease-in-out infinite;
+    border-radius: 2px;
+}
+
 /* Hover state for clickable actions to indicate interactivity */
 
 /*

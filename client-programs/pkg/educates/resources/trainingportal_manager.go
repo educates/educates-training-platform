@@ -21,15 +21,15 @@ type PortalManager struct {
 }
 
 type TrainingPortalCreateConfig struct {
-	Portal       string
-	Hostname     string
-	Repository   string
-	Capacity     uint
-	Password     string
-	IsPasswordSet	bool
-	ThemeName    string
-	CookieDomain string
-	Labels       []string
+	Portal        string
+	Hostname      string
+	Repository    string
+	Capacity      uint
+	Password      string
+	IsPasswordSet bool
+	ThemeName     string
+	CookieDomain  string
+	Labels        []string
 }
 
 type TrainingPortalDeleteConfig struct {
@@ -51,6 +51,8 @@ type TrainingPortalPasswordConfig struct {
 
 type TrainingPortalExportConfig struct {
 	Portal string
+	Repository string
+	WorkshopVersion string
 }
 
 func NewPortalManager(client dynamic.Interface) *PortalManager {
@@ -194,7 +196,6 @@ func (m *PortalManager) DeleteTrainingPortal(cfg *TrainingPortalDeleteConfig) er
 	return nil
 }
 
-
 func (m *PortalManager) ListTrainingPortals(cfg *TrainingPortalListConfig) (string, error) {
 	trainingPortalClient := m.client.Resource(educatesTypes.TrainingPortalResource)
 
@@ -286,7 +287,6 @@ func (m *PortalManager) GetTrainingPortalPassword(cfg *TrainingPortalPasswordCon
 	}
 }
 
-
 func (m *PortalManager) GetTrainingPortalYAMLDocumentsForExport(cfg *TrainingPortalExportConfig) ([]utils.ExportedYAMLDocument, error) {
 	trainingPortalClient := m.client.Resource(educatesTypes.TrainingPortalResource)
 	trainingPortal, err := trainingPortalClient.Get(context.TODO(), cfg.Portal, metav1.GetOptions{})
@@ -324,7 +324,10 @@ func (m *PortalManager) GetTrainingPortalYAMLDocumentsForExport(cfg *TrainingPor
 			return nil, errors.Wrapf(err, "unable to fetch workshop %q in cluster", name)
 		}
 
-		workshopData, err := utils.RenderResourceAsYAMLDocument(utils.SanitizeResourceForExport(workshop))
+		workshopData, err := utils.RenderResourceAsYAMLDocument(utils.SanitizeWorkshopResourceForExport(utils.SanitizeResourceForExport(workshop), &utils.WorkshopResourceExportConfig{
+			Repository:      cfg.Repository,
+			WorkshopVersion: cfg.WorkshopVersion,
+		}))
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to generate YAML for workshop %q", name)
 		}

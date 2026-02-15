@@ -27,11 +27,11 @@
                             {{ end }}
                             {{ if eq $current_module.path $module.path }}
                             <li class="page active">
-                                <a href="{{ relURL .path }}">{{ $module.step }}: {{ $title }}</a>
+                                <span class="toc-step">{{ $module.step }}</span><a href="{{ relURL .path }}">{{ $title }}</a>
                             </li>
                             {{ else }}
                             <li class="page">
-                                <a href="{{ relURL .path }}">{{ $module.step }}: {{ $title }}</a>
+                                <span class="toc-step">{{ $module.step }}</span><a href="{{ relURL .path }}">{{ $title }}</a>
                             </li>
                             {{ end }}
                             {{ end }}

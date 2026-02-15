@@ -162,6 +162,25 @@ button#header-next-page {
     line-height: 1.2;
 }
 
+.modules .page {
+    display: flex;
+    align-items: baseline;
+}
+
+.modules .page .toc-step {
+    display: inline-block;
+    background-color: #d4e9f7;
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.3rem;
+    margin-right: 0.5rem;
+    min-width: 1.8rem;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.85em;
+    line-height: 1.2;
+    flex-shrink: 0;
+}
+
 .page-content h1,
 .page-content h2,
 .page-content h3,

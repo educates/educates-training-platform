@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -15,6 +16,11 @@ import (
 type ExportedYAMLDocument struct {
 	Name string
 	Data []byte
+}
+
+type WorkshopResourceExportConfig struct {
+	Repository      string
+	WorkshopVersion string
 }
 
 func SanitizeResourceForExport(resource *unstructured.Unstructured) *unstructured.Unstructured {
@@ -62,6 +68,57 @@ func SanitizeTrainingPortalResourceForExport(resource *unstructured.Unstructured
 	unstructured.RemoveNestedField(exported.Object, "spec", "portal", "password")
 
 	return exported
+}
+
+func SanitizeWorkshopResourceForExport(resource *unstructured.Unstructured, cfg *WorkshopResourceExportConfig) *unstructured.Unstructured {
+	exported := resource.DeepCopy()
+
+	repository := ""
+	workshopVersion := "latest"
+
+	if cfg != nil {
+		repository = cfg.Repository
+		if cfg.WorkshopVersion != "" {
+			workshopVersion = cfg.WorkshopVersion
+		}
+	}
+
+	exported.Object = replaceWorkshopExportVariables(exported.Object, repository, workshopVersion).(map[string]interface{})
+
+	_, found, _ := unstructured.NestedString(exported.Object, "spec", "version")
+	if !found && workshopVersion != "latest" {
+		unstructured.SetNestedField(exported.Object, workshopVersion, "spec", "version")
+	}
+
+	unstructured.RemoveNestedField(exported.Object, "spec", "publish")
+
+	return exported
+}
+
+func replaceWorkshopExportVariables(value interface{}, repository string, workshopVersion string) interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		for key, nested := range typed {
+			typed[key] = replaceWorkshopExportVariables(nested, repository, workshopVersion)
+		}
+		return typed
+	case []interface{}:
+		for index, nested := range typed {
+			typed[index] = replaceWorkshopExportVariables(nested, repository, workshopVersion)
+		}
+		return typed
+	case string:
+		replaced := typed
+		if repository != "" {
+			replaced = strings.ReplaceAll(replaced, "$(image_repository)", repository)
+		}
+		if workshopVersion != "" {
+			replaced = strings.ReplaceAll(replaced, "$(workshop_version)", workshopVersion)
+		}
+		return replaced
+	default:
+		return value
+	}
 }
 
 func RenderResourceAsYAMLDocument(resource *unstructured.Unstructured) ([]byte, error) {

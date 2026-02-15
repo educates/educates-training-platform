@@ -11,8 +11,10 @@ import (
 
 type ClusterPortalExportOptions struct {
 	KubeconfigOptions
-	Portal  string
-	AsFiles string
+	Portal          string
+	AsFiles         string
+	Repository      string
+	WorkshopVersion string
 }
 
 
@@ -48,6 +50,8 @@ func (o *ClusterPortalExportOptions) Run() error {
 
 	documents, err := manager.GetTrainingPortalYAMLDocumentsForExport(&educatesResources.TrainingPortalExportConfig{
 		Portal: o.Portal,
+		Repository: o.Repository,
+		WorkshopVersion: o.WorkshopVersion,
 	})
 	if err != nil {
 		return err
@@ -97,6 +101,18 @@ func (p *ProjectInfo) NewClusterPortalExportCmd() *cobra.Command {
 		"as-files",
 		"",
 		"write YAML resources as files in target directory instead of stdout",
+	)
+	c.Flags().StringVar(
+		&o.Repository,
+		"image-repository",
+		"localhost:5001",
+		"the address of the image repository",
+	)
+	c.Flags().StringVar(
+		&o.WorkshopVersion,
+		"workshop-version",
+		"latest",
+		"version of the workshop being published",
 	)
 
 	return c

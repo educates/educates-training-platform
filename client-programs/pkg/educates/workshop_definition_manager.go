@@ -14,6 +14,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/logger"
 	"github.com/educates/educates-training-platform/client-programs/pkg/templates"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"go.yaml.in/yaml/v2"
 	"k8s.io/apimachinery/pkg/apis/meta/internalversion/scheme"
@@ -23,7 +24,6 @@ import (
 )
 
 type WorkshopDefinitionManager struct {
-
 }
 
 type NewWorkshopDefinitionConfig struct {
@@ -65,7 +65,7 @@ func NewWorkshopDefinitionManager() *WorkshopDefinitionManager {
 	return &WorkshopDefinitionManager{}
 }
 
-func (m *WorkshopDefinitionManager) New(directory string,o *NewWorkshopDefinitionConfig) error {
+func (m *WorkshopDefinitionManager) New(directory string, o *NewWorkshopDefinitionConfig) error {
 	var err error
 
 	parameters := map[string]string{
@@ -98,7 +98,7 @@ func (m *WorkshopDefinitionManager) New(directory string,o *NewWorkshopDefinitio
 	return err
 }
 
-func (m *WorkshopDefinitionManager) Export(directory string,o *ExportWorkshopDefinitionConfig) (string, error) {
+func (m *WorkshopDefinitionManager) Export(directory string, o *ExportWorkshopDefinitionConfig) (string, error) {
 	// If image name hasn't been supplied read workshop definition file and
 	// try to work out image name to Export workshop as.
 
@@ -121,9 +121,6 @@ func (m *WorkshopDefinitionManager) Export(directory string,o *ExportWorkshopDef
 		return "", errors.Wrap(err, "unable to process workshop definition as template")
 	}
 
-	workshopFileData = []byte(strings.ReplaceAll(string(workshopFileData), "$(image_repository)", o.Repository))
-	workshopFileData = []byte(strings.ReplaceAll(string(workshopFileData), "$(workshop_version)", o.WorkshopVersion))
-
 	decoder := serializer.NewCodecFactory(scheme.Scheme).UniversalDecoder()
 
 	workshop := &unstructured.Unstructured{}
@@ -138,17 +135,10 @@ func (m *WorkshopDefinitionManager) Export(directory string,o *ExportWorkshopDef
 		return "", errors.New("invalid type for workshop definition")
 	}
 
-	// Insert workshop version property if not specified.
-
-	_, found, _ := unstructured.NestedString(workshop.Object, "spec", "version")
-
-	if !found && o.WorkshopVersion != "latest" {
-		unstructured.SetNestedField(workshop.Object, o.WorkshopVersion, "spec", "version")
-	}
-
-	// Remove the publish section as will not be accurate after publising.
-
-	unstructured.RemoveNestedField(workshop.Object, "spec", "publish")
+	workshop = utils.SanitizeWorkshopResourceForExport(workshop, &utils.WorkshopResourceExportConfig{
+		Repository:      o.Repository,
+		WorkshopVersion: o.WorkshopVersion,
+	})
 
 	// Export modified workshop definition file.
 
@@ -161,7 +151,7 @@ func (m *WorkshopDefinitionManager) Export(directory string,o *ExportWorkshopDef
 	return string(workshopFileData), nil
 }
 
-func (m *WorkshopDefinitionManager) Publish(directory string,o *PublishWorkshopDefinitionConfig) error {
+func (m *WorkshopDefinitionManager) Publish(directory string, o *PublishWorkshopDefinitionConfig) error {
 	// If image name hasn't been supplied read workshop definition file and
 	// try to work out image name to publish workshop as.
 
@@ -206,7 +196,7 @@ func (m *WorkshopDefinitionManager) Publish(directory string,o *PublishWorkshopD
 		return errors.Wrap(err, "couldn't parse workshop definition")
 	}
 
-		// Extract vendir snippet describing subset of files to package up as the
+	// Extract vendir snippet describing subset of files to package up as the
 	// workshop image.
 
 	carvelUI := logger.NewCarvelUI()
@@ -337,17 +327,10 @@ func (m *WorkshopDefinitionManager) Publish(directory string,o *PublishWorkshopD
 	exportWorkshop := o.ExportWorkshop
 
 	if exportWorkshop != "" {
-		// Insert workshop version property if not specified.
-
-		_, found, _ := unstructured.NestedString(workshop.Object, "spec", "version")
-
-		if !found && o.WorkshopVersion != "latest" {
-			unstructured.SetNestedField(workshop.Object, o.WorkshopVersion, "spec", "version")
-		}
-
-		// Remove the publish section as will not be accurate after publising.
-
-		unstructured.RemoveNestedField(workshop.Object, "spec", "publish")
+		workshop = utils.SanitizeWorkshopResourceForExport(workshop, &utils.WorkshopResourceExportConfig{
+			Repository:      o.Repository,
+			WorkshopVersion: o.WorkshopVersion,
+		})
 
 		workshopFileData, err = yaml.Marshal(&workshop.Object)
 

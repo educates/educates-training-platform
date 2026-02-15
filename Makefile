@@ -163,7 +163,7 @@ endif
 TARGET_PLATFORM = $(TARGET_SYSTEM)-$(TARGET_MACHINE)
 BUILDX_BUILDER = educates-multiarch-builder
 
-TARGET_PLATFORMS ?= $(TARGET_PLATFORMS)
+TARGET_PLATFORMS := $(TARGET_PLATFORMS)
 
 # Platform configuration - can be overridden by TARGET_PLATFORMS env var or make parameter
 ifeq ($(TARGET_PLATFORMS),)

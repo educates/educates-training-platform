@@ -1,0 +1,179 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: workshopsessions.training.educates.dev
+spec:
+  scope: Cluster
+  group: training.educates.dev
+  names:
+    plural: workshopsessions
+    singular: workshopsession
+    kind: WorkshopSession
+    categories:
+    - educates
+    - educates-training
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+              - environment
+              properties:
+                workshop:
+                  type: object
+                  required:
+                  - name
+                  properties:
+                    name:
+                      type: string
+                portal:
+                  type: object
+                  required:
+                  - name
+                  - url
+                  properties:
+                    name:
+                      type: string
+                    url:
+                      type: string
+                environment:
+                  type: object
+                  required:
+                  - name
+                  properties:
+                    name:
+                      type: string
+                session:
+                  type: object
+                  required:
+                  - id
+                  properties:
+                    id:
+                      type: string
+                    username:
+                      type: string
+                    password:
+                      type: string
+                    config:
+                      type: object
+                      properties:
+                        password:
+                          type: string
+                    ingress:
+                      type: object
+                      properties:
+                        domain:
+                          type: string
+                        secret:
+                          type: string
+                        class:
+                          type: string
+                    env:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - name
+                        properties:
+                          name:
+                            type: string
+                          value:
+                            type: string
+                request:
+                  type: object
+                  properties:
+                    namespace:
+                      type: string
+                    kind:
+                      type: string
+                    apiVersion:
+                      type: string
+                    name:
+                      type: string
+                    uid:
+                      type: string
+                analytics:
+                  type: object
+                  properties:
+                    google:
+                      type: object
+                      required:
+                      - trackingId
+                      properties:
+                        trackingId:
+                          type: string
+                    clarity:
+                      type: object
+                      required:
+                      - trackingId
+                      properties:
+                        trackingId:
+                          type: string
+                    amplitude:
+                      type: object
+                      required:
+                      - trackingId
+                      properties:
+                        trackingId:
+                          type: string
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                educates:
+                  type: object
+                  properties:
+                    phase:
+                      type: string
+                    message:
+                      type: string
+                    url:
+                      type: string
+                    sshd:
+                      type: object
+                      required:
+                      - enabled
+                      properties:
+                        enabled:
+                          type: boolean
+                        tunnel:
+                          type: object
+                          properties:
+                            enabled:
+                              type: boolean
+                    user:
+                      type: string
+      additionalPrinterColumns:
+      - name: URL
+        type: string
+        priority: 0
+        description: The URL to access the workshop.
+        jsonPath: .status.educates.url
+      - name: Username
+        type: string
+        priority: 0
+        description: The username to access the workshop.
+        jsonPath: .spec.session.username
+      - name: Password
+        type: string
+        priority: 0
+        description: The password to access the workshop.
+        jsonPath: .spec.session.password
+      - name: Status
+        type: string
+        priority: 0
+        description: The status of the workshop session.
+        jsonPath: .status.educates.phase
+      - name: Message
+        type: string
+        priority: 0
+        description: Status message.
+        jsonPath: .status.educates.message

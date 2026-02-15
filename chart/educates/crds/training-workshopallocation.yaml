@@ -1,0 +1,79 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: workshopallocations.training.educates.dev
+spec:
+  scope: Cluster
+  group: training.educates.dev
+  names:
+    plural: workshopallocations
+    singular: workshopallocation
+    kind: WorkshopAllocation
+    categories:
+    - educates
+    - educates-training
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+              - environment
+              - session
+              properties:
+                environment:
+                  type: object
+                  required:
+                  - name
+                  properties:
+                    name:
+                      type: string
+                session:
+                  type: object
+                  required:
+                  - name
+                  - user
+                  properties:
+                    name:
+                      type: string
+                    user:
+                      type: string
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                educates:
+                  type: object
+                  properties:
+                    phase:
+                      type: string
+                    message:
+                      type: string
+      additionalPrinterColumns:
+      - name: Environment
+        type: string
+        priority: 0
+        description: The name of the workshop environment.
+        jsonPath: .spec.environment.name
+      - name: Session
+        type: string
+        priority: 0
+        description: The name of the workshop session.
+        jsonPath: .spec.session.name
+      - name: Status
+        type: string
+        priority: 0
+        description: Status of workshop allocation.
+        jsonPath: .status.educates.phase
+      - name: Message
+        type: string
+        priority: 0
+        description: Status message.
+        jsonPath: .status.educates.message

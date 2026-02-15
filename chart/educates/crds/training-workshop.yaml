@@ -1,0 +1,1153 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: workshops.training.educates.dev
+spec:
+  scope: Cluster
+  group: training.educates.dev
+  names:
+    plural: workshops
+    singular: workshop
+    kind: Workshop
+    categories:
+    - educates.dev
+    - educates-training
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+              - title
+              - description
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                vendor:
+                  type: string
+                authors:
+                  type: array
+                  items:
+                    type: string
+                version:
+                  type: string
+                difficulty:
+                  type: string
+                  pattern: '^(beginner|intermediate|advanced|extreme)$'
+                duration:
+                  type: string
+                  pattern: '^\d+(s|m|h)$'
+                tags:
+                  type: array
+                  items:
+                    type: string
+                labels:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                    - name
+                    properties:
+                      name:
+                        type: string
+                      value:
+                        type: string
+                logo:
+                  type: string
+                url:
+                  type: string
+                content:
+                  type: object
+                  properties:
+                    image:
+                      type: string
+                    files:
+                      type: string
+                publish:
+                  type: object
+                  properties:
+                    image:
+                      type: string
+                    files:
+                      type: array
+                      items:
+                        type: object
+                        oneOf:
+                        - required:
+                          - git
+                        - required:
+                          - hg
+                        - required:
+                          - http
+                        - required:
+                          - image
+                        - required:
+                          - imgpkgBundle
+                        - required:
+                          - githubRelease
+                        - required:
+                          - helmChart
+                        - required:
+                          - directory
+                        properties:
+                          path:
+                            type: string
+                            default: "."
+                          git:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          hg:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          http:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          image:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          imgpkgBundle:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          githubRelease:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          helmChart:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          directory:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          includePaths:
+                            type: array
+                            items:
+                              type: string
+                          excludePaths:
+                            type: array
+                            items:
+                              type: string
+                          legalPaths:
+                            type: array
+                            items:
+                              type: string
+                          newRootPath:
+                            type: string
+                workshop:
+                  type: object
+                  properties:
+                    image:
+                      type: string
+                    files:
+                      type: array
+                      items:
+                        type: object
+                        oneOf:
+                        - required:
+                          - git
+                        - required:
+                          - hg
+                        - required:
+                          - http
+                        - required:
+                          - image
+                        - required:
+                          - imgpkgBundle
+                        - required:
+                          - githubRelease
+                        - required:
+                          - helmChart
+                        - required:
+                          - inline
+                        - required:
+                          - directory
+                        properties:
+                          path:
+                            type: string
+                            default: "."
+                          git:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          hg:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          http:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          image:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          imgpkgBundle:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          githubRelease:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          helmChart:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          inline:
+                            type: object
+                            properties:
+                              paths:
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                                additionalProperties:
+                                  type: string
+                              pathsFrom:
+                                type: array
+                                items:
+                                  type: object
+                                  required:
+                                  - secretRef
+                                  properties:
+                                    secretRef:
+                                      type: object
+                                      required:
+                                      - name
+                                      properties:
+                                        name:
+                                          type: string
+                                        directoryPath:
+                                          type: string
+                          directory:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          includePaths:
+                            type: array
+                            items:
+                              type: string
+                          excludePaths:
+                            type: array
+                            items:
+                              type: string
+                          legalPaths:
+                            type: array
+                            items:
+                              type: string
+                          newRootPath:
+                            type: string
+                    packages:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - name
+                        - files
+                        properties:
+                          name:
+                            type: string
+                          files:
+                            type: array
+                            items:
+                              type: object
+                              oneOf:
+                              - required:
+                                - git
+                              - required:
+                                - hg
+                              - required:
+                                - http
+                              - required:
+                                - image
+                              - required:
+                                - imgpkgBundle
+                              - required:
+                                - githubRelease
+                              - required:
+                                - helmChart
+                              - required:
+                                - inline
+                              - required:
+                                - directory
+                              properties:
+                                path:
+                                  type: string
+                                  default: "."
+                                git:
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                hg:
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                http:
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                image:
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                imgpkgBundle:
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                githubRelease:
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                helmChart:
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                inline:
+                                  type: object
+                                  properties:
+                                    paths:
+                                      type: object
+                                      x-kubernetes-preserve-unknown-fields: true
+                                      additionalProperties:
+                                        type: string
+                                    pathsFrom:
+                                      type: array
+                                      items:
+                                        type: object
+                                        required:
+                                        - secretRef
+                                        properties:
+                                          secretRef:
+                                            type: object
+                                            required:
+                                            - name
+                                            properties:
+                                              name:
+                                                type: string
+                                              directoryPath:
+                                                type: string
+                                directory:
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                includePaths:
+                                  type: array
+                                  items:
+                                    type: string
+                                excludePaths:
+                                  type: array
+                                  items:
+                                    type: string
+                                legalPaths:
+                                  type: array
+                                  items:
+                                    type: string
+                                newRootPath:
+                                  type: string
+                environment:
+                  type: object
+                  properties:
+                    objects:
+                      type: array
+                      items:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    secrets:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - namespace
+                        - name
+                        properties:
+                          namespace:
+                            type: string
+                          name:
+                            type: string
+                          labels:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                            additionalProperties:
+                              type: string
+                    assets:
+                      type: object
+                      required:
+                      - files
+                      properties:
+                        ingress:
+                          type: object
+                          properties:
+                            enabled:
+                              type: boolean
+                              default: false
+                        storage:
+                          type: string
+                        memory:
+                          type: string
+                        files:
+                          type: array
+                          items:
+                            type: object
+                            oneOf:
+                            - required:
+                              - git
+                            - required:
+                              - hg
+                            - required:
+                              - http
+                            - required:
+                              - image
+                            - required:
+                              - imgpkgBundle
+                            - required:
+                              - githubRelease
+                            - required:
+                              - helmChart
+                            - required:
+                              - inline
+                            - required:
+                              - directory
+                            properties:
+                              path:
+                                type: string
+                                default: "."
+                              git:
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                              hg:
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                              http:
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                              image:
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                              imgpkgBundle:
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                              githubRelease:
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                              helmChart:
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                              inline:
+                                type: object
+                                properties:
+                                  paths:
+                                    type: object
+                                    x-kubernetes-preserve-unknown-fields: true
+                                    additionalProperties:
+                                      type: string
+                                  pathsFrom:
+                                    type: array
+                                    items:
+                                      type: object
+                                      required:
+                                      - secretRef
+                                      properties:
+                                        secretRef:
+                                          type: object
+                                          required:
+                                          - name
+                                          properties:
+                                            name:
+                                              type: string
+                                            directoryPath:
+                                              type: string
+                              directory:
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                              includePaths:
+                                type: array
+                                items:
+                                  type: string
+                              excludePaths:
+                                type: array
+                                items:
+                                  type: string
+                              legalPaths:
+                                type: array
+                                items:
+                                  type: string
+                              newRootPath:
+                                type: string
+                    images:
+                      type: object
+                      properties:
+                        ingress:
+                          type: object
+                          properties:
+                            enabled:
+                              type: boolean
+                              default: false
+                        storage:
+                          type: string
+                        memory:
+                          type: string
+                        registries:
+                          type: array
+                          items:
+                            type: object
+                            required:
+                            - urls
+                            properties:
+                              urls:
+                                type: array
+                                items:
+                                  type: string
+                              onDemand:
+                                type: boolean
+                              pollInterval:
+                                type: string
+                              tlsVerify:
+                                type: boolean
+                              maxRetries:
+                                type: integer
+                              retryDelay:
+                                type: string
+                              onlySigned:
+                                type: boolean
+                              content:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    prefix:
+                                      type: string
+                                    destination:
+                                      type: string
+                                    stripPrefix:
+                                      type: boolean
+                                    tags:
+                                      type: object
+                                      required:
+                                      - regex
+                                      properties:
+                                        regex:
+                                          type: string
+                                        semver:
+                                          type: boolean
+                session:
+                  type: object
+                  properties:
+                    namespaces:
+                      type: object
+                      properties:
+                        role:
+                          type: string
+                        budget:
+                          type: string
+                        limits:
+                          type: object
+                          properties:
+                            min:
+                              type: object
+                              properties:
+                                cpu:
+                                  type: string
+                                memory:
+                                  type: string
+                            max:
+                              type: object
+                              properties:
+                                cpu:
+                                  type: string
+                                memory:
+                                  type: string
+                            defaultRequest:
+                              type: object
+                              properties:
+                                cpu:
+                                  type: string
+                                memory:
+                                  type: string
+                            default:
+                              type: object
+                              properties:
+                                cpu:
+                                  type: string
+                                memory:
+                                  type: string
+                        security:
+                          type: object
+                          properties:
+                            token:
+                              type: object
+                              properties:
+                                enabled:
+                                  type: boolean
+                                  default: true
+                            policy:
+                              type: string
+                              enum:
+                              - restricted
+                              - baseline
+                              - privileged
+                              #! Following are obsolete and should not be used.
+                              - nonroot
+                              - anyuid
+                              - custom
+                            rules:
+                              type: object
+                              properties:
+                                action:
+                                  type: string
+                                  enum:
+                                  - enforce
+                                  - audit
+                                  default: enforce
+                                exclude:
+                                  type: array
+                                  items:
+                                    type: string
+                        secondary:
+                          type: array
+                          items:
+                            type: object
+                            required:
+                            - name
+                            properties:
+                              name:
+                                type: string
+                              role:
+                                type: string
+                              budget:
+                                type: string
+                              limits:
+                                type: object
+                                properties:
+                                  min:
+                                    type: object
+                                    properties:
+                                      cpu:
+                                        type: string
+                                      memory:
+                                        type: string
+                                  max:
+                                    type: object
+                                    properties:
+                                      cpu:
+                                        type: string
+                                      memory:
+                                        type: string
+                                  defaultRequest:
+                                    type: object
+                                    properties:
+                                      cpu:
+                                        type: string
+                                      memory:
+                                        type: string
+                                  default:
+                                    type: object
+                                    properties:
+                                      cpu:
+                                        type: string
+                                      memory:
+                                        type: string
+                              security:
+                                type: object
+                                properties:
+                                  policy:
+                                    type: string
+                                    enum:
+                                    - restricted
+                                    - baseline
+                                    - privileged
+                                    #! Following are obsolete and should not be used.
+                                    - nonroot
+                                    - anyuid
+                                    - custom
+                    resources:
+                      type: object
+                      properties:
+                        memory:
+                          type: string
+                        storage:
+                          type: string
+                        volume:
+                          type: object
+                          required:
+                          - name
+                          properties:
+                            name:
+                              type: string
+                            subPath:
+                              type: string
+                    env:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - name
+                        properties:
+                          name:
+                            type: string
+                          value:
+                            type: string
+                          valueFrom:
+                            type: object
+                            properties:
+                              configMapKeyRef:
+                                type: object
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  optional:
+                                    type: boolean
+                              fieldRef:
+                                type: object
+                                properties:
+                                  apiVersion:
+                                    type: string
+                                  fieldPath:
+                                    type: string
+                              resourceFieldRef:
+                                type: object
+                                properties:
+                                  containerName:
+                                    type: string
+                                  divisor:
+                                    type: string
+                                  resource:
+                                    type: string
+                              secretKeyRef:
+                                type: object
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    type: string
+                                  optional:
+                                    type: boolean
+                    envFrom:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          prefix:
+                            type: string
+                          configMapRef:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              optional:
+                                type: boolean
+                          secretRef:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              optional:
+                                type: boolean
+                    volumeMounts:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - name
+                        - mountPath
+                        properties:
+                          name:
+                            type: string
+                          mountPath:
+                            type: string
+                          mountPropagation:
+                            type: string
+                          readOnly:
+                            type: boolean
+                          subPath:
+                            type: string
+                          subPathExpr:
+                            type: string
+                    volumes:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - name
+                        properties:
+                          name:
+                            type: string
+                        x-kubernetes-preserve-unknown-fields: true
+                    initContainers:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - name
+                        properties:
+                          name:
+                            type: string
+                        x-kubernetes-preserve-unknown-fields: true
+                    applications:
+                      type: object
+                      properties:
+                        workshop:
+                          type: object
+                          properties:
+                            enabled:
+                              type: boolean
+                            #! The renderer property is now obsolete and should not be used.
+                            renderer:
+                              type: string
+                              enum:
+                              - local
+                              - remote
+                              - static
+                              - proxy
+                            url:
+                              type: string
+                            proxy:
+                              type: object
+                              required:
+                              - host
+                              properties:
+                                protocol:
+                                  type: string
+                                host:
+                                  type: string
+                                port:
+                                  type: integer
+                                headers:
+                                  type: array
+                                  items:
+                                    type: object
+                                    required:
+                                    - name
+                                    properties:
+                                      name:
+                                        type: string
+                                      value:
+                                        type: string
+                                changeOrigin:
+                                  type: boolean
+                                pathRewrite:
+                                  type: array
+                                  items:
+                                    type: object
+                                    required:
+                                    - pattern
+                                    - replacement
+                                    properties:
+                                      pattern:
+                                        type: string
+                                      replacement:
+                                        type: string
+                            path:
+                              type: string
+                            layout:
+                              type: string
+                        terminal:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                            layout:
+                              type: string
+                        editor:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                        console:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                            vendor:
+                              type: string
+                            octant:
+                              type: object
+                              properties:
+                                version:
+                                  type: string
+                        slides:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                            reveal.js:
+                              type: object
+                              required:
+                              - version
+                              properties:
+                                version:
+                                  type: string
+                            impress.js:
+                              type: object
+                              required:
+                              - version
+                              properties:
+                                version:
+                                  type: string
+                        webdav:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                        docker:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                            memory:
+                              type: string
+                            storage:
+                              type: string
+                            socket:
+                              type: object
+                              properties:
+                                enabled:
+                                  type: boolean
+                            compose:
+                              type: object
+                              required:
+                              - services
+                              properties:
+                                services:
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                volumes:
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                        registry:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                            memory:
+                              type: string
+                            storage:
+                              type: string
+                            volume:
+                              type: object
+                              required:
+                              - name
+                              properties:
+                                name:
+                                  type: string
+                                subPath:
+                                  type: string
+                        examiner:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                        files:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                            directory:
+                              type: string
+                        uploads:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                            directory:
+                              type: string
+                              default: uploads
+                        git:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                        vcluster:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                            version:
+                              type: string
+                            resources:
+                              type: object
+                              properties:
+                                syncer:
+                                  type: object
+                                  properties:
+                                    memory:
+                                      type: string
+                                    storage:
+                                      type: string
+                            ingress:
+                              type: object
+                              required:
+                              - enabled
+                              properties:
+                                enabled:
+                                  type: boolean
+                                  default: false
+                                subdomains:
+                                  type: array
+                                  items:
+                                    type: string
+                            objects:
+                              type: array
+                              items:
+                                type: object
+                                x-kubernetes-preserve-unknown-fields: true
+                            services:
+                              type: object
+                              properties:
+                                fromHost:
+                                  type: array
+                                  items:
+                                    type: object
+                                    required:
+                                    - from
+                                    - to
+                                    properties:
+                                      from:
+                                        type: string
+                                      to:
+                                        type: string
+                                fromVirtual:
+                                  type: array
+                                  items:
+                                    type: object
+                                    required:
+                                    - from
+                                    - to
+                                    properties:
+                                      from:
+                                        type: string
+                                      to:
+                                        type: string
+                        sshd:
+                          type: object
+                          required:
+                          - enabled
+                          properties:
+                            enabled:
+                              type: boolean
+                            tunnel:
+                              type: object
+                              required:
+                              - enabled
+                              properties:
+                                enabled:
+                                  type: boolean
+                                  default: false
+                                memory:
+                                  type: string
+                    dashboards:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - name
+                        properties:
+                          name:
+                            type: string
+                          url:
+                            type: string
+                    ingresses:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - name
+                        properties:
+                          name:
+                            type: string
+                          authentication:
+                            type: object
+                            properties:
+                              type:
+                                type: string
+                                pattern: '^(none|session)$'
+                                default: session
+                          protocol:
+                            type: string
+                          host:
+                            type: string
+                          port:
+                            type: integer
+                          path:
+                            type: string
+                          changeOrigin:
+                            type: boolean
+                          secure:
+                            type: boolean
+                          headers:
+                            type: array
+                            items:
+                              type: object
+                              required:
+                              - name
+                              properties:
+                                name:
+                                  type: string
+                                value:
+                                  type: string
+                    patches:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    objects:
+                      type: array
+                      items:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                request:
+                  type: object
+                  properties:
+                    parameters:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - name
+                        properties:
+                          name:
+                            type: string
+                          value:
+                            type: string
+                          generate:
+                            type: string
+                          from:
+                            type: string
+                    objects:
+                      type: array
+                      items:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                images:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                    - name
+                    - image
+                    properties:
+                      name:
+                        type: string
+                      image:
+                        type: string
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+      - name: URL
+        type: string
+        priority: 0
+        description: URL for further information on the workshop.
+        jsonPath: .spec.url

@@ -1,0 +1,53 @@
+{{- if .Values.imagePuller.enabled }}
+{{- $pauseImage := include "educates.image" (dict "name" "pause-container" "context" .) }}
+{{- $pullPolicy := include "educates.imagePullPolicy" $pauseImage }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: image-puller
+  namespace: {{ include "educates.operator.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "educates.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app: image-puller
+spec:
+  selector:
+    matchLabels:
+      app: image-puller
+  template:
+    metadata:
+      labels:
+        app: image-puller
+        app.kubernetes.io/name: {{ include "educates.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: image-puller
+      {{- with .Values.clusterSecrets.pullSecretRefs }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ .name }}
+        {{- end }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      initContainers:
+      {{- $root := . }}
+      {{- range (concat (list "training-portal") .Values.imagePuller.prePullImages) }}
+      {{- $img := include "educates.image" (dict "name" . "context" $root) }}
+      {{- if $img }}
+      - name: {{ . }}
+        image: {{ $img }}
+        imagePullPolicy: {{ include "educates.imagePullPolicy" $img }}
+        command: ["/bin/true"]
+      {{- end }}
+      {{- end }}
+      containers:
+      - name: pause
+        image: {{ $pauseImage }}
+        imagePullPolicy: {{ $pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+{{- end }}

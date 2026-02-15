@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "educates.operator.namespace" . }}
+  {{- if eq .Values.clusterSecurity.policyEngine "pod-security-standards" }}
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: {{ include "educates.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}

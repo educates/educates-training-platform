@@ -1,0 +1,57 @@
+{{- $caRef := .Values.clusterIngress.caCertificateRef.name }}
+{{- $caCert := index .Values.clusterIngress.caCertificate "ca.crt" }}
+{{- $hasCA := or $caRef $caCert }}
+{{- if and $hasCA .Values.clusterIngress.caNodeInjector.enabled }}
+{{- $caSecret := $caRef | default (printf "%s-ca" .Values.clusterIngress.domain) }}
+{{- $debianImage := include "educates.image" (dict "name" "debian-base-image" "context" .) }}
+{{- $pauseImage := include "educates.image" (dict "name" "pause-container" "context" .) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-injector
+  namespace: {{ include "educates.operator.namespace" . }}
+data:
+  inject-ca.sh: |
+    echo "$CA_CERTIFICATE" > /usr/local/share/ca-certificates/Cluster_Ingress_CA.crt && update-ca-certificates && systemctl restart containerd
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-injector
+  namespace: {{ include "educates.operator.namespace" . }}
+spec:
+  selector:
+    matchLabels:
+      app: node-injector
+  template:
+    metadata:
+      labels:
+        app: node-injector
+    spec:
+      hostPID: true
+      hostNetwork: true
+      initContainers:
+      - name: inject-ca
+        image: {{ $debianImage }}
+        imagePullPolicy: {{ include "educates.imagePullPolicy" $debianImage }}
+        command: ["nsenter"]
+        args: ["--mount=/proc/1/ns/mnt", "--", "sh", "-c", "$(INJECT_CA)"]
+        env:
+        - name: CA_CERTIFICATE
+          valueFrom:
+            secretKeyRef:
+              name: {{ $caSecret }}
+              key: ca.crt
+        - name: INJECT_CA
+          valueFrom:
+            configMapKeyRef:
+              name: node-injector
+              key: inject-ca.sh
+        securityContext:
+          privileged: true
+      containers:
+      - name: pause
+        image: {{ $pauseImage }}
+        imagePullPolicy: {{ include "educates.imagePullPolicy" $pauseImage }}
+{{- end }}

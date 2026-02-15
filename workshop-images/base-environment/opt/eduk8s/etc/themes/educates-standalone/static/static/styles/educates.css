@@ -150,6 +150,18 @@ button#header-next-page {
     margin: 0 0 30px 0;
 }
 
+.page-content .title .title-step {
+    display: inline-block;
+    background-color: #d4e9f7;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.375rem;
+    margin-right: 0.75rem;
+    min-width: 2.5rem;
+    text-align: center;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
 .page-content h1,
 .page-content h2,
 .page-content h3,

@@ -12,7 +12,7 @@
         {{ $title = .Page.Title }}
         {{ end }}
         {{ if $title }}
-        <h1 class="title" id="title">{{ $current_module.step }}: {{ $title }}</h1>
+        <h1 class="title" id="title"><span class="title-step">{{ $current_module.step }}</span>{{ $title }}</h1>
         {{ end }}
         <div class="rendered-content">
           {{ .Content }}

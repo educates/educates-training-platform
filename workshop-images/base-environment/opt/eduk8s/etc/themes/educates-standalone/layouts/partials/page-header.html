@@ -57,25 +57,27 @@
             </div>
             <div class="btn-toolbar float-end" role="toolbar">
                 <div class="btn-group btn-group-sm" role="group">
-                    <form action="{{ relURL $current_module.prev_page }}">
+                    <form action="{{ relURL $current_module.prev_page }}" style="display: none;">
                         <button class="btn btn-transparent" id="header-prev-page" type="submit" {{ if (not
                             $current_module.prev_page) }}disabled="" {{ end }} aria-label="Prev"><span
                                 class="fas fa-arrow-left fa-inverse" aria-hidden="true"></span></button>
                     </form>
-                    <form>
+                    <form style="display: none;">
                         <button class="btn btn-transparent" id="header-goto-toc" type="button" aria-label="TOC"
                             data-bs-toggle="modal" data-bs-target="#table-of-contents"><span class="fas fa-list fa-inverse"
                                 aria-hidden="true"></span></button>
                     </form>
-                    <span class="header-step-counter" aria-label="Progress">
+                    <span class="header-step-counter" aria-label="Progress" style="display: none;">
                         {{ $current_module.step }} / {{ len $modules }}
                     </span>
+                    {{ if not $current_module.next_page }}
                     <form>
                         <button class="btn btn-transparent" id="header-print-page" type="button" aria-label="Print"
                             onclick="window.open('{{ relURL "print.html" }}', '_blank')"><span class="fas fa-print fa-inverse"
                                 aria-hidden="true"></span></button>
                     </form>
-                    <form action="{{ relURL $current_module.next_page }}">
+                    {{ end }}
+                    <form action="{{ relURL $current_module.next_page }}" style="display: none;">
                         <button class="btn btn-transparent" id="header-next-page" type="submit" {{ if (not
                             $current_module.next_page) }}disabled="" {{ end }} aria-label="Next"><span
                                 class="fas fa-arrow-right fa-inverse" aria-hidden="true"></span></button>
@@ -84,7 +86,7 @@
             </div>
         </div>
     </div>
-    <div class="header-progress-track">
+    <div class="header-progress-track" style="display: none;">
         <div class="header-progress-bar" style="width: {{ math.Round (mul (div (float $current_module.step) (len $modules)) 100) }}%;"></div>
     </div>
 </div>

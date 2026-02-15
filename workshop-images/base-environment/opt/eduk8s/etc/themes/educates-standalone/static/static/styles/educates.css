@@ -179,7 +179,7 @@ button#header-next-page {
 }
 
 .main-content {
-    height: calc(100% - 33px);
+    height: calc(100% - 33px - 52px);
     overflow-y: auto;
     overflow-x: hidden;
     padding-top: 0px;
@@ -478,6 +478,104 @@ form.jsonform-hasrequired div.form-group {
     margin-bottom: 1rem;
 }
 
+/* Persistent bottom navigation bar */
+
+.workshop-bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1030;
+    background: #ffffff;
+    border-top: 1px solid #dee2e6;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.bottom-bar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    max-width: 100%;
+}
+
+.bottom-bar-progress {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.bottom-bar-step-label {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #555;
+    white-space: nowrap;
+}
+
+.bottom-bar-toc {
+    font-size: 0.8em;
+    padding: 3px 8px;
+    border-color: #adb5bd;
+    color: #555;
+}
+
+.bottom-bar-toc:hover {
+    background-color: #e9ecef;
+    color: #333;
+}
+
+.bottom-bar-progress-track {
+    flex: 1;
+    height: 4px;
+    background-color: #e9ecef;
+    border-radius: 2px;
+    overflow: hidden;
+    max-width: 200px;
+}
+
+.bottom-bar-progress-fill {
+    height: 100%;
+    width: 0%;
+    background-color: #0d6efd;
+    border-radius: 2px;
+    transition: width 0.15s ease;
+}
+
+.bottom-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 16px;
+}
+
+.bottom-bar-back {
+    font-size: 0.85em;
+}
+
+.bottom-bar-continue {
+    font-size: 0.9em;
+    padding: 6px 20px;
+    transition: opacity 0.2s ease;
+}
+
+.bottom-bar-continue:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.bottom-bar-continue.enabled {
+    opacity: 1;
+}
+
+.bottom-bar-scroll-hint {
+    font-size: 0.7em;
+    color: #999;
+    margin-right: 4px;
+    transition: opacity 0.3s ease;
+}
+
 @media print {
     html {
         height: auto;
@@ -506,6 +604,10 @@ form.jsonform-hasrequired div.form-group {
     }
 
     .navigation-buttons {
+        display: none;
+    }
+
+    .workshop-bottom-bar {
         display: none;
     }
 }

@@ -17,7 +17,7 @@
         <div class="rendered-content">
           {{ .Content }}
         </div>
-        <div class="navigation-buttons">
+        <div class="navigation-buttons" style="display: none;">
           {{ if $current_module.next_page }}
           <div class="page-meta clearfix">
             <form action="{{ relURL $current_module.next_page }}">
@@ -39,5 +39,39 @@
     </div>
   </div>
 </div>
+
+<div class="workshop-bottom-bar" id="bottom-bar">
+  <div class="bottom-bar-inner">
+    <div class="bottom-bar-progress">
+      <button class="btn btn-sm btn-outline-secondary bottom-bar-toc" type="button" aria-label="TOC"
+        data-bs-toggle="modal" data-bs-target="#table-of-contents">
+        <span class="fas fa-list" aria-hidden="true"></span>
+      </button>
+      <span class="bottom-bar-step-label">Step {{ $current_module.step }} of {{ len $modules }}</span>
+      <div class="bottom-bar-progress-track">
+        <div class="bottom-bar-progress-fill" id="scroll-progress"></div>
+      </div>
+    </div>
+    <div class="bottom-bar-actions">
+      {{ if $current_module.prev_page }}
+      <a href="{{ relURL $current_module.prev_page }}" class="btn btn-sm btn-outline-secondary bottom-bar-back" aria-label="previous">
+        <span class="fas fa-arrow-left" aria-hidden="true"></span> Back
+      </a>
+      {{ end }}
+      {{ if $current_module.next_page }}
+      <button class="btn btn-primary bottom-bar-continue" id="bottom-bar-next" disabled aria-label="continue"
+        onclick="window.location.href='{{ relURL $current_module.next_page }}'">
+        Continue <span class="fas fa-arrow-right" aria-hidden="true"></span>
+      </button>
+      {{ else if and $current_module (.Param "restart_url") }}
+      <button class="btn btn-primary bottom-bar-continue" id="bottom-bar-next" disabled aria-label="finish"
+        onclick="educates.finished_workshop()">
+        Finish Workshop
+      </button>
+      {{ end }}
+    </div>
+  </div>
+</div>
+
 </section>
 {{ end }}

@@ -1073,6 +1073,50 @@ const educates = (function () {
                 pages_total: body.dataset.pagesTotal,
             });
         }
+
+        // Persistent bottom bar: scroll-based progress and Continue button
+        // enablement. The main-content div is the scroll container (not the
+        // window), so we listen for scroll events on that element.
+
+        const bottomBarNext = document.getElementById('bottom-bar-next');
+        const scrollProgress = document.getElementById('scroll-progress');
+        const mainContent = document.querySelector('.main-content');
+
+        if (mainContent) {
+            function updateScrollProgress() {
+                const scrollTop = mainContent.scrollTop;
+                const scrollHeight = mainContent.scrollHeight - mainContent.clientHeight;
+
+                // Calculate progress as a fraction 0..1. If there's no
+                // scrollable overflow treat as fully scrolled.
+
+                const progress = scrollHeight > 0
+                    ? Math.min(scrollTop / scrollHeight, 1)
+                    : 1;
+
+                // Update the progress bar fill width.
+
+                if (scrollProgress) {
+                    scrollProgress.style.width = (progress * 100) + '%';
+                }
+
+                // Enable the Continue/Finish button once the user has
+                // scrolled to at least 90% of the content, or if the
+                // content fits entirely within the viewport.
+
+                if (bottomBarNext && progress >= 0.9) {
+                    bottomBarNext.disabled = false;
+                    bottomBarNext.classList.add('enabled');
+                }
+            }
+
+            mainContent.addEventListener('scroll', updateScrollProgress, { passive: true });
+
+            // Run once immediately in case content is short enough to
+            // fit without scrolling.
+
+            updateScrollProgress();
+        }
     });
 
     // Table of clickable actions and their handlers. Clickable actions will

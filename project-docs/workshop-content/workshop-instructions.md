@@ -425,7 +425,32 @@ Absence of ``start`` means start at the beginning of the file. Absence of ``stop
 
 When ``start`` or ``stop`` is a negative value, it is interpreted as offset from the end of the file. Note that when the file ends with a newline, a value of ``-1`` selects the empty value after the newline and not the last line terminated by the newline.
 
-For both an exact match and regular expression, the text to be matched must all be on one line. It is not possible to match on text which spans across lines.
+For both an exact match and regular expression, the text to be matched can span multiple lines using the YAML block scalar syntax. For example, to select a multi-line block of code:
+
+~~~text
+```editor:select-matching-text
+file: ~/exercises/factory.py
+text: |-
+  def make_multiplier(n):
+      def multiplier(x):
+          return x * n
+      return multiplier
+```
+~~~
+
+When ``before`` and ``after`` are used with a multi-line match, they are relative to the first and last lines of the matched text respectively.
+
+To select a range of lines by line number, use:
+
+~~~text
+```editor:select-lines-in-range
+file: ~/exercises/sample.txt
+start: 5
+stop: 10
+```
+~~~
+
+The ``start`` property specifies the first line to select and ``stop`` specifies the last line to select. Both are inclusive. If ``stop`` is omitted, only the single line specified by ``start`` will be selected. Line numbers start at ``1``. The selected text can then be replaced using ``editor:replace-text-selection``.
 
 To replace text within the file, first match it exactly or using a regular expression so it is marked as selected, then use:
 
@@ -433,6 +458,61 @@ To replace text within the file, first match it exactly or using a regular expre
 ```editor:replace-text-selection
 file: ~/exercises/sample.txt
 text: nginx:latest
+```
+~~~
+
+To find and replace text in a single step, without needing to first select the text and then replace it separately, use:
+
+~~~text
+```editor:replace-matching-text
+file: ~/exercises/sample.txt
+match: "nginx:1.19"
+replacement: "nginx:1.21"
+```
+~~~
+
+The ``match`` property specifies the text to find and the ``replacement`` property specifies what to replace it with. Both ``match`` and ``replacement`` can span multiple lines using the YAML block scalar syntax. For example, to replace an entire function definition:
+
+~~~text
+```editor:replace-matching-text
+file: ~/exercises/factory.py
+match: |-
+  def make_multiplier(n):
+      def multiplier(x):
+          return x * n
+      return multiplier
+replacement: |-
+  def make_multiplier(n, offset=0):
+      def multiplier(x):
+          return x * n + offset
+      return multiplier
+```
+~~~
+
+As with ``editor:select-matching-text``, you can use regular expressions by setting ``isRegex`` to ``true``, select a specific match group using the ``group`` property, and limit the search range using ``start`` and ``stop`` properties.
+
+~~~text
+```editor:replace-matching-text
+file: ~/exercises/sample.txt
+match: "image: (.*)"
+replacement: "image: nginx:latest"
+isRegex: true
+group: 0
+start: 8
+stop: 20
+```
+~~~
+
+By default only the first match in the file is replaced. The ``count`` property controls how many matches to replace. Setting ``count`` to ``-1`` replaces all matches in the file (or within the search range if ``start`` and ``stop`` are specified). Setting ``count`` to a specific positive number replaces up to that many matches.
+
+~~~text
+```editor:replace-matching-text
+file: ~/exercises/sample.txt
+match: "image: (.*)"
+replacement: "image: nginx:latest"
+isRegex: true
+group: 0
+count: -1
 ```
 ~~~
 
@@ -447,12 +527,47 @@ text: |
 ```
 ~~~
 
-If you use ``editor:append-to-lines-to-file`` and the file doesn't exist it will be created for you. You can therefore use this to create new files.
+If you use ``editor:append-lines-to-file`` and the file doesn't exist it will be created for you. You can therefore use this to create new files.
+
+To create a new file with specific content, or to overwrite the contents of an existing file, use:
+
+~~~text
+```editor:create-file
+file: ~/exercises/sample.txt
+text: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: example
+```
+~~~
+
+If the file already exists, all of its content will be replaced with the new text. If the file does not exist, it will be created. This is useful when workshop instructions need to provide the complete contents of a file.
+
+In any situation where a file needs to be created, if the containing directory does not exist the operation will fail. To create a directory first use:
+
+~~~text
+```editor:create-directory
+directory: ~/exercises
+```
+~~~
 
 To insert lines before a specified line in the file, use:
 
 ~~~text
 ```editor:insert-lines-before-line
+file: ~/exercises/sample.txt
+line: 8
+text: |
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed
+    do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+```
+~~~
+
+To insert lines after a specified line in the file, use:
+
+~~~text
+```editor:insert-lines-after-line
 file: ~/exercises/sample.txt
 line: 8
 text: |
@@ -473,15 +588,247 @@ text: |
 ```
 ~~~
 
-Where the file contains YAML, to insert a new YAML value into an existing structure, use:
+To delete a range of lines from a file by line number, use:
 
 ~~~text
-```editor:insert-value-into-yaml
+```editor:delete-lines-in-range
+file: ~/exercises/sample.txt
+start: 5
+stop: 10
+```
+~~~
+
+The ``start`` property specifies the first line to delete and ``stop`` specifies the last line to delete. Both are inclusive. If ``stop`` is omitted, only the single line specified by ``start`` will be deleted. Line numbers start at ``1``.
+
+To delete lines that match a specified string or regular expression, use:
+
+~~~text
+```editor:delete-matching-lines
+file: ~/exercises/sample.txt
+match: "# TODO: remove this"
+```
+~~~
+
+This will find the first line containing the match text and delete it. To delete additional lines around the match, you can specify the ``before`` and ``after`` properties to include lines before and after the matched line. Setting ``before`` or ``after`` to ``-1`` will include all lines before or after the match respectively.
+
+~~~text
+```editor:delete-matching-lines
+file: ~/exercises/sample.txt
+match: "# TODO: remove this"
+before: 1
+after: 2
+```
+~~~
+
+To replace a range of lines in a file with new content, use:
+
+~~~text
+```editor:replace-lines-in-range
+file: ~/exercises/sample.txt
+start: 5
+stop: 10
+text: |
+    new content line 1
+    new content line 2
+```
+~~~
+
+The ``start`` and ``stop`` properties specify the first and last line to replace (both inclusive). The ``text`` property contains the replacement content. Line numbers start at ``1``.
+
+To copy a file to a new location, use:
+
+~~~text
+```editor:copy-file
+src: ~/exercises/template.yaml
+dest: ~/exercises/deployment.yaml
+```
+~~~
+
+The ``src`` property is the path to the source file and ``dest`` is the path for the copy. By default the destination file will be opened in the editor. Set ``open`` to ``false`` to copy the file without opening it. If the destination file already exists it will be overwritten.
+
+To rename or move a file, use:
+
+~~~text
+```editor:rename-file
+src: ~/exercises/old-name.txt
+dest: ~/exercises/new-name.txt
+```
+~~~
+
+The ``src`` property is the current file path and ``dest`` is the new path. This can also be used to move a file to a different directory. By default the file will be opened in the editor after renaming. Set ``open`` to ``false`` to rename without opening.
+
+To close a file tab in the editor, use:
+
+~~~text
+```editor:close-file
+file: ~/exercises/sample.txt
+```
+~~~
+
+If the file is not currently open in the editor, the action is a no-op.
+
+To delete a file from the file system, use:
+
+~~~text
+```editor:delete-file
+file: ~/exercises/sample.txt
+```
+~~~
+
+If the file is open in the editor it will be closed before being deleted.
+
+For more precise YAML manipulation that preserves comments and handles all YAML styles (block, flow, inline), the following actions are available.
+
+To set or update a YAML value at a specific path, creating intermediate keys if they don't exist:
+
+~~~text
+```editor:set-yaml-value
+file: ~/exercises/deployment.yaml
+path: spec.replicas
+value: 3
+```
+~~~
+
+To append an item to the end of a YAML sequence:
+
+~~~text
+```editor:add-yaml-item
 file: ~/exercises/deployment.yaml
 path: spec.template.spec.containers
 value:
-- name: nginx
-  image: nginx:latest
+  name: sidecar
+  image: busybox:latest
+```
+~~~
+
+To insert an item at a specific position in a YAML sequence:
+
+~~~text
+```editor:insert-yaml-item
+file: ~/exercises/deployment.yaml
+path: spec.template.spec.containers
+index: 0
+value:
+  name: init
+  image: alpine:latest
+```
+~~~
+
+To replace a specific item in a YAML sequence, identified by index or attribute match:
+
+~~~text
+```editor:replace-yaml-item
+file: ~/exercises/deployment.yaml
+path: spec.template.spec.containers[name=nginx]
+value:
+  name: nginx
+  image: nginx:1.25
+  ports:
+  - containerPort: 8080
+```
+~~~
+
+To delete a key from a YAML mapping or an item from a sequence:
+
+~~~text
+```editor:delete-yaml-value
+file: ~/exercises/deployment.yaml
+path: spec.template.metadata.labels.app
+```
+~~~
+
+To merge multiple key-value pairs into an existing YAML mapping:
+
+~~~text
+```editor:merge-yaml-values
+file: ~/exercises/deployment.yaml
+path: metadata.labels
+value:
+  app: myapp
+  version: v2
+  tier: frontend
+```
+~~~
+
+To select (highlight) a YAML node at a specific path in the editor, including both the key and its value for mapping entries:
+
+~~~text
+```editor:select-yaml-path
+file: ~/exercises/deployment.yaml
+path: spec.template.spec.containers
+```
+~~~
+
+This will open the file and select the region spanning from the key through all of its value content. For a sequence, this means the key and all list items will be highlighted. For a scalar value, the key and its value will be highlighted. For a sequence item identified by index or attribute match, only the item content will be selected.
+
+~~~text
+```editor:select-yaml-path
+file: ~/exercises/deployment.yaml
+path: spec.template.spec.containers[name=nginx]
+```
+~~~
+
+If ``path`` is omitted or empty, the entire document contents will be selected.
+
+The YAML path uses dot notation for mapping keys (``spec.template``), bracket notation with integers for sequence indices (``containers[0]``), and bracket notation with key=value for matching sequence items by attribute (``containers[name=nginx]``).  
+For mapping keys that include special characters used by path syntax (such as ``.``), use a quoted key inside square brackets, for example ``data["index.html"]``.
+
+The above YAML clickable actions replace the existing ``editor:insert-value-into-yaml`` clickable action which didn't work correctly except in very specific cases and has now been deprecated.
+
+To open or create a terminal within the VS Code editor, you can use:
+
+~~~text
+```editor:open-terminal
+session: build
+```
+~~~
+
+The ``session`` property specifies the name of the terminal. If omitted it defaults to ``"educates"``. If a terminal with that name already exists it will be shown, otherwise a new terminal will be created.
+
+Note that these ``editor:*-terminal`` clickable actions manage terminals within the VS Code editor and are separate from the dashboard ``terminal:*`` clickable actions which manage terminals on the terminals tab of the dashboard.
+
+To send text or a command to a terminal within the VS Code editor, you can use:
+
+~~~text
+```editor:send-to-terminal
+text: echo "Hello from VS Code terminal"
+session: build
+```
+~~~
+
+By default a newline will be appended, causing the text to be executed as a command. If you do not want a newline appended, set the ``endl`` property to ``false``.
+
+~~~text
+```editor:send-to-terminal
+text: some input
+session: build
+endl: false
+```
+~~~
+
+You can specify the ``session`` property to target a specific terminal. If the terminal does not exist it will be created.
+
+To interrupt a running command in a terminal within the VS Code editor, you can use:
+
+~~~text
+```editor:interrupt-terminal
+session: build
+```
+~~~
+
+To clear the terminal buffer of a terminal within the VS Code editor, you can use:
+
+~~~text
+```editor:clear-terminal
+session: build
+```
+~~~
+
+To close and dispose of a terminal within the VS Code editor, you can use:
+
+~~~text
+```editor:close-terminal
+session: build
 ```
 ~~~
 

@@ -28,8 +28,6 @@ export async function selectMatchingText(params: SelectMatchingTextParams) {
 
     const lines = editor.document.lineCount
 
-    let line = 0
-
     let startLine = (params.start === undefined || params.start === null) ? 0 : params.start
     let stopLine = (params.stop === undefined || params.stop === null) ? lines : params.stop
 
@@ -49,29 +47,79 @@ export async function selectMatchingText(params: SelectMatchingTextParams) {
     else if (stopLine >= lines)
         stopLine = lines - 1
 
-    let startMatch = -1
-    let stopMatch = -1
+    let matchStartLine = -1
+    let matchStartCol = -1
+    let matchEndLine = -1
+    let matchEndCol = -1
 
-    if (params.isRegex) {
+    // Check whether the text to match spans multiple lines.
+
+    let isMultiLine = params.text.indexOf('\n') >= 0
+
+    if (isMultiLine) {
+        // For multi-line matching, extract the text block within the
+        // start/stop range and search within it as a single string.
+
+        let lastLine = stopLine - 1
+
+        if (lastLine < startLine)
+            lastLine = startLine
+
+        let rangeStart = new vscode.Position(startLine, 0)
+        let rangeEnd = new vscode.Position(lastLine, editor.document.lineAt(lastLine).text.length)
+        let searchRange = new vscode.Range(rangeStart, rangeEnd)
+        let blockText = editor.document.getText(searchRange)
+        let blockOffset = editor.document.offsetAt(rangeStart)
+
+        if (params.isRegex) {
+            let regex = new RegExp(params.text)
+            let group = params.group || 0
+            let match = execWithIndices(regex, blockText)
+            if (match) {
+                let startPos = editor.document.positionAt(blockOffset + match.indices[group][0])
+                let endPos = editor.document.positionAt(blockOffset + match.indices[group][1])
+                matchStartLine = startPos.line
+                matchStartCol = startPos.character
+                matchEndLine = endPos.line
+                matchEndCol = endPos.character
+            }
+        }
+        else {
+            let offset = blockText.indexOf(params.text)
+            if (offset >= 0) {
+                let startPos = editor.document.positionAt(blockOffset + offset)
+                let endPos = editor.document.positionAt(blockOffset + offset + params.text.length)
+                matchStartLine = startPos.line
+                matchStartCol = startPos.character
+                matchEndLine = endPos.line
+                matchEndCol = endPos.character
+            }
+        }
+    }
+    else if (params.isRegex) {
         let regex = new RegExp(params.text)
         let group = params.group || 0
-        for (line = startLine; line < stopLine; line++) {
+        for (let line = startLine; line < stopLine; line++) {
             let currentLine = editor.document.lineAt(line)
             let match = execWithIndices(regex, currentLine.text)
             if (match) {
-                startMatch = match.indices[group][0]
-                stopMatch = match.indices[group][1]
+                matchStartLine = line
+                matchStartCol = match.indices[group][0]
+                matchEndLine = line
+                matchEndCol = match.indices[group][1]
                 break
             }
         }
     }
     else {
-        for (line = startLine; line < stopLine; line++) {
+        for (let line = startLine; line < stopLine; line++) {
             let currentLine = editor.document.lineAt(line)
             let offset = currentLine.text.indexOf(params.text)
             if (offset >= 0) {
-                startMatch = offset
-                stopMatch = offset + params.text.length
+                matchStartLine = line
+                matchStartCol = offset
+                matchEndLine = line
+                matchEndCol = offset + params.text.length
                 break
             }
         }
@@ -79,17 +127,17 @@ export async function selectMatchingText(params: SelectMatchingTextParams) {
 
     // Bail out out if there was no match found anywhere in the file.
 
-    if (startMatch == -1)
+    if (matchStartLine == -1)
         return
 
     // Highlight the matched text in file or the region around it.
 
     if (params.before === undefined && params.after === undefined) {
         // When no lines before or after marked to be select, we only want
-        // to highlight the select text.
+        // to highlight the matched text.
 
-        let startPosition = new vscode.Position(line, startMatch)
-        let stopPosition = new vscode.Position(line, stopMatch)
+        let startPosition = new vscode.Position(matchStartLine, matchStartCol)
+        let stopPosition = new vscode.Position(matchEndLine, matchEndCol)
         let selection = new vscode.Selection(startPosition, stopPosition)
         editor.selection = selection
         editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter)
@@ -104,17 +152,17 @@ export async function selectMatchingText(params: SelectMatchingTextParams) {
         // Use negative values to indicate all lines before or after.
 
         if (linesBefore === null || linesBefore < 0)
-            linesBefore = line
+            linesBefore = matchStartLine
 
         if (linesAfter === null || linesAfter < 0)
-            linesAfter = lines - line - 1
+            linesAfter = lines - matchEndLine - 1
 
-        let startBeforeLine = line - linesBefore
+        let startBeforeLine = matchStartLine - linesBefore
 
         if (startBeforeLine < 0)
             startBeforeLine = 0
 
-        let stopAfterLine = line + linesAfter
+        let stopAfterLine = matchEndLine + linesAfter
 
         if (stopAfterLine >= lines)
             stopAfterLine = lines - 1

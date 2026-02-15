@@ -1,0 +1,5 @@
+  Line 1: Hello World
+  Line 2: This is a sample file
+  Line 3: Used for testing editor actions
+  Line 4: It has multiple lines
+  Line 5: For various tests

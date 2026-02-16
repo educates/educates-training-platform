@@ -3,19 +3,25 @@ name: Check Code Formatting
 on:
   pull_request:
     paths:
-      - '**.ts'
-      - '**.tsx'
-      - '**.js'
-      - '**.jsx'
-      - '**.json'
-      - '**.md'
-      - '.prettierrc.json'
-      - '.editorconfig'
-      - 'package.json'
+      - "**.ts"
+      - "**.tsx"
+      - "**.js"
+      - "**.jsx"
+      - "**.json"
+      - "**.md"
+      - "**.py"
+      - "**.go"
+      - "**.yaml"
+      - "**.yml"
+      - ".prettierrc.json"
+      - ".editorconfig"
+      - "package.json"
+      - "pyproject.toml"
+      - ".yamllint.yml"
 
 jobs:
-  check-formatting:
-    name: Check Code Formatting
+  prettier:
+    name: Prettier (TS/JS/JSON/MD)
     runs-on: ubuntu-latest
 
     steps:
@@ -25,24 +31,110 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: "18"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm install
 
       - name: Check code formatting
         run: npm run format:check
-        continue-on-error: false
 
+  python:
+    name: Ruff (Python)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Check Python formatting
+        run: ruff format --check secrets-manager session-manager training-portal lookup-service tunnel-manager
+
+      - name: Check Python linting
+        run: ruff check secrets-manager session-manager training-portal lookup-service tunnel-manager
+
+  golang:
+    name: gofmt (Go)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.work"
+
+      - name: Check Go formatting
+        run: |
+          unformatted=$(gofmt -l assets-server/ client-programs/ tunnel-manager/)
+          if [ -n "$unformatted" ]; then
+            echo "Go files need formatting:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+  yamllint:
+    name: yamllint (YAML)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Lint YAML files
+        run: yamllint -c .yamllint.yml .
+
+  comment-on-failure:
+    name: Comment on PR
+    runs-on: ubuntu-latest
+    needs: [prettier, python, golang, yamllint]
+    if: failure()
+
+    steps:
       - name: Comment PR if formatting is incorrect
-        if: failure()
         uses: actions/github-script@v7
         with:
           script: |
+            const body = [
+              '**Code formatting check failed**',
+              '',
+              'This PR contains files that are not formatted according to the project style.',
+              '',
+              'To fix formatting issues, run:',
+              '```bash',
+              'make format        # Format all code (Prettier + Ruff + gofmt)',
+              'make format-check  # Check all formatting without modifying files',
+              '```',
+              '',
+              'Or run individual formatters:',
+              '- `make format-prettier` — TypeScript/JavaScript/JSON/Markdown',
+              '- `make format-python` — Python (Ruff)',
+              '- `make format-go` — Go (gofmt)',
+              '- `make format-check-yaml` — YAML lint check',
+            ].join('\n');
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '❌ **Code formatting check failed**\n\nThis PR contains files that are not formatted according to the project style. Please run `npm run format` to fix the formatting issues.\n\nYou can also format specific directories:\n- `npm run format:gateway`\n- `npm run format:renderer`\n- `npm run format:helper`\n- `npm run format:docker-extension`'
+              body: body
             })

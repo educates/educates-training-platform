@@ -1,0 +1,52 @@
+---
+# yamllint configuration
+#
+# Relaxed rules to accommodate ytt templates, Kubernetes manifests, and
+# Carvel tooling annotations (e.g. #@ directives) used throughout this project.
+#
+extends: default
+
+rules:
+  # Disabled: many K8s CRDs and ytt templates have very long lines
+  line-length: disable
+  # Relaxed: ytt templates and K8s manifests use varying indentation styles
+  indentation: disable
+  # Allow on/off/yes/no used in K8s manifests
+  truthy:
+    allowed-values: ["true", "false", "yes", "no", "on", "off"]
+    check-keys: false
+  # Disabled: ytt #@ directives are flagged as comments without space
+  comments: disable
+  comments-indentation: disable
+  # Disabled: not all YAML files start with ---
+  document-start: disable
+  # Disabled: existing files have varying whitespace conventions
+  trailing-spaces: disable
+  new-line-at-end-of-file: disable
+  empty-lines: disable
+  # Disabled: ytt templates use conditional blocks that appear as duplicate keys
+  key-duplicates: disable
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+  # Relaxed: ytt overlay files use specific spacing conventions
+  colons:
+    max-spaces-after: -1
+  commas:
+    min-spaces-after: 0
+
+ignore:
+  - node_modules/
+  - .git/
+  - build/
+  - dist/
+  - venv/
+  - .venv/
+  - "**/node_modules/"
+  - "**/_build/"
+  - "*.lock.yml"
+  # Go template YAML files contain {{ }} which breaks YAML parsing
+  - "client-programs/pkg/templates/"

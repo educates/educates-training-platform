@@ -412,6 +412,28 @@ div.magic-code-block-upload {
     background-color: orangered;
 }
 
+/* Required action indicator */
+
+.clickable-action__header {
+    padding-left: 6px;
+}
+
+.clickable-action[data-action-required='true'] .clickable-action__header {
+    border-left: 2px solid #dc3545;
+    padding-left: 4px;
+}
+
+.clickable-action__required {
+    color: #dc3545;
+    font-size: 0.55em;
+    margin-left: 4px;
+    vertical-align: super;
+}
+
+.clickable-action[data-action-result='success'] .clickable-action__required {
+    display: none;
+}
+
 /* Pulse animation for the next clickable action needing attention */
 
 @keyframes action-pulse {
@@ -616,10 +638,28 @@ form.jsonform-hasrequired div.form-group {
 .bottom-bar-continue:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+    pointer-events: auto;
 }
 
 .bottom-bar-continue.enabled {
     opacity: 1;
+}
+
+/* Required-actions badge on Continue/Finish button */
+
+.bottom-bar-continue {
+    position: relative;
+}
+
+.bottom-bar-required-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    font-size: 0.6em;
+    min-width: 18px;
+    padding: 3px 5px;
+    line-height: 1;
+    pointer-events: none;
 }
 
 .bottom-bar-scroll-hint {

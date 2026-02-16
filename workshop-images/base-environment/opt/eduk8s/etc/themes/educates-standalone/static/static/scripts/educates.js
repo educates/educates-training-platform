@@ -1551,37 +1551,42 @@ const educates = (function () {
         // window), so we listen for scroll events on that element.
 
         const bottomBarNext = document.getElementById('bottom-bar-next');
+        let bottomBarNextTooltip = null;
         const scrollProgress = document.getElementById('scroll-progress');
         const mainContent = document.querySelector('.main-content');
 
-        if (mainContent) {
-            function updateScrollProgress() {
-                const scrollTop = mainContent.scrollTop;
-                const scrollHeight = mainContent.scrollHeight - mainContent.clientHeight;
+        function updateScrollProgress() {
+            if (!mainContent) return;
 
-                // Calculate progress as a fraction 0..1. If there's no
-                // scrollable overflow treat as fully scrolled.
+            const scrollTop = mainContent.scrollTop;
+            const scrollHeight = mainContent.scrollHeight - mainContent.clientHeight;
 
-                const progress = scrollHeight > 0
-                    ? Math.min(scrollTop / scrollHeight, 1)
-                    : 1;
+            // Calculate progress as a fraction 0..1. If there's no
+            // scrollable overflow treat as fully scrolled.
 
-                // Update the progress bar fill width.
+            const progress = scrollHeight > 0
+                ? Math.min(scrollTop / scrollHeight, 1)
+                : 1;
 
-                if (scrollProgress) {
-                    scrollProgress.style.width = (progress * 100) + '%';
-                }
+            // Update the progress bar fill width.
 
-                // Enable the Continue/Finish button once the user has
-                // scrolled to at least 90% of the content, or if the
-                // content fits entirely within the viewport.
+            if (scrollProgress) {
+                scrollProgress.style.width = (progress * 100) + '%';
+            }
 
-                if (bottomBarNext && progress >= 0.9) {
+            // Enable the Continue/Finish button once the user has
+            // scrolled to at least 90% of the content, or if the
+            // content fits entirely within the viewport.
+
+            if (bottomBarNext && progress >= 0.9) {
+                if (getIncompleteRequiredCount() === 0) {
                     bottomBarNext.disabled = false;
                     bottomBarNext.classList.add('enabled');
                 }
             }
+        }
 
+        if (mainContent) {
             mainContent.addEventListener('scroll', updateScrollProgress, { passive: true });
 
             // Also save scroll position to sessionStorage on scroll.
@@ -1592,6 +1597,81 @@ const educates = (function () {
             // fit without scrolling.
 
             updateScrollProgress();
+        }
+
+        // Required action tracking: count required actions that have not
+        // yet succeeded and update the Continue/Finish button state
+        // accordingly (lock icon, badge count, tooltip, disabled state).
+
+        function getIncompleteRequiredCount() {
+            const required = document.querySelectorAll(
+                '.clickable-action[data-action-required="true"]:not([hidden]):not([data-content-body])'
+            );
+            let count = 0;
+            required.forEach(function (el) {
+                if (el.dataset.actionResult !== 'success') {
+                    count++;
+                }
+            });
+            return count;
+        }
+
+        function updateRequiredState() {
+            var iconEl = document.getElementById('bottom-bar-next-icon');
+            var badgeEl = document.getElementById('bottom-bar-required-badge');
+            if (!bottomBarNext) return;
+
+            var remaining = getIncompleteRequiredCount();
+
+            // Update badge: show count when > 0, hide when 0.
+
+            if (badgeEl) {
+                if (remaining > 0) {
+                    badgeEl.textContent = remaining;
+                    badgeEl.style.display = '';
+                } else {
+                    badgeEl.style.display = 'none';
+                }
+            }
+
+            // Update icon: fa-lock when blocked, fa-arrow-right when clear.
+
+            if (iconEl) {
+                if (remaining > 0) {
+                    iconEl.classList.remove('fa-arrow-right');
+                    iconEl.classList.add('fa-lock');
+                } else {
+                    iconEl.classList.remove('fa-lock');
+                    iconEl.classList.add('fa-arrow-right');
+                }
+            }
+
+            // Update tooltip: create lazily when needed, dispose when not.
+
+            if (remaining > 0) {
+                var msg = remaining === 1
+                    ? 'Complete the required action to continue'
+                    : 'Complete all ' + remaining + ' required actions to continue';
+                if (!bottomBarNextTooltip) {
+                    bottomBarNextTooltip = new bootstrap.Tooltip(bottomBarNext, {
+                        trigger: 'hover',
+                        placement: 'top',
+                        title: msg
+                    });
+                } else {
+                    bottomBarNextTooltip.setContent({ '.tooltip-inner': msg });
+                }
+            } else if (bottomBarNextTooltip) {
+                bottomBarNextTooltip.dispose();
+                bottomBarNextTooltip = null;
+            }
+
+            // If required actions remain, force button disabled.
+
+            if (remaining > 0) {
+                bottomBarNext.disabled = true;
+                bottomBarNext.classList.remove('enabled');
+            }
         }
 
         // Clickable action pulse hint: visually guide users to the next
@@ -1717,7 +1797,10 @@ const educates = (function () {
         // Run once on page load after a short delay so that any autostart
         // actions have time to set their initial state.
 
-        setTimeout(updateActionPulse, 500);
+        setTimeout(function () {
+            updateActionPulse();
+            updateRequiredState();
+        }, 500);
 
         // Observe data-action-result attribute changes on all clickable
         // actions to move the pulse forward.
@@ -1727,7 +1810,11 @@ const educates = (function () {
             // don't cause flicker.
 
             clearTimeout(actionObserver._debounce);
-            actionObserver._debounce = setTimeout(updateActionPulse, 150);
+            actionObserver._debounce = setTimeout(function () {
+                updateActionPulse();
+                updateRequiredState();
+                updateScrollProgress();
+            }, 150);
         });
 
         document.querySelectorAll('.clickable-action').forEach(el => {

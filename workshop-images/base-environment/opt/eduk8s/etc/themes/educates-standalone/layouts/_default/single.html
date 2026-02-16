@@ -61,12 +61,14 @@
       {{ if $current_module.next_page }}
       <button class="btn btn-primary bottom-bar-continue" id="bottom-bar-next" disabled aria-label="continue"
         onclick="window.location.href='{{ relURL $current_module.next_page }}'">
-        Continue <span class="fas fa-arrow-right" aria-hidden="true"></span>
+        Continue <span class="fas fa-arrow-right" id="bottom-bar-next-icon" aria-hidden="true"></span>
+        <span class="badge rounded-pill bg-danger bottom-bar-required-badge" id="bottom-bar-required-badge" style="display: none;"></span>
       </button>
       {{ else if and $current_module (.Param "restart_url") }}
       <button class="btn btn-primary bottom-bar-continue" id="bottom-bar-next" disabled aria-label="finish"
         onclick="educates.finished_workshop()">
-        Finish Workshop
+        Finish Workshop <span class="fas fa-arrow-right" id="bottom-bar-next-icon" aria-hidden="true"></span>
+        <span class="badge rounded-pill bg-danger bottom-bar-required-badge" id="bottom-bar-required-badge" style="display: none;"></span>
       </button>
       {{ end }}
     </div>

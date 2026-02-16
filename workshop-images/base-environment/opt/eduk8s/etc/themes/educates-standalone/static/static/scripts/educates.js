@@ -601,6 +601,89 @@ const educates = (function () {
         } catch (e) {
             // Degrade silently.
         }
+
+        // Also add the current page to the set of visited pages so the
+        // TOC can show which pages the user has been to.
+
+        const visited_key = `${state_key_prefix}:visited-pages`;
+
+        try {
+            let visited = [];
+
+            const raw = sessionStorage.getItem(visited_key);
+
+            if (raw) {
+                visited = JSON.parse(raw);
+            }
+
+            if (!visited.includes(page_path)) {
+                visited.push(page_path);
+                sessionStorage.setItem(visited_key, JSON.stringify(visited));
+            }
+        } catch (e) {
+            // Degrade silently.
+        }
+    }
+
+    // Activate TOC links for pages the user has already visited. Unvisited
+    // page links are rendered but disabled (pointer-events off, dimmed).
+    // Holding Shift while hovering over an unvisited entry re-enables it.
+
+    function activate_toc_links() {
+        if (!in_dashboard || !state_key_prefix) return;
+
+        let visited = [];
+
+        try {
+            const raw = sessionStorage.getItem(`${state_key_prefix}:visited-pages`);
+
+            if (raw) {
+                visited = JSON.parse(raw);
+            }
+        } catch (e) {
+            return;
+        }
+
+        // Process all TOC entries that are not the active (current) page.
+
+        document.querySelectorAll('#table-of-contents li.page[data-toc-path]:not(.active)').forEach(li => {
+            const path = li.dataset.tocPath;
+            const link = li.querySelector('a.toc-link-unvisited');
+
+            if (!link) return;
+
+            if (visited.includes(path)) {
+                // Page has been visited — enable the link normally.
+
+                link.classList.remove('toc-link-unvisited');
+            } else {
+                // Unvisited page — block clicks unless shift-enabled.
+
+                link.addEventListener('click', function (event) {
+                    if (link.classList.contains('toc-link-unvisited') &&
+                        !link.classList.contains('toc-link-shift-enabled')) {
+                        event.preventDefault();
+                    } else if (link.classList.contains('toc-link-shift-enabled')) {
+                        // Prevent browser's default Shift+click behavior
+                        // (new window in Chrome, download in Safari) and
+                        // navigate within the current frame instead.
+
+                        event.preventDefault();
+                        window.location.href = link.href;
+                    }
+                });
+
+                link.addEventListener('mouseenter', function () {
+                    if (shift_key_pressed) {
+                        link.classList.add('toc-link-shift-enabled');
+                    }
+                });
+
+                link.addEventListener('mouseleave', function () {
+                    link.classList.remove('toc-link-shift-enabled');
+                });
+            }
+        });
     }
 
     // The Editor class provides integration with VSCode/code-server for file
@@ -1362,6 +1445,10 @@ const educates = (function () {
         // a dashboard refresh the home page can offer to resume here.
 
         save_last_visited_page();
+
+        // Activate TOC links for pages already visited.
+
+        activate_toc_links();
 
         // Auto-trigger clickable actions with autostart attribute. Note that
         // any which are contained within the body of a section are excluded

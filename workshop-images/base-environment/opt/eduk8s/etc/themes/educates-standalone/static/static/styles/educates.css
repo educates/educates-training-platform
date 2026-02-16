@@ -232,6 +232,23 @@ button#header-next-page {
     flex-shrink: 0;
 }
 
+/* Unvisited TOC links are dimmed and clicks are blocked by JS.
+   Shift+hover temporarily enables them via the toc-link-shift-enabled class. */
+
+.modules .page a.toc-link-unvisited {
+    opacity: 0.5;
+    cursor: default;
+    color: inherit;
+    text-decoration: none;
+}
+
+.modules .page a.toc-link-unvisited.toc-link-shift-enabled {
+    opacity: 1;
+    cursor: pointer;
+    color: revert;
+    text-decoration: revert;
+}
+
 .page-content h1,
 .page-content h2,
 .page-content h3,

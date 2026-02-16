@@ -626,8 +626,11 @@ const educates = (function () {
     }
 
     // Activate TOC links for pages the user has already visited. Unvisited
-    // page links are rendered but disabled (pointer-events off, dimmed).
-    // Holding Shift while hovering over an unvisited entry re-enables it.
+    // page links are rendered but disabled (dimmed, clicks blocked).
+    // Shift+clicking the step-number badge bypasses the restriction and
+    // navigates to the page. Because the badge is a <span>, not an <a>,
+    // the browser does not intercept Shift+click the way it would for a
+    // link (e.g. open-in-new-window in Chrome).
 
     function activate_toc_links() {
         if (!in_dashboard || !state_key_prefix) return;
@@ -657,31 +660,36 @@ const educates = (function () {
 
                 link.classList.remove('toc-link-unvisited');
             } else {
-                // Unvisited page — block clicks unless shift-enabled.
+                // Unvisited page — block clicks on the link itself.
 
                 link.addEventListener('click', function (event) {
-                    if (link.classList.contains('toc-link-unvisited') &&
-                        !link.classList.contains('toc-link-shift-enabled')) {
+                    if (link.classList.contains('toc-link-unvisited')) {
                         event.preventDefault();
-                    } else if (link.classList.contains('toc-link-shift-enabled')) {
-                        // Prevent browser's default Shift+click behavior
-                        // (new window in Chrome, download in Safari) and
-                        // navigate within the current frame instead.
-
-                        event.preventDefault();
-                        window.location.href = link.href;
                     }
                 });
 
-                link.addEventListener('mouseenter', function () {
-                    if (shift_key_pressed) {
-                        link.classList.add('toc-link-shift-enabled');
-                    }
-                });
+                // Allow Shift+click on the step-number badge to bypass
+                // the restriction and navigate to the unvisited page.
 
-                link.addEventListener('mouseleave', function () {
-                    link.classList.remove('toc-link-shift-enabled');
-                });
+                const step = li.querySelector('.toc-step');
+
+                if (step) {
+                    step.addEventListener('click', function (event) {
+                        if (event.shiftKey && link.classList.contains('toc-link-unvisited')) {
+                            window.location.href = link.href;
+                        }
+                    });
+
+                    step.addEventListener('mouseenter', function () {
+                        if (shift_key_pressed) {
+                            step.classList.add('toc-step-shift');
+                        }
+                    });
+
+                    step.addEventListener('mouseleave', function () {
+                        step.classList.remove('toc-step-shift');
+                    });
+                }
             }
         });
     }

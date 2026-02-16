@@ -233,7 +233,7 @@ button#header-next-page {
 }
 
 /* Unvisited TOC links are dimmed and clicks are blocked by JS.
-   Shift+hover temporarily enables them via the toc-link-shift-enabled class. */
+   Shift+clicking the step-number badge bypasses the restriction. */
 
 .modules .page a.toc-link-unvisited {
     opacity: 0.5;
@@ -242,11 +242,11 @@ button#header-next-page {
     text-decoration: none;
 }
 
-.modules .page a.toc-link-unvisited.toc-link-shift-enabled {
-    opacity: 1;
+/* Visual hint when Shift is held and hovering the step badge. */
+
+.modules .page .toc-step-shift {
     cursor: pointer;
-    color: revert;
-    text-decoration: revert;
+    background-color: #a8d4f0;
 }
 
 .page-content h1,

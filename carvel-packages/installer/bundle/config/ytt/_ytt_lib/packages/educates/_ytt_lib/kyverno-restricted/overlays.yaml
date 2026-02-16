@@ -11,7 +11,7 @@
 #@overlay/match by=overlay.subset({"kind":"ClusterPolicy"}),expects="1+"
 ---
 metadata:
-  #@overlay/replace via=lambda left, right: "{}-restricted-{}".format(data.values.operator.namePrefix, left)
+  #@overlay/replace via=lambda left, right: "educates-restricted-{}".format(left)
   name: null
 
 #@overlay/match by=overlay.subset({"kind":"ClusterPolicy"}),expects="1+"
@@ -26,11 +26,11 @@ spec:
               #@overlay/match missing_ok=True
               namespaceSelector:
                 matchExpressions:
-                  - key: #@ "training.{}/policy.engine".format(data.values.operator.apiGroup)
+                  - key: training.educates.dev/policy.engine
                     operator: In
                     values:
                       - kyverno
-                  - key: #@ "training.{}/policy.name".format(data.values.operator.apiGroup)
+                  - key: training.educates.dev/policy.name
                     operator: In
                     values:
                       - restricted

@@ -4,11 +4,11 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-secrets-manager".format(data.values.operator.namePrefix)
+  name: educates-secrets-manager
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: #@ "{}-secrets-manager".format(data.values.operator.namePrefix)
+  name: educates-secrets-manager
 subjects:
 - kind: ServiceAccount
   name: secrets-manager
@@ -19,11 +19,11 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-secrets-manager-psp".format(data.values.operator.namePrefix)
+  name: educates-secrets-manager-psp
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: #@ "{}-baseline-psp".format(data.values.operator.namePrefix)
+  name: educates-baseline-psp
 subjects:
 - kind: ServiceAccount
   name: secrets-manager
@@ -35,11 +35,11 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-secrets-manager-scc".format(data.values.operator.namePrefix)
+  name: educates-secrets-manager-scc
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: #@ "{}-baseline-scc".format(data.values.operator.namePrefix)
+  name: educates-baseline-scc
 subjects:
 - kind: ServiceAccount
   name: secrets-manager

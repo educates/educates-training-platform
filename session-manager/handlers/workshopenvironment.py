@@ -24,9 +24,6 @@ from .analytics import report_analytics_event
 from .operator_config import (
     resolve_workshop_image,
     PLATFORM_ARCH,
-    OPERATOR_API_GROUP,
-    OPERATOR_STATUS_KEY,
-    OPERATOR_NAME_PREFIX,
     OPERATOR_NAMESPACE,
     IMAGE_REPOSITORY,
     CLUSTER_DOMAIN,
@@ -58,7 +55,7 @@ logger = logging.getLogger("educates.workshopenvironment")
 api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 
-@kopf.index(f"training.{OPERATOR_API_GROUP}", "v1beta1", "workshopenvironments")
+@kopf.index("training.educates.dev", "v1beta1", "workshopenvironments")
 def workshop_environment_index(name, meta, body, **_):
     """Keeps an index of the workshop environments. This is used to allow
     workshop environments to be found when processing a workshop allocation
@@ -74,7 +71,7 @@ def workshop_environment_index(name, meta, body, **_):
 
 
 @kopf.on.resume(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "workshopenvironments",
 )
@@ -89,7 +86,7 @@ def workshop_environment_resume(name, **_):
 
 
 @kopf.on.create(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "workshopenvironments",
 )
@@ -131,10 +128,10 @@ def workshop_environment_create(
     # workshop environment is created as a child to a training portal.
 
     portal_name = meta.get("labels", {}).get(
-        f"training.{OPERATOR_API_GROUP}/portal.name", ""
+        "training.educates.dev/portal.name", ""
     )
     portal_uid = meta.get("labels", {}).get(
-        f"training.{OPERATOR_API_GROUP}/portal.uid", ""
+        "training.educates.dev/portal.uid", ""
     )
 
     # The name of the workshop to be deployed can differ and is taken from the
@@ -152,7 +149,7 @@ def workshop_environment_create(
     except pykube.exceptions.ObjectDoesNotExist as exc:
         if runtime.total_seconds() >= 300:
             patch["status"] = {
-                OPERATOR_STATUS_KEY: {
+                "educates": {
                     "phase": "Failed",
                     "message": f"Workshop {workshop_name} is not available.",
                 }
@@ -175,7 +172,7 @@ def workshop_environment_create(
 
         else:
             patch["status"] = {
-                OPERATOR_STATUS_KEY: {
+                "educates": {
                     "phase": "Pending",
                     "message": f"Workshop {workshop_name} is not available.",
                 }
@@ -261,7 +258,7 @@ def workshop_environment_create(
         )
 
         patch["status"] = {
-            OPERATOR_STATUS_KEY: {
+            "educates": {
                 "phase": "Unknown",
                 "message": f"Unexpected error querying namespace {workshop_namespace}.",
             }
@@ -294,7 +291,7 @@ def workshop_environment_create(
 
             if runtime.total_seconds() >= 300:
                 patch["status"] = {
-                    OPERATOR_STATUS_KEY: {
+                    "educates": {
                         "phase": "Failed",
                         "message": f"Namespace {workshop_namespace} already exists.",
                     }
@@ -317,7 +314,7 @@ def workshop_environment_create(
 
             else:
                 patch["status"] = {
-                    OPERATOR_STATUS_KEY: {
+                    "educates": {
                         "phase": "Pending",
                         "message": f"Namespace {workshop_namespace} already exists.",
                     }
@@ -344,12 +341,12 @@ def workshop_environment_create(
             # previously had an error and want to retry. In this case we will
             # delete the namespace and flag a transient error again.
 
-            phase = xget(status, f"{OPERATOR_STATUS_KEY}.phase")
+            phase = xget(status, "educates.phase")
 
             if phase == "Retrying":
                 if runtime.total_seconds() >= 300:
                     patch["status"] = {
-                        OPERATOR_STATUS_KEY: {
+                        "educates": {
                             "phase": "Failed",
                             "message": f"Unable to setup workshop environment {environment_name}.",
                         }
@@ -382,7 +379,7 @@ def workshop_environment_create(
                         )
 
                         patch["status"] = {
-                            OPERATOR_STATUS_KEY: {
+                            "educates": {
                                 "phase": "Retrying",
                                 "message": f"Failed to delete namespace {workshop_namespace}.",
                             }
@@ -405,7 +402,7 @@ def workshop_environment_create(
                         ) from exc
 
                     patch["status"] = {
-                        OPERATOR_STATUS_KEY: {
+                        "educates": {
                             "phase": "Retrying",
                             "message": f"Deleting namespace {workshop_namespace} and retrying.",
                         }
@@ -429,7 +426,7 @@ def workshop_environment_create(
 
             else:
                 patch["status"] = {
-                    OPERATOR_STATUS_KEY: {
+                    "educates": {
                         "phase": "Unknown",
                         "message": f"Workshop environment {environment_name} in unexpected state {phase}.",
                     }
@@ -466,14 +463,14 @@ def workshop_environment_create(
         "metadata": {
             "name": workshop_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "environment",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/policy.engine": CLUSTER_SECURITY_POLICY_ENGINE,
-                f"training.{OPERATOR_API_GROUP}/policy.name": "privileged",
+                "training.educates.dev/component": "environment",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/policy.engine": CLUSTER_SECURITY_POLICY_ENGINE,
+                "training.educates.dev/policy.name": "privileged",
             },
             "annotations": {"secretgen.carvel.dev/excluded-from-wildcard-matching": ""},
         },
@@ -499,7 +496,7 @@ def workshop_environment_create(
         )
 
         patch["status"] = {
-            OPERATOR_STATUS_KEY: {
+            "educates": {
                 "phase": "Retrying",
                 "message": f"Failed to create namespace {workshop_namespace}.",
             }
@@ -516,7 +513,7 @@ def workshop_environment_create(
     # keep retrying when there is an unexpected error, we can avoid having to
     # explicitly catch and raise a temporary error at every point beyond here.
 
-    patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Retrying"}}
+    patch["status"] = {"educates": {"phase": "Retrying"}}
 
     # Apply security policies to whole namespace if enabled. We need to set the
     # whole namespace as requiring privilged as we need to run docker in docker
@@ -527,21 +524,21 @@ def workshop_environment_create(
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "RoleBinding",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-security-policy",
+                "name": "educates-security-policy",
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": f"{OPERATOR_NAME_PREFIX}-privileged-psp",
+                "name": "educates-privileged-psp",
             },
             "subjects": [
                 {
@@ -561,21 +558,21 @@ def workshop_environment_create(
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "RoleBinding",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-security-policy",
+                "name": "educates-security-policy",
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": f"{OPERATOR_NAME_PREFIX}-privileged-scc",
+                "name": "educates-privileged-scc",
             },
             "subjects": [
                 {
@@ -627,15 +624,15 @@ def workshop_environment_create(
             "apiVersion": "networking.k8s.io/v1",
             "kind": "NetworkPolicy",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-network-policy",
+                "name": "educates-network-policy",
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "spec": {
@@ -706,12 +703,12 @@ def workshop_environment_create(
             "name": "workshop-config",
             "namespace": workshop_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "environment",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                "training.educates.dev/component": "environment",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
             },
         },
         "data": {
@@ -859,14 +856,14 @@ def workshop_environment_create(
         "apiVersion": "rbac.authorization.k8s.io/v1",
         "kind": "ClusterRole",
         "metadata": {
-            "name": f"{OPERATOR_NAME_PREFIX}-web-console-{workshop_namespace}",
+            "name": f"educates-web-console-{workshop_namespace}",
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "environment",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                "training.educates.dev/component": "environment",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
             },
         },
         "rules": [
@@ -886,17 +883,17 @@ def workshop_environment_create(
 
     if INGRESS_SECRET:
         secret_copier_body = {
-            "apiVersion": f"secrets.{OPERATOR_API_GROUP}/v1beta1",
+            "apiVersion": "secrets.educates.dev/v1beta1",
             "kind": "SecretCopier",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-ingress-secret-{workshop_namespace}",
+                "name": f"educates-ingress-secret-{workshop_namespace}",
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "spec": {
@@ -939,17 +936,17 @@ def workshop_environment_create(
         secrets = workshop_spec["environment"]["secrets"]
 
         secret_copier_body = {
-            "apiVersion": f"secrets.{OPERATOR_API_GROUP}/v1beta1",
+            "apiVersion": "secrets.educates.dev/v1beta1",
             "kind": "SecretCopier",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-workshop-secrets-{workshop_namespace}",
+                "name": f"educates-workshop-secrets-{workshop_namespace}",
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "spec": {
@@ -986,17 +983,17 @@ def workshop_environment_create(
         secrets = spec["environment"]["secrets"]
 
         secret_copier_body = {
-            "apiVersion": f"secrets.{OPERATOR_API_GROUP}/v1beta1",
+            "apiVersion": "secrets.educates.dev/v1beta1",
             "kind": "SecretCopier",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-environment-secrets-{workshop_namespace}",
+                "name": f"educates-environment-secrets-{workshop_namespace}",
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "spec": {
@@ -1035,17 +1032,17 @@ def workshop_environment_create(
     theme_name = xget(spec, "theme.name", "default-website-theme")
 
     theme_secret_copier_body = {
-        "apiVersion": f"secrets.{OPERATOR_API_GROUP}/v1beta1",
+        "apiVersion": "secrets.educates.dev/v1beta1",
         "kind": "SecretCopier",
         "metadata": {
-            "name": f"{OPERATOR_NAME_PREFIX}-website-theme-{workshop_namespace}",
+            "name": f"educates-website-theme-{workshop_namespace}",
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "environment",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                "training.educates.dev/component": "environment",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
             },
         },
         "spec": {
@@ -1080,7 +1077,7 @@ def workshop_environment_create(
         image_repository=image_repository,
         oci_image_cache=oci_image_cache,
         assets_repository=assets_repository,
-        service_account=f"{OPERATOR_NAME_PREFIX}-services",
+        service_account="educates-services",
         workshop_name=workshop_name,
         workshop_version=workshop_version,
         workshop_image=workshop_image,
@@ -1115,15 +1112,15 @@ def workshop_environment_create(
         "apiVersion": "v1",
         "kind": "ServiceAccount",
         "metadata": {
-            "name": f"{OPERATOR_NAME_PREFIX}-services",
+            "name": "educates-services",
             "namespace": workshop_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "environment",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                "training.educates.dev/component": "environment",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
             },
         },
     }
@@ -1155,12 +1152,12 @@ def workshop_environment_create(
                     "namespace": workshop_namespace,
                     "name": f"{workshop_namespace}-mirror",
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "environment",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                        "training.educates.dev/component": "environment",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
                     },
                 },
                 "spec": {
@@ -1184,13 +1181,13 @@ def workshop_environment_create(
                     "namespace": workshop_namespace,
                     "name": f"{workshop_namespace}-mirror",
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "environment",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.services.mirror": "true",
+                        "training.educates.dev/component": "environment",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
+                        "training.educates.dev/environment.services.mirror": "true",
                     },
                 },
                 "spec": {
@@ -1203,17 +1200,17 @@ def workshop_environment_create(
                         "metadata": {
                             "labels": {
                                 "deployment": f"{workshop_namespace}-mirror",
-                                f"training.{OPERATOR_API_GROUP}/component": "environment",
-                                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                                f"training.{OPERATOR_API_GROUP}/environment.services.mirror": "true",
+                                "training.educates.dev/component": "environment",
+                                "training.educates.dev/workshop.name": workshop_name,
+                                "training.educates.dev/portal.name": portal_name,
+                                "training.educates.dev/portal.uid": portal_uid,
+                                "training.educates.dev/environment.name": environment_name,
+                                "training.educates.dev/environment.uid": environment_uid,
+                                "training.educates.dev/environment.services.mirror": "true",
                             },
                         },
                         "spec": {
-                            "serviceAccountName": f"{OPERATOR_NAME_PREFIX}-services",
+                            "serviceAccountName": "educates-services",
                             "initContainers": [],
                             "containers": [
                                 {
@@ -1315,12 +1312,12 @@ def workshop_environment_create(
                     "namespace": workshop_namespace,
                     "name": f"{workshop_namespace}-mirror",
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "environment",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                        "training.educates.dev/component": "environment",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
                     },
                 },
                 "spec": {
@@ -1371,13 +1368,13 @@ def workshop_environment_create(
                 "namespace": workshop_namespace,
                 "name": "image-cache",
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.services.images": "true",
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/environment.services.images": "true",
                 },
             },
             "spec": {
@@ -1388,17 +1385,17 @@ def workshop_environment_create(
                     "metadata": {
                         "labels": {
                             "deployment": "image-cache",
-                            f"training.{OPERATOR_API_GROUP}/component": "environment",
-                            f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                            f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                            f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                            f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                            f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                            f"training.{OPERATOR_API_GROUP}/environment.services.images": "true",
+                            "training.educates.dev/component": "environment",
+                            "training.educates.dev/workshop.name": workshop_name,
+                            "training.educates.dev/portal.name": portal_name,
+                            "training.educates.dev/portal.uid": portal_uid,
+                            "training.educates.dev/environment.name": environment_name,
+                            "training.educates.dev/environment.uid": environment_uid,
+                            "training.educates.dev/environment.services.images": "true",
                         },
                     },
                     "spec": {
-                        "serviceAccountName": f"{OPERATOR_NAME_PREFIX}-services",
+                        "serviceAccountName": "educates-services",
                         "containers": [
                             {
                                 "name": "image-cache",
@@ -1452,12 +1449,12 @@ def workshop_environment_create(
                     "namespace": workshop_namespace,
                     "name": "image-cache",
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "environment",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                        "training.educates.dev/component": "environment",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
                     },
                 },
                 "spec": {
@@ -1526,12 +1523,12 @@ def workshop_environment_create(
                 "namespace": workshop_namespace,
                 "name": "image-cache",
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "spec": {
@@ -1571,12 +1568,12 @@ def workshop_environment_create(
                 "name": "image-cache",
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "data": {"config.yaml": yaml.dump(artifacts_config, Dumper=yaml.Dumper)},
@@ -1601,12 +1598,12 @@ def workshop_environment_create(
                     "namespace": workshop_namespace,
                     "annotations": {},
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "session",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                        "training.educates.dev/component": "session",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
                     },
                 },
                 "spec": {
@@ -1683,13 +1680,13 @@ def workshop_environment_create(
                 "namespace": workshop_namespace,
                 "name": "assets-server",
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.services.assets": "true",
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/environment.services.assets": "true",
                 },
             },
             "spec": {
@@ -1700,17 +1697,17 @@ def workshop_environment_create(
                     "metadata": {
                         "labels": {
                             "deployment": "assets-server",
-                            f"training.{OPERATOR_API_GROUP}/component": "environment",
-                            f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                            f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                            f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                            f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                            f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                            f"training.{OPERATOR_API_GROUP}/environment.services.assets": "true",
+                            "training.educates.dev/component": "environment",
+                            "training.educates.dev/workshop.name": workshop_name,
+                            "training.educates.dev/portal.name": portal_name,
+                            "training.educates.dev/portal.uid": portal_uid,
+                            "training.educates.dev/environment.name": environment_name,
+                            "training.educates.dev/environment.uid": environment_uid,
+                            "training.educates.dev/environment.services.assets": "true",
                         },
                     },
                     "spec": {
-                        "serviceAccountName": f"{OPERATOR_NAME_PREFIX}-services",
+                        "serviceAccountName": "educates-services",
                         "initContainers": [
                             {
                                 "name": "download-assets",
@@ -1785,12 +1782,12 @@ def workshop_environment_create(
                     "namespace": workshop_namespace,
                     "name": "assets-server",
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "environment",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                        "training.educates.dev/component": "environment",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
                     },
                 },
                 "spec": {
@@ -1859,12 +1856,12 @@ def workshop_environment_create(
                 "namespace": workshop_namespace,
                 "name": "assets-server",
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "spec": {
@@ -1881,12 +1878,12 @@ def workshop_environment_create(
                 "name": "assets-server",
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "data": {},
@@ -1942,12 +1939,12 @@ def workshop_environment_create(
                     "namespace": workshop_namespace,
                     "annotations": {},
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "session",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                        "training.educates.dev/component": "session",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
                     },
                 },
                 "spec": {
@@ -2021,12 +2018,12 @@ def workshop_environment_create(
                 "name": "tunnel-manager",
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
         }
@@ -2035,20 +2032,20 @@ def workshop_environment_create(
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "ClusterRoleBinding",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-tunnel-manager-{workshop_namespace}",
+                "name": f"educates-tunnel-manager-{workshop_namespace}",
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": f"{OPERATOR_NAME_PREFIX}-tunnel-manager",
+                "name": "educates-tunnel-manager",
             },
             "subjects": [
                 {
@@ -2066,12 +2063,12 @@ def workshop_environment_create(
                 "namespace": workshop_namespace,
                 "name": "tunnel-manager",
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "spec": {
@@ -2082,12 +2079,12 @@ def workshop_environment_create(
                     "metadata": {
                         "labels": {
                             "deployment": "tunnel-manager",
-                            f"training.{OPERATOR_API_GROUP}/component": "environment",
-                            f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                            f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                            f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                            f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                            f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                            "training.educates.dev/component": "environment",
+                            "training.educates.dev/workshop.name": workshop_name,
+                            "training.educates.dev/portal.name": portal_name,
+                            "training.educates.dev/portal.uid": portal_uid,
+                            "training.educates.dev/environment.name": environment_name,
+                            "training.educates.dev/environment.uid": environment_uid,
                         },
                     },
                     "spec": {
@@ -2134,12 +2131,12 @@ def workshop_environment_create(
                 "namespace": workshop_namespace,
                 "name": "tunnel-manager",
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "environment",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
+                    "training.educates.dev/component": "environment",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
                 },
             },
             "spec": {
@@ -2217,13 +2214,13 @@ def workshop_environment_create(
 
         object_body["metadata"].setdefault("labels", {}).update(
             {
-                f"training.{OPERATOR_API_GROUP}/component": "environment",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.objects": "true",
+                "training.educates.dev/component": "environment",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/environment.objects": "true",
             }
         )
 
@@ -2274,7 +2271,7 @@ def workshop_environment_create(
             )
 
             patch["status"] = {
-                OPERATOR_STATUS_KEY: {
+                "educates": {
                     "phase": "Failed",
                     "message": f"Unable to create workshop environment objects, failed creating object {object_name} of type {object_type} in namespace {object_namespace} for workshop environment {environment_name}.",
                 }
@@ -2304,7 +2301,7 @@ def workshop_environment_create(
 
     patch["status"] = {}
 
-    patch["status"][OPERATOR_STATUS_KEY] = {
+    patch["status"]["educates"] = {
         "phase": "Running",
         "message": None,
         "namespace": workshop_namespace,
@@ -2318,7 +2315,7 @@ def workshop_environment_create(
 
 
 @kopf.on.delete(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "workshopenvironments",
     optional=True,
@@ -2333,7 +2330,7 @@ def workshop_environment_delete(**_):
     # environment is deleted.
 
 
-@kopf.on.event(f"training.{OPERATOR_API_GROUP}", "v1beta1", "workshopenvironments")
+@kopf.on.event("training.educates.dev", "v1beta1", "workshopenvironments")
 def workshop_environment_event(type, event, **_):  # pylint: disable=redefined-builtin
     """Log when a workshop environment is deleted."""
 

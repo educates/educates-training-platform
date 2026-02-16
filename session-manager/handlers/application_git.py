@@ -2,7 +2,7 @@ import random
 import string
 import base64
 
-from .operator_config import OPERATOR_API_GROUP, INGRESS_DOMAIN, INGRESS_PROTOCOL
+from .operator_config import INGRESS_DOMAIN, INGRESS_PROTOCOL
 from .helpers import substitute_variables
 
 

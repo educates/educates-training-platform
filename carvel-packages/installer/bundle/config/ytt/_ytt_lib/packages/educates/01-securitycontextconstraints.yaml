@@ -5,7 +5,7 @@
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
 metadata:
-  name: #@ "{}-privileged".format(data.values.operator.namePrefix)
+  name: educates-privileged
 allowHostDirVolumePlugin: true
 allowHostIPC: true
 allowHostNetwork: true
@@ -40,7 +40,7 @@ volumes:
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
 metadata:
-  name: #@ "{}-baseline".format(data.values.operator.namePrefix)
+  name: educates-baseline
 allowHostDirVolumePlugin: false
 allowHostIPC: false
 allowHostNetwork: false
@@ -78,7 +78,7 @@ volumes:
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
 metadata:
-  name: #@ "{}-restricted".format(data.values.operator.namePrefix)
+  name: educates-restricted
 allowHostDirVolumePlugin: false
 allowHostIPC: false
 allowHostNetwork: false

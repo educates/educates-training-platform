@@ -65,17 +65,17 @@ def create_request_resources(session):
             "name": f"{session.name}-user",
             "namespace": session.environment.name,
             "labels": {
-                f"training.{settings.OPERATOR_API_GROUP}/component": "request",
-                f"training.{settings.OPERATOR_API_GROUP}/component.group": "variables",
-                f"training.{settings.OPERATOR_API_GROUP}/workshop.name": session.environment.workshop.name,
-                f"training.{settings.OPERATOR_API_GROUP}/portal.name": settings.PORTAL_NAME,
-                f"training.{settings.OPERATOR_API_GROUP}/portal.uid": settings.PORTAL_UID,
-                f"training.{settings.OPERATOR_API_GROUP}/environment.name": session.environment.name,
-                f"training.{settings.OPERATOR_API_GROUP}/session.name": session.name,
+                "training.educates.dev/component": "request",
+                "training.educates.dev/component.group": "variables",
+                "training.educates.dev/workshop.name": session.environment.workshop.name,
+                "training.educates.dev/portal.name": settings.PORTAL_NAME,
+                "training.educates.dev/portal.uid": settings.PORTAL_UID,
+                "training.educates.dev/environment.name": session.environment.name,
+                "training.educates.dev/session.name": session.name,
             },
             "ownerReferences": [
                 {
-                    "apiVersion": f"training.{settings.OPERATOR_API_GROUP}/v1beta1",
+                    "apiVersion": "training.educates.dev/v1beta1",
                     "kind": "WorkshopSession",
                     "blockOwnerDeletion": True,
                     "controller": True,
@@ -106,17 +106,17 @@ def create_request_resources(session):
             "name": f"{session.name}-request",
             "namespace": session.environment.name,
             "labels": {
-                f"training.{settings.OPERATOR_API_GROUP}/component": "request",
-                f"training.{settings.OPERATOR_API_GROUP}/component.group": "variables",
-                f"training.{settings.OPERATOR_API_GROUP}/workshop.name": session.environment.workshop.name,
-                f"training.{settings.OPERATOR_API_GROUP}/portal.name": settings.PORTAL_NAME,
-                f"training.{settings.OPERATOR_API_GROUP}/portal.uid": settings.PORTAL_UID,
-                f"training.{settings.OPERATOR_API_GROUP}/environment.name": session.environment.name,
-                f"training.{settings.OPERATOR_API_GROUP}/session.name": session.name,
+                "training.educates.dev/component": "request",
+                "training.educates.dev/component.group": "variables",
+                "training.educates.dev/workshop.name": session.environment.workshop.name,
+                "training.educates.dev/portal.name": settings.PORTAL_NAME,
+                "training.educates.dev/portal.uid": settings.PORTAL_UID,
+                "training.educates.dev/environment.name": session.environment.name,
+                "training.educates.dev/session.name": session.name,
             },
             "ownerReferences": [
                 {
-                    "apiVersion": f"training.{settings.OPERATOR_API_GROUP}/v1beta1",
+                    "apiVersion": "training.educates.dev/v1beta1",
                     "kind": "WorkshopSession",
                     "blockOwnerDeletion": True,
                     "controller": True,
@@ -136,26 +136,26 @@ def create_request_resources(session):
     pykube.Secret(api, secret_body).create()
 
     K8SWorkshopAllocation = pykube.object_factory(
-        api, f"training.{settings.OPERATOR_API_GROUP}/v1beta1", "WorkshopAllocation"
+        api, "training.educates.dev/v1beta1", "WorkshopAllocation"
     )
 
     allocation_body = {
-        "apiVersion": f"training.{settings.OPERATOR_API_GROUP}/v1beta1",
+        "apiVersion": "training.educates.dev/v1beta1",
         "kind": "WorkshopAllocation",
         "metadata": {
             "name": f"{session.name}",
             "labels": {
-                f"training.{settings.OPERATOR_API_GROUP}/component": "request",
-                f"training.{settings.OPERATOR_API_GROUP}/workshop.name": session.environment.workshop.name,
-                f"training.{settings.OPERATOR_API_GROUP}/portal.name": settings.PORTAL_NAME,
-                f"training.{settings.OPERATOR_API_GROUP}/portal.uid": settings.PORTAL_UID,
-                f"training.{settings.OPERATOR_API_GROUP}/environment.name": session.environment.name,
-                f"training.{settings.OPERATOR_API_GROUP}/environment.uid": session.environment.uid,
-                f"training.{settings.OPERATOR_API_GROUP}/session.name": session.name,
+                "training.educates.dev/component": "request",
+                "training.educates.dev/workshop.name": session.environment.workshop.name,
+                "training.educates.dev/portal.name": settings.PORTAL_NAME,
+                "training.educates.dev/portal.uid": settings.PORTAL_UID,
+                "training.educates.dev/environment.name": session.environment.name,
+                "training.educates.dev/environment.uid": session.environment.uid,
+                "training.educates.dev/session.name": session.name,
             },
             "ownerReferences": [
                 {
-                    "apiVersion": f"training.{settings.OPERATOR_API_GROUP}/v1beta1",
+                    "apiVersion": "training.educates.dev/v1beta1",
                     "kind": "WorkshopSession",
                     "blockOwnerDeletion": True,
                     "controller": True,
@@ -186,7 +186,7 @@ def update_session_status(name, phase, user=None):
 
     try:
         K8SWorkshopSession = pykube.object_factory(
-            api, f"training.{settings.OPERATOR_API_GROUP}/v1beta1", "WorkshopSession"
+            api, "training.educates.dev/v1beta1", "WorkshopSession"
         )
 
         resource = K8SWorkshopSession.objects(api).get(name=name)
@@ -196,7 +196,7 @@ def update_session_status(name, phase, user=None):
         # sees associated with a training portal.
 
         status = resource.obj.setdefault("status", {}).setdefault(
-            settings.OPERATOR_STATUS_KEY, {}
+            "educates", {}
         )
 
         status["phase"] = phase
@@ -268,19 +268,19 @@ def create_workshop_session(session, secret):
     config_password = "".join(random.sample(characters, 32))
 
     session_body = {
-        "apiVersion": f"training.{settings.OPERATOR_API_GROUP}/v1beta1",
+        "apiVersion": "training.educates.dev/v1beta1",
         "kind": "WorkshopSession",
         "metadata": {
             "name": session.name,
             "labels": {
-                f"training.{settings.OPERATOR_API_GROUP}/portal.name": settings.PORTAL_NAME,
-                f"training.{settings.OPERATOR_API_GROUP}/portal.uid": settings.PORTAL_UID,
-                f"training.{settings.OPERATOR_API_GROUP}/environment.name": session.environment.name,
-                f"training.{settings.OPERATOR_API_GROUP}/environment.uid": session.environment.uid,
+                "training.educates.dev/portal.name": settings.PORTAL_NAME,
+                "training.educates.dev/portal.uid": settings.PORTAL_UID,
+                "training.educates.dev/environment.name": session.environment.name,
+                "training.educates.dev/environment.uid": session.environment.uid,
             },
             "ownerReferences": [
                 {
-                    "apiVersion": f"training.{settings.OPERATOR_API_GROUP}/v1beta1",
+                    "apiVersion": "training.educates.dev/v1beta1",
                     "kind": "WorkshopEnvironment",
                     "blockOwnerDeletion": True,
                     "controller": True,
@@ -335,7 +335,7 @@ def create_workshop_session(session, secret):
     # Create the Kubernetes resource for the workshop session.
 
     K8SWorkshopSession = pykube.object_factory(
-        api, f"training.{settings.OPERATOR_API_GROUP}/v1beta1", "WorkshopSession"
+        api, "training.educates.dev/v1beta1", "WorkshopSession"
     )
 
     resource = K8SWorkshopSession(api, session_body)

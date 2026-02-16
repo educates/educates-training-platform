@@ -6,8 +6,6 @@ import pykube
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 
-from .operator_config import OPERATOR_API_GROUP, OPERATOR_STATUS_KEY
-
 api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 _polling_interval = 60
@@ -18,8 +16,8 @@ logger = logging.getLogger("educates")
 
 def get_overdue_terminating_namespaces(timeout=_resource_timeout):
     label_set = [
-        f"training.{OPERATOR_API_GROUP}/component",
-        f"training.{OPERATOR_API_GROUP}/portal.name",
+        "training.educates.dev/component",
+        "training.educates.dev/portal.name",
     ]
 
     selector = ",".join(label_set)

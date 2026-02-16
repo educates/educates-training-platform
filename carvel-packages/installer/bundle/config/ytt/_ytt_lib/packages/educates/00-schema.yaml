@@ -12,9 +12,6 @@ version: "latest"
 
 operator:
   namespace: "educates"
-  apiGroup: "educates.dev"
-  statusKey: "educates"
-  namePrefix: "educates"
 
 #! Settings for customizing session manager permissions. By default, the session
 #! manager is granted cluster-admin to allow workshops to make use of any

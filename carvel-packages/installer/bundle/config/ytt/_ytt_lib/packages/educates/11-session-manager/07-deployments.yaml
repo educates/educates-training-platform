@@ -64,7 +64,7 @@ spec:
       volumes:
       - name: config
         secret:
-          secretName: #@ "{}-config".format(data.values.operator.namePrefix)
+          secretName: educates-config
       - name: token
         secret:
           secretName: session-manager-token

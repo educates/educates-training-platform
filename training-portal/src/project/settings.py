@@ -185,11 +185,6 @@ AMPLITUDE_TRACKING_ID = os.environ.get("AMPLITUDE_TRACKING_ID", "")
 
 ANALYTICS_WEBHOOK_URL = os.environ.get("ANALYTICS_WEBHOOK_URL", "")
 
-OPERATOR_API_GROUP = os.environ.get("OPERATOR_API_GROUP", "educates.dev")
-
-OPERATOR_STATUS_KEY = os.environ.get("OPERATOR_STATUS_KEY", "educates")
-OPERATOR_NAME_PREFIX = os.environ.get("OPERATOR_NAME_PREFIX", "educates")
-
 INGRESS_DOMAIN = os.environ.get("INGRESS_DOMAIN", "127-0-0-1.nip.io")
 INGRESS_CLASS = os.environ.get("INGRESS_CLASS", "")
 INGRESS_PROTOCOL = os.environ.get("INGRESS_PROTOCOL", "http")

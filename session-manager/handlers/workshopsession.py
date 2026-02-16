@@ -30,8 +30,7 @@ from .operator_config import (AMPLITUDE_TRACKING_ID, BASE_ENVIRONMENT_IMAGE,
                               IMAGE_REPOSITORY, INGRESS_CA_SECRET,
                               INGRESS_CLASS, INGRESS_DOMAIN, INGRESS_PROTOCOL,
                               INGRESS_SECRET, NETWORK_BLOCKCIDRS,
-                              OPERATOR_API_GROUP, OPERATOR_NAME_PREFIX,
-                              OPERATOR_STATUS_KEY, PLATFORM_ARCH,
+                              PLATFORM_ARCH,
                               RUNTIME_CLASS, SESSION_COOKIE_DOMAIN,
                               resolve_workshop_image)
 
@@ -42,7 +41,7 @@ logger = logging.getLogger("educates.workshopsession")
 api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 
-@kopf.index(f"training.{OPERATOR_API_GROUP}", "v1beta1", "workshopsessions")
+@kopf.index("training.educates.dev", "v1beta1", "workshopsessions")
 def workshop_session_index(name, meta, body, **_):
     """Keeps an index of the workshop session. This is used to allow
     workshop sessions to be found when processing a workshop allocation
@@ -58,7 +57,7 @@ def workshop_session_index(name, meta, body, **_):
 
 
 @kopf.on.resume(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "workshopsessions",
 )
@@ -176,16 +175,16 @@ def _setup_session_namespace(
             "apiVersion": "networking.k8s.io/v1",
             "kind": "NetworkPolicy",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-network-policy",
+                "name": "educates-network-policy",
                 "namespace": target_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
             },
             "spec": {
@@ -236,9 +235,9 @@ def _setup_session_namespace(
     # be set up so you can define your own, then can set "custom".
 
     role_mappings = {
-        "admin": f"{OPERATOR_NAME_PREFIX}-admin-session-role",
-        "edit": f"{OPERATOR_NAME_PREFIX}-edit-session-role",
-        "view": f"{OPERATOR_NAME_PREFIX}-view-session-role",
+        "admin": "educates-admin-session-role",
+        "edit": "educates-edit-session-role",
+        "view": "educates-view-session-role",
         "cluster-admin": "cluster-admin",
         "custom": None,
     }
@@ -246,23 +245,23 @@ def _setup_session_namespace(
     role_resource_name = role_mappings.get(role)
 
     if role_resource_name is None and role != "custom":
-        role_resource_name = f"{OPERATOR_NAME_PREFIX}-view-session-role"
+        role_resource_name = "educates-view-session-role"
 
     if role_resource_name is not None:
         role_binding_body = {
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "RoleBinding",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-session-role",
+                "name": "educates-session-role",
                 "namespace": target_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
             },
             "roleRef": {
@@ -289,22 +288,22 @@ def _setup_session_namespace(
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "RoleBinding",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-security-policy",
+                "name": "educates-security-policy",
                 "namespace": target_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
             },
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": f"{OPERATOR_NAME_PREFIX}-{security_policy}-psp",
+                "name": f"educates-{security_policy}-psp",
             },
             "subjects": [
                 {
@@ -322,22 +321,22 @@ def _setup_session_namespace(
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "RoleBinding",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-security-policy",
+                "name": "educates-security-policy",
                 "namespace": target_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
             },
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": f"{OPERATOR_NAME_PREFIX}-{security_policy}-scc",
+                "name": f"educates-{security_policy}-scc",
             },
             "subjects": [
                 {
@@ -371,13 +370,13 @@ def _setup_session_namespace(
                 "name": registry_secret,
                 "namespace": target_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
             },
             "type": "kubernetes.io/dockerconfigjson",
@@ -394,13 +393,13 @@ def _setup_session_namespace(
 
         resource_limits_body["metadata"].setdefault("labels", {}).update(
             {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
             }
         )
 
@@ -416,13 +415,13 @@ def _setup_session_namespace(
 
         resource_quota_body["metadata"].setdefault("labels", {}).update(
             {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
             }
         )
 
@@ -434,13 +433,13 @@ def _setup_session_namespace(
 
         resource_quota_body["metadata"].setdefault("labels", {}).update(
             {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
             }
         )
 
@@ -452,13 +451,13 @@ def _setup_session_namespace(
 
         resource_quota_body["metadata"].setdefault("labels", {}).update(
             {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
             }
         )
 
@@ -490,7 +489,7 @@ def _setup_session_namespace(
 
 
 @kopf.on.create(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "workshopsessions",
 )
@@ -517,7 +516,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     # errors occurring after the session namespace has been created we will set
     # a Failed status instead.
 
-    patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+    patch["status"] = {"educates": {"phase": "Pending"}}
 
     # The namespace created for the session is the name of the workshop
     # namespace suffixed by the session ID. By convention this should be
@@ -538,7 +537,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         )
 
     except pykube.exceptions.ObjectDoesNotExist as exc:
-        patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+        patch["status"] = {"educates": {"phase": "Pending"}}
         raise kopf.TemporaryError(
             f"Environment {workshop_namespace} does not exist."
         ) from exc
@@ -553,10 +552,10 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     # portal.
 
     portal_name = meta.get("labels", {}).get(
-        f"training.{OPERATOR_API_GROUP}/portal.name", ""
+        "training.educates.dev/portal.name", ""
     )
     portal_uid = meta.get("labels", {}).get(
-        f"training.{OPERATOR_API_GROUP}/portal.uid", ""
+        "training.educates.dev/portal.uid", ""
     )
 
     # We pull details of the workshop to be deployed from the status of the
@@ -566,14 +565,14 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
 
     if not environment_instance.obj.get("status") or not environment_instance.obj[
         "status"
-    ].get(OPERATOR_STATUS_KEY):
-        patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+    ].get("educates"):
+        patch["status"] = {"educates": {"phase": "Pending"}}
         raise kopf.TemporaryError(f"Environment {workshop_namespace} is not ready.")
 
-    workshop_name = environment_instance.obj["status"][OPERATOR_STATUS_KEY]["workshop"][
+    workshop_name = environment_instance.obj["status"]["educates"]["workshop"][
         "name"
     ]
-    workshop_spec = environment_instance.obj["status"][OPERATOR_STATUS_KEY]["workshop"][
+    workshop_spec = environment_instance.obj["status"]["educates"]["workshop"][
         "spec"
     ]
 
@@ -645,7 +644,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             .strip()
         )
 
-        registry_secret = f"{OPERATOR_NAME_PREFIX}-registry-credentials"
+        registry_secret = "educates-registry-credentials"
 
         applications.properties("registry")["host"] = registry_host
         applications.properties("registry")["username"] = registry_username
@@ -683,7 +682,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             )
 
         except pykube.exceptions.ObjectDoesNotExist as exc:
-            patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+            patch["status"] = {"educates": {"phase": "Pending"}}
             raise kopf.TemporaryError(
                 f"Secret {secret_item['name']} not yet available in {workshop_namespace}.",
                 delay=15,
@@ -693,7 +692,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             logger.exception(
                 "Unexpected error querying secrets in %s.", workshop_namespace
             )
-            patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+            patch["status"] = {"educates": {"phase": "Pending"}}
             raise kopf.TemporaryError(
                 f"Unexpected error querying secrets in {workshop_namespace}."
             ) from exc
@@ -722,15 +721,15 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         "metadata": {
             "name": session_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
-                f"training.{OPERATOR_API_GROUP}/policy.engine": CLUSTER_SECURITY_POLICY_ENGINE,
-                f"training.{OPERATOR_API_GROUP}/policy.name": namespace_security_policy,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
+                "training.educates.dev/policy.engine": CLUSTER_SECURITY_POLICY_ENGINE,
+                "training.educates.dev/policy.name": namespace_security_policy,
             },
             "annotations": {"secretgen.carvel.dev/excluded-from-wildcard-matching": ""},
         },
@@ -748,7 +747,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
 
     except pykube.exceptions.PyKubeError as exc:
         if exc.code == 409:
-            patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+            patch["status"] = {"educates": {"phase": "Pending"}}
             raise kopf.TemporaryError(
                 f"Namespace {session_namespace} already exists."
             ) from exc
@@ -763,7 +762,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
 
     except pykube.exceptions.KubernetesError as exc:
         logger.exception("Unexpected error fetching namespace %s.", session_namespace)
-        patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Failed"}}
+        patch["status"] = {"educates": {"phase": "Failed"}}
         raise kopf.PermanentError(
             f"Failed to fetch namespace {session_namespace}."
         ) from exc
@@ -797,7 +796,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     # For unexpected errors beyond this point we will set the status to say
     # things Failed since we can't really recover.
 
-    patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Failed"}}
+    patch["status"] = {"educates": {"phase": "Failed"}}
 
     # Create the service account under which the workshop session
     # instance will run. This is created in the workshop namespace. As
@@ -816,13 +815,13 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             "name": service_account,
             "namespace": workshop_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
             },
         },
     }
@@ -837,7 +836,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             "Unexpected error creating service account %s.", service_account
         )
         patch["status"] = {
-            OPERATOR_STATUS_KEY: {
+            "educates": {
                 "phase": "Failed",
                 "message": f"Failed to create service account {service_account}: {exc}",
             }
@@ -854,9 +853,9 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             "namespace": workshop_namespace,
             "annotations": {"kubernetes.io/service-account.name": service_account},
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
             },
         },
         "type": "kubernetes.io/service-account-token",
@@ -872,7 +871,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             "Unexpected error creating access token %s-token.", service_account
         )
         patch["status"] = {
-            OPERATOR_STATUS_KEY: {
+            "educates": {
                 "phase": "Failed",
                 "message": f"Failed to create access token {service_account}-token: {exc}",
             }
@@ -888,21 +887,21 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         "apiVersion": "rbac.authorization.k8s.io/v1",
         "kind": "ClusterRoleBinding",
         "metadata": {
-            "name": f"{OPERATOR_NAME_PREFIX}-web-console-{session_namespace}",
+            "name": f"educates-web-console-{session_namespace}",
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
             },
         },
         "roleRef": {
             "apiGroup": "rbac.authorization.k8s.io",
             "kind": "ClusterRole",
-            "name": f"{OPERATOR_NAME_PREFIX}-web-console-{workshop_namespace}",
+            "name": f"educates-web-console-{workshop_namespace}",
         },
         "subjects": [
             {
@@ -921,17 +920,17 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     except pykube.exceptions.PyKubeError as exc:
         logger.exception(
             "Unexpected error creating cluster role binding %s-web-console-%s.",
-            OPERATOR_NAME_PREFIX,
+            "educates",
             session_namespace,
         )
         patch["status"] = {
-            OPERATOR_STATUS_KEY: {
+            "educates": {
                 "phase": "Failed",
-                "message": f"Failed to create cluster role binding {OPERATOR_NAME_PREFIX}-web-console-{session_namespace}: {exc}",
+                "message": f"Failed to create cluster role binding educates-web-console-{session_namespace}: {exc}",
             }
         }
         raise kopf.PermanentError(
-            f"Failed to create cluster role binding {OPERATOR_NAME_PREFIX}-web-console-{session_namespace}: {exc}"
+            f"Failed to create cluster role binding educates-web-console-{session_namespace}: {exc}"
         )
 
     # Setup configuration on the primary session namespace.
@@ -1083,13 +1082,13 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 "name": session_namespace,
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
             },
             "spec": {
@@ -1123,14 +1122,14 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             "name": f"{session_namespace}-session",
             "namespace": workshop_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/component.group": "variables",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/component.group": "variables",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
             },
         },
         "data": {},
@@ -1150,7 +1149,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
 
     except pykube.exceptions.PyKubeError as exc:
         if exc.code == 409:
-            patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Failed"}}
+            patch["status"] = {"educates": {"phase": "Failed"}}
             raise kopf.TemporaryError(
                 f"Session variables secret {session_namespace}-session already exists."
             )
@@ -1183,15 +1182,15 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 "metadata": {
                     "name": target_namespace,
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "session",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                        f"training.{OPERATOR_API_GROUP}/session.name": session_name,
-                        f"training.{OPERATOR_API_GROUP}/policy.engine": CLUSTER_SECURITY_POLICY_ENGINE,
-                        f"training.{OPERATOR_API_GROUP}/policy.name": target_security_policy,
+                        "training.educates.dev/component": "session",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
+                        "training.educates.dev/session.name": session_name,
+                        "training.educates.dev/policy.engine": CLUSTER_SECURITY_POLICY_ENGINE,
+                        "training.educates.dev/policy.name": target_security_policy,
                     },
                     "annotations": {
                         "secretgen.carvel.dev/excluded-from-wildcard-matching": ""
@@ -1211,7 +1210,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
 
             except pykube.exceptions.PyKubeError as exc:
                 if exc.code == 409:
-                    patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Failed"}}
+                    patch["status"] = {"educates": {"phase": "Failed"}}
                     raise kopf.TemporaryError(
                         f"Secondary namespace {target_namespace} already exists."
                     )
@@ -1270,14 +1269,14 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
 
         object_body["metadata"].setdefault("labels", {}).update(
             {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
-                f"training.{OPERATOR_API_GROUP}/session.objects": "true",
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
+                "training.educates.dev/session.objects": "true",
             }
         )
 
@@ -1289,20 +1288,20 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             annotations["secretgen.carvel.dev/excluded-from-wildcard-matching"] = ""
 
             target_role = annotations.get(
-                f"training.{OPERATOR_API_GROUP}/session.role", role
+                "training.educates.dev/session.role", role
             )
 
             target_security_policy = resolve_security_policy(
                 annotations.get(
-                    f"training.{OPERATOR_API_GROUP}/session.policy",
+                    "training.educates.dev/session.policy",
                     namespace_security_policy,
                 )
             )
 
             object_body["metadata"].setdefault("labels", {}).update(
                 {
-                    f"training.{OPERATOR_API_GROUP}/policy.engine": CLUSTER_SECURITY_POLICY_ENGINE,
-                    f"training.{OPERATOR_API_GROUP}/policy.name": target_security_policy,
+                    "training.educates.dev/policy.engine": CLUSTER_SECURITY_POLICY_ENGINE,
+                    "training.educates.dev/policy.name": target_security_policy,
                 }
             )
 
@@ -1312,57 +1311,57 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 ] = target_security_policy
 
             target_budget = annotations.get(
-                f"training.{OPERATOR_API_GROUP}/session.budget", budget
+                "training.educates.dev/session.budget", budget
             )
 
             target_limits = {}
 
-            if annotations.get(f"training.{OPERATOR_API_GROUP}/session.limits.min.cpu"):
+            if annotations.get("training.educates.dev/session.limits.min.cpu"):
                 target_limits.setdefault("min", {})["cpu"] = annotations[
-                    f"training.{OPERATOR_API_GROUP}/session.limits.min.cpu"
+                    "training.educates.dev/session.limits.min.cpu"
                 ]
             if annotations.get(
-                f"training.{OPERATOR_API_GROUP}/session.limits.min.memory"
+                "training.educates.dev/session.limits.min.memory"
             ):
                 target_limits.setdefault("min", {})["memory"] = annotations[
-                    f"training.{OPERATOR_API_GROUP}/session.limits.min.memory"
+                    "training.educates.dev/session.limits.min.memory"
                 ]
 
-            if annotations.get(f"training.{OPERATOR_API_GROUP}/session.limits.max.cpu"):
+            if annotations.get("training.educates.dev/session.limits.max.cpu"):
                 target_limits.setdefault("max", {})["cpu"] = annotations[
-                    f"training.{OPERATOR_API_GROUP}/session.limits.max.cpu"
+                    "training.educates.dev/session.limits.max.cpu"
                 ]
             if annotations.get(
-                f"training.{OPERATOR_API_GROUP}/session.limits.max.memory"
+                "training.educates.dev/session.limits.max.memory"
             ):
                 target_limits.setdefault("max", {})["memory"] = annotations[
-                    f"training.{OPERATOR_API_GROUP}/session.limits.max.memory"
+                    "training.educates.dev/session.limits.max.memory"
                 ]
 
             if annotations.get(
-                f"training.{OPERATOR_API_GROUP}/session.limits.defaultrequest.cpu"
+                "training.educates.dev/session.limits.defaultrequest.cpu"
             ):
                 target_limits.setdefault("defaultRequest", {})["cpu"] = annotations[
-                    f"training.{OPERATOR_API_GROUP}/session.limits.defaultrequest.cpu"
+                    "training.educates.dev/session.limits.defaultrequest.cpu"
                 ]
             if annotations.get(
-                f"training.{OPERATOR_API_GROUP}/session.limits.defaultrequest.memory"
+                "training.educates.dev/session.limits.defaultrequest.memory"
             ):
                 target_limits.setdefault("defaultRequest", {})["memory"] = annotations[
-                    f"training.{OPERATOR_API_GROUP}/session.limits.defaultrequest.memory"
+                    "training.educates.dev/session.limits.defaultrequest.memory"
                 ]
 
             if annotations.get(
-                f"training.{OPERATOR_API_GROUP}/session.limits.default.cpu"
+                "training.educates.dev/session.limits.default.cpu"
             ):
                 target_limits.setdefault("default", {})["cpu"] = annotations[
-                    f"training.{OPERATOR_API_GROUP}/session.limits.default.cpu"
+                    "training.educates.dev/session.limits.default.cpu"
                 ]
             if annotations.get(
-                f"training.{OPERATOR_API_GROUP}/session.limits.default.memory"
+                "training.educates.dev/session.limits.default.memory"
             ):
                 target_limits.setdefault("default", {})["memory"] = annotations[
-                    f"training.{OPERATOR_API_GROUP}/session.limits.default.memory"
+                    "training.educates.dev/session.limits.default.memory"
                 ]
 
             logger.info(
@@ -1397,7 +1396,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 )
 
                 patch["status"] = {
-                    OPERATOR_STATUS_KEY: {
+                    "educates": {
                         "phase": "Failed",
                         "message": f"Unable to create workshop session objects, failed creating object {object_name} of type {object_type} in namespace {object_namespace} for workshop session {session_name}.",
                     }
@@ -1461,7 +1460,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 )
 
                 patch["status"] = {
-                    OPERATOR_STATUS_KEY: {
+                    "educates": {
                         "phase": "Failed",
                         "message": f"Unable to create workshop session objects, failed creating object {object_name} of type {object_type} in namespace {object_namespace} for workshop session {session_name}.",
                     }
@@ -1556,15 +1555,15 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             "name": session_namespace,
             "namespace": workshop_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/application": "workshop",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
-                f"training.{OPERATOR_API_GROUP}/session.services.workshop": "true",
+                "training.educates.dev/component": "session",
+                "training.educates.dev/application": "workshop",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
+                "training.educates.dev/session.services.workshop": "true",
             },
         },
         "spec": {
@@ -1575,15 +1574,15 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 "metadata": {
                     "labels": {
                         "deployment": session_namespace,
-                        f"training.{OPERATOR_API_GROUP}/component": "session",
-                        f"training.{OPERATOR_API_GROUP}/application": "workshop",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                        f"training.{OPERATOR_API_GROUP}/session.name": session_name,
-                        f"training.{OPERATOR_API_GROUP}/session.services.workshop": "true",
+                        "training.educates.dev/component": "session",
+                        "training.educates.dev/application": "workshop",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
+                        "training.educates.dev/session.name": session_name,
+                        "training.educates.dev/session.services.workshop": "true",
                     },
                 },
                 "spec": {
@@ -2039,13 +2038,13 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 "name": f"{session_namespace}-vendir-secrets",
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
             },
             "data": environment_secrets,
@@ -2165,7 +2164,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     for application in applications:
         if applications.is_enabled(application):
             additional_labels[
-                f"training.{OPERATOR_API_GROUP}/session.applications.{application.lower()}"
+                "training.educates.dev/session.applications.{application.lower()}"
             ] = "true"
 
     # Add in extra configuation for web console.
@@ -2179,13 +2178,13 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                     "name": "kubernetes-dashboard-csrf",
                     "namespace": session_namespace,
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "session",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                        f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                        "training.educates.dev/component": "session",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
+                        "training.educates.dev/session.name": session_name,
                     },
                 },
             }
@@ -2319,10 +2318,10 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         deployment_pod_template_spec["containers"].append(docker_container)
 
         deployment_body["metadata"]["labels"].update(
-            {f"training.{OPERATOR_API_GROUP}/session.services.docker": "true"}
+            {"training.educates.dev/session.services.docker": "true"}
         )
         deployment_body["spec"]["template"]["metadata"]["labels"].update(
-            {f"training.{OPERATOR_API_GROUP}/session.services.docker": "true"}
+            {"training.educates.dev/session.services.docker": "true"}
         )
 
         if not storage_volume_name:
@@ -2333,13 +2332,13 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                     "name": f"{session_namespace}-docker",
                     "namespace": workshop_namespace,
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "session",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                        f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                        "training.educates.dev/component": "session",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
+                        "training.educates.dev/session.name": session_name,
                     },
                 },
                 "spec": {
@@ -2396,13 +2395,13 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                     "name": f"{session_namespace}-docker-compose",
                     "namespace": workshop_namespace,
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "session",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                        f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                        "training.educates.dev/component": "session",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
+                        "training.educates.dev/session.name": session_name,
                     },
                 },
                 "data": {
@@ -2575,13 +2574,13 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                     "name": f"{session_namespace}-registry",
                     "namespace": workshop_namespace,
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "session",
-                        f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                        f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                        f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                        "training.educates.dev/component": "session",
+                        "training.educates.dev/workshop.name": workshop_name,
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/environment.name": environment_name,
+                        "training.educates.dev/environment.uid": environment_uid,
+                        "training.educates.dev/session.name": session_name,
                     },
                 },
                 "spec": {
@@ -2604,13 +2603,13 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 "name": f"{session_namespace}-registry",
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
             },
             "data": {
@@ -2629,15 +2628,15 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 "name": f"{session_namespace}-registry",
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/application": "registry",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
-                    f"training.{OPERATOR_API_GROUP}/session.services.registry": "true",
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/application": "registry",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
+                    "training.educates.dev/session.services.registry": "true",
                 },
             },
             "spec": {
@@ -2650,19 +2649,19 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                     "metadata": {
                         "labels": {
                             "deployment": f"{session_namespace}-registry",
-                            f"training.{OPERATOR_API_GROUP}/component": "session",
-                            f"training.{OPERATOR_API_GROUP}/application": "registry",
-                            f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                            f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                            f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                            f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                            f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                            f"training.{OPERATOR_API_GROUP}/session.name": session_name,
-                            f"training.{OPERATOR_API_GROUP}/session.services.registry": "true",
+                            "training.educates.dev/component": "session",
+                            "training.educates.dev/application": "registry",
+                            "training.educates.dev/workshop.name": workshop_name,
+                            "training.educates.dev/portal.name": portal_name,
+                            "training.educates.dev/portal.uid": portal_uid,
+                            "training.educates.dev/environment.name": environment_name,
+                            "training.educates.dev/environment.uid": environment_uid,
+                            "training.educates.dev/session.name": session_name,
+                            "training.educates.dev/session.services.registry": "true",
                         },
                     },
                     "spec": {
-                        "serviceAccountName": f"{OPERATOR_NAME_PREFIX}-services",
+                        "serviceAccountName": "educates-services",
                         "initContainers": [],
                         "containers": [
                             {
@@ -2773,14 +2772,14 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 "name": f"{session_namespace}-registry",
                 "namespace": workshop_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/application": "registry",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/application": "registry",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
             },
             "spec": {
@@ -2798,14 +2797,14 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 "namespace": workshop_namespace,
                 "annotations": {"nginx.ingress.kubernetes.io/proxy-body-size": "512m"},
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "session",
-                    f"training.{OPERATOR_API_GROUP}/application": "registry",
-                    f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                    f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                    f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/application": "registry",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
             },
             "spec": {
@@ -2882,13 +2881,13 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             "name": f"{session_namespace}-ssh-keys",
             "namespace": workshop_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
             },
         },
         "data": {
@@ -2946,14 +2945,14 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             "name": session_namespace,
             "namespace": workshop_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/application": "workshop",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/application": "workshop",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
             },
         },
         "spec": {
@@ -3090,14 +3089,14 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 "projectcontour.io/response-timeout": "3600s",
             },
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "session",
-                f"training.{OPERATOR_API_GROUP}/application": "workshop",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
+                "training.educates.dev/component": "session",
+                "training.educates.dev/application": "workshop",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
             },
         },
         "spec": {
@@ -3235,12 +3234,12 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         changes["phase"] = phase
 
     patch["status"] = {
-        OPERATOR_STATUS_KEY: changes,
+        "educates": changes,
     }
 
 
 @kopf.on.delete(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "workshopsessions",
     optional=True,
@@ -3255,7 +3254,7 @@ def workshop_session_delete(**_):
     # session is deleted.
 
 
-@kopf.on.event(f"training.{OPERATOR_API_GROUP}", "v1beta1", "workshopsessions")
+@kopf.on.event("training.educates.dev", "v1beta1", "workshopsessions")
 def workshop_session_event(type, event, **_):  # pylint: disable=redefined-builtin
     """Log when a workshop session is deleted."""
 
@@ -3271,11 +3270,11 @@ def workshop_session_event(type, event, **_):  # pylint: disable=redefined-built
     "v1",
     "pods",
     labels={
-        f"training.{OPERATOR_API_GROUP}/component": "session",
-        f"training.{OPERATOR_API_GROUP}/application": "workshop",
-        f"training.{OPERATOR_API_GROUP}/portal.name": kopf.PRESENT,
-        f"training.{OPERATOR_API_GROUP}/environment.name": kopf.PRESENT,
-        f"training.{OPERATOR_API_GROUP}/session.name": kopf.PRESENT,
+        "training.educates.dev/component": "session",
+        "training.educates.dev/application": "workshop",
+        "training.educates.dev/portal.name": kopf.PRESENT,
+        "training.educates.dev/environment.name": kopf.PRESENT,
+        "training.educates.dev/session.name": kopf.PRESENT,
     },
 )
 def workshop_session_pod_event(type, event, **_):  # pylint: disable=redefined-builtin

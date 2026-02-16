@@ -255,6 +255,354 @@ const educates = (function () {
         dashboard = parent.educates.dashboard;
     }
 
+    // State persistence via sessionStorage. When running inside the dashboard
+    // iframe, action results, section visibility, and scroll position are
+    // saved to sessionStorage so that navigating between pages or refreshing
+    // restores the previously-seen state. sessionStorage is scoped to the
+    // browser tab and is automatically cleared when the tab is closed,
+    // avoiding stale data accumulation. In standalone mode (no parent
+    // dashboard), persistence is skipped entirely.
+
+    const in_dashboard = !!(parent && parent.educates && parent.educates.dashboard);
+
+    let state_key_prefix = null;
+
+    if (in_dashboard) {
+        try {
+            const time_started = parent.document.body.dataset.timeStarted;
+
+            if (time_started) {
+                const hostname = location.hostname;
+
+                state_key_prefix = `educates:${hostname}:${time_started}`;
+
+                // Clean up stale state from previous sessions on the same
+                // hostname (different time_started values). This handles
+                // the case where a hostname is recycled for a new session
+                // within the same browser tab.
+
+                const stale_prefix = `educates:${hostname}:`;
+                const keys_to_remove = [];
+
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    const key = sessionStorage.key(i);
+
+                    if (key && key.startsWith(stale_prefix) && !key.startsWith(state_key_prefix)) {
+                        keys_to_remove.push(key);
+                    }
+                }
+
+                keys_to_remove.forEach(key => sessionStorage.removeItem(key));
+
+                if (keys_to_remove.length > 0) {
+                    console.log(`Cleared ${keys_to_remove.length} stale state key(s) for ${hostname}`);
+                }
+            }
+        } catch (e) {
+            // Cross-origin access to parent or sessionStorage not available.
+            console.warn('State persistence unavailable:', e);
+        }
+    }
+
+    // Build the sessionStorage key for a given page path.
+
+    function get_page_state_key(page_path) {
+        if (!state_key_prefix || !page_path) return null;
+        return `${state_key_prefix}:page:${page_path}`;
+    }
+
+    // Flag used to suppress save_page_state during restore to avoid
+    // writing back state while we are still applying it.
+
+    let restoring_state = false;
+
+    // Save the current page's action state, section visibility, and scroll
+    // position to sessionStorage.
+
+    function save_page_state() {
+        if (restoring_state) return;
+        if (!in_dashboard || !state_key_prefix) return;
+
+        const body = document.body;
+        const page_path = body.dataset.currentPage;
+        const key = get_page_state_key(page_path);
+
+        if (!key) return;
+
+        const state = {
+            actions: {},
+            sections: {},
+            scrollTop: 0
+        };
+
+        // Collect action results.
+
+        for (const action_id in clickable_actions) {
+            const element = clickable_actions[action_id].element;
+            const result = element.dataset.actionResult;
+
+            if (result === 'success' || result === 'failure') {
+                state.actions[action_id] = {
+                    result: result,
+                    completed: element.dataset.actionCompleted || ''
+                };
+            }
+        }
+
+        // Collect section visibility.
+
+        document.querySelectorAll('.clickable-action[data-handler="section:begin"]').forEach(el => {
+            const name = el.dataset.sectionName;
+
+            if (name) {
+                state.sections[name] = {
+                    open: el.dataset.contentState === 'visible'
+                };
+            }
+        });
+
+        // Collect scroll position.
+
+        const mainContent = document.querySelector('.main-content');
+
+        if (mainContent) {
+            state.scrollTop = mainContent.scrollTop;
+        }
+
+        try {
+            sessionStorage.setItem(key, JSON.stringify(state));
+        } catch (e) {
+            // Storage quota exceeded or unavailable — degrade silently.
+            console.warn('Failed to save page state:', e);
+        }
+    }
+
+    // Debounced wrapper for saving scroll position changes.
+
+    let save_scroll_timer = null;
+
+    function save_page_state_debounced() {
+        if (save_scroll_timer) clearTimeout(save_scroll_timer);
+        save_scroll_timer = setTimeout(save_page_state, 500);
+    }
+
+    // Restore saved state for the current page. Must be called after all
+    // actions have been registered (setup callbacks have run) but before
+    // autostart actions are triggered. Returns true if state was restored.
+
+    function restore_page_state() {
+        if (!in_dashboard || !state_key_prefix) return false;
+
+        const body = document.body;
+        const page_path = body.dataset.currentPage;
+        const key = get_page_state_key(page_path);
+
+        if (!key) return false;
+
+        let state;
+
+        try {
+            const raw = sessionStorage.getItem(key);
+            if (!raw) return false;
+            state = JSON.parse(raw);
+        } catch (e) {
+            console.warn('Failed to read page state:', e);
+            return false;
+        }
+
+        if (!state) return false;
+
+        restoring_state = true;
+
+        try {
+            // Restore section visibility first so that content elements
+            // are shown/hidden before we restore action icons.
+
+            if (state.sections) {
+                for (const section_name in state.sections) {
+                    const saved = state.sections[section_name];
+                    const begin_el = document.querySelector(
+                        `.clickable-action[data-handler="section:begin"][data-section-name="${CSS.escape(section_name)}"]`
+                    );
+
+                    if (!begin_el) continue;
+
+                    const current_open = begin_el.dataset.contentState === 'visible';
+
+                    if (saved.open === current_open) continue;
+
+                    // Need to toggle — collect elements between begin and
+                    // matching end.
+
+                    const name = section_name;
+                    const following = [];
+                    let end_el = null;
+                    let sibling = begin_el.nextElementSibling;
+
+                    while (sibling) {
+                        if (sibling.classList.contains('clickable-action') &&
+                            sibling.dataset.handler === 'section:end' &&
+                            sibling.dataset.sectionName === name) {
+                            end_el = sibling;
+                            break;
+                        }
+                        following.push(sibling);
+                        sibling = sibling.nextElementSibling;
+                    }
+
+                    const content = following.filter(el => el.dataset.contentBody === name);
+
+                    if (saved.open) {
+                        // Reveal.
+                        content.forEach(el => {
+                            const is_section = el.classList.contains('clickable-action') &&
+                                (el.dataset.handler === 'section:begin' || el.dataset.handler === 'section:end');
+                            if (!is_section) {
+                                el.dataset.contentState = 'visible';
+                            }
+                            el.style.display = '';
+                        });
+                        begin_el.dataset.contentState = 'visible';
+
+                        // Update chevron icon.
+                        const glyph = begin_el.querySelector('.clickable-action__icon');
+                        if (glyph) {
+                            glyph.classList.remove('fa-chevron-down', 'fa-check-circle');
+                            glyph.classList.add('fa-chevron-up');
+                            begin_el.dataset.originalGlyph = 'fa-chevron-up';
+                        }
+                    } else {
+                        // Collapse.
+                        following.forEach(el => {
+                            el.dataset.contentState = 'hidden';
+                            el.style.display = 'none';
+                        });
+                        if (end_el) {
+                            end_el.dataset.contentState = 'hidden';
+                        }
+                        begin_el.dataset.contentState = 'hidden';
+
+                        // Update chevron icon.
+                        const glyph = begin_el.querySelector('.clickable-action__icon');
+                        if (glyph) {
+                            glyph.classList.remove('fa-chevron-up', 'fa-check-circle');
+                            glyph.classList.add('fa-chevron-down');
+                            begin_el.dataset.originalGlyph = 'fa-chevron-down';
+                        }
+                    }
+                }
+            }
+
+            // Restore action results.
+
+            if (state.actions) {
+                for (const action_id in state.actions) {
+                    const saved = state.actions[action_id];
+                    const config = clickable_actions[action_id];
+
+                    if (!config) continue;
+
+                    const element = config.element;
+
+                    // Skip actions that are disabled.
+                    if (config.args && config.args.enabled === false) continue;
+
+                    // Skip section handlers — their visual state is handled
+                    // above via section restore.
+                    if (config.handler === 'section:begin' || config.handler === 'section:end') continue;
+
+                    if (saved.result === 'success') {
+                        set_action_state(element, ActionState.SUCCESS);
+                    } else if (saved.result === 'failure') {
+                        set_action_state(element, ActionState.FAILURE);
+                    }
+
+                    if (saved.completed) {
+                        element.dataset.actionCompleted = saved.completed;
+                    }
+
+                    // Mark as restored so autostart can be suppressed.
+                    element.dataset.stateRestored = 'true';
+                }
+            }
+
+            // Restore scroll position.
+
+            if (state.scrollTop) {
+                const mainContent = document.querySelector('.main-content');
+
+                if (mainContent) {
+                    mainContent.scrollTop = state.scrollTop;
+                }
+            }
+        } finally {
+            restoring_state = false;
+        }
+
+        return true;
+    }
+
+    // Clear all persisted state for the current session.
+
+    function clear_session_state() {
+        if (!state_key_prefix) return;
+
+        const keys_to_remove = [];
+
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+
+            if (key && key.startsWith(state_key_prefix)) {
+                keys_to_remove.push(key);
+            }
+        }
+
+        keys_to_remove.forEach(key => sessionStorage.removeItem(key));
+
+        console.log(`Cleared ${keys_to_remove.length} state key(s) for session`);
+    }
+
+    // Save the path and title of the last visited page so that the home
+    // page can offer to resume where the user left off after a dashboard
+    // refresh.
+
+    function save_last_visited_page() {
+        if (!in_dashboard || !state_key_prefix) return;
+
+        const body = document.body;
+        const page_path = body.dataset.currentPage;
+
+        if (!page_path) return;
+
+        // Read the page title from the heading element, excluding the
+        // step number span so only the actual title text is captured.
+
+        const title_el = document.querySelector('.title');
+        let title = page_path;
+
+        if (title_el) {
+            const clone = title_el.cloneNode(true);
+            const step_span = clone.querySelector('.title-step');
+            if (step_span) step_span.remove();
+            title = clone.textContent.trim() || page_path;
+        }
+        const step = body.dataset.pageStep || '';
+        const total = body.dataset.pagesTotal || '';
+
+        const key = `${state_key_prefix}:last-page`;
+
+        try {
+            sessionStorage.setItem(key, JSON.stringify({
+                path: page_path,
+                title: title,
+                step: step,
+                total: total
+            }));
+        } catch (e) {
+            // Degrade silently.
+        }
+    }
+
     // The Editor class provides integration with VSCode/code-server for file
     // editing operations. Unlike terminals and dashboard, the editor is accessed
     // directly via HTTP API calls rather than through the parent frame.
@@ -980,13 +1328,50 @@ const educates = (function () {
             });
         });
 
+        // Shift+click on the home button clears all persisted state for
+        // the current session before navigating to the home page. A normal
+        // click on the home button sets a flag so the home page knows not
+        // to show the resume popup.
+
+        const homeButton = document.getElementById('header-goto-home');
+
+        if (homeButton) {
+            homeButton.addEventListener('click', function (event) {
+                if (event.shiftKey) {
+                    clear_session_state();
+                } else if (state_key_prefix) {
+                    try {
+                        sessionStorage.setItem(
+                            `${state_key_prefix}:home-clicked`,
+                            Date.now().toString()
+                        );
+                    } catch (e) {
+                        // Ignore.
+                    }
+                }
+            });
+        }
+
+        // Restore saved state from sessionStorage before triggering any
+        // autostart actions. This ensures icons and section visibility
+        // reflect the user's previous visit to this page.
+
+        const state_was_restored = restore_page_state();
+
+        // Record the current page as the last-visited page so that after
+        // a dashboard refresh the home page can offer to resume here.
+
+        save_last_visited_page();
+
         // Auto-trigger clickable actions with autostart attribute. Note that
         // any which are contained within the body of a section are excluded
-        // and will only be executed if the section is revealed.
+        // and will only be executed if the section is revealed. Actions
+        // whose state was restored from sessionStorage are skipped.
 
         const autostart_actions = document.querySelectorAll('.clickable-action[data-action-autostart="true"]:not([data-content-body])');
 
         autostart_actions.forEach(element => {
+            if (element.dataset.stateRestored === 'true') return;
             element.click();
         });
 
@@ -1111,6 +1496,10 @@ const educates = (function () {
             }
 
             mainContent.addEventListener('scroll', updateScrollProgress, { passive: true });
+
+            // Also save scroll position to sessionStorage on scroll.
+
+            mainContent.addEventListener('scroll', save_page_state_debounced, { passive: true });
 
             // Run once immediately in case content is short enough to
             // fit without scrolling.
@@ -1450,6 +1839,7 @@ const educates = (function () {
                     glyph_element.classList.add('fa-check-circle');
                     element.dataset.originalGlyph = 'fa-check-circle';
                 }
+                save_page_state();
                 break;
 
             case ActionState.FAILURE:
@@ -1463,6 +1853,7 @@ const educates = (function () {
                 if (error) {
                     console.error(`Action failed: ${error.message || error}`);
                 }
+                save_page_state();
                 break;
 
             case ActionState.IDLE:
@@ -3294,10 +3685,12 @@ const educates = (function () {
                 element.dataset.contentState = 'visible';
 
                 // Trigger autostart clickable actions within the revealed section.
+                // Skip any whose state was previously restored from sessionStorage.
 
                 content_elements.forEach(el => {
                     if (el.classList.contains('clickable-action') &&
-                        el.dataset.actionAutostart === 'true') {
+                        el.dataset.actionAutostart === 'true' &&
+                        el.dataset.stateRestored !== 'true') {
                         execute_action(el.id);
                     }
                 });
@@ -3335,6 +3728,9 @@ const educates = (function () {
                         glyph_element.classList.add('fa-chevron-up');
                     }
                 }
+
+                // Persist section toggle state.
+                save_page_state();
             }
         }
     });

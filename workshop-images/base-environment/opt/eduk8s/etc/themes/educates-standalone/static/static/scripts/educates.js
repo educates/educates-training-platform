@@ -1124,6 +1124,24 @@ const educates = (function () {
         // yet been completed (success) and is not currently pending. A
         // MutationObserver watches for data-action-result changes to move
         // the pulse forward as actions are completed.
+        //
+        // An IntersectionObserver is used so the pulse animation class is
+        // only added when the target action scrolls into view. This avoids
+        // the animation playing (and finishing) while the element is off-
+        // screen where the user can't see it.
+
+        // Track which element should currently be pulsing and the
+        // IntersectionObserver watching for it to become visible.
+
+        let pulseTarget = null;
+        let pulseVisibilityObserver = null;
+
+        function clearPulseObserver() {
+            if (pulseVisibilityObserver) {
+                pulseVisibilityObserver.disconnect();
+                pulseVisibilityObserver = null;
+            }
+        }
 
         function updateActionPulse() {
             // Collect all visible clickable actions in document order.
@@ -1140,6 +1158,9 @@ const educates = (function () {
 
             // Find the first action that needs attention: not success and
             // not pending.
+
+            let nextTarget = null;
+            let pulseClass = null;
 
             for (const action of allActions) {
                 const result = action.dataset.actionResult;
@@ -1158,15 +1179,63 @@ const educates = (function () {
                 if (result === 'failure') {
                     // Failed — pulse with warning colour to draw retry
                     // attention.
-                    action.classList.add('action-pulse-hint-failure');
+                    nextTarget = action;
+                    pulseClass = 'action-pulse-hint-failure';
                     break;
                 }
 
                 // No result yet (idle) — this is the next action to do.
 
-                action.classList.add('action-pulse-hint');
+                nextTarget = action;
+                pulseClass = 'action-pulse-hint';
                 break;
             }
+
+            // If the target hasn't changed, nothing to do (unless it was
+            // cleared, in which case we clean up the observer).
+
+            if (nextTarget === pulseTarget && nextTarget !== null) {
+                return;
+            }
+
+            // Clean up previous observer.
+
+            clearPulseObserver();
+            pulseTarget = nextTarget;
+
+            if (!nextTarget) {
+                return;
+            }
+
+            // Use an IntersectionObserver rooted in the scroll container
+            // so the pulse class is only applied when the element is
+            // actually visible to the user.
+
+            const scrollRoot = document.querySelector('.main-content');
+
+            pulseVisibilityObserver = new IntersectionObserver(
+                function (entries) {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            // Element is visible — start the pulse.
+
+                            entry.target.classList.add(pulseClass);
+                        } else {
+                            // Element scrolled out of view — remove the
+                            // animation so it replays fresh when it comes
+                            // back into view.
+
+                            entry.target.classList.remove(pulseClass);
+                        }
+                    });
+                },
+                {
+                    root: scrollRoot || null,
+                    threshold: 0.1
+                }
+            );
+
+            pulseVisibilityObserver.observe(nextTarget);
         }
 
         // Run once on page load after a short delay so that any autostart

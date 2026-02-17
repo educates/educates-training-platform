@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"fmt"
-	"os/exec"
-	"runtime"
-
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -17,22 +15,7 @@ func (p *ProjectInfo) NewProjectDocsOpenCmd() *cobra.Command {
 		Use:   "open",
 		Short: "Open browser on project documentation",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			var err error
-
-			const url = "https://docs.educates.dev/"
-
-			switch runtime.GOOS {
-			case "linux":
-				err = exec.Command("xdg-open", url).Start()
-			case "windows":
-				err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-			case "darwin":
-				err = exec.Command("open", url).Start()
-			default:
-				err = fmt.Errorf("unsupported platform")
-			}
-
-			return err
+			return utils.OpenBrowser(constants.PROJECT_DOCS_URL)
 		},
 	}
 

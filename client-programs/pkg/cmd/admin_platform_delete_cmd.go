@@ -16,6 +16,14 @@ type PlatformDeleteOptions struct {
 	Verbose bool
 }
 
+const adminPlatformDeleteExample = `
+  # Delete Educates and related cluster services from your cluster
+  educates admin platform delete
+
+  # Delete Educates and related cluster services from your cluster for a specific cluster
+  educates admin platform delete --kubeconfig /path/to/kubeconfig --context my-cluster
+`
+
 func (o *PlatformDeleteOptions) Run() error {
 	fullConfig := config.NewDefaultInstallationConfig()
 
@@ -44,6 +52,7 @@ func (p *ProjectInfo) NewAdminPlatformDeleteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return o.Run()
 		},
+		Example: adminPlatformDeleteExample,
 	}
 
 	c.Flags().StringVar(

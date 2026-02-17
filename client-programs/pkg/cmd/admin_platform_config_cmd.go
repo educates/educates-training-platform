@@ -9,7 +9,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/installer"
 )
 
-var (
+const (
 	adminPlatformConfigExample = `
   # Show configuration config for local deployment
   educates admin platform config --local-config
@@ -18,7 +18,7 @@ var (
   educates admin platform config --config config.yaml
 
   # Get configuration used to deploy to the current cluster
-  educates admin platform config --from-cluster 
+  educates admin platform config --from-cluster
   educates admin platform config --from-cluster --kubeconfig /path/to/kubeconfig --context my-cluster
 
   # Get configuration config with different domain (to make copies of the config)

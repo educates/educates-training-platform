@@ -48,6 +48,18 @@
 #   Default: latest
 #   Examples: v1.0.0, dev, latest
 #
+# IMGPKG_IMAGE_REPOSITORY
+#   Description: Registry/repository used for image refs inside the installer bundle (kbld-images).
+#   Default: same as IMAGE_REPOSITORY
+#   Override when developing installer carvel-packages to use released images in the bundle
+#   instead of local images (e.g. IMGPKG_IMAGE_REPOSITORY=ghcr.io/educates).
+#
+# IMGPKG_PACKAGE_VERSION
+#   Description: Version tag used for image refs inside the installer bundle (kbld-images).
+#   Default: same as PACKAGE_VERSION
+#   Override when developing installer to pin bundle to a released version's images
+#   (e.g. IMGPKG_PACKAGE_VERSION=3.5.1).
+#
 # =============================================================================
 # BUILD TARGETS
 # =============================================================================
@@ -130,8 +142,16 @@ IMAGE_REPOSITORY = localhost:5001
 PACKAGE_VERSION = latest
 RELEASE_VERSION = 0.0.1
 
-UNAME_SYSTEM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
-UNAME_MACHINE := $(shell uname -m)
+# Export variables to recursive make invocations so CLI/env overrides
+# (for example TARGET_PLATFORMS, PUSH_IMAGES, IMAGE_REPOSITORY) are inherited.
+.EXPORT_ALL_VARIABLES:
+
+# Installer bundle image refs: default to same as build repo/version; override to use released images when developing installer
+IMGPKG_IMAGE_REPOSITORY ?= $(IMAGE_REPOSITORY)
+IMGPKG_PACKAGE_VERSION ?= $(PACKAGE_VERSION)
+
+UNAME_SYSTEM ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+UNAME_MACHINE ?= $(shell uname -m)
 
 TARGET_SYSTEM = $(UNAME_SYSTEM)
 TARGET_MACHINE = $(UNAME_MACHINE)
@@ -142,6 +162,8 @@ endif
 
 TARGET_PLATFORM = $(TARGET_SYSTEM)-$(TARGET_MACHINE)
 BUILDX_BUILDER = educates-multiarch-builder
+
+TARGET_PLATFORMS := $(TARGET_PLATFORMS)
 
 # Platform configuration - can be overridden by TARGET_PLATFORMS env var or make parameter
 ifeq ($(TARGET_PLATFORMS),)
@@ -157,12 +179,25 @@ endif
 # Push/Load configuration - can be overridden by PUSH_IMAGES env var or make parameter
 ifeq ($(PUSH_IMAGES),false)
 # Load images locally when PUSH_IMAGES is not true (default)
-DOCKER_BUILDER =
+DOCKER_BUILDER = --builder ${BUILDX_BUILDER} --load
 MULTIARCH_PLATFORMS = $(DOCKER_PLATFORM)
 else
 # Push images to registry when PUSH_IMAGES is true
 DOCKER_BUILDER = --builder ${BUILDX_BUILDER} --push
 endif
+
+print-vars:
+	@echo "--- Makefile Variables ---"
+	@echo "OS:      $(UNAME_SYSTEM)"
+	@echo "Arch:    $(UNAME_MACHINE)"
+	@echo "Shell:   $(SHELL)"
+	@echo "TARGET_SYSTEM: $(TARGET_SYSTEM)"
+	@echo "TARGET_MACHINE: $(TARGET_MACHINE)"
+	@echo "TARGET_PLATFORM: $(TARGET_PLATFORM)"
+	@echo "DOCKER_PLATFORM: $(DOCKER_PLATFORM)"
+	@echo "MULTIARCH_PLATFORMS: $(MULTIARCH_PLATFORMS)"
+	@echo "DOCKER_BUILDER: $(DOCKER_BUILDER)"
+	@echo "PUSH_IMAGES: $(PUSH_IMAGES)"
 
 all: build-all-images # deploy-installer deploy-workshop
 
@@ -173,7 +208,7 @@ build-all-images: setup-buildx build-session-manager build-training-portal \
   build-conda-environment build-docker-registry \
   build-pause-container build-secrets-manager build-tunnel-manager \
   build-image-cache build-assets-server build-lookup-service \
-  build-cli-image
+  build-cli-image build-docker-extension
 
 build-core-images: setup-buildx build-session-manager build-training-portal \
   build-base-environment build-docker-registry build-pause-container \
@@ -291,7 +326,7 @@ else
 endif
 
 push-installer-bundle:
-	ytt -f carvel-packages/installer/config/images.yaml -f carvel-packages/installer/config/schema.yaml -v imageRegistry.host=$(IMAGE_REPOSITORY) -v version=$(PACKAGE_VERSION) > carvel-packages/installer/bundle/kbld/kbld-images.yaml
+	ytt -f carvel-packages/installer/config/images.yaml -f carvel-packages/installer/config/schema.yaml -v imageRegistry.host=$(IMGPKG_IMAGE_REPOSITORY) -v version=$(IMGPKG_PACKAGE_VERSION) > carvel-packages/installer/bundle/kbld/kbld-images.yaml
    # For local development, we just need to lock educates images. Everything else can be referenced by tag from real origin.
 	cat carvel-packages/installer/bundle/kbld/kbld-images.yaml | kbld -f - --imgpkg-lock-output carvel-packages/installer/bundle/.imgpkg/images.yml
 	imgpkg push -b $(IMAGE_REPOSITORY)/educates-installer:$(RELEASE_VERSION) -f carvel-packages/installer/bundle
@@ -343,25 +378,25 @@ push-client-programs: build-client-programs
 	(cd client-programs; GOOS=linux GOARCH=arm64 go build -o bin/educates-linux-arm64 cmd/educates/main.go)
 	imgpkg push -i $(IMAGE_REPOSITORY)/educates-client-programs:$(PACKAGE_VERSION) -f client-programs/bin
 
-build-cli-image:
+build-cli-image: build-base-environment
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-cli:$(PACKAGE_VERSION) \
 		client-programs
 
 build-docker-extension : build-cli-image
-	$(MAKE) -C docker-extension build-extension REPOSITORY=$(IMAGE_REPOSITORY) TAG=$(PACKAGE_VERSION)
+	$(MAKE) -C docker-extension build-extension
 
 install-docker-extension : build-docker-extension
-	$(MAKE) -C docker-extension install-extension REPOSITORY=$(IMAGE_REPOSITORY) TAG=$(PACKAGE_VERSION)
+	$(MAKE) -C docker-extension install-extension
 
 update-docker-extension : build-docker-extension
-	$(MAKE) -C docker-extension update-extension REPOSITORY=$(IMAGE_REPOSITORY) TAG=$(PACKAGE_VERSION)
+	$(MAKE) -C docker-extension update-extension
 
 project-docs/venv :
 	python3 -m venv project-docs/venv
 	project-docs/venv/bin/pip install -r project-docs/requirements.txt
- 
+
 build-project-docs : project-docs/venv
 	source project-docs/venv/bin/activate && make -C project-docs html
 

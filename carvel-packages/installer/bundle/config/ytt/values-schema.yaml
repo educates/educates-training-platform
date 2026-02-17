@@ -75,7 +75,7 @@ clusterInfrastructure:
     #@schema/title "AWS IAM IRSA Roles"
     #@schema/desc "AWS IAM IRSA Roles for external-dns and cert-manager"
     irsaRoles:
-      #@schema/example "arn:aws:iam::MY_IAM:role/external-dns" 
+      #@schema/example "arn:aws:iam::MY_IAM:role/external-dns"
       #@schema/validation ("irsaRole for external-dns is required for aws based providers",lambda v: len(v) >= 1)
       external-dns: ""
       #@schema/example "arn:aws:iam::MY_IAM:role/cert-manager"
@@ -122,6 +122,9 @@ localKindCluster: {}
 #@schema/nullable
 #@schema/type any=True
 localDNSResolver: {}
+#@schema/nullable
+#@schema/type any=True
+installerImages: {}
 #!--------- educates training platform schema
 #! NOTE: https://github.com/jorgemoralespou/educates-training-platform/blob/develop/carvel-packages/training-platform/bundle/config/00-schema.yaml#L21C1-L33
 #! This is only so that the images generates are loaded from this registry. There's a pre-proccesing step that will generate a images file

@@ -6,6 +6,11 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 )
 
+const localClusterStartExample = `
+  # Start the local Kubernetes cluster
+  educates local cluster start
+`
+
 func (p *ProjectInfo) NewLocalClusterStartCmd() *cobra.Command {
 	var c = &cobra.Command{
 		Args:  cobra.NoArgs,
@@ -16,6 +21,7 @@ func (p *ProjectInfo) NewLocalClusterStartCmd() *cobra.Command {
 
 			return c.StartCluster()
 		},
+		Example: localClusterStartExample,
 	}
 
 	return c

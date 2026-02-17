@@ -1,16 +1,11 @@
 package cmd
 
 import (
-	"context"
-	"strings"
-
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 type ClusterConfigViewOptions struct {
@@ -25,13 +20,26 @@ type ClusterConfigViewOptions struct {
 	Labels       []string
 }
 
+const clusterPortalCreateExample = `
+# Create TrainingPortal in Educates cluster with default name
+educates cluster portal create
+
+# Create TrainingPortal in Educates cluster with specific name
+educates cluster portal create --portal=my-portal
+
+# Create TrainingPortal in Educates cluster with specific name and capacity and theme
+educates cluster portal create --portal=my-portal --capacity=10 --theme-name=my-theme
+
+# Create given TrainingPortal in given Educates cluster
+educates cluster portal create --portal=my-portal --kubeconfig ~/.kube/config --context=my-context
+`
+
 func (o *ClusterConfigViewOptions) Run(isPasswordSet bool) error {
 	var err error
 
 	// Ensure have portal name.
-
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
@@ -46,9 +54,21 @@ func (o *ClusterConfigViewOptions) Run(isPasswordSet bool) error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	// Update the training portal, creating it if necessary.
+	config := educatesResources.TrainingPortalCreateConfig{
+		Portal: o.Portal,
+		Hostname: o.Hostname,
+		Repository: o.Repository,
+		Capacity: o.Capacity,
+		Password: o.Password,
+		IsPasswordSet: isPasswordSet,
+		ThemeName: o.ThemeName,
+		CookieDomain: o.CookieDomain,
+		Labels: o.Labels,
+	}
 
-	err = createTrainingPortal(dynamicClient, o.Portal, o.Hostname, o.Repository, o.Capacity, o.Password, isPasswordSet, o.ThemeName, o.CookieDomain, o.Labels)
+	manager := educatesResources.NewPortalManager(dynamicClient)
+
+	err = manager.CreateTrainingPortal(&config)
 
 	if err != nil {
 		return err
@@ -69,6 +89,7 @@ func (p *ProjectInfo) NewClusterPortalCreateCmd() *cobra.Command {
 
 			return o.Run(isPasswordSet)
 		},
+		Example: clusterPortalCreateExample,
 	}
 
 	c.Flags().StringVar(
@@ -87,7 +108,7 @@ func (p *ProjectInfo) NewClusterPortalCreateCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 	c.Flags().StringVar(
@@ -105,7 +126,7 @@ func (p *ProjectInfo) NewClusterPortalCreateCmd() *cobra.Command {
 	c.Flags().UintVar(
 		&o.Capacity,
 		"capacity",
-		5,
+		constants.DefaultPortalCapacity,
 		"maximum number of current sessions for the training portal",
 	)
 	c.Flags().StringVar(
@@ -135,123 +156,4 @@ func (p *ProjectInfo) NewClusterPortalCreateCmd() *cobra.Command {
 	)
 
 	return c
-}
-
-func createTrainingPortal(client dynamic.Interface, portal string, hostname string, registry string, capacity uint, password string, isPasswordSet bool, themeName string, cookieDomain string, labels []string) error {
-	trainingPortalClient := client.Resource(trainingPortalResource)
-
-	_, err := trainingPortalClient.Get(context.TODO(), portal, metav1.GetOptions{})
-
-	if err != nil {
-		if !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, "unable to query training portal")
-		}
-	} else {
-		return errors.New("training portal already exists")
-	}
-
-	trainingPortal := &unstructured.Unstructured{}
-
-	if !isPasswordSet {
-		password = randomPassword(12)
-	}
-
-	type LabelDetails struct {
-		Name  string `json:"name"`
-		Value string `json:"value"`
-	}
-
-	var labelOverrides []LabelDetails
-
-	for _, value := range labels {
-		parts := strings.SplitN(value, "=", 2)
-		labelOverrides = append(labelOverrides, LabelDetails{
-			Name:  parts[0],
-			Value: parts[1],
-		})
-	}
-
-	type RegistryDetails struct {
-		Host      string `json:"host"`
-		Namespace string `json:"namespace"`
-	}
-
-	registryHost := ""
-	registryNamespace := ""
-
-	if registry != "" {
-		parts := strings.SplitN(registry, "/", 2)
-
-		registryHost = parts[0]
-
-		if len(parts) > 1 {
-			registryNamespace = parts[1]
-		}
-
-	}
-
-	trainingPortal.SetUnstructuredContent(map[string]interface{}{
-		"apiVersion": "training.educates.dev/v1beta1",
-		"kind":       "TrainingPortal",
-		"metadata": map[string]interface{}{
-			"name": portal,
-		},
-		"spec": map[string]interface{}{
-			"portal": map[string]interface{}{
-				"password": password,
-				"registration": struct {
-					Type string `json:"type"`
-				}{
-					Type: "anonymous",
-				},
-				"updates": struct {
-					Workshop bool `json:"workshop"`
-				}{
-					Workshop: true,
-				},
-				"sessions": struct {
-					Maximum int64 `json:"maximum"`
-				}{
-					Maximum: int64(capacity),
-				},
-				"workshop": map[string]interface{}{
-					"defaults": struct {
-						Reserved int             `json:"reserved"`
-						Registry RegistryDetails `json:"registry"`
-					}{
-						Reserved: 0,
-						Registry: RegistryDetails{
-							Host:      registryHost,
-							Namespace: registryNamespace,
-						},
-					},
-				},
-				"ingress": struct {
-					Hostname string `json:"hostname"`
-				}{
-					Hostname: hostname,
-				},
-				"theme": struct {
-					Name string `json:"name"`
-				}{
-					Name: themeName,
-				},
-				"cookies": struct {
-					Domain string `json:"domain"`
-				}{
-					Domain: cookieDomain,
-				},
-				"labels": labelOverrides,
-			},
-			"workshops": []interface{}{},
-		},
-	})
-
-	_, err = trainingPortalClient.Create(context.TODO(), trainingPortal, metav1.CreateOptions{FieldManager: "educates-cli"})
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to create training portal %q in cluster", portal)
-	}
-
-	return nil
 }

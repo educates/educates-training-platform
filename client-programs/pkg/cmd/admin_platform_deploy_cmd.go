@@ -12,7 +12,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 )
 
-var (
+const (
 	adminPlatformDeployExample = `
   # Deploy educates platform
   educates admin platform deploy --config config.yaml
@@ -109,7 +109,7 @@ func (o *PlatformDeployOptions) Run() error {
 		}
 	}
 
-	fmt.Println("\nEducates has been installed succesfully")
+	fmt.Println("\n🎓 Educates has been installed succesfully")
 
 	return nil
 }

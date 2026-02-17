@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"context"
-	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"os"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/lookup"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type LookupConfigOptions struct {
@@ -17,85 +14,16 @@ type LookupConfigOptions struct {
 	OutputPath string
 }
 
-func (o *LookupConfigOptions) Run() error {
-	var err error
+const adminLookupKubeconfigExample = `
+  # Fetch kubeconfig for lookup service remote access
+  educates admin lookup kubeconfig
 
-	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
-	if err != nil {
-		return err
-	}
+  # Fetch kubeconfig for lookup service remote access and save to a specific file
+  educates admin lookup kubeconfig --output ./lookup-kubeconfig.yaml
 
-	client, err := clusterConfig.GetClient()
-
-	if err != nil {
-		return err
-	}
-
-	// We need to fetch the secret called "remote-access-token" from the
-	// "educates" namespace. This contains a Kubernetes access token secret
-	// giving access to just the Educates custom resources.
-
-	secretsClient := client.CoreV1().Secrets("educates")
-
-	secret, err := secretsClient.Get(context.TODO(), "remote-access-token", metav1.GetOptions{})
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to fetch remote-access secret")
-	}
-
-	// Within the secret are data fields for "ca.crt" and "token". We need to
-	// extract these and use them to create a kubeconfig file. Note that there
-	// is no "server" property in the secret, so when constructing the kubeconfig
-	// we need to use the server from the same cluster as we are requesting the
-	// secret from.
-
-	caCrt := secret.Data["ca.crt"]
-	token := secret.Data["token"]
-
-	// Get the server from the client for Kubernetes cluster access.
-
-	serverScheme := client.CoreV1().RESTClient().Get().URL().Scheme
-	serverHost := client.CoreV1().RESTClient().Get().URL().Host
-
-	serverUrl := fmt.Sprintf("%s://%s", serverScheme, serverHost)
-
-	// Construct the kubeconfig file. We need to base64 encode the ca.crt file
-	// as it is a binary file.
-
-	kubeconfig := fmt.Sprintf(`apiVersion: v1
-kind: Config
-clusters:
-- name: training-platform
-  cluster:
-    server: %s
-    certificate-authority-data: %s
-contexts:
-- name: training-platform
-  context:
-    cluster: training-platform
-    user: remote-access
-current-context: training-platform
-users:
-- name: remote-access
-  user:
-    token: %s
-`, serverUrl, base64.StdEncoding.EncodeToString(caCrt), token)
-
-	// Write out the kubeconfig to the output path if provided, otherwise
-	// print it to stdout.
-
-	if o.OutputPath != "" {
-		err = ioutil.WriteFile(o.OutputPath, []byte(kubeconfig), 0644)
-
-		if err != nil {
-			return errors.Wrapf(err, "unable to write kubeconfig to %s", o.OutputPath)
-		}
-	} else {
-		fmt.Print(kubeconfig)
-	}
-
-	return nil
-}
+  # Fetch kubeconfig for lookup service remote access for a specific cluster
+  educates admin lookup kubeconfig --kubeconfig /path/to/kubeconfig --context my-cluster
+`
 
 func (p *ProjectInfo) NewAdminLookupKubeconfigCmd() *cobra.Command {
 	var o LookupConfigOptions
@@ -105,8 +33,27 @@ func (p *ProjectInfo) NewAdminLookupKubeconfigCmd() *cobra.Command {
 		Use:   "kubeconfig",
 		Short: "Fetch kubeconfig for lookup service remote access",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return o.Run()
+			config := lookup.LookupConfig{
+				Kubeconfig: o.Kubeconfig,
+				Context: o.Context,
+			}
+			kubeconfig, err := lookup.NewLookupService().RemoteAccessKubeconfig(&config)
+			if err != nil {
+				return err
+			}
+			if o.OutputPath != "" {
+				err = os.WriteFile(o.OutputPath, []byte(kubeconfig), 0644)
+
+				if err != nil {
+					return errors.Wrapf(err, "unable to write kubeconfig to %s", o.OutputPath)
+				}
+			} else {
+				fmt.Print(kubeconfig)
+			}
+
+			return nil
 		},
+		Example: adminLookupKubeconfigExample,
 	}
 
 	c.Flags().StringVar(

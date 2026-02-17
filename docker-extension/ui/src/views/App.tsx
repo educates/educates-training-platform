@@ -4,10 +4,10 @@ import { Box, Grid, Link, TextField, Typography } from "@mui/material";
 import BottomIntroPane from "../components/BottomIntroPane/BottomIntroPane";
 import WorkshopsTable from "../components/WorkshopsTable/WorkshopsTable";
 import { handleGoTo } from "../common/goto";
-import { Workshop } from "../common/types";
+import { Workshop, ListResponse, DeployResponse, DeleteResponse } from "../common/types";
 import { isValidURL } from "../common/validations";
 import OptionsPane from "../components/OptionsPane/OptionsPane";
-import { LoadingButton } from "@mui/lab";
+import Button from "@mui/material/Button";
 
 const sampleWorkshopURL =
   "https://github.com/educates/lab-container-basics/releases/latest/download/workshop.yaml";
@@ -63,24 +63,20 @@ export function App() {
   };
 
   useEffect(() => {
-    let interval: any = null;
-    if (interval != undefined) clearInterval(interval);
-    if (interval == undefined) {
-      interval = setInterval(() => {
-        list();
-      }, 3000);
-      return () => clearInterval(interval);
-    }
+    const interval: ReturnType<typeof setInterval> = setInterval(() => {
+      list();
+    }, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const list = async () => {
     console.log("list");
     ddClient.extension.vm?.service
       ?.get("/workshop/list")
-      .then((result: any) => {
-        setWorkshops(result);
+      .then((result: unknown) => {
+        setWorkshops(result as ListResponse);
       })
-      .catch((err: any) => {
+      .catch((err: unknown) => {
         console.log(err);
       });
   };
@@ -91,12 +87,13 @@ export function App() {
       setQueryingBackend(true);
       ddClient.extension.vm?.service
         ?.get("/workshop/deploy?url=" + encodeURIComponent(url) + "&port=" + port)
-        .then((result: any) => {
+        .then((result: unknown) => {
+          const _ = result as DeployResponse;
           setQueryingBackend(false);
           setUrl("");
           list();
         })
-        .catch((err: any) => {
+        .catch((err: unknown) => {
           console.log(err);
           setQueryingBackend(false);
         });
@@ -109,10 +106,11 @@ export function App() {
     console.log("stop: " + name);
     ddClient.extension.vm?.service
       ?.get("/workshop/delete?name=" + name)
-      .then((result: any) => {
+      .then((result: unknown) => {
+        const _ = result as DeleteResponse;
         list();
       })
-      .catch((err: any) => {
+      .catch((err: unknown) => {
         console.log(err);
       });
   };
@@ -173,9 +171,9 @@ export function App() {
           </Grid>
           <Grid item xs={1}>
             <Box sx={{ m: 1, position: "relative" }}>
-              <LoadingButton variant="contained" loading={queryingBackend} onClick={start}>
+              <Button variant="contained" loading={queryingBackend} onClick={start}>
                 Start
-              </LoadingButton>
+              </Button>
             </Box>
           </Grid>
           <Grid item xs={2}>

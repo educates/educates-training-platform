@@ -1,15 +1,15 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import CssBaseline from "@mui/material/CssBaseline";
-import { DockerMuiThemeProvider } from "@docker/docker-mui-theme";
+import { DockerMuiV6ThemeProvider } from "@docker/docker-mui-theme";
 
 import { App } from "./views/App";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <DockerMuiThemeProvider>
+    <DockerMuiV6ThemeProvider>
       <CssBaseline />
       <App />
-    </DockerMuiThemeProvider>
+    </DockerMuiV6ThemeProvider>
   </React.StrictMode>
 );

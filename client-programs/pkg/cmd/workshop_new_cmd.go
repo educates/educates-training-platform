@@ -1,12 +1,19 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
-var (
+const (
 	workshopNewExample = `
   # Create a new workshop using default hugo template (a directory will be created with my-workshop as name)
   educates workshop new my-workshop
@@ -53,14 +60,100 @@ var (
 `
 )
 
+type WorkshopNewOptions struct {
+	Template              string
+	Name                  string
+	Title                 string
+	Description           string
+	Image                 string
+	TargetDirectory       string
+	Overwrite             bool
+	WithKubernetesAccess  bool
+	WithGitHubAction      bool
+	WithVirtualCluster    bool
+	WithDockerDaemon      bool
+	WithImageRegistry     bool
+	WithKubernetesConsole bool
+	WithEditor            bool
+	WithTerminal          bool
+}
+
 func (p *ProjectInfo) NewWorkshopNewCmd() *cobra.Command {
-	var o workshops.WorkshopNewOptions
+	var o WorkshopNewOptions
 
 	var c = &cobra.Command{
-		Args:    cobra.ExactArgs(1),
-		Use:     "new PATH",
-		Short:   "Create workshop files from template",
-		RunE:    func(_ *cobra.Command, args []string) error { return o.Run(args) },
+		Args:  func(cmd *cobra.Command, args []string) error {
+			if len(args) < 1 {
+				return utils.CmdError(cmd, "path is required", "PATH")
+			}
+			if len(args) > 1 {
+				return utils.CmdError(cmd, "too many arguments", "PATH")
+			}
+			return nil
+		},
+		Use:   "new PATH",
+		Short: "Create workshop files from template",
+		RunE: func(_ *cobra.Command, args []string) error {
+			var err error
+
+			// Validate workshop name
+			name := o.Name
+			if name == "" {
+				name = args[0]
+			}
+			if match, _ := regexp.MatchString("^[a-z0-9-]+$", name); !match {
+				return errors.Errorf("invalid workshop name %q", name)
+			}
+
+			// Get workshop dir
+			workshopDir := filepath.Clean(args[0])
+			if o.TargetDirectory != "" {
+				workshopDir = filepath.Join(o.TargetDirectory, args[0])
+			}
+
+			if workshopDir, err = filepath.Abs(workshopDir); err != nil {
+				return errors.Wrapf(err, "could not convert path name %q to absolute path", workshopDir)
+			}
+
+			// Check if target directory already exist and prompt the user to confirm that they want to overwrite the files in it
+			if _, err = os.Stat(workshopDir); err == nil {
+				ok := o.Overwrite
+				if !o.Overwrite {
+					ok = utils.YesNoPrompt([]string{
+						fmt.Sprintf("WARNING: The directory %q already exists.", workshopDir),
+						"All files will be created in it, overwriting existing files.",
+						"Do you still want to use this directory?",
+					}, true)
+				}
+				if !ok {
+					return nil // Operation cancelled
+				}
+			}
+
+			manager := educates.NewWorkshopDefinitionManager()
+			err = manager.New(workshopDir, &educates.NewWorkshopDefinitionConfig{
+				Template: o.Template,
+				Name: name,
+				Title: o.Title,
+				Description: o.Description,
+				Image: o.Image,
+				TargetDirectory: o.TargetDirectory,
+				Overwrite: o.Overwrite,
+				WithKubernetesAccess: o.WithKubernetesAccess,
+				WithGitHubAction: o.WithGitHubAction,
+				WithVirtualCluster: o.WithVirtualCluster,
+				WithDockerDaemon: o.WithDockerDaemon,
+				WithImageRegistry: o.WithImageRegistry,
+				WithKubernetesConsole: o.WithKubernetesConsole,
+				WithEditor: o.WithEditor,
+				WithTerminal: o.WithTerminal,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Workshop %q created successfully.\n", name)
+			return nil
+		},
 		Example: workshopNewExample,
 	}
 

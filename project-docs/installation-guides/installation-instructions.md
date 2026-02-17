@@ -88,6 +88,17 @@ See the general documentation on [Configuration Settings](configuration-settings
 
 For more details on configuration requirements for specific infrastructure providers see the documentation on [Infrastructure Providers](infrastructure-providers).
 
+Customizing the installation via installer images
+------------------------------------------------
+
+When installing with the Educates CLI, you can customize the installation in two ways using the ``installerImages`` configuration:
+
+* **Custom bundle**: Replace the default installer bundle with your own customized imgpkg bundle by setting ``installerImages.bundle`` to an OCI image reference. This allows you to use a completely customized installation bundle.
+
+* **Overlays**: Add one or more *installer overlay* bundles by setting ``installerImages.overlays`` to a list of OCI image references. Each overlay is an imgpkg bundle that contains ytt templates or YAML; the CLI fetches these images and runs their content together with the default installer templates. Use this to add resources, patch existing ones, or adjust configuration without forking the installer. Overlay bundles can use any directory layout, as the entire bundle root is passed to ytt.
+
+Both options can be used independently or together. Configure these in your package configuration file under the top-level key ``installerImages``. See [Configuration Settings](configuration-settings) for the ``installerImages`` setting. This option is only available when using the [CLI Based Installation](cli-based-installation); it is not used when installing via Carvel or kapp-controller.
+
 Performing the installation
 ---------------------------
 

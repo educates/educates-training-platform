@@ -50,7 +50,7 @@ func GetConfig(kubeconfigPath string, context string) (*rest.Config, error) {
 	if kubeconfigPath != "" {
 		if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
 			// If kubeconfig is provided but not available, fail
-			return nil, errors.Wrap(err, "kubeconfig file does not exist")
+			return nil, fmt.Errorf("kubeconfig file does not exist: %s", kubeconfigPath)
 		}
 	}
 

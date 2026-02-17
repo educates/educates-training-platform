@@ -7,6 +7,17 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/resolver"
 )
 
+const localResolverDeployExample = `
+  # Deploy the local DNS resolver
+  educates local resolver deploy
+
+  # Deploy the local DNS resolver with a custom config
+  educates local resolver deploy --config /path/to/config.yaml
+
+  # Deploy the local DNS resolver with a custom domain
+  educates local resolver deploy --domain test.educates.io
+`
+
 type LocalResolverDeployOptions struct {
 	Config string
 	Domain string
@@ -41,6 +52,7 @@ func (p *ProjectInfo) NewLocalResolverDeployCmd() *cobra.Command {
 		Use:   "deploy",
 		Short: "Deploys a local DNS resolver",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: localResolverDeployExample,
 	}
 
 	c.Flags().StringVar(

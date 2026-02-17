@@ -1,30 +1,57 @@
-package workshops
+package educates
 
 import (
-	"bytes"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	imgpkgcmd "carvel.dev/imgpkg/pkg/imgpkg/cmd"
-	"carvel.dev/kapp/pkg/kapp/cmd"
 	vendirsync "carvel.dev/vendir/pkg/vendir/cmd"
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	yttcmdui "carvel.dev/ytt/pkg/cmd/ui"
-	"carvel.dev/ytt/pkg/files"
-	"carvel.dev/ytt/pkg/yamlmeta"
-	"github.com/cppforlife/go-cli-ui/ui"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/logger"
+	"github.com/educates/educates-training-platform/client-programs/pkg/templates"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v2"
+	"k8s.io/apimachinery/pkg/apis/meta/internalversion/scheme"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/kubectl/pkg/scheme"
 )
 
-type FilesPublishOptions struct {
+type WorkshopDefinitionManager struct {
+}
+
+type NewWorkshopDefinitionConfig struct {
+	Template              string
+	Name                  string
+	Title                 string
+	Description           string
+	Image                 string
+	TargetDirectory       string
+	Overwrite             bool
+	WithKubernetesAccess  bool
+	WithGitHubAction      bool
+	WithVirtualCluster    bool
+	WithDockerDaemon      bool
+	WithImageRegistry     bool
+	WithKubernetesConsole bool
+	WithEditor            bool
+	WithTerminal          bool
+}
+
+type ExportWorkshopDefinitionConfig struct {
+	Repository      string
+	WorkshopFile    string
+	WorkshopVersion string
+	DataValuesFlags yttcmd.DataValuesFlags
+}
+
+type PublishWorkshopDefinitionConfig struct {
 	Image           string
 	Repository      string
 	WorkshopFile    string
@@ -34,35 +61,101 @@ type FilesPublishOptions struct {
 	DataValuesFlags yttcmd.DataValuesFlags
 }
 
-func (o *FilesPublishOptions) Run(args []string) error {
-	var err error
-
-	var workshopDir string
-
-	if len(args) != 0 {
-		workshopDir = filepath.Clean(args[0])
-	} else {
-		workshopDir = "."
-	}
-
-	if workshopDir, err = filepath.Abs(workshopDir); err != nil {
-		return errors.Wrap(err, "couldn't convert workshop directory to absolute path")
-	}
-
-	fileInfo, err := os.Stat(workshopDir)
-
-	if err != nil || !fileInfo.IsDir() {
-		return errors.New("workshop directory does not exist or path is not a workshop directory")
-	}
-
-	return o.Publish(workshopDir)
+func NewWorkshopDefinitionManager() *WorkshopDefinitionManager {
+	return &WorkshopDefinitionManager{}
 }
 
-func (o *FilesPublishOptions) Publish(workshopDir string) error {
+func (m *WorkshopDefinitionManager) New(directory string, o *NewWorkshopDefinitionConfig) error {
+	var err error
+
+	parameters := map[string]string{
+		"WorkshopName":          o.Name,
+		"WorkshopTitle":         o.Title,
+		"WorkshopDescription":   o.Description,
+		"WorkshopImage":         o.Image,
+		"WithKubernetesAccess":  strconv.FormatBool(o.WithKubernetesAccess),
+		"WithVirtualCluster":    strconv.FormatBool(o.WithVirtualCluster),
+		"WithDockerDaemon":      strconv.FormatBool(o.WithDockerDaemon),
+		"WithImageRegistry":     strconv.FormatBool(o.WithImageRegistry),
+		"WithKubernetesConsole": strconv.FormatBool(o.WithKubernetesConsole),
+		"WithEditor":            strconv.FormatBool(o.WithEditor),
+		"WithTerminal":          strconv.FormatBool(o.WithTerminal),
+	}
+
+	template := templates.InternalTemplate(o.Template)
+
+	err = template.ApplyFiles(directory, parameters)
+
+	if err != nil {
+		return errors.Wrap(err, "unable to apply template")
+	}
+
+	if o.WithGitHubAction {
+		template := templates.InternalTemplate("single")
+		err = template.ApplyGitHubAction(directory, parameters)
+	}
+
+	return err
+}
+
+func (m *WorkshopDefinitionManager) Export(directory string, o *ExportWorkshopDefinitionConfig) (string, error) {
+	// If image name hasn't been supplied read workshop definition file and
+	// try to work out image name to Export workshop as.
+
+	rootDirectory := directory
+	workshopFilePath := o.WorkshopFile
+
+	if !filepath.IsAbs(workshopFilePath) {
+		workshopFilePath = filepath.Join(rootDirectory, workshopFilePath)
+	}
+
+	workshopFileData, err := os.ReadFile(workshopFilePath)
+
+	if err != nil {
+		return "", errors.Wrapf(err, "cannot open workshop definition %q", workshopFilePath)
+	}
+
+	// Process the workshop YAML data for ytt templating and data variables.
+
+	if workshopFileData, err = ProcessWorkshopDefinition(workshopFileData, o.DataValuesFlags); err != nil {
+		return "", errors.Wrap(err, "unable to process workshop definition as template")
+	}
+
+	decoder := serializer.NewCodecFactory(scheme.Scheme).UniversalDecoder()
+
+	workshop := &unstructured.Unstructured{}
+
+	err = runtime.DecodeInto(decoder, workshopFileData, workshop)
+
+	if err != nil {
+		return "", errors.Wrap(err, "couldn't parse workshop definition")
+	}
+
+	if workshop.GetAPIVersion() != constants.EducatesTrainingAPIGroupVersion || workshop.GetKind() != "Workshop" {
+		return "", errors.New("invalid type for workshop definition")
+	}
+
+	workshop = utils.SanitizeWorkshopResourceForExport(workshop, &utils.WorkshopResourceExportConfig{
+		Repository:      o.Repository,
+		WorkshopVersion: o.WorkshopVersion,
+	})
+
+	// Export modified workshop definition file.
+
+	workshopFileData, err = yaml.Marshal(&workshop.Object)
+
+	if err != nil {
+		return "", errors.Wrap(err, "couldn't convert workshop definition back to YAML")
+	}
+
+	return string(workshopFileData), nil
+}
+
+func (m *WorkshopDefinitionManager) Publish(directory string, o *PublishWorkshopDefinitionConfig) error {
 	// If image name hasn't been supplied read workshop definition file and
 	// try to work out image name to publish workshop as.
 
-	rootDirectory := workshopDir
+	rootDirectory := directory
 	workshopFilePath := o.WorkshopFile
 
 	workingDirectory, err := os.Getwd()
@@ -71,7 +164,7 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 		return errors.Wrap(err, "cannot determine current working directory")
 	}
 
-	includePaths := []string{workshopDir}
+	includePaths := []string{directory}
 	excludePaths := []string{".git"}
 
 	if !filepath.IsAbs(workshopFilePath) {
@@ -103,9 +196,14 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 		return errors.Wrap(err, "couldn't parse workshop definition")
 	}
 
-	fmt.Printf("Processing workshop with name %q.\n", workshop.GetName())
+	// Extract vendir snippet describing subset of files to package up as the
+	// workshop image.
 
-	if workshop.GetAPIVersion() != "training.educates.dev/v1beta1" || workshop.GetKind() != "Workshop" {
+	carvelUI := logger.NewCarvelUI()
+
+	carvelUI.PrintLinef("Processing workshop with name %q", workshop.GetName())
+
+	if workshop.GetAPIVersion() != constants.EducatesTrainingAPIGroupVersion || workshop.GetKind() != "Workshop" {
 		return errors.New("invalid type for workshop definition")
 	}
 
@@ -118,21 +216,6 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 	if image == "" {
 		return errors.Errorf("cannot find image name for publishing workshop %q", workshopFilePath)
 	}
-
-	// Extract vendir snippet describing subset of files to package up as the
-	// workshop image.
-
-	confUI := ui.NewConfUI(ui.NewNoopLogger())
-
-	uiFlags := cmd.UIFlags{
-		Color:          true,
-		JSON:           false,
-		NonInteractive: true,
-	}
-
-	uiFlags.ConfigureUI(confUI)
-
-	defer confUI.Flush()
 
 	if fileArtifacts, found, _ := unstructured.NestedSlice(workshop.Object, "spec", "publish", "files"); found && len(fileArtifacts) != 0 {
 		tempDir, err := os.MkdirTemp("", "educates-imgpkg")
@@ -159,7 +242,7 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 			if directoryConfig, found := artifactEntry.(map[string]interface{})["directory"]; found {
 				if directoryPath, found := directoryConfig.(map[string]interface{})["path"].(string); found {
 					if !filepath.IsAbs(directoryPath) {
-						directoryConfig.(map[string]interface{})["path"] = filepath.Join(workshopDir, directoryPath)
+						directoryConfig.(map[string]interface{})["path"] = filepath.Join(directory, directoryPath)
 					}
 				}
 			}
@@ -193,7 +276,7 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 				return errors.Wrap(err, "unable to write vendir config file")
 			}
 
-			syncOptions := vendirsync.NewSyncOptions(confUI)
+			syncOptions := vendirsync.NewSyncOptions(carvelUI)
 
 			syncOptions.Directories = nil
 			syncOptions.Files = []string{filepath.Join(tempDir, "vendir.yml")}
@@ -221,10 +304,9 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 	}
 
 	// Now publish workshop directory contents as OCI image artifact.
+	carvelUI.PrintLinef("Publishing workshop files to %q", image)
 
-	fmt.Printf("Publishing workshop files to %q.\n", image)
-
-	pushOptions := imgpkgcmd.NewPushOptions(confUI)
+	pushOptions := imgpkgcmd.NewPushOptions(carvelUI)
 
 	pushOptions.ImageFlags.Image = image
 	pushOptions.FileFlags.Files = append(pushOptions.FileFlags.Files, includePaths...)
@@ -238,25 +320,17 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 		return errors.Wrap(err, "unable to push image artifact for workshop")
 	}
 
-	// We add a newline to output for better readability.
-	fmt.Println()
+	// // We add a newline to output for better readability.
+	// confUI.PrintLinef("\n")
 
 	// Export modified workshop definition file.
-
 	exportWorkshop := o.ExportWorkshop
 
 	if exportWorkshop != "" {
-		// Insert workshop version property if not specified.
-
-		_, found, _ := unstructured.NestedString(workshop.Object, "spec", "version")
-
-		if !found && o.WorkshopVersion != "latest" {
-			unstructured.SetNestedField(workshop.Object, o.WorkshopVersion, "spec", "version")
-		}
-
-		// Remove the publish section as will not be accurate after publishing.
-
-		unstructured.RemoveNestedField(workshop.Object, "spec", "publish")
+		workshop = utils.SanitizeWorkshopResourceForExport(workshop, &utils.WorkshopResourceExportConfig{
+			Repository:      o.Repository,
+			WorkshopVersion: o.WorkshopVersion,
+		})
 
 		workshopFileData, err = yaml.Marshal(&workshop.Object)
 
@@ -284,42 +358,4 @@ func (o *FilesPublishOptions) Publish(workshopDir string) error {
 	}
 
 	return nil
-}
-
-/*
- * ProcessWorkshopDefinition processes a workshop YAML definition file through the ytt templating engine.
- * It takes the raw YAML data as input along with any data value flags for template variable substitution.
- * The function returns the processed YAML with template variables replaced, or an error if processing fails.
- */
-
-func ProcessWorkshopDefinition(yamlData []byte, dataValueFlags yttcmd.DataValuesFlags) ([]byte, error) {
-	templatingOptions := yttcmd.NewOptions()
-
-	templatingOptions.IgnoreUnknownComments = true
-
-	templatingOptions.DataValuesFlags = dataValueFlags
-
-	var filesToProcess []*files.File
-
-	mainInputFile := files.MustNewFileFromSource(files.NewBytesSource("workshop.yaml", yamlData))
-
-	filesToProcess = append(filesToProcess, mainInputFile)
-
-	logUI := yttcmdui.NewCustomWriterTTY(false, log.Writer(), log.Writer())
-
-	output := templatingOptions.RunWithFiles(yttcmd.Input{Files: filesToProcess}, logUI)
-
-	if output.Err != nil {
-		return []byte{}, fmt.Errorf("execution of ytt failed: %s", output.Err)
-	}
-
-	if len(output.DocSet.Items) == 0 {
-		return []byte{}, nil
-	}
-
-	var buf bytes.Buffer
-
-	yamlmeta.NewYAMLPrinter(&buf).Print(output.DocSet.Items[0])
-
-	return buf.Bytes(), nil
 }

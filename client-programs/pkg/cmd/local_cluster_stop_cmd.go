@@ -6,6 +6,11 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 )
 
+const localClusterStopExample = `
+  # Stop the local Kubernetes cluster
+  educates local cluster stop
+`
+
 func (p *ProjectInfo) NewLocalClusterStopCmd() *cobra.Command {
 	var c = &cobra.Command{
 		Args:  cobra.NoArgs,
@@ -16,6 +21,7 @@ func (p *ProjectInfo) NewLocalClusterStopCmd() *cobra.Command {
 
 			return c.StopCluster()
 		},
+		Example: localClusterStopExample,
 	}
 
 	return c

@@ -44,8 +44,8 @@ export async function selectMatchingText(params: SelectMatchingTextParams) {
 
     if (stopLine < 0)
         stopLine = 0
-    else if (stopLine >= lines)
-        stopLine = lines - 1
+    else if (stopLine > lines)
+        stopLine = lines
 
     let matchStartLine = -1
     let matchStartCol = -1

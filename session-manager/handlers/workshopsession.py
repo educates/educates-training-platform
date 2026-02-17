@@ -2164,7 +2164,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     for application in applications:
         if applications.is_enabled(application):
             additional_labels[
-                "training.educates.dev/session.applications.{application.lower()}"
+                f"training.educates.dev/session.applications.{application.lower()}"
             ] = "true"
 
     # Add in extra configuation for web console.

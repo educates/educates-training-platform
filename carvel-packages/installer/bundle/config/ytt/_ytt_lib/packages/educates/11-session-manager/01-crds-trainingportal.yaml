@@ -1,20 +1,18 @@
-#@ load("@ytt:data", "data")
-
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: #@ "trainingportals.training.{}".format(data.values.operator.apiGroup)
+  name: trainingportals.training.educates.dev
 spec:
   scope: Cluster
-  group: #@ "training.{}".format(data.values.operator.apiGroup)
+  group: training.educates.dev
   names:
     plural: trainingportals
     singular: trainingportal
     kind: TrainingPortal
     categories:
-    - #@ data.values.operator.namePrefix
-    - #@ "{}-training".format(data.values.operator.namePrefix)
+    - educates
+    - educates-training
   versions:
     - name: v1beta1
       served: true
@@ -317,8 +315,7 @@ spec:
                 kopf:
                   type: object
                   x-kubernetes-preserve-unknown-fields: true
-                #@yaml/text-templated-strings
-                (@= data.values.operator.statusKey @):
+                educates:
                   type: object
                   required:
                   - phase
@@ -388,7 +385,7 @@ spec:
         type: string
         priority: 0
         description: The URL for accessing the portal.
-        jsonPath: #@ ".status.{}.url".format(data.values.operator.statusKey)
+        jsonPath: .status.educates.url
       - name: PortalPassword
         type: string
         priority: 0
@@ -398,19 +395,19 @@ spec:
         type: string
         priority: 0
         description: The username for accessing admin pages.
-        jsonPath: #@ ".status.{}.credentials.admin.username".format(data.values.operator.statusKey)
+        jsonPath: .status.educates.credentials.admin.username
       - name: AdminPassword
         type: string
         priority: 0
         description: The password for accessing admin pages.
-        jsonPath: #@ ".status.{}.credentials.admin.password".format(data.values.operator.statusKey)
+        jsonPath: .status.educates.credentials.admin.password
       - name: Status
         type: string
         priority: 0
         description: Status of training portal deployment.
-        jsonPath: #@ ".status.{}.phase".format(data.values.operator.statusKey)
+        jsonPath: .status.educates.phase
       - name: Message
         type: string
         priority: 0
         description: Status message.
-        jsonPath: #@ ".status.{}.message".format(data.values.operator.statusKey)
+        jsonPath: .status.educates.message

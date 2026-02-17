@@ -8,7 +8,7 @@
 apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
-  name: #@ "aaa-{}-privileged".format(data.values.operator.namePrefix)
+  name: aaa-educates-privileged
   annotations:
     seccomp.security.alpha.kubernetes.io/allowedProfileNames: "*"
 spec:
@@ -37,7 +37,7 @@ spec:
 apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
-  name: #@ "aaa-{}-baseline".format(data.values.operator.namePrefix)
+  name: aaa-educates-baseline
   annotations:
     #! Optional: Allow the default AppArmor profile, requires setting the default.
     #! apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
@@ -124,7 +124,7 @@ spec:
 apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
-  name: #@ "aaa-{}-restricted".format(data.values.operator.namePrefix)
+  name: aaa-educates-restricted
   annotations:
     #! apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
     #! apparmor.security.beta.kubernetes.io/defaultProfileName:  'runtime/default'

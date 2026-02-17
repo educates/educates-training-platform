@@ -40,7 +40,7 @@ def purge_expired_workshop_sessions():
     # whether any should be deleted and/or marked as stopped.
 
     K8SWorkshopSession = pykube.object_factory(
-        api, f"training.{settings.OPERATOR_API_GROUP}/v1beta1", "WorkshopSession"
+        api, "training.educates.dev/v1beta1", "WorkshopSession"
     )
 
     for session in Session.objects.all():
@@ -181,7 +181,7 @@ def delete_workshop_session(session):
     # the workshop session was deleted manually for some reason.
 
     K8SWorkshopSession = pykube.object_factory(
-        api, f"training.{settings.OPERATOR_API_GROUP}/v1beta1", "WorkshopSession"
+        api, "training.educates.dev/v1beta1", "WorkshopSession"
     )
 
     try:

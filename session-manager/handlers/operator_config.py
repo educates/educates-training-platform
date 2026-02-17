@@ -23,11 +23,6 @@ if os.path.exists("/var/run/secrets/kubernetes.io/serviceaccount/namespace"):
     with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as fp:
         OPERATOR_NAMESPACE = fp.read().strip()
 
-OPERATOR_API_GROUP = xget(config_values, "operator.apiGroup", "educates.dev")
-
-OPERATOR_STATUS_KEY = xget(config_values, "operator.statusKey", "educates")
-OPERATOR_NAME_PREFIX = xget(config_values, "operator.namePrefix", "educates")
-
 IMAGE_REGISTRY_HOST = xget(config_values, "imageRegistry.host")
 IMAGE_REGISTRY_NAMESPACE = xget(config_values, "imageRegistry.namespace")
 

@@ -4,11 +4,11 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-session-manager".format(data.values.operator.namePrefix)
+  name: educates-session-manager
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: #@ "{}-session-manager".format(data.values.operator.namePrefix)
+  name: educates-session-manager
 subjects:
 - kind: ServiceAccount
   name: session-manager
@@ -18,7 +18,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-session-manager:admin".format(data.values.operator.namePrefix)
+  name: educates-session-manager:admin
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -32,7 +32,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-session-manager:kyverno-policies".format(data.values.operator.namePrefix)
+  name: educates-session-manager:kyverno-policies
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -47,7 +47,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-session-manager:cluster-admin".format(data.values.operator.namePrefix)
+  name: educates-session-manager:cluster-admin
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -63,11 +63,11 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-session-manager-psp".format(data.values.operator.namePrefix)
+  name: educates-session-manager-psp
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: #@ "{}-baseline-psp".format(data.values.operator.namePrefix)
+  name: educates-baseline-psp
 subjects:
 - kind: ServiceAccount
   name: session-manager
@@ -77,11 +77,11 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-image-puller-psp".format(data.values.operator.namePrefix)
+  name: educates-image-puller-psp
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: #@ "{}-baseline-psp".format(data.values.operator.namePrefix)
+  name: educates-baseline-psp
 subjects:
 - kind: ServiceAccount
   name: image-puller
@@ -93,11 +93,11 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-session-manager-scc".format(data.values.operator.namePrefix)
+  name: educates-session-manager-scc
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: #@ "{}-baseline-scc".format(data.values.operator.namePrefix)
+  name: educates-baseline-scc
 subjects:
 - kind: ServiceAccount
   name: session-manager
@@ -107,11 +107,11 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: #@ "{}-image-puller-scc".format(data.values.operator.namePrefix)
+  name: educates-image-puller-scc
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: #@ "{}-baseline-scc".format(data.values.operator.namePrefix)
+  name: educates-baseline-scc
 subjects:
 - kind: ServiceAccount
   name: image-puller

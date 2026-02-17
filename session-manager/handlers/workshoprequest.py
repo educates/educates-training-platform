@@ -8,8 +8,6 @@ from .objects import WorkshopEnvironment, WorkshopSession
 from .helpers import substitute_variables
 
 from .operator_config import (
-    OPERATOR_API_GROUP,
-    OPERATOR_STATUS_KEY,
     INGRESS_DOMAIN,
     INGRESS_SECRET,
     INGRESS_PROTOCOL,
@@ -21,10 +19,10 @@ api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 
 @kopf.on.create(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "workshoprequests",
-    id=OPERATOR_STATUS_KEY,
+    id="educates",
 )
 def workshop_request_create(name, uid, namespace, spec, patch, logger, **_):
     # The name of the custom resource for requesting a workshop doesn't
@@ -47,7 +45,7 @@ def workshop_request_create(name, uid, namespace, spec, patch, logger, **_):
         )
 
     except pykube.exceptions.ObjectDoesNotExist:
-        patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+        patch["status"] = {"educates": {"phase": "Pending"}}
         raise kopf.TemporaryError(
             f"Cannot find the workshop environment {environment_name}."
         )
@@ -59,7 +57,7 @@ def workshop_request_create(name, uid, namespace, spec, patch, logger, **_):
         enabled = environment_instance.obj["spec"]["request"].get("enabled", False)
 
         if not enabled:
-            patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+            patch["status"] = {"educates": {"phase": "Pending"}}
             raise kopf.TemporaryError(
                 f"Workshop request not permitted for workshop environment."
             )
@@ -72,13 +70,13 @@ def workshop_request_create(name, uid, namespace, spec, patch, logger, **_):
         namespaces = list(map(substitute_variables, namespaces, environment_variables))
 
         if namespaces and namespace not in namespaces:
-            patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+            patch["status"] = {"educates": {"phase": "Pending"}}
             raise kopf.TemporaryError(
                 f"Workshop request not permitted from namespace {namespace}."
             )
 
         if token and spec["environment"].get("token") != token:
-            patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+            patch["status"] = {"educates": {"phase": "Pending"}}
             raise kopf.TemporaryError(
                 "Workshop request requires valid matching access token."
             )
@@ -120,14 +118,14 @@ def workshop_request_create(name, uid, namespace, spec, patch, logger, **_):
         session_hostname = f"{session_name}.{INGRESS_DOMAIN}"
 
         session_body = {
-            "apiVersion": f"training.{OPERATOR_API_GROUP}/v1beta1",
+            "apiVersion": "training.educates.dev/v1beta1",
             "kind": "WorkshopSession",
             "metadata": {
                 "name": session_name,
                 "labels": {
-                    # f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    # f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                    # f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
+                    # "training.educates.dev/portal.name": portal_name,
+                    # "training.educates.dev/portal.uid": portal_uid,
+                    # "training.educates.dev/environment.name": environment_name,
                 },
             },
             "spec": {
@@ -147,7 +145,7 @@ def workshop_request_create(name, uid, namespace, spec, patch, logger, **_):
                 "request": {
                     "namespace": namespace,
                     "kind": "WorkshopRequest",
-                    "apiVersion": f"training.{OPERATOR_API_GROUP}/v1beta1",
+                    "apiVersion": "training.educates.dev/v1beta1",
                     "name": name,
                     "uid": uid,
                 },
@@ -162,7 +160,7 @@ def workshop_request_create(name, uid, namespace, spec, patch, logger, **_):
         except pykube.exceptions.PyKubeError as exc:
             if exc.code == 409:
                 if count >= 20:
-                    patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Failed"}}
+                    patch["status"] = {"educates": {"phase": "Failed"}}
                     raise kopf.PermanentError("Unable to generate session.")
                 continue
 
@@ -170,7 +168,7 @@ def workshop_request_create(name, uid, namespace, spec, patch, logger, **_):
             session_instance = WorkshopSession.objects(api).get(name=session_name)
 
         except Exception:
-            patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Failed"}}
+            patch["status"] = {"educates": {"phase": "Failed"}}
             raise kopf.PermanentError("Unable to query back session.")
 
         break
@@ -182,20 +180,20 @@ def workshop_request_create(name, uid, namespace, spec, patch, logger, **_):
         "password": password,
         "session": {
             "kind": "WorkshopSession",
-            "apiVersion": f"training.{OPERATOR_API_GROUP}/v1beta1",
+            "apiVersion": "training.educates.dev/v1beta1",
             "name": session_name,
             "uid": session_instance.obj["metadata"]["uid"],
         },
     }
 
 
-@kopf.on.delete(f"training.{OPERATOR_API_GROUP}", "v1beta1", "workshoprequests")
+@kopf.on.delete("training.educates.dev", "v1beta1", "workshoprequests")
 def workshop_request_delete(name, uid, namespace, spec, status, logger, **_):
     # We need to pull the session details from the status of the request,
     # look it up to see if it still exists, verify we created it, and then
     # delete it.
 
-    session_details = status.get(OPERATOR_STATUS_KEY, {}).get("session")
+    session_details = status.get("educates", {}).get("session")
 
     if not session_details:
         return

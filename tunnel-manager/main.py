@@ -72,7 +72,7 @@ async def cleanup_fn(logger, **kwargs):
     stop_flag.set_result(None)
 
 
-@kopf.on.event(f"training.educates.dev", "v1beta1", "workshopsessions")
+@kopf.on.event("training.educates.dev", "v1beta1", "workshopsessions")
 def workshop_session_event(name, type, event, logger, **_):
     obj = event["object"]
 

@@ -5,7 +5,6 @@ import yaml
 from .helpers import xget
 
 from .operator_config import (
-    OPERATOR_API_GROUP,
     LOFTSH_VCLUSTER_IMAGE,
     LOFTSH_KUBERNETES_V1_31_IMAGE,
     LOFTSH_KUBERNETES_V1_32_IMAGE,
@@ -25,7 +24,7 @@ K8S_VERSIONS = {
 
 # Scenarios
 # - Expose k8s api_server in vcluster via a TLS ingress on host.
-# - Enable internal vcluster to use it's own ingresses, so deploy an internal ingress controller.  
+# - Enable internal vcluster to use it's own ingresses, so deploy an internal ingress controller.
 
 
 def vcluster_workshop_spec_patches(workshop_spec, application_properties):
@@ -261,7 +260,7 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     #vcluster_config["sync"]["toHost"]["secrets"] = {"enabled": True}
     vcluster_config["sync"]["toHost"]["serviceAccounts"] = {"enabled": True}
     vcluster_config["sync"]["toHost"]["ingresses"] = {"enabled": sync_ingress_resources}
-    # FROM_HOST_SYNC    
+    # FROM_HOST_SYNC
     vcluster_config["sync"]["fromHost"]["storageClasses"] = {"enabled": True}
     vcluster_config["sync"]["fromHost"]["ingressClasses"] = {"enabled": True}
 
@@ -304,14 +303,14 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                 "name": "$(session_namespace)-vc",
                 "annotations": {
                     "secretgen.carvel.dev/excluded-from-wildcard-matching": "",
-                    f"training.{OPERATOR_API_GROUP}/session.role": "custom",
-                    f"training.{OPERATOR_API_GROUP}/session.budget": "custom",
-                    f"training.{OPERATOR_API_GROUP}/session.policy": "baseline",
+                    "training.educates.dev/session.role": "custom",
+                    "training.educates.dev/session.budget": "custom",
+                    "training.educates.dev/session.policy": "baseline",
                 },
             },
         },
         {
-            "apiVersion": f"secrets.{OPERATOR_API_GROUP}/v1beta1",
+            "apiVersion": "secrets.educates.dev/v1beta1",
             "kind": "SecretCopier",
             "metadata": {"name": "$(session_namespace)-vc-kubeconfig"},
             "spec": {

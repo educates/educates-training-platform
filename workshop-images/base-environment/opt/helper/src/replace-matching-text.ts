@@ -47,8 +47,8 @@ export async function replaceMatchingText(params: ReplaceMatchingTextParams) {
 
     if (stopLine < 0)
         stopLine = 0
-    else if (stopLine >= lines)
-        stopLine = lines - 1
+    else if (stopLine > lines)
+        stopLine = lines
 
     // Determine how many matches to replace. Default is 1 (first match
     // only). A value of -1 means replace all matches.

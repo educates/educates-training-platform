@@ -43,6 +43,8 @@ imageVersions:
     image: #@ image_reference("assets-server")
   - name: lookup-service
     image: #@ image_reference("lookup-service")
+  - name: node-ca-injector
+    image: #@ image_reference("node-ca-injector")
   - name: debian-base-image
     image: "debian:sid-20230502-slim"
   - name: docker-in-docker

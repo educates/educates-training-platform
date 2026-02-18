@@ -6,7 +6,7 @@ on:
       target_platforms:
         type: choice
         description: Platforms
-        options: 
+        options:
         - linux/amd64
         - linux/arm64
         - linux/amd64,linux/arm64
@@ -40,6 +40,7 @@ jobs:
           - image: image-cache
           - image: assets-server
           - image: lookup-service
+          - image: node-ca-injector
 
     steps:
       - name: Check out the repository
@@ -695,7 +696,7 @@ jobs:
         with:
           name: educates-darwin-amd64
           path: client-programs
-      
+
       - name: Restore educates-darwin-arm64
         uses: actions/download-artifact@v4
         with:

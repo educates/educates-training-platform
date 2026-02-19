@@ -612,12 +612,8 @@ jobs:
           cd client-programs
           REPOSITORY_TAG=${{env.REPOSITORY_TAG}}
           IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
-          # DO NOT USE GOOS/GOARCH for native build as it appears to produce a
-          # binary which is different and cannot create a Kind cluster which can
-          # run both AMD and ARM images. Version with GOOS/GOARCH only retained
-          # here for documentation purposes.
-          # GOOS=darwin GOARCH=amd64 go build -o educates-darwin-amd64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
-          go build -o educates-darwin-amd64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
+          # Need to build for amd64 on darwin on an arm64 runner as they are deprecating amd64 runner.
+          GOOS=darwin GOARCH=amd64 go build -o educates-darwin-amd64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
 
       - uses: actions/upload-artifact@v4
         with:
@@ -655,7 +651,7 @@ jobs:
           cd client-programs
           REPOSITORY_TAG=${{env.REPOSITORY_TAG}}
           IMAGE_REPOSITORY=ghcr.io/${{env.REPOSITORY_OWNER}}
-          GOOS=darwin GOARCH=arm64 go build -o educates-darwin-arm64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
+          go build -o educates-darwin-arm64 -ldflags "-X 'main.projectVersion=$REPOSITORY_TAG' -X 'main.imageRepository=$IMAGE_REPOSITORY'" cmd/educates/main.go
 
       - uses: actions/upload-artifact@v4
         with:

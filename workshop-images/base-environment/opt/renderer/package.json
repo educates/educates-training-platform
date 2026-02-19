@@ -29,7 +29,7 @@
     "liquidjs": "^10.9.4",
     "lodash": ">=4.17.23",
     "marked": "^4.2.2",
-    "minimatch": "~9.0.3",
+    "minimatch": "~10.2.1",
     "minimist": ">=1.2.7",
     "morgan": "^1.10.1",
     "path-parse": ">=1.0.7",

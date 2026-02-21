@@ -132,7 +132,14 @@ clusterIngress:
     enabled: true
 ```
 
-Note that the Kubernetes cluster in this case must use a Debian based operating system for nodes and ``containerd`` as the container runtime. Other operating systems or container runtimes are not supported when using this mechanism to inject the CA certificate into the cluster nodes.
+When the CA node injector is enabled, Educates deploys two components:
+
+* A **controller** (Deployment) that watches for per-session registry Ingress resources and maintains a list of registry hostnames in a ConfigMap.
+* A **DaemonSet** that runs on every node and configures containerd to trust the CA certificate by writing per-registry ``hosts.toml`` files to ``/etc/containerd/certs.d/``.
+
+This approach uses containerd's native registry host configuration, which is picked up dynamically without requiring a containerd restart. As new workshop sessions with registries are created or deleted, the controller updates the host list and the DaemonSet syncs the corresponding configuration files on each node.
+
+The Kubernetes cluster must use ``containerd`` as the container runtime with the ``config_path`` option set to ``/etc/containerd/certs.d`` (this is the default for Kind clusters and most modern Kubernetes distributions). There is no requirement for a specific node operating system.
 
 Defining cluster policy engine
 ------------------------------

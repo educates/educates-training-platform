@@ -1,0 +1,152 @@
+#@ load("@ytt:data", "data")
+#@ load("/00-package.star", "image_reference", "image_pull_policy")
+
+#@ ingress_ca_secret = data.values.clusterIngress.caCertificateRef.name
+#@ if not ingress_ca_secret and getattr(data.values.clusterIngress.caCertificate, "ca.crt"):
+#@ ingress_ca_secret = "{}-ca".format(data.values.clusterIngress.domain)
+#@ end
+
+#@ if ingress_ca_secret and data.values.clusterIngress.caNodeInjector.enabled:
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: node-ca-injector
+  namespace: #@ data.values.operator.namespace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-node-ca-injector
+rules:
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-node-ca-injector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-node-ca-injector
+subjects:
+- kind: ServiceAccount
+  name: node-ca-injector
+  namespace: #@ data.values.operator.namespace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: node-ca-injector
+  namespace: #@ data.values.operator.namespace
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "create", "update"]
+  resourceNames: ["educates-registry-hosts"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: node-ca-injector
+  namespace: #@ data.values.operator.namespace
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: node-ca-injector
+subjects:
+- kind: ServiceAccount
+  name: node-ca-injector
+  namespace: #@ data.values.operator.namespace
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-ca-injector-controller
+  namespace: #@ data.values.operator.namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node-ca-injector-controller
+  template:
+    metadata:
+      labels:
+        app: node-ca-injector-controller
+    spec:
+      serviceAccountName: node-ca-injector
+      containers:
+      - name: controller
+        #@ image = image_reference("node-ca-injector")
+        image: #@ image
+        imagePullPolicy: #@ image_pull_policy(image)
+        args: ["controller"]
+        env:
+        - name: OPERATOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-ca-injector
+  namespace: #@ data.values.operator.namespace
+spec:
+  selector:
+    matchLabels:
+      app: node-ca-injector
+  template:
+    metadata:
+      labels:
+        app: node-ca-injector
+    spec:
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: sync
+        #@ image = image_reference("node-ca-injector")
+        image: #@ image
+        imagePullPolicy: #@ image_pull_policy(image)
+        args: ["sync"]
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: hosts-config
+          mountPath: /config/hosts
+          readOnly: true
+        - name: ca-secret
+          mountPath: /config/ca
+          readOnly: true
+        - name: containerd-certs-d
+          mountPath: /host/etc/containerd/certs.d
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+      volumes:
+      - name: hosts-config
+        configMap:
+          name: educates-registry-hosts
+          optional: true
+      - name: ca-secret
+        secret:
+          secretName: #@ ingress_ca_secret
+      - name: containerd-certs-d
+        hostPath:
+          path: /etc/containerd/certs.d
+          type: DirectoryOrCreate
+#@ end

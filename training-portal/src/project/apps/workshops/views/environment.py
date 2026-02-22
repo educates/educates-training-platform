@@ -174,7 +174,13 @@ def environment_status(request, name):
 
     # Only allow user who is in the robots group to request session.
 
-    if not request.user.groups.filter(name="robots").exists():
+    token = request.auth
+
+    if token and token.application and not token.user:
+        pass
+    elif request.user.groups.filter(name="robots").exists():
+        pass
+    else:
         return HttpResponseForbidden("Status requests not permitted")
 
     # XXX What if the portal configuration doesn't exist as process
@@ -276,7 +282,13 @@ def environment_request(request, name):
 
     # Only allow user who is in the robots group to request session.
 
-    if not request.user.groups.filter(name="robots").exists():
+    token = request.auth
+
+    if token and token.application and not token.user:
+        pass
+    elif request.user.groups.filter(name="robots").exists():
+        pass
+    else:
         return HttpResponseForbidden("Session requests not permitted")
 
     # Ensure there is an environment which the specified name in existance.

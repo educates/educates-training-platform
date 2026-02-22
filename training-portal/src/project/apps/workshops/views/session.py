@@ -203,10 +203,13 @@ def session_terminate(request, name):
     if not instance.is_allocated():
         return HttpResponseBadRequest("Session is not currently in use")
 
-    if (
-        not request.user.is_staff
-        and not request.user.groups.filter(name="robots").exists()
-    ):
+    token = request.auth
+
+    if token and token.application and not token.user:
+        pass
+    elif request.user.groups.filter(name="robots").exists():
+        pass
+    else:
         if instance.owner != request.user:
             return HttpResponseForbidden("Access to session not permitted")
 
@@ -324,10 +327,13 @@ def session_authorize(request, name):
 
     # Check that are owner of session, a robot account, or a staff member.
 
-    if (
-        not request.user.is_staff
-        and not request.user.groups.filter(name="robots").exists()
-    ):
+    token = request.auth
+
+    if token and token.application and not token.user:
+        pass
+    elif request.user.groups.filter(name="robots").exists():
+        pass
+    else:
         if instance.owner != request.user:
             return HttpResponseForbidden("Access to session not permitted")
 
@@ -360,10 +366,13 @@ def session_config(request, name):
 
     # Check that are owner of session, a robot account, or a staff member.
 
-    if (
-        not request.user.is_staff
-        and not request.user.groups.filter(name="robots").exists()
-    ):
+    token = request.auth
+
+    if token and token.application and not token.user:
+        pass
+    elif request.user.groups.filter(name="robots").exists():
+        pass
+    else:
         if instance.owner != request.user:
             return HttpResponseForbidden("Access to session not permitted")
 
@@ -395,10 +404,13 @@ def session_schedule(request, name):
 
     # Check that are owner of session, a robot account, or a staff member.
 
-    if (
-        not request.user.is_staff
-        and not request.user.groups.filter(name="robots").exists()
-    ):
+    token = request.auth
+
+    if token and token.application and not token.user:
+        pass
+    elif request.user.groups.filter(name="robots").exists():
+        pass
+    else:
         if instance.owner != request.user:
             return HttpResponseForbidden("Access to session not permitted")
 
@@ -448,10 +460,13 @@ def session_extend(request, name):
 
     # Check that are owner of session, a robot account, or a staff member.
 
-    if (
-        not request.user.is_staff
-        and not request.user.groups.filter(name="robots").exists()
-    ):
+    token = request.auth
+
+    if token and token.application and not token.user:
+        pass
+    elif request.user.groups.filter(name="robots").exists():
+        pass
+    else:
         if instance.owner != request.user:
             return HttpResponseForbidden("Access to session not permitted")
 
@@ -516,10 +531,13 @@ def session_event(request, name):
 
     # Check that are owner of session, a robot account, or a staff member.
 
-    if (
-        not request.user.is_staff
-        and not request.user.groups.filter(name="robots").exists()
-    ):
+    token = request.auth
+
+    if token and token.application and not token.user:
+        pass
+    elif request.user.groups.filter(name="robots").exists():
+        pass
+    else:
         if instance.owner != request.user:
             return HttpResponseForbidden("Access to session not permitted")
 

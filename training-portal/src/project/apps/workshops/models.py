@@ -12,10 +12,26 @@ from django.utils.html import format_html
 from django.urls import reverse
 from django.db.models import Sum
 
-from oauth2_provider.models import Application
+from oauth2_provider.models import Application, AbstractApplication
 
 
 User = get_user_model()
+
+
+class CustomApplication(AbstractApplication):
+    """Custom OAuth2 Application model that supports both password and
+    client_credentials grant types during transition period.
+
+    """
+
+    def allows_grant_type(self, *grant_types):
+        return bool(
+            set([self.authorization_grant_type, self.GRANT_CLIENT_CREDENTIALS])
+            & set(grant_types)
+        )
+
+    class Meta:
+        swappable = "OAUTH2_PROVIDER_APPLICATION_MODEL"
 
 
 class JSONField(models.Field):

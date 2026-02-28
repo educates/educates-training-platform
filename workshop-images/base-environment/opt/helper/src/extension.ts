@@ -61,15 +61,27 @@ function showEditor(file: string): Thenable<vscode.TextEditor> {
 function insertTextAtLine(editor: vscode.TextEditor, line: number, text: string): Thenable<any> {
     log(`called insertTextAtLine(${line})`);
     let lines = editor.document.lineCount;
+    let paddingLines = 0;
     while (lines <= line) {
         lines++;
+        paddingLines++;
         text = "\n" + text;
     }
+    let contentLineCount = (text.match(/\n/g) || []).length - paddingLines;
     return editor.edit(editBuilder => {
         const loc = new vscode.Position(line, 0);
         editBuilder.insert(loc, text);
     })
-        .then(() => revealLine(editor, line));
+        .then(() => {
+            let contentStart = line;
+            let contentEnd = contentStart + contentLineCount;
+            let sel = new vscode.Selection(
+                new vscode.Position(contentStart, 0),
+                new vscode.Position(contentEnd, 0)
+            );
+            editor.selection = sel;
+            editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter);
+        });
 }
 
 function revealLine(editor: vscode.TextEditor, line: number, before: number = 0, after: number = 0): void {
@@ -586,7 +598,24 @@ async function handleReplaceLines(params: ReplaceLinesParams) {
         editBuilder.replace(range, replacement);
     });
 
-    editor.revealRange(new vscode.Range(startPosition, startPosition), vscode.TextEditorRevealType.InCenter);
+    // Select the replacement content so it is highlighted in the editor.
+
+    let contentStart = new vscode.Position(startLine, 0);
+    let contentEnd: vscode.Position;
+
+    if (replacement.endsWith('\n')) {
+        // Normal case: replacement ends with newline, select full lines.
+        let repLineCount = (replacement.match(/\n/g) || []).length;
+        contentEnd = new vscode.Position(startLine + repLineCount, 0);
+    } else {
+        // Last-lines case: replacement starts with \n, no trailing newline.
+        let repLines = replacement.split('\n');
+        let repNewlineCount = repLines.length - 1;
+        contentEnd = new vscode.Position(startLine + repNewlineCount - 1, repLines[repLines.length - 1].length);
+    }
+
+    editor.selection = new vscode.Selection(contentStart, contentEnd);
+    editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter);
 
     await doc.save();
 }

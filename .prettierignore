@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+build/
+dist/
+*.tsbuildinfo
+
+# Generated files
+**/generated/
+**/*.generated.*
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Go files (not formatted by Prettier)
+*.go
+
+# Python files (not formatted by Prettier)
+*.py
+
+# YAML files (can be formatted but may have specific formatting requirements)
+*.yaml
+*.yml
+
+# Other
+.git/
+.vscode/
+.idea/

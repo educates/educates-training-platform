@@ -1,0 +1,20 @@
+{
+  "name": "educates-training-platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Root package.json for code formatting and linting tools",
+  "scripts": {
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:gateway": "prettier --write \"workshop-images/base-environment/opt/gateway/**/*.{ts,tsx,js,jsx}\"",
+    "format:renderer": "prettier --write \"workshop-images/base-environment/opt/renderer/**/*.{ts,tsx,js,jsx}\"",
+    "format:helper": "prettier --write \"workshop-images/base-environment/opt/helper/**/*.{ts,tsx,js,jsx}\"",
+    "format:docker-extension": "prettier --write \"docker-extension/**/*.{ts,tsx,js,jsx}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

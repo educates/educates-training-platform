@@ -1,9 +1,65 @@
-#@ load("@ytt:data", "data")
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-view-session-role".format(data.values.operator.namePrefix)
+  name: educates-session-manager
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.educates.dev/extends-workshop-permissions: "true"
+rules: []
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-session-manager:core
+  labels:
+    rbac.educates.dev/extends-workshop-permissions: "true"
+rules:
+- apiGroups:
+    - ""
+  resources:
+    - namespaces
+  verbs:
+    - "*"
+- apiGroups:
+    - ""
+  resources:
+    - limitranges
+    - resourcequotas
+  verbs:
+    - "*"
+- apiGroups:
+    - rbac.authorization.k8s.io
+  resources:
+    - clusterroles
+    - clusterrolebindings
+  verbs:
+    - "*"
+- apiGroups:
+    - training.educates.dev
+  resources:
+    - workshops
+    - workshopsessions
+    - trainingportals
+    - workshopenvironments
+    - workshopallocations
+    - workshoprequests
+  verbs:
+    - "*"
+- apiGroups:
+    - secrets.educates.dev
+  resources:
+    - secretcopiers
+  verbs:
+    - "*"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-view-session-role
 rules:
   - apiGroups:
       - ""
@@ -128,7 +184,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-edit-session-role".format(data.values.operator.namePrefix)
+  name: educates-edit-session-role
 rules:
   - apiGroups:
       - ""
@@ -379,7 +435,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-admin-session-role".format(data.values.operator.namePrefix)
+  name: educates-admin-session-role
 rules:
   - apiGroups:
       - ""
@@ -650,7 +706,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-training-portal".format(data.values.operator.namePrefix)
+  name: educates-training-portal
 rules:
   - apiGroups:
       - ""
@@ -670,7 +726,7 @@ rules:
       - watch
       - create
   - apiGroups:
-      -  #@ "training.{}".format(data.values.operator.apiGroup)
+      - training.educates.dev
     resources:
       - workshops
       - workshopenvironments
@@ -682,7 +738,7 @@ rules:
       - list
       - watch
   - apiGroups:
-      -  #@ "training.{}".format(data.values.operator.apiGroup)
+      - training.educates.dev
     resources:
       - trainingportals/finalizers
       - workshopenvironments/finalizers
@@ -690,7 +746,7 @@ rules:
     verbs:
       - update
   - apiGroups:
-      -  #@ "training.{}".format(data.values.operator.apiGroup)
+      - training.educates.dev
     resources:
       - workshopenvironments
       - workshopsessions
@@ -704,7 +760,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-tunnel-manager".format(data.values.operator.namePrefix)
+  name: educates-tunnel-manager
 rules:
 - apiGroups:
   - ""
@@ -744,7 +800,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - #@ "training.{}".format(data.values.operator.apiGroup)
+  - training.educates.dev
   resources:
   - workshopsessions
   verbs:

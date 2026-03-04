@@ -8,11 +8,31 @@ included in the project source code.
 Details of more immediate plans are listed below.
 
 (upcoming-changes)=
+Changes already completed
+-------------------------
+
+The following changes were made in Educates 3.0.0:
+
+* Supply of Carvel repository packages for Educates has been stopped. You can
+  still install Educates using Carvel packages using supplied `App` resource
+  definitions, but the `PackageRepository` resource type which bundled access
+  to multiple versions has been removed. This was done because in-place rolling
+  updates of the Educates version isn't always feasible and it is always
+  recommended to install from scratch rather than upgrading.
+
+* The `educates` CLI's ability to install Educates and create a local Kind
+  Kubernetes cluster has been overhauled. The experience is similar, but the
+  requirement for `kapp-controller` to exist in the Kubernetes cluster has been
+  removed. The `kapp-controller` package can still be optionally installed as
+  it may be required by workshops that depend on it. The CLI also supports
+  opinionated installs of Educates to IaaS providers such as AWS, GCP and
+  Azure.
+
 Upcoming changes
 ----------------
 
 Note that the following features are deprecated and the current plan is that
-they will be removed sometime in the 3.X series of Educates releases:
+they will be removed sometime in the 4.X series of Educates releases:
 
 * The classic renderer for workshop instructions (Markdown and AsciiDoc) will be
   removed. All workshops should be ported over to use the Hugo (Markdown) based
@@ -25,23 +45,15 @@ they will be removed sometime in the 3.X series of Educates releases:
 * The Octant web console for viewing and interacting with a Kubernetes cluster
   will be removed. The standard Kubernetes dashboard should be used instead.
 
-* The use of `profile.d` files has been supersed by adding environment variables
-  to the `WORKSHOP_ENV` file from `setup.d` scripts. Support for `profile.d`
-  files will be removed to more easily allow the set of shell scripts used to
-  initialize a workshop container to be re-implemented as a standalone Go
-  application. Workshops should switch to setting environment variables from
-  `setup.d` scripts.
+* The use of `profile.d` files has been superseded by adding environment
+  variables to the `WORKSHOP_ENV` file from `setup.d` scripts. Support for
+  `profile.d` files will be removed to more easily allow the set of shell
+  scripts used to initialize a workshop container to be re-implemented as a
+  standalone Go application. Workshops should switch to setting environment
+  variables from `setup.d` scripts.
 
 * Support for deploying Educates to a Kubernetes cluster which uses Pod Security
   Policies will be removed.
-
-* Supply of Carvel repository packages for Educates will be stopped. You will
-  still be able to install Educates using Carvel packages using supplied `App`
-  resource definitions, but the `PackageRepository` resource type which bundles
-  access to multiple versions will go away. This is being done because in-place
-  rolling updates of the Educates version isn't always feasible and it is always
-  recommended to install from scratch rather than upgrading. **Changes made in
-  Educates 3.0.0.**
 
 * The `skaffold` command line tool will be removed. If this is required for a
   specific workshop it will need to install it as part of workshop setup.
@@ -55,16 +67,7 @@ they will be removed sometime in the 3.X series of Educates releases:
   file system paths where possible, but may need to change paths where anchors
   for home directory cannot be used.
 
-Other notable changes intended to be made with version 3.X of Educates are:
-
-* The ability of the `educates` CLI to install Educates and also create a local
-  Kind Kubernetes cluster for hosting Educates is being overhauled. The
-  experience will be similar, but the requirement for `kapp-controller` to exist
-  in the Kubernetes cluster is being removed. The `kapp-controller` package
-  will still be able to be optionally installed as it may still be required by
-  workshops that depend on it. The CLI will also support opinionated installs
-  of Educates to IaaS providers such as AWS, GCP and Azure. **Changes made in
-  Educates 3.0.0.**
+Other notable changes intended to be made with version 4.X of Educates are:
 
 * First class support for OpenShift will be added back into Educates after
   having previously been removed. This will include support for using the

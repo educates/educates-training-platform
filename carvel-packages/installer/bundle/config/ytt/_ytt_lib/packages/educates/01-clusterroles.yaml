@@ -5,7 +5,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-privileged-psp".format(data.values.operator.namePrefix)
+  name: educates-privileged-psp
 rules:
   - apiGroups:
       - policy
@@ -14,13 +14,13 @@ rules:
     verbs:
       - use
     resourceNames:
-      -  #@ "aaa-{}-privileged".format(data.values.operator.namePrefix)
+      -  aaa-educates-privileged
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-baseline-psp".format(data.values.operator.namePrefix)
+  name: educates-baseline-psp
 rules:
   - apiGroups:
       - policy
@@ -29,13 +29,13 @@ rules:
     verbs:
       - use
     resourceNames:
-      -  #@ "aaa-{}-baseline".format(data.values.operator.namePrefix)
+      -  aaa-educates-baseline
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-restricted-psp".format(data.values.operator.namePrefix)
+  name: educates-restricted-psp
 rules:
   - apiGroups:
       - policy
@@ -44,7 +44,7 @@ rules:
     verbs:
       - use
     resourceNames:
-      -  #@ "aaa-{}-restricted".format(data.values.operator.namePrefix)
+      -  aaa-educates-restricted
 #@ end
 
 #@ if data.values.clusterSecurity.policyEngine == "security-context-constraints":
@@ -52,7 +52,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-privileged-scc".format(data.values.operator.namePrefix)
+  name: educates-privileged-scc
 rules:
   - apiGroups:
       - security.openshift.io
@@ -61,13 +61,13 @@ rules:
     verbs:
       - use
     resourceNames:
-      -  #@ "{}-privileged".format(data.values.operator.namePrefix)
+      -  educates-privileged
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-baseline-scc".format(data.values.operator.namePrefix)
+  name: educates-baseline-scc
 rules:
   - apiGroups:
       - security.openshift.io
@@ -76,13 +76,13 @@ rules:
     verbs:
       - use
     resourceNames:
-      -  #@ "{}-baseline".format(data.values.operator.namePrefix)
+      -  educates-baseline
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: #@ "{}-restricted-scc".format(data.values.operator.namePrefix)
+  name: educates-restricted-scc
 rules:
   - apiGroups:
       - security.openshift.io
@@ -91,5 +91,5 @@ rules:
     verbs:
       - use
     resourceNames:
-      -  #@ "{}-restricted".format(data.values.operator.namePrefix)
+      -  educates-restricted
 #@ end

@@ -132,7 +132,14 @@ clusterIngress:
     enabled: true
 ```
 
-Note that the Kubernetes cluster in this case must use a Debian based operating system for nodes and ``containerd`` as the container runtime. Other operating systems or container runtimes are not supported when using this mechanism to inject the CA certificate into the cluster nodes.
+When the CA node injector is enabled, Educates deploys two components:
+
+* A **controller** (Deployment) that watches for per-session registry Ingress resources and maintains a list of registry hostnames in a ConfigMap.
+* A **DaemonSet** that runs on every node and configures containerd to trust the CA certificate by writing per-registry ``hosts.toml`` files to ``/etc/containerd/certs.d/``.
+
+This approach uses containerd's native registry host configuration, which is picked up dynamically without requiring a containerd restart. As new workshop sessions with registries are created or deleted, the controller updates the host list and the DaemonSet syncs the corresponding configuration files on each node.
+
+The Kubernetes cluster must use ``containerd`` as the container runtime with the ``config_path`` option set to ``/etc/containerd/certs.d`` (this is the default for Kind clusters and most modern Kubernetes distributions). There is no requirement for a specific node operating system.
 
 Defining cluster policy engine
 ------------------------------
@@ -209,6 +216,41 @@ clusterRuntime:
 ```
 
 Note that other components, such as the Educates operator and training portal, as well as any additional deployments created for a workshop session or workshop environment, are still run using the default container runtime class. It is only the containers of the workshop pod created for each workshop session and to which workshops users have shell access that are run with this runtime class.
+
+(restricting-session-manager-permissions)=
+Restricting session manager permissions
+---------------------------------------
+
+By default, the session manager component in Educates, which is responsible for managing workshop sessions, is granted cluster admin access to the Kubernetes cluster. This default configuration provides convenience for workshop authors, as they do not need to implement any special mechanisms to elevate privileges when their workshops require access to custom resources managed by Kubernetes operators or other cluster-wide resources.
+
+If a cluster administrator is concerned about the session manager having cluster admin permissions, this elevated access can be disabled. When disabled, the session manager will operate with only the minimum permissions necessary to deploy training portals and workshops, manage workshop sessions, and grant users the access required to deploy workloads into the Kubernetes namespace allocated to their workshop session.
+
+When cluster admin permissions are dropped from the session manager, workshops that require additional access permissions beyond the defaults will need those permissions explicitly defined. This is achieved by creating a ``ClusterRole`` that specifies the additional permissions required by the workshop. To have the session manager adopt these extra permissions, the ``ClusterRole`` can leverage Kubernetes cluster role aggregation by applying the appropriate label:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: custom-workshop-permissions
+  labels:
+    rbac.educates.dev/extends-workshop-permissions: "true"
+rules:
+- apiGroups:
+  - "kappctrl.k14s.io"
+  resources:
+  - apps
+  verbs:
+  - "*"
+```
+
+Note that dropping cluster admin permissions from the session manager does not eliminate the requirement to install Educates itself with cluster admin privileges. The initial installation still requires elevated access to set up the necessary custom resource definitions, namespaces, and other cluster-level resources.
+
+To disable cluster admin permissions for the session manager, set the following in your configuration when installing Educates:
+
+```yaml
+sessionManager:
+  clusterAdmin: false
+```
 
 Defining image registry pull secrets
 ------------------------------------
@@ -675,3 +717,19 @@ sessionCookies:
 ```
 
 The cookie domain can also be overridden on a per training portal definition in the training portal definition. This option may also have to be used in conjunction with options for specifying allowed frame ancestors when embedding.
+
+Enabling the lookup service
+---------------------------
+
+The lookup service is an optional component that provides a centralized REST API for aggregating access to workshops across multiple training portals and Kubernetes clusters. When enabled, a custom front-end portal can use the lookup service as a single entry point for discovering available workshops and requesting workshop sessions, rather than interacting with individual training portals directly.
+
+To enable the lookup service, include the following in the configuration when deploying Educates:
+
+```yaml
+lookupService:
+  enabled: true
+```
+
+Once deployed, the lookup service will be accessible via an ingress at a URL of the form ``http://educates-api.<ingress-domain>``. Before it can be used, you will need to configure monitored clusters, tenants, and client credentials using custom resources.
+
+For full details on configuring and using the lookup service, see the [Lookup Service](lookup-service-service-overview) documentation.

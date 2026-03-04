@@ -1,20 +1,18 @@
-#@ load("@ytt:data", "data")
-
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: #@ "workshops.training.{}".format(data.values.operator.apiGroup)
+  name: workshops.training.educates.dev
 spec:
   scope: Cluster
-  group: #@ "training.{}".format(data.values.operator.apiGroup)
+  group: training.educates.dev
   names:
     plural: workshops
     singular: workshop
     kind: Workshop
     categories:
-    - #@ data.values.operator.namePrefix
-    - #@ "{}-training".format(data.values.operator.namePrefix)
+    - educates
+    - educates-training
   versions:
     - name: v1beta1
       served: true

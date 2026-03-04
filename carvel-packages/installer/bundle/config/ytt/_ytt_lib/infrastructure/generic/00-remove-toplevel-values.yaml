@@ -13,6 +13,8 @@ localDNSResolver:
 clusterInfrastructure:
 
 #@overlay/remove
+sessionManager:
+#@overlay/remove
 imageRegistry:
 #@overlay/remove
 version:

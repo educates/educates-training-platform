@@ -1,0 +1,26 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: lab-section-actions
+spec:
+  title: Section Clickable Actions Test
+  description: Test workshop for verifying all section clickable action types including collapsible sections, nested sections, autostart, cascade, and section headings.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/lab-section-actions-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/lab-section-actions-files:$(workshop_version)"
+      includePaths:
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      security:
+        token:
+          enabled: false
+    applications:
+      terminal:
+        enabled: true

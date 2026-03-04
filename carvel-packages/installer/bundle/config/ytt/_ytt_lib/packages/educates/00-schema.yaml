@@ -12,9 +12,18 @@ version: "latest"
 
 operator:
   namespace: "educates"
-  apiGroup: "educates.dev"
-  statusKey: "educates"
-  namePrefix: "educates"
+
+#! Settings for customizing session manager permissions. By default, the session
+#! manager is granted cluster-admin to allow workshops to make use of any
+#! resource types. If cluster-admin is disabled, only the minimum permissions
+#! required for the session manager to function will be granted. This restricts
+#! workshops to deploying workloads into the session namespace only. To grant
+#! additional permissions without cluster-admin, use cluster role aggregation to
+#! add permissions to the default cluster role granted to the session manager.
+
+sessionManager:
+  #! Whether the session manager should be granted cluster-admin permissions.
+  clusterAdmin: true
 
 #! Image registry where Educates container images and workshop content is
 #! stored. This is used internally for development, experimentation and when

@@ -4,7 +4,7 @@
 #@overlay/match by=overlay.subset({"kind":"ClusterPolicy"}),expects="1+"
 ---
 metadata:
-  #@overlay/replace via=lambda left, right: "{}-baseline-{}".format(data.values.operator.namePrefix, left)
+  #@overlay/replace via=lambda left, right: "educates-baseline-{}".format(left)
   name: null
 
 #@overlay/match by=overlay.subset({"kind":"ClusterPolicy"}),expects="1+"
@@ -20,11 +20,11 @@ spec:
               namespaceSelector:
                 #@overlay/match missing_ok=True
                 matchExpressions:
-                  - key: #@ "training.{}/policy.engine".format(data.values.operator.apiGroup)
+                  - key: training.educates.dev/policy.engine
                     operator: In
                     values:
                       - kyverno
-                  - key: #@ "training.{}/policy.name".format(data.values.operator.apiGroup)
+                  - key: training.educates.dev/policy.name
                     operator: In
                     values:
                       - baseline

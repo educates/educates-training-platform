@@ -173,12 +173,12 @@ build-all-images: setup-buildx build-session-manager build-training-portal \
   build-conda-environment build-docker-registry \
   build-pause-container build-secrets-manager build-tunnel-manager \
   build-image-cache build-assets-server build-lookup-service \
-  build-cli-image
+  build-node-ca-injector build-cli-image
 
 build-core-images: setup-buildx build-session-manager build-training-portal \
   build-base-environment build-docker-registry build-pause-container \
   build-secrets-manager build-tunnel-manager build-image-cache \
-  build-assets-server build-lookup-service
+  build-assets-server build-lookup-service build-node-ca-injector
 
 build-session-manager:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
@@ -282,6 +282,12 @@ build-lookup-service:
 		-t $(IMAGE_REPOSITORY)/educates-lookup-service:$(PACKAGE_VERSION) \
 		lookup-service
 
+build-node-ca-injector:
+	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
+	    $(DOCKER_BUILDER) \
+		-t $(IMAGE_REPOSITORY)/educates-node-ca-injector:$(PACKAGE_VERSION) \
+		node-ca-injector
+
 verify-installer-config:
 ifneq ("$(wildcard developer-testing/educates-installer-values.yaml)","")
 	@ytt --file carvel-packages/installer/bundle/config --data-values-file developer-testing/educates-installer-values.yaml
@@ -374,8 +380,8 @@ clean-project-docs:
 	rm -rf project-docs/_build
 
 deploy-workshop:
-	kubectl apply -f https://github.com/educates/lab-k8s-fundamentals/releases/download/8.3/workshop.yaml
-	kubectl apply -f https://github.com/educates/lab-k8s-fundamentals/releases/download/8.3/trainingportal.yaml
+	kubectl apply -f https://github.com/educates/lab-k8s-fundamentals/releases/download/8.4/workshop.yaml
+	kubectl apply -f https://github.com/educates/lab-k8s-fundamentals/releases/download/8.4/trainingportal.yaml
 	STATUS=1; ATTEMPTS=0; ROLLOUT_STATUS_CMD="kubectl rollout status deployment/training-portal -n lab-k8s-fundamentals-ui"; until [ $$STATUS -eq 0 ] || $$ROLLOUT_STATUS_CMD || [ $$ATTEMPTS -eq 5 ]; do sleep 5; $$ROLLOUT_STATUS_CMD; STATUS=$$?; ATTEMPTS=$$((ATTEMPTS + 1)); done
 
 delete-workshop:
@@ -404,7 +410,7 @@ prune-builds:
 	rm -rf project-docs/_build
 
 prune-registry:
-	docker exec educates-registry registry garbage-collect /etc/docker/registry/config.yml --delete-untagged=true
+	docker exec educates-registry registry garbage-collect /etc/distribution/config.yml --delete-untagged=true
 
 prune-all: prune-docker prune-builds prune-registry
 

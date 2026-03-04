@@ -8,9 +8,6 @@ from .objects import SecretCopier
 from .analytics import report_analytics_event
 
 from .operator_config import (
-    OPERATOR_API_GROUP,
-    OPERATOR_STATUS_KEY,
-    OPERATOR_NAME_PREFIX,
     OPERATOR_NAMESPACE,
     INGRESS_DOMAIN,
     INGRESS_PROTOCOL,
@@ -44,7 +41,7 @@ api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 
 @kopf.on.resume(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "trainingportals",
 )
@@ -59,7 +56,7 @@ def training_portal_resume(name, **_):
 
 
 @kopf.on.create(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "trainingportals",
     timeout=900,
@@ -188,7 +185,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         logger.exception("Unexpected error querying namespace %s.", portal_namespace)
 
         patch["status"] = {
-            OPERATOR_STATUS_KEY: {
+            "educates": {
                 "phase": "Unknown",
                 "message": f"Unexpected error querying namespace {portal_namespace}.",
             }
@@ -220,7 +217,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
 
             if runtime.total_seconds() >= 300:
                 patch["status"] = {
-                    OPERATOR_STATUS_KEY: {
+                    "educates": {
                         "phase": "Failed",
                         "message": f"Namespace {portal_namespace} already exists.",
                     }
@@ -243,7 +240,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
 
             else:
                 patch["status"] = {
-                    OPERATOR_STATUS_KEY: {
+                    "educates": {
                         "phase": "Pending",
                         "message": f"Namespace {portal_namespace} already exists.",
                     }
@@ -270,12 +267,12 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             # previously had an error and want to retry. In this case we will
             # delete the namespace and flag a transient error again.
 
-            phase = xget(status, f"{OPERATOR_STATUS_KEY}.phase")
+            phase = xget(status, "educates.phase")
 
             if phase == "Retrying":
                 if runtime.total_seconds() >= 300:
                     patch["status"] = {
-                        OPERATOR_STATUS_KEY: {
+                        "educates": {
                             "phase": "Failed",
                             "message": f"Unable to setup training portal {name}.",
                         }
@@ -308,7 +305,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                         )
 
                         patch["status"] = {
-                            OPERATOR_STATUS_KEY: {
+                            "educates": {
                                 "phase": "Retrying",
                                 "message": f"Failed to delete namespace {portal_namespace}.",
                             }
@@ -331,7 +328,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                         ) from exc
 
                     patch["status"] = {
-                        OPERATOR_STATUS_KEY: {
+                        "educates": {
                             "phase": "Retrying",
                             "message": f"Deleting {portal_namespace} and retrying.",
                         }
@@ -354,7 +351,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
 
             else:
                 patch["status"] = {
-                    OPERATOR_STATUS_KEY: {
+                    "educates": {
                         "phase": "Unknown",
                         "message": f"Training portal {portal_name} in unexpected state {phase}.",
                     }
@@ -388,11 +385,11 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         "metadata": {
             "name": portal_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/policy.engine": CLUSTER_SECURITY_POLICY_ENGINE,
-                f"training.{OPERATOR_API_GROUP}/policy.name": "baseline",
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/policy.engine": CLUSTER_SECURITY_POLICY_ENGINE,
+                "training.educates.dev/policy.name": "baseline",
             },
             "annotations": {"secretgen.carvel.dev/excluded-from-wildcard-matching": ""},
         },
@@ -414,7 +411,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         logger.exception("Unexpected error creating namespace %s.", portal_namespace)
 
         patch["status"] = {
-            OPERATOR_STATUS_KEY: {
+            "educates": {
                 "phase": "Retrying",
                 "message": f"Failed to create namespace {portal_namespace}.",
             }
@@ -442,18 +439,18 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "RoleBinding",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-security-policy",
+                "name": "educates-security-policy",
                 "namespace": portal_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "portal",
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                    "training.educates.dev/component": "portal",
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
                 },
             },
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": f"{OPERATOR_NAME_PREFIX}-baseline-psp",
+                "name": "educates-baseline-psp",
             },
             "subjects": [
                 {
@@ -471,18 +468,18 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "RoleBinding",
             "metadata": {
-                "name": f"{OPERATOR_NAME_PREFIX}-security-policy",
+                "name": "educates-security-policy",
                 "namespace": portal_namespace,
                 "labels": {
-                    f"training.{OPERATOR_API_GROUP}/component": "portal",
-                    f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                    f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                    "training.educates.dev/component": "portal",
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
                 },
             },
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": f"{OPERATOR_NAME_PREFIX}-baseline-scc",
+                "name": "educates-baseline-scc",
             },
             "subjects": [
                 {
@@ -533,9 +530,9 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             "name": "training-portal",
             "namespace": portal_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
             },
         },
     }
@@ -548,9 +545,9 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             "namespace": portal_namespace,
             "annotations": {"kubernetes.io/service-account.name": "training-portal"},
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
             },
         },
         "type": "kubernetes.io/service-account-token",
@@ -560,17 +557,17 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         "apiVersion": "rbac.authorization.k8s.io/v1",
         "kind": "ClusterRoleBinding",
         "metadata": {
-            "name": f"{OPERATOR_NAME_PREFIX}-training-portal-{portal_namespace}",
+            "name": f"educates-training-portal-{portal_namespace}",
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
             },
         },
         "roleRef": {
             "apiGroup": "rbac.authorization.k8s.io",
             "kind": "ClusterRole",
-            "name": f"{OPERATOR_NAME_PREFIX}-training-portal",
+            "name": "educates-training-portal",
         },
         "subjects": [
             {
@@ -590,9 +587,9 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             "name": "training-portal",
             "namespace": portal_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
             },
         },
         "spec": {
@@ -611,9 +608,9 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             "name": "training-portal",
             "namespace": portal_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
             },
         },
         "data": {
@@ -628,10 +625,10 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             "name": "training-portal",
             "namespace": portal_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/portal.services.dashboard": "true",
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/portal.services.dashboard": "true",
             },
         },
         "spec": {
@@ -642,10 +639,10 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                 "metadata": {
                     "labels": {
                         "deployment": "training-portal",
-                        f"training.{OPERATOR_API_GROUP}/component": "portal",
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                        f"training.{OPERATOR_API_GROUP}/portal.services.dashboard": "true",
+                        "training.educates.dev/component": "portal",
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
+                        "training.educates.dev/portal.services.dashboard": "true",
                     },
                 },
                 "spec": {
@@ -686,18 +683,6 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                                 "periodSeconds": 10,
                             },
                             "env": [
-                                {
-                                    "name": "OPERATOR_API_GROUP",
-                                    "value": OPERATOR_API_GROUP,
-                                },
-                                {
-                                    "name": "OPERATOR_STATUS_KEY",
-                                    "value": OPERATOR_STATUS_KEY,
-                                },
-                                {
-                                    "name": "OPERATOR_NAME_PREFIX",
-                                    "value": OPERATOR_NAME_PREFIX,
-                                },
                                 {
                                     "name": "TRAINING_PORTAL",
                                     "value": portal_name,
@@ -860,9 +845,9 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             "name": "training-portal",
             "namespace": portal_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
             },
         },
         "spec": {
@@ -879,9 +864,9 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             "name": "training-portal",
             "namespace": portal_namespace,
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
             },
             "annotations": {},
         },
@@ -941,14 +926,14 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                 and ingress_secret_namespace != portal_namespace
             ):
                 ingress_secret_copier_body = {
-                    "apiVersion": f"secrets.{OPERATOR_API_GROUP}/v1beta1",
+                    "apiVersion": "secrets.educates.dev/v1beta1",
                     "kind": "SecretCopier",
                     "metadata": {
-                        "name": f"{OPERATOR_NAME_PREFIX}-ingress-secret-{portal_namespace}",
+                        "name": f"educates-ingress-secret-{portal_namespace}",
                         "labels": {
-                            f"training.{OPERATOR_API_GROUP}/component": "portal",
-                            f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                            f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                            "training.educates.dev/component": "portal",
+                            "training.educates.dev/portal.name": portal_name,
+                            "training.educates.dev/portal.uid": portal_uid,
                         },
                     },
                     "spec": {
@@ -975,14 +960,14 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             ]
 
             ingress_secret_copier_body = {
-                "apiVersion": f"secrets.{OPERATOR_API_GROUP}/v1beta1",
+                "apiVersion": "secrets.educates.dev/v1beta1",
                 "kind": "SecretCopier",
                 "metadata": {
-                    "name": f"{OPERATOR_NAME_PREFIX}-ingress-secret-{portal_namespace}",
+                    "name": f"educates-ingress-secret-{portal_namespace}",
                     "labels": {
-                        f"training.{OPERATOR_API_GROUP}/component": "portal",
-                        f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                        f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                        "training.educates.dev/component": "portal",
+                        "training.educates.dev/portal.name": portal_name,
+                        "training.educates.dev/portal.uid": portal_uid,
                     },
                 },
                 "spec": {
@@ -1004,14 +989,14 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             kopf.adopt(ingress_secret_copier_body, namespace_instance.obj)
 
     theme_secret_copier_body = {
-        "apiVersion": f"secrets.{OPERATOR_API_GROUP}/v1beta1",
+        "apiVersion": "secrets.educates.dev/v1beta1",
         "kind": "SecretCopier",
         "metadata": {
-            "name": f"{OPERATOR_NAME_PREFIX}-website-theme-{portal_namespace}",
+            "name": f"educates-website-theme-{portal_namespace}",
             "labels": {
-                f"training.{OPERATOR_API_GROUP}/component": "portal",
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
+                "training.educates.dev/component": "portal",
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
             },
         },
         "spec": {
@@ -1057,7 +1042,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         logger.exception("Unexpected error creating training portal %s.", portal_name)
 
         patch["status"] = {
-            OPERATOR_STATUS_KEY: {
+            "educates": {
                 "phase": "Retrying",
                 "message": f"Unexpected error creating training portal {portal_name}.",
             }
@@ -1095,7 +1080,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
 
     patch["status"] = {}
 
-    patch["status"][OPERATOR_STATUS_KEY] = {
+    patch["status"]["educates"] = {
         "phase": "Running",
         "message": None,
         "namespace": portal_namespace,
@@ -1109,7 +1094,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
 
 
 @kopf.on.delete(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "trainingportals",
     optional=True,
@@ -1124,7 +1109,7 @@ def training_portal_delete(**_):
     # is deleted.
 
 
-@kopf.on.event(f"training.{OPERATOR_API_GROUP}", "v1beta1", "trainingportals")
+@kopf.on.event("training.educates.dev", "v1beta1", "trainingportals")
 def training_portal_event(type, event, **_):  # pylint: disable=redefined-builtin
     """Log when a training portal is deleted."""
 
@@ -1139,8 +1124,8 @@ def training_portal_event(type, event, **_):  # pylint: disable=redefined-builti
     "v1",
     "pods",
     labels={
-        f"training.{OPERATOR_API_GROUP}/component": "portal",
-        f"training.{OPERATOR_API_GROUP}/portal.services.dashboard": "true",
+        "training.educates.dev/component": "portal",
+        "training.educates.dev/portal.services.dashboard": "true",
     },
 )
 def training_portal_pod_event(type, event, **_):  # pylint: disable=redefined-builtin

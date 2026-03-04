@@ -6,7 +6,6 @@ import pykube
 
 from .helpers import lookup
 
-from .operator_config import OPERATOR_API_GROUP
 
 logger = logging.getLogger("educates")
 
@@ -304,7 +303,7 @@ def update_secret(namespace_name, rule):
 
     try:
         SecretImporter = pykube.object_factory(
-            api, "secrets.{}/v1beta1".format(OPERATOR_API_GROUP), "SecretImporter"
+            api, "secrets.educates.dev/v1beta1", "SecretImporter"
         )
 
         secret_importer_obj = SecretImporter.objects(

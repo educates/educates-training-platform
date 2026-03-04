@@ -6,12 +6,11 @@ import pykube
 
 from .secretcopier_funcs import reconcile_namespace
 
-from .operator_config import OPERATOR_API_GROUP
 
 logger = logging.getLogger("educates")
 
 
-@kopf.on.event(f"secrets.{OPERATOR_API_GROUP}", "v1beta1", "secretimporters")
+@kopf.on.event("secrets.educates.dev", "v1beta1", "secretimporters")
 def secretimporters_event(
     type, event, secretcopier_index: kopf.Index, secretexporter_index, **_
 ):

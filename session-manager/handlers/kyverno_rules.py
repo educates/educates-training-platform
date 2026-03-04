@@ -6,8 +6,6 @@ from wrapt import synchronized
 
 from .helpers import xget
 
-from .operator_config import OPERATOR_API_GROUP, OPERATOR_NAME_PREFIX
-
 kyverno_policies = []
 
 if os.path.exists("/opt/app-root/config/kyverno-policies.yaml"):
@@ -53,12 +51,12 @@ def kyverno_environment_rules(workshop_spec, environment_name):
                 resource["namespaceSelector"] = {
                     "matchExpressions": [
                         {
-                            "key": f"training.{OPERATOR_API_GROUP}/environment.name",
+                            "key": "training.educates.dev/environment.name",
                             "operator": "In",
                             "values": [environment_name],
                         },
                         {
-                            "key": f"training.{OPERATOR_API_GROUP}/component",
+                            "key": "training.educates.dev/component",
                             "operator": "In",
                             "values": ["session"],
                         },
@@ -75,7 +73,7 @@ def kyverno_environment_rules(workshop_spec, environment_name):
         "apiVersion": "kyverno.io/v1",
         "kind": "ClusterPolicy",
         "metadata": {
-            "name": f"{OPERATOR_NAME_PREFIX}-environment-{environment_name}",
+            "name": f"educates-environment-{environment_name}",
         },
         "spec": {
             "validationFailureAction": action,

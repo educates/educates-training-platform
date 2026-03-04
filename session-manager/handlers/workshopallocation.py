@@ -11,11 +11,6 @@ from .helpers import xget, substitute_variables
 from .analytics import report_analytics_event
 
 
-from .operator_config import (
-    OPERATOR_API_GROUP,
-    OPERATOR_STATUS_KEY,
-)
-
 logger = logging.getLogger("educates.workshopallocation")
 
 api = pykube.HTTPClient(pykube.KubeConfig.from_env())
@@ -26,11 +21,11 @@ api = pykube.HTTPClient(pykube.KubeConfig.from_env())
     "v1",
     "secrets",
     labels={
-        f"training.{OPERATOR_API_GROUP}/component": "session",
-        f"training.{OPERATOR_API_GROUP}/component.group": "variables",
-        f"training.{OPERATOR_API_GROUP}/portal.name": kopf.PRESENT,
-        f"training.{OPERATOR_API_GROUP}/environment.name": kopf.PRESENT,
-        f"training.{OPERATOR_API_GROUP}/session.name": kopf.PRESENT,
+        "training.educates.dev/component": "session",
+        "training.educates.dev/component.group": "variables",
+        "training.educates.dev/portal.name": kopf.PRESENT,
+        "training.educates.dev/environment.name": kopf.PRESENT,
+        "training.educates.dev/session.name": kopf.PRESENT,
     },
 )
 def session_variables_secret_index(
@@ -44,10 +39,10 @@ def session_variables_secret_index(
     variables can be used in expanding the request objects."""
 
     environment_name = body["metadata"]["labels"][
-        f"training.{OPERATOR_API_GROUP}/environment.name"
+        "training.educates.dev/environment.name"
     ]
     session_name = body["metadata"]["labels"][
-        f"training.{OPERATOR_API_GROUP}/session.name"
+        "training.educates.dev/session.name"
     ]
 
     logger.info(
@@ -65,11 +60,11 @@ def session_variables_secret_index(
     "v1",
     "secrets",
     labels={
-        f"training.{OPERATOR_API_GROUP}/component": "request",
-        f"training.{OPERATOR_API_GROUP}/component.group": "variables",
-        f"training.{OPERATOR_API_GROUP}/portal.name": kopf.PRESENT,
-        f"training.{OPERATOR_API_GROUP}/environment.name": kopf.PRESENT,
-        f"training.{OPERATOR_API_GROUP}/session.name": kopf.PRESENT,
+        "training.educates.dev/component": "request",
+        "training.educates.dev/component.group": "variables",
+        "training.educates.dev/portal.name": kopf.PRESENT,
+        "training.educates.dev/environment.name": kopf.PRESENT,
+        "training.educates.dev/session.name": kopf.PRESENT,
     },
 )
 def request_variables_secret_index(
@@ -86,10 +81,10 @@ def request_variables_secret_index(
     was actually created."""
 
     environment_name = body["metadata"]["labels"][
-        f"training.{OPERATOR_API_GROUP}/environment.name"
+        "training.educates.dev/environment.name"
     ]
     session_name = body["metadata"]["labels"][
-        f"training.{OPERATOR_API_GROUP}/session.name"
+        "training.educates.dev/session.name"
     ]
 
     logger.info(
@@ -103,7 +98,7 @@ def request_variables_secret_index(
 
 
 @kopf.on.resume(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "workshopallocations",
 )
@@ -120,7 +115,7 @@ def workshop_allocation_resume(name, **_):
 
 
 @kopf.on.create(
-    f"training.{OPERATOR_API_GROUP}",
+    "training.educates.dev",
     "v1beta1",
     "workshopallocations",
 )
@@ -145,16 +140,16 @@ def workshop_allocation_create(
     processed."""
 
     portal_name = meta.get("labels", {}).get(
-        f"training.{OPERATOR_API_GROUP}/portal.name", ""
+        "training.educates.dev/portal.name", ""
     )
     portal_uid = meta.get("labels", {}).get(
-        f"training.{OPERATOR_API_GROUP}/portal.uid", ""
+        "training.educates.dev/portal.uid", ""
     )
 
     environment_name = spec["environment"]["name"]
 
     environment_uid = meta.get("labels", {}).get(
-        f"training.{OPERATOR_API_GROUP}/environment.uid", ""
+        "training.educates.dev/environment.uid", ""
     )
 
     workshop_namespace = environment_name
@@ -207,7 +202,7 @@ def workshop_allocation_create(
             # status of the workshop allocation request.
 
             patch["status"] = {
-                OPERATOR_STATUS_KEY: {
+                "educates": {
                     "phase": "Failed",
                     "message": f"Workshop environment {environment_name} is not available.",
                 }
@@ -232,7 +227,7 @@ def workshop_allocation_create(
         # the request after a short delay. Make sure to set the status to
         # "Pending" to indicate that the request is still being processed.
 
-        patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+        patch["status"] = {"educates": {"phase": "Pending"}}
 
         raise kopf.TemporaryError(
             f"In processing workshop allocation request {name}, no record of workshop environment {environment_name} currently exists.",
@@ -253,7 +248,7 @@ def workshop_allocation_create(
             # status of the workshop allocation request.
 
             patch["status"] = {
-                OPERATOR_STATUS_KEY: {
+                "educates": {
                     "phase": "Failed",
                     "message": f"Workshop session {session_name} is not available.",
                 }
@@ -278,7 +273,7 @@ def workshop_allocation_create(
         # request after a short delay. Make sure to set the status to "Pending"
         # to indicate that the request is still being processed.
 
-        patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+        patch["status"] = {"educates": {"phase": "Pending"}}
 
         raise kopf.TemporaryError(
             f"In processing workshop allocation request {name}, no record of workshop session {session_name} currently exists.",
@@ -313,7 +308,7 @@ def workshop_allocation_create(
             # status of the workshop allocation request.
 
             patch["status"] = {
-                OPERATOR_STATUS_KEY: {
+                "educates": {
                     "phase": "Failed",
                     "message": f"Session variables secret {session_variables_secret_name} is not available.",
                 }
@@ -338,7 +333,7 @@ def workshop_allocation_create(
         # retry the request after a short delay. Make sure to set the status to
         # "Pending" to indicate that the request is still being processed.
 
-        patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+        patch["status"] = {"educates": {"phase": "Pending"}}
 
         raise kopf.TemporaryError(
             f"No record of variables secret {session_variables_secret_name} required for workshop allocation request {name}.",
@@ -363,7 +358,7 @@ def workshop_allocation_create(
 
             if not (workshop_namespace, request_variables_secret_name) in request_variables_secret_index:
                 patch["status"] = {
-                    OPERATOR_STATUS_KEY: {
+                    "educates": {
                         "phase": "Failed",
                         "message": f"Request variables secret {request_variables_secret_name} is not available.",
                     }
@@ -383,10 +378,10 @@ def workshop_allocation_create(
                 raise kopf.PermanentError(
                     f"Request variables secret {request_variables_secret_name} is not available."
                 )
-            
+
             else:
                 patch["status"] = {
-                    OPERATOR_STATUS_KEY: {
+                    "educates": {
                         "phase": "Failed",
                         "message": f"Request variables secret {user_variables_secret_name} is not available.",
                     }
@@ -411,7 +406,7 @@ def workshop_allocation_create(
         # retry the request after a short delay. Make sure to set the status to
         # "Pending" to indicate that the request is still being processed.
 
-        patch["status"] = {OPERATOR_STATUS_KEY: {"phase": "Pending"}}
+        patch["status"] = {"educates": {"phase": "Pending"}}
 
         if not (workshop_namespace, request_variables_secret_name) in request_variables_secret_index:
             raise kopf.TemporaryError(
@@ -464,11 +459,11 @@ def workshop_allocation_create(
     # workshop environment instance.
 
     workshop_name = xget(
-        environment_instance, f"status.{OPERATOR_STATUS_KEY}.workshop.name"
+        environment_instance, f"status.educates.workshop.name"
     )
 
     workshop_spec = xget(
-        environment_instance, f"status.{OPERATOR_STATUS_KEY}.workshop.spec"
+        environment_instance, f"status.educates.workshop.spec"
     )
 
     objects = []
@@ -494,15 +489,15 @@ def workshop_allocation_create(
 
         object_body["metadata"].setdefault("labels", {}).update(
             {
-                f"training.{OPERATOR_API_GROUP}/component": "request",
-                f"training.{OPERATOR_API_GROUP}/component.group": "objects",
-                f"training.{OPERATOR_API_GROUP}/workshop.name": workshop_name,
-                f"training.{OPERATOR_API_GROUP}/portal.name": portal_name,
-                f"training.{OPERATOR_API_GROUP}/portal.uid": portal_uid,
-                f"training.{OPERATOR_API_GROUP}/environment.name": environment_name,
-                f"training.{OPERATOR_API_GROUP}/environment.uid": environment_uid,
-                f"training.{OPERATOR_API_GROUP}/session.name": session_name,
-                f"training.{OPERATOR_API_GROUP}/session.objects": "true",
+                "training.educates.dev/component": "request",
+                "training.educates.dev/component.group": "objects",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
+                "training.educates.dev/session.objects": "true",
             }
         )
 
@@ -553,7 +548,7 @@ def workshop_allocation_create(
             )
 
             patch["status"] = {
-                OPERATOR_STATUS_KEY: {
+                "educates": {
                     "phase": "Failed",
                     "message": f"Unable to create workshop request objects for workshop session, failed on creating workshop request object {object_name} of type {object_type} in namespace {object_namespace} for workshop session {session_name}.",
                 }
@@ -568,14 +563,14 @@ def workshop_allocation_create(
 
     patch["status"] = {}
 
-    patch["status"][OPERATOR_STATUS_KEY] = {
+    patch["status"]["educates"] = {
         "phase": "Allocated",
         "message": None,
     }
 
 
 @kopf.on.delete(
-    f"training.{OPERATOR_API_GROUP}", "v1beta1", "workshopallocations", optional=True
+    "training.educates.dev", "v1beta1", "workshopallocations", optional=True
 )
 def workshop_allocation_delete(name, **_):
     """Nothing to do here at this point because the owner references will
@@ -587,7 +582,7 @@ def workshop_allocation_delete(name, **_):
     # allocation request is deleted.
 
 
-@kopf.on.event(f"training.{OPERATOR_API_GROUP}", "v1beta1", "workshopallocations")
+@kopf.on.event("training.educates.dev", "v1beta1", "workshopallocations")
 def workshop_allocation_event(type, event, **_):  # pylint: disable=redefined-builtin
     """Log when a workshop allocation request is deleted."""
 

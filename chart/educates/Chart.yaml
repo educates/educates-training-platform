@@ -1,0 +1,17 @@
+apiVersion: v2
+name: educates
+description: Educates training platform - Helm chart for the Educates package (session manager, secrets manager, CRDs and operator configuration).
+type: application
+version: 0.1.0
+appVersion: "3.5.1"
+kubeVersion: ">=1.25.0"
+keywords:
+  - educates
+  - training
+  - workshop
+  - kubernetes
+home: https://github.com/educates/educates-training-platform
+sources:
+  - https://github.com/educates/educates-training-platform
+maintainers:
+  - name: Educates Team

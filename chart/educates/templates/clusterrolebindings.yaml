@@ -1,0 +1,154 @@
+{{- $ns := include "educates.operator.namespace" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-session-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-session-manager
+subjects:
+  - kind: ServiceAccount
+    name: session-manager
+    namespace: {{ $ns }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-session-manager:admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: ServiceAccount
+    name: session-manager
+    namespace: {{ $ns }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-session-manager:kyverno-policies
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kyverno:rbac:admin:policies
+subjects:
+  - kind: ServiceAccount
+    name: session-manager
+    namespace: {{ $ns }}
+{{- if .Values.sessionManager.clusterAdmin }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-session-manager:cluster-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: session-manager
+    namespace: {{ $ns }}
+{{- end }}
+{{- if eq .Values.clusterSecurity.policyEngine "pod-security-policies" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-session-manager-psp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-baseline-psp
+subjects:
+  - kind: ServiceAccount
+    name: session-manager
+    namespace: {{ $ns }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-image-puller-psp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-baseline-psp
+subjects:
+  - kind: ServiceAccount
+    name: image-puller
+    namespace: {{ $ns }}
+{{- end }}
+{{- if eq .Values.clusterSecurity.policyEngine "security-context-constraints" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-session-manager-scc
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-baseline-scc
+subjects:
+  - kind: ServiceAccount
+    name: session-manager
+    namespace: {{ $ns }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-image-puller-scc
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-baseline-scc
+subjects:
+  - kind: ServiceAccount
+    name: image-puller
+    namespace: {{ $ns }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-secrets-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-secrets-manager
+subjects:
+  - kind: ServiceAccount
+    name: secrets-manager
+    namespace: {{ $ns }}
+{{- if eq .Values.clusterSecurity.policyEngine "pod-security-policies" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-secrets-manager-psp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-baseline-psp
+subjects:
+  - kind: ServiceAccount
+    name: secrets-manager
+    namespace: {{ $ns }}
+{{- end }}
+{{- if eq .Values.clusterSecurity.policyEngine "security-context-constraints" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-secrets-manager-scc
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-baseline-scc
+subjects:
+  - kind: ServiceAccount
+    name: secrets-manager
+    namespace: {{ $ns }}
+{{- end }}

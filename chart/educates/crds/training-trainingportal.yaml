@@ -1,0 +1,414 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: trainingportals.training.educates.dev
+spec:
+  scope: Cluster
+  group: training.educates.dev
+  names:
+    plural: trainingportals
+    singular: trainingportal
+    kind: TrainingPortal
+    categories:
+    - educates
+    - educates-training
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                portal:
+                  type: object
+                  properties:
+                    title:
+                      type: string
+                    logo:
+                      type: string
+                    labels:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                        - name
+                        properties:
+                          name:
+                            type: string
+                          value:
+                            type: string
+                    password:
+                      type: string
+                    index:
+                      type: string
+                    sessions:
+                      type: object
+                      properties:
+                        maximum:
+                          type: integer
+                        registered:
+                          type: integer
+                        anonymous:
+                          type: integer
+                    # Deprecated, use "workshop.defaults.capacity".
+                    capacity:
+                      type: integer
+                    # Deprecated, use "workshop.defaults.initial".
+                    initial:
+                      type: integer
+                    # Deprecated, use "workshop.defaults.reserved".
+                    reserved:
+                      type: integer
+                    # Deprecated, use "workshop.defaults.expires".
+                    expires:
+                      type: string
+                      pattern: '^\d+(s|m|h)$'
+                    # Deprecated, use "workshop.defaults.orphaned".
+                    orphaned:
+                      type: string
+                      pattern: '^\d+(s|m|h)$'
+                    workshop:
+                      type: object
+                      properties:
+                        defaults:
+                          type: object
+                          properties:
+                            labels:
+                              type: array
+                              items:
+                                type: object
+                                required:
+                                - name
+                                properties:
+                                  name:
+                                    type: string
+                                  value:
+                                    type: string
+                            capacity:
+                              type: integer
+                            initial:
+                              type: integer
+                            reserved:
+                              type: integer
+                            expires:
+                              type: string
+                              pattern: '^\d+(s|m|h)$'
+                            overtime:
+                              type: string
+                              pattern: '^\d+(s|m|h)$'
+                            deadline:
+                              type: string
+                              pattern: '^\d+(s|m|h)$'
+                            orphaned:
+                              type: string
+                              pattern: '^\d+(s|m|h)$'
+                            overdue:
+                              type: string
+                              pattern: '^\d+(s|m|h)$'
+                            refresh:
+                              type: string
+                              pattern: '^\d+(s|m|h)$'
+                            registry:
+                              type: object
+                              required:
+                              - host
+                              properties:
+                                host:
+                                  type: string
+                                namespace:
+                                  type: string
+                            env:
+                              type: array
+                              items:
+                                type: object
+                                required:
+                                - name
+                                properties:
+                                  name:
+                                    type: string
+                                  value:
+                                    type: string
+                    theme:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        frame:
+                          type: object
+                          properties:
+                            ancestors:
+                              type: array
+                              items:
+                                type: string
+                    ingress:
+                      type: object
+                      properties:
+                        hostname:
+                          type: string
+                        tlsCertificateRef:
+                          type: object
+                          required:
+                          - name
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                    cookies:
+                      type: object
+                      properties:
+                        domain:
+                          type: string
+                    registration:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                            pattern: '^(one-step|anonymous)$'
+                          enabled:
+                            type: boolean
+                    catalog:
+                      type: object
+                      properties:
+                        visibility:
+                          type: string
+                          pattern: '^(public|private)$'
+                    credentials:
+                      type: object
+                      properties:
+                        admin:
+                          type: object
+                          properties:
+                            username:
+                              type: string
+                            password:
+                              type: string
+                        robot:
+                          type: object
+                          properties:
+                            username:
+                              type: string
+                            password:
+                              type: string
+                    clients:
+                      type: object
+                      properties:
+                        robot:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            secret:
+                              type: string
+                    updates:
+                      type: object
+                      properties:
+                        workshop:
+                          type: boolean
+                          default: false
+                analytics:
+                  type: object
+                  properties:
+                    google:
+                      type: object
+                      required:
+                      - trackingId
+                      properties:
+                        trackingId:
+                          type: string
+                    clarity:
+                      type: object
+                      required:
+                      - trackingId
+                      properties:
+                        trackingId:
+                          type: string
+                    amplitude:
+                      type: object
+                      required:
+                      - trackingId
+                      properties:
+                        trackingId:
+                          type: string
+                    webhook:
+                      type: object
+                      required:
+                      - url
+                      properties:
+                        url:
+                          type: string
+                workshops:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                    - name
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                      alias:
+                        type: string
+                      labels:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                          - name
+                          properties:
+                            name:
+                              type: string
+                            value:
+                              type: string
+                      capacity:
+                        type: integer
+                      initial:
+                        type: integer
+                      reserved:
+                        type: integer
+                      expires:
+                        type: string
+                        pattern: '^\d+(s|m|h)$'
+                      overtime:
+                        type: string
+                        pattern: '^\d+(s|m|h)$'
+                      deadline:
+                        type: string
+                        pattern: '^\d+(s|m|h)$'
+                      orphaned:
+                        type: string
+                        pattern: '^\d+(s|m|h)$'
+                      overdue:
+                        type: string
+                        pattern: '^\d+(s|m|h)$'
+                      refresh:
+                        type: string
+                        pattern: '^\d+(s|m|h)$'
+                      registry:
+                        type: object
+                        required:
+                        - host
+                        properties:
+                          host:
+                            type: string
+                          namespace:
+                            type: string
+                      env:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                          - name
+                          properties:
+                            name:
+                              type: string
+                            value:
+                              type: string
+            status:
+              type: object
+              properties:
+                kopf:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                educates:
+                  type: object
+                  required:
+                  - phase
+                  properties:
+                    phase:
+                      type: string
+                    message:
+                      type: string
+                    namespace:
+                      type: string
+                    url:
+                      type: string
+                    credentials:
+                      type: object
+                      required:
+                      - admin
+                      - robot
+                      properties:
+                        admin:
+                          type: object
+                          required:
+                          - username
+                          - password
+                          properties:
+                            username:
+                              type: string
+                            password:
+                              type: string
+                        robot:
+                          type: object
+                          required:
+                          - username
+                          - password
+                          properties:
+                            username:
+                              type: string
+                            password:
+                              type: string
+                    clients:
+                      type: object
+                      required:
+                      - robot
+                      properties:
+                        robot:
+                          type: object
+                          required:
+                          - id
+                          - secret
+                          properties:
+                            id:
+                              type: string
+                            secret:
+                              type: string
+                    secrets:
+                      type: object
+                      properties:
+                        ingress:
+                          type: array
+                          items:
+                            type: string
+                        registry:
+                          type: array
+                          items:
+                            type: string
+      additionalPrinterColumns:
+      - name: URL
+        type: string
+        priority: 0
+        description: The URL for accessing the portal.
+        jsonPath: .status.educates.url
+      - name: PortalPassword
+        type: string
+        priority: 0
+        description: Password for accessing the training portal.
+        jsonPath: ".spec.portal.password"
+      - name: AdminUsername
+        type: string
+        priority: 0
+        description: The username for accessing admin pages.
+        jsonPath: .status.educates.credentials.admin.username
+      - name: AdminPassword
+        type: string
+        priority: 0
+        description: The password for accessing admin pages.
+        jsonPath: .status.educates.credentials.admin.password
+      - name: Status
+        type: string
+        priority: 0
+        description: Status of training portal deployment.
+        jsonPath: .status.educates.phase
+      - name: Message
+        type: string
+        priority: 0
+        description: Status message.
+        jsonPath: .status.educates.message

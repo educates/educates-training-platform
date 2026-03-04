@@ -1,0 +1,75 @@
+{{- $smImage := include "educates.image" (dict "name" "session-manager" "context" .) }}
+{{- $pullPolicy := include "educates.imagePullPolicy" $smImage }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: session-manager
+  namespace: {{ include "educates.operator.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "educates.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    deployment: session-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      deployment: session-manager
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        deployment: session-manager
+        app.kubernetes.io/name: {{ include "educates.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: session-manager
+      automountServiceAccountToken: false
+      {{- with .Values.clusterSecrets.pullSecretRefs }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ .name }}
+        {{- end }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+      - name: operator
+        image: {{ $smImage }}
+        imagePullPolicy: {{ $pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        startupProbe:
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 4
+          httpGet:
+            path: /healthz?probe=startup
+            port: 8080
+        livenessProbe:
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+          httpGet:
+            path: /healthz?probe=liveness
+            port: 8080
+        volumeMounts:
+        - name: config
+          mountPath: /opt/app-root/config/
+        - name: token
+          mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          readOnly: true
+      volumes:
+      - name: config
+        secret:
+          secretName: educates-config
+      - name: token
+        secret:
+          secretName: session-manager-token

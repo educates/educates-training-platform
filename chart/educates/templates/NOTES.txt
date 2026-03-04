@@ -1,0 +1,24 @@
+Educates (Helm) has been installed.
+
+1. Ensure the **training CRDs** are installed (TrainingPortal, Workshop, etc.). See the chart README or project docs: project-docs/installation-guides/helm-installation.md
+
+2. Check that the session manager and secrets manager are running:
+
+   kubectl get pods -n {{ include "educates.operator.namespace" . }}
+
+3. Create a TrainingPortal to expose workshops, for example:
+
+   kubectl apply -f - <<EOF
+   apiVersion: training.educates.dev/v1beta1
+   kind: TrainingPortal
+   metadata:
+     name: my-portal
+   spec:
+     ...
+   EOF
+
+4. Configuration is stored in the educates-config secret. To change settings, update your values and run:
+
+   helm upgrade educates ./chart/educates -n {{ include "educates.operator.namespace" . }} -f your-values.yaml
+
+For more options see: project-docs/installation-guides/configuration-settings.md

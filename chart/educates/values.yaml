@@ -1,0 +1,202 @@
+# Default values for the Educates Helm chart.
+# This structure mirrors the Educates package configuration used by the ytt-based installer.
+# See project-docs/installation-guides/helm-installation.md for full documentation.
+
+# Version of Educates. Used for image tags when a component is not listed in imageVersions.
+version: "3.5.1"
+
+# Session manager permissions. When true, session manager gets cluster-admin.
+sessionManager:
+  clusterAdmin: true
+
+# Image registry for Educates images. Leave host empty to use in-cluster registry.
+imageRegistry:
+  host: ""
+  namespace: ""
+
+# Override container images by name. Entries here take precedence over registry/version.
+# Defaults below use ghcr.io/educates with the chart appVersion (3.5.1). Override to use a
+# different registry, private images, or a specific tag.
+imageVersions:
+  - name: session-manager
+    image: ghcr.io/educates/educates-session-manager:3.5.1
+  - name: training-portal
+    image: ghcr.io/educates/educates-training-portal:3.5.1
+  - name: secrets-manager
+    image: ghcr.io/educates/educates-secrets-manager:3.5.1
+  - name: pause-container
+    image: ghcr.io/educates/educates-pause-container:3.5.1
+  - name: base-environment
+    image: ghcr.io/educates/educates-base-environment:3.5.1
+  - name: docker-registry
+    image: ghcr.io/educates/educates-docker-registry:3.5.1
+  - name: tunnel-manager
+    image: ghcr.io/educates/educates-tunnel-manager:3.5.1
+  - name: image-cache
+    image: ghcr.io/educates/educates-image-cache:3.5.1
+  - name: assets-server
+    image: ghcr.io/educates/educates-assets-server:3.5.1
+  - name: lookup-service
+    image: ghcr.io/educates/educates-lookup-service:3.5.1
+  - name: jdk8-environment
+    image: ghcr.io/educates/educates-jdk8-environment:3.5.1
+  - name: jdk11-environment
+    image: ghcr.io/educates/educates-jdk11-environment:3.5.1
+  - name: jdk17-environment
+    image: ghcr.io/educates/educates-jdk17-environment:3.5.1
+  - name: jdk21-environment
+    image: ghcr.io/educates/educates-jdk21-environment:3.5.1
+  - name: conda-environment
+    image: ghcr.io/educates/educates-conda-environment:3.5.1
+  - name: debian-base-image
+    image: debian:sid-20230502-slim
+  - name: docker-in-docker
+    image: docker:27.5.1-dind
+  - name: loftsh-kubernetes-v1.31
+    image: ghcr.io/loft-sh/kubernetes:v1.31.1
+  - name: loftsh-kubernetes-v1.32
+    image: ghcr.io/loft-sh/kubernetes:v1.32.1
+  - name: loftsh-kubernetes-v1.33
+    image: ghcr.io/loft-sh/kubernetes:v1.33.4
+  - name: loftsh-kubernetes-v1.34
+    image: ghcr.io/loft-sh/kubernetes:v1.34.0
+  - name: loftsh-vcluster
+    image: ghcr.io/loft-sh/vcluster-oss:0.30.2
+
+# Container runtime class for workshop session pods (e.g. kata-qemu)
+clusterRuntime:
+  class: ""
+
+# Ingress configuration
+clusterIngress:
+  domain: "educates-local-dev.test"
+  class: ""
+  protocol: ""
+  # Inline TLS certificate (optional; prefer tlsCertificateRef when possible)
+  tlsCertificate:
+    tls.crt: ""
+    tls.key: ""
+  # Reference to TLS secret (takes precedence over tlsCertificate)
+  tlsCertificateRef:
+    namespace: ""
+    name: ""
+  # Inline CA certificate (optional)
+  caCertificate:
+    ca.crt: ""
+  # Reference to CA secret (takes precedence over caCertificate)
+  caCertificateRef:
+    namespace: ""
+    name: ""
+  caNodeInjector:
+    enabled: false
+
+# Session cookie domain (for cross-domain embedding)
+sessionCookies:
+  domain: ""
+
+# Storage for persistent volumes
+clusterStorage:
+  class: ""
+  user: 0
+  group: 1
+
+# Image pull secrets for workshop and operator images
+# The chart automatically creates SecretCopier resources to copy secrets from external namespaces
+# and SecretInjector resources to inject them into portal/environment/session namespaces
+clusterSecrets:
+  pullSecretRefs: []
+    # - namespace: "default"
+    #   name: "my-registry-pull"
+
+# Cluster security policy engine: pod-security-policies | pod-security-standards | security-context-constraints | kyverno | none
+clusterSecurity:
+  policyEngine: "none"
+  # When policyEngine is kyverno:
+  # - The chart automatically creates 16 embedded Kyverno ClusterPolicy resources (11 baseline + 5 restricted)
+  # - These policies enforce Pod Security Standards using CEL expressions
+  # - Policies apply to namespaces with training.educates.dev/policy.engine=kyverno labels
+  # - kyvernoPolicies field below is for custom policies (optional YAML string for config secret)
+  kyvernoPolicies: "[]"
+
+# Workshop rules engine: kyverno | none
+workshopSecurity:
+  rulesEngine: "kyverno"
+
+# Default training portal credentials
+trainingPortal:
+  credentials:
+    admin:
+      username: "educates"
+      password: ""
+    robot:
+      username: "robot@educates"
+      password: ""
+  clients:
+    robot:
+      id: ""
+      secret: ""
+
+# Docker daemon settings when building images in workshops
+dockerDaemon:
+  networkMTU: 1400
+  proxyCache:
+    remoteURL: ""
+    username: ""
+    password: ""
+
+# Blocked CIDRs (e.g. cloud metadata endpoints)
+clusterNetwork:
+  blockCIDRs:
+    - "169.254.169.254/32"
+    - "fd00:ec2::254/128"
+
+# Workshop analytics
+workshopAnalytics:
+  google:
+    trackingId: ""
+  clarity:
+    trackingId: ""
+  amplitude:
+    trackingId: ""
+  webhook:
+    url: ""
+
+# Website styling overrides (HTML, script, style strings)
+websiteStyling:
+  workshopDashboard:
+    html: ""
+    script: ""
+    style: ""
+  workshopInstructions:
+    html: ""
+    script: ""
+    style: ""
+  workshopStarted:
+    html: ""
+  workshopFinished:
+    html: ""
+  trainingPortal:
+    html: ""
+    script: ""
+    style: ""
+  defaultTheme: ""
+  themeDataRefs: []  # Chart automatically creates SecretCopier resources for external theme refs
+    # - name: ""
+    #   namespace: ""
+  frameAncestors: []
+
+# Pre-pull workshop images to nodes
+imagePuller:
+  enabled: true
+  prePullImages:
+    - "base-environment"
+
+# Lookup service (aggregation API for discovering workshops and environments)
+# When enabled, deploys:
+# - Lookup service Deployment, Service, and Ingress
+# - Three CRDs: ClusterConfig, ClientConfig, TenantConfig
+# - RBAC for remote access (ServiceAccount, ClusterRole, ClusterRoleBinding)
+# - Automatic CA certificate injection if clusterIngress CA is configured
+lookupService:
+  enabled: false
+  ingressPrefix: "educates-api"  # Creates ingress at <ingressPrefix>.<clusterIngress.domain>

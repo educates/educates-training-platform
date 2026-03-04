@@ -1,0 +1,71 @@
+{{- if .Values.lookupService.enabled }}
+
+{{- $ns := include "educates.operator.namespace" . }}
+---
+# ServiceAccount for remote access clients.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: remote-access
+  namespace: {{ $ns }}
+  annotations:
+    kapp.k14s.io/change-group: "educates/sa-with-separate-token-secret"
+  labels:
+    app.kubernetes.io/name: {{ include "educates.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+# Secret for remote-access ServiceAccount token (required on Kubernetes 1.24+).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: remote-access-token
+  namespace: {{ $ns }}
+  annotations:
+    kubernetes.io/service-account.name: "remote-access"
+    kapp.k14s.io/change-rule: "upsert after upserting educates/sa-with-separate-token-secret"
+  labels:
+    app.kubernetes.io/name: {{ include "educates.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+type: kubernetes.io/service-account-token
+---
+# ClusterRole for remote access clients.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-remote-access
+rules:
+  - apiGroups:
+      - training.educates.dev
+    resources:
+      - trainingportals
+      - workshopenvironments
+      - workshopsessions
+      - workshopallocations
+      - workshops
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+      - watch
+---
+# ClusterRoleBinding for remote access.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-remote-access
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-remote-access
+subjects:
+  - kind: ServiceAccount
+    name: remote-access
+    namespace: {{ $ns }}
+{{- end }}

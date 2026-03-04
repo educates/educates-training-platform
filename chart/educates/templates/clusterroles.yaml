@@ -1,0 +1,231 @@
+{{- if eq .Values.clusterSecurity.policyEngine "pod-security-policies" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-privileged-psp
+rules:
+  - apiGroups: [policy]
+    resources: [podsecuritypolicies]
+    verbs: [use]
+    resourceNames: [aaa-educates-privileged]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-baseline-psp
+rules:
+  - apiGroups: [policy]
+    resources: [podsecuritypolicies]
+    verbs: [use]
+    resourceNames: [aaa-educates-baseline]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-restricted-psp
+rules:
+  - apiGroups: [policy]
+    resources: [podsecuritypolicies]
+    verbs: [use]
+    resourceNames: [aaa-educates-restricted]
+{{- end }}
+{{- if eq .Values.clusterSecurity.policyEngine "security-context-constraints" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-privileged-scc
+rules:
+  - apiGroups: [security.openshift.io]
+    resources: [securitycontextconstraints]
+    verbs: [use]
+    resourceNames: [educates-privileged]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-baseline-scc
+rules:
+  - apiGroups: [security.openshift.io]
+    resources: [securitycontextconstraints]
+    verbs: [use]
+    resourceNames: [educates-baseline]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-restricted-scc
+rules:
+  - apiGroups: [security.openshift.io]
+    resources: [securitycontextconstraints]
+    verbs: [use]
+    resourceNames: [educates-restricted]
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-session-manager
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels:
+      rbac.educates.dev/extends-workshop-permissions: "true"
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-session-manager:core
+  labels:
+    rbac.educates.dev/extends-workshop-permissions: "true"
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, limitranges, resourcequotas]
+    verbs: ["*"]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles, clusterrolebindings]
+    verbs: ["*"]
+  - apiGroups: [training.educates.dev]
+    resources: [workshops, workshopsessions, trainingportals, workshopenvironments, workshopallocations, workshoprequests]
+    verbs: ["*"]
+  - apiGroups: [secrets.educates.dev]
+    resources: [secretcopiers]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-secrets-manager
+rules:
+  - apiGroups: [""]
+    resources: [events, secrets, namespaces, serviceaccounts]
+    verbs: [create, get, list, watch, delete, deletecollection, patch, update]
+  - apiGroups: [secrets.educates.dev]
+    resources: [secretcopiers, secretexporters, secretimporters, secretinjectors]
+    verbs: [get, list, watch, patch, update]
+  - apiGroups: [secrets.educates.dev]
+    resources: [secretcopiers/finalizers, secretimporters/finalizers]
+    verbs: [update]
+---
+# view-session-role, edit-session-role, admin-session-role (abbreviated for chart size; full RBAC in ytt package)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-view-session-role
+rules:
+  - apiGroups: [""]
+    resources: [configmaps, endpoints, persistentvolumeclaims, persistentvolumeclaims/status, pods, replicationcontrollers, replicationcontrollers/scale, serviceaccounts, services, services/status, bindings, events, limitranges, namespaces/status, pods/log, pods/status, replicationcontrollers/status, resourcequotas, resourcequotas/status, namespaces]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [controllerrevisions, daemonsets, daemonsets/status, deployments, deployments/scale, deployments/status, replicasets, replicasets/scale, replicasets/status, statefulsets, statefulsets/scale, statefulsets/status]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling, batch, policy, networking.k8s.io]
+    resources: [horizontalpodautoscalers, horizontalpodautoscalers/status, cronjobs, cronjobs/status, jobs, jobs/status, poddisruptionbudgets, poddisruptionbudgets/status, ingresses, ingresses/status]
+    verbs: [get, list, watch]
+  - apiGroups: [extensions]
+    resources: [daemonsets, daemonsets/status, deployments, deployments/scale, deployments/status, ingresses, ingresses/status, replicasets, replicasets/scale, replicasets/status, replicationcontrollers/scale]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-edit-session-role
+rules:
+  - apiGroups: [""]
+    resources: [pods/attach, pods/exec, pods/portforward, pods/proxy, secrets, services/proxy]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    verbs: [impersonate]
+  - apiGroups: [""]
+    resources: [pods, pods/attach, pods/exec, pods/portforward, pods/proxy, configmaps, endpoints, persistentvolumeclaims, replicationcontrollers, replicationcontrollers/scale, secrets, serviceaccounts, services, services/proxy]
+    verbs: [create, delete, deletecollection, patch, update]
+  - apiGroups: [apps]
+    resources: [daemonsets, deployments, deployments/rollback, deployments/scale, replicasets, replicasets/scale, statefulsets, statefulsets/scale]
+    verbs: [create, delete, deletecollection, patch, update]
+  - apiGroups: [autoscaling, batch, policy, networking.k8s.io]
+    resources: [horizontalpodautoscalers, cronjobs, jobs, poddisruptionbudgets, ingresses]
+    verbs: [create, delete, deletecollection, patch, update]
+  - apiGroups: [extensions]
+    resources: [daemonsets, deployments, deployments/rollback, deployments/scale, ingresses, replicasets, replicasets/scale, replicationcontrollers/scale]
+    verbs: [create, delete, deletecollection, patch, update]
+  - apiGroups: [""]
+    resources: [configmaps, endpoints, persistentvolumeclaims, persistentvolumeclaims/status, pods, replicationcontrollers, replicationcontrollers/scale, serviceaccounts, services, services/status, bindings, events, limitranges, namespaces/status, pods/log, pods/status, replicationcontrollers/status, resourcequotas, resourcequotas/status, namespaces]
+    verbs: [get, list, watch]
+  - apiGroups: [apps, autoscaling, batch, policy, extensions, networking.k8s.io]
+    resources: [controllerrevisions, daemonsets, daemonsets/status, deployments, deployments/scale, deployments/status, replicasets, replicasets/scale, replicasets/status, statefulsets, statefulsets/scale, statefulsets/status, horizontalpodautoscalers, horizontalpodautoscalers/status, cronjobs, cronjobs/status, jobs, jobs/status, poddisruptionbudgets, poddisruptionbudgets/status, daemonsets/status, deployments/scale, deployments/status, ingresses/status, replicasets/scale, replicasets/status, replicationcontrollers/scale]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-admin-session-role
+rules:
+  - apiGroups: [""]
+    resources: [pods/attach, pods/exec, pods/portforward, pods/proxy, secrets, services/proxy]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    verbs: [impersonate]
+  - apiGroups: [""]
+    resources: [pods, pods/attach, pods/exec, pods/portforward, pods/proxy, configmaps, endpoints, persistentvolumeclaims, replicationcontrollers, replicationcontrollers/scale, secrets, serviceaccounts, services, services/proxy]
+    verbs: [create, delete, deletecollection, patch, update]
+  - apiGroups: [apps]
+    resources: [daemonsets, deployments, deployments/rollback, deployments/scale, replicasets, replicasets/scale, statefulsets, statefulsets/scale]
+    verbs: [create, delete, deletecollection, patch, update]
+  - apiGroups: [autoscaling, batch, policy, networking.k8s.io]
+    resources: [horizontalpodautoscalers, cronjobs, jobs, poddisruptionbudgets, ingresses]
+    verbs: [create, delete, deletecollection, patch, update]
+  - apiGroups: [extensions]
+    resources: [daemonsets, deployments, deployments/rollback, deployments/scale, ingresses, replicasets, replicasets/scale, replicationcontrollers/scale]
+    verbs: [create, delete, deletecollection, patch, update]
+  - apiGroups: [""]
+    resources: [configmaps, endpoints, persistentvolumeclaims, persistentvolumeclaims/status, pods, replicationcontrollers, replicationcontrollers/scale, serviceaccounts, services, services/status, bindings, events, limitranges, namespaces/status, pods/log, pods/status, replicationcontrollers/status, resourcequotas, resourcequotas/status, namespaces]
+    verbs: [get, list, watch]
+  - apiGroups: [apps, autoscaling, batch, policy, extensions, networking.k8s.io]
+    resources: [controllerrevisions, daemonsets, daemonsets/status, deployments, deployments/scale, deployments/status, replicasets, replicasets/scale, replicasets/status, statefulsets, statefulsets/scale, statefulsets/status, horizontalpodautoscalers, horizontalpodautoscalers/status, cronjobs, cronjobs/status, jobs, jobs/status, poddisruptionbudgets, poddisruptionbudgets/status, daemonsets/status, deployments/scale, deployments/status, ingresses/status, replicasets/scale, replicasets/status, replicationcontrollers/scale]
+    verbs: [get, list, watch]
+  - apiGroups: [authorization.k8s.io]
+    resources: [localsubjectaccessreviews]
+    verbs: [create]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [rolebindings, roles]
+    verbs: [create, delete, deletecollection, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-training-portal
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    resourceNames: [default]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list, watch, create]
+  - apiGroups: [training.educates.dev]
+    resources: [workshops, workshopenvironments, workshopsessions, workshopallocations, trainingportals]
+    verbs: [get, list, watch]
+  - apiGroups: [training.educates.dev]
+    resources: [trainingportals/finalizers, workshopenvironments/finalizers, workshopsessions/finalizers]
+    verbs: [update]
+  - apiGroups: [training.educates.dev]
+    resources: [workshopenvironments, workshopsessions, workshopallocations]
+    verbs: [create, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-tunnel-manager
+rules:
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets, namespaces, serviceaccounts]
+    verbs: [get, list, watch, create, delete, deletecollection, patch, update]
+  - apiGroups: [training.educates.dev]
+    resources: [workshopsessions]
+    verbs: [get, list, watch]

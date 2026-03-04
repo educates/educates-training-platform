@@ -1,0 +1,85 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: workshoprequests.training.educates.dev
+spec:
+  scope: Namespaced
+  group: training.educates.dev
+  names:
+    plural: workshoprequests
+    singular: workshoprequest
+    kind: WorkshopRequest
+    categories:
+    - educates
+    - educates-training
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+              - environment
+              properties:
+                environment:
+                  type: object
+                  required:
+                  - name
+                  properties:
+                    name:
+                      type: string
+                    token:
+                      type: string
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                educates:
+                  type: object
+                  properties:
+                    phase:
+                      type: string
+                    url:
+                      type: string
+                    username:
+                      type: string
+                    password:
+                      type: string
+                    session:
+                      type: object
+                      properties:
+                        kind:
+                          type: string
+                        apiVersion:
+                          type: string
+                        name:
+                          type: string
+                        uid:
+                          type: string
+      additionalPrinterColumns:
+      - name: URL
+        type: string
+        priority: 0
+        description: The URL to access the workshop.
+        jsonPath: .status.educates.url
+      - name: Username
+        type: string
+        priority: 0
+        description: The username to access the workshop.
+        jsonPath: .status.educates.username
+      - name: Password
+        type: string
+        priority: 0
+        description: The password to access the workshop.
+        jsonPath: .status.educates.password
+      - name: Status
+        type: string
+        priority: 0
+        description: Status of workshop request.
+        jsonPath: .status.educates.phase

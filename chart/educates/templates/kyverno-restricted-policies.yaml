@@ -1,0 +1,370 @@
+{{- if eq .Values.clusterSecurity.policyEngine "kyverno" }}
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: educates-restricted-disallow-capabilities-strict
+  annotations:
+    policies.kyverno.io/title: Disallow Capabilities (Strict) in CEL expressions
+    policies.kyverno.io/category: Pod Security Standards (Restricted) in CEL
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/minversion: 1.11.0
+    kyverno.io/kyverno-version: 1.11.0
+    kyverno.io/kubernetes-version: "1.26-1.27"
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Adding capabilities other than `NET_BIND_SERVICE` is disallowed. In addition,
+      all containers must explicitly drop `ALL` capabilities.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-drop-all
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            operations:
+            - CREATE
+            - UPDATE
+            namespaceSelector:
+              matchExpressions:
+              - key: {{ printf "training.%s/policy.engine" "educates.dev" }}
+                operator: In
+                values:
+                - kyverno
+              - key: {{ printf "training.%s/policy.name" "educates.dev" }}
+                operator: In
+                values:
+                - restricted
+      validate:
+        message: >-
+          Containers must drop `ALL` capabilities.
+        cel:
+          expressions:
+            - expression: >-
+                object.spec.containers.all(container, has(container.securityContext) &&
+                has(container.securityContext.capabilities) &&
+                has(container.securityContext.capabilities.drop) &&
+                container.securityContext.capabilities.drop.exists_one(capability, capability == 'ALL'))
+
+            - expression: >-
+                !has(object.spec.initContainers) ||
+                object.spec.initContainers.all(container, has(container.securityContext) &&
+                has(container.securityContext.capabilities) &&
+                has(container.securityContext.capabilities.drop) &&
+                container.securityContext.capabilities.drop.exists_one(capability, capability == 'ALL'))
+
+            - expression: >-
+                !has(object.spec.ephemeralContainers) ||
+                object.spec.ephemeralContainers.all(container, has(container.securityContext) &&
+                has(container.securityContext.capabilities) &&
+                has(container.securityContext.capabilities.drop) &&
+                container.securityContext.capabilities.drop.exists_one(capability, capability == 'ALL'))
+    - name: adding-capabilities-strict
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            operations:
+            - CREATE
+            - UPDATE
+            namespaceSelector:
+              matchExpressions:
+              - key: {{ printf "training.%s/policy.engine" "educates.dev" }}
+                operator: In
+                values:
+                - kyverno
+              - key: {{ printf "training.%s/policy.name" "educates.dev" }}
+                operator: In
+                values:
+                - restricted
+      validate:
+        cel:
+          expressions:
+          - expression: >-
+              object.spec.containers.all(container, !has(container.securityContext) ||
+              !has(container.securityContext.capabilities) ||
+              !has(container.securityContext.capabilities.add) ||
+              ((size(container.securityContext.capabilities.add) == 1) && (container.securityContext.capabilities.add[0] == 'NET_BIND_SERVICE')))
+            message: >-
+              Any capabilities added other than NET_BIND_SERVICE are disallowed.
+
+          - expression: >-
+              !has(object.spec.initContainers) ||
+              object.spec.initContainers.all(container, !has(container.securityContext) ||
+              !has(container.securityContext.capabilities) ||
+              !has(container.securityContext.capabilities.add) ||
+              ((size(container.securityContext.capabilities.add) == 1) && (container.securityContext.capabilities.add[0] == 'NET_BIND_SERVICE')))
+            message: >-
+              Any capabilities added other than NET_BIND_SERVICE are disallowed.
+
+          - expression: >-
+              !has(object.spec.ephemeralContainers) ||
+              object.spec.ephemeralContainers.all(container, !has(container.securityContext) ||
+              !has(container.securityContext.capabilities) ||
+              !has(container.securityContext.capabilities.add) ||
+              ((size(container.securityContext.capabilities.add) == 1) && (container.securityContext.capabilities.add[0] == 'NET_BIND_SERVICE')))
+            message: >-
+              Any capabilities added other than NET_BIND_SERVICE are disallowed.
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: educates-restricted-disallow-privilege-escalation
+  annotations:
+    policies.kyverno.io/title: Disallow Privilege Escalation in CEL
+    policies.kyverno.io/category: Pod Security Standards (Restricted) in CEL
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/minversion: 1.11.0
+    kyverno.io/kyverno-version: 1.11.0
+    kyverno.io/kubernetes-version: "1.26-1.27"
+    policies.kyverno.io/description: >-
+      Privilege escalation, such as via set-user-ID or set-group-ID file mode, should not be allowed.
+      This policy ensures the `allowPrivilegeEscalation` field is set to `false`.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: privilege-escalation
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            operations:
+            - CREATE
+            - UPDATE
+            namespaceSelector:
+              matchExpressions:
+              - key: {{ printf "training.%s/policy.engine" "educates.dev" }}
+                operator: In
+                values:
+                - kyverno
+              - key: {{ printf "training.%s/policy.name" "educates.dev" }}
+                operator: In
+                values:
+                - restricted
+      validate:
+        cel:
+          variables:
+            - name: allContainers
+              expression: >-
+               object.spec.containers +
+               object.spec.?initContainers.orValue([]) +
+               object.spec.?ephemeralContainers.orValue([])
+          expressions:
+            - expression: >-
+                variables.allContainers.all(container,
+                container.?securityContext.allowPrivilegeEscalation.orValue(true) == false)
+              message: >-
+                Privilege escalation is disallowed.
+                All containers must set the securityContext.allowPrivilegeEscalation field to `false`.
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: educates-restricted-require-run-as-nonroot
+  annotations:
+    policies.kyverno.io/title: Require runAsNonRoot in CEL
+    policies.kyverno.io/category: Pod Security Standards (Restricted) in CEL
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/minversion: 1.11.0
+    kyverno.io/kyverno-version: 1.11.0
+    kyverno.io/kubernetes-version: "1.26-1.27"
+    policies.kyverno.io/description: >-
+      Containers must be required to run as non-root. This policy ensures
+      `runAsNonRoot` is set to true.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: run-as-non-root
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            operations:
+            - CREATE
+            - UPDATE
+            namespaceSelector:
+              matchExpressions:
+              - key: {{ printf "training.%s/policy.engine" "educates.dev" }}
+                operator: In
+                values:
+                - kyverno
+              - key: {{ printf "training.%s/policy.name" "educates.dev" }}
+                operator: In
+                values:
+                - restricted
+      validate:
+        cel:
+          expressions:
+            - expression: >-
+                (
+                    (
+                      has(object.spec.securityContext) &&
+                      has(object.spec.securityContext.runAsNonRoot) &&
+                      object.spec.securityContext.runAsNonRoot == true
+                    ) && (
+                      (
+                          object.spec.containers +
+                          (has(object.spec.initContainers) ? object.spec.initContainers : []) +
+                          (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])
+                      ).all(container,
+                          !has(container.securityContext) ||
+                          !has(container.securityContext.runAsNonRoot) ||
+                          container.securityContext.runAsNonRoot == true)
+                    )
+                ) || (
+                    (
+                        object.spec.containers +
+                        (has(object.spec.initContainers) ? object.spec.initContainers : []) +
+                        (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])
+                    ).all(container,
+                        has(container.securityContext) &&
+                        has(container.securityContext.runAsNonRoot) &&
+                        container.securityContext.runAsNonRoot == true)
+                )
+              message: >-
+                Running as root is not allowed. Either the field spec.securityContext.runAsNonRoot or all of
+                spec.containers[*].securityContext.runAsNonRoot, spec.initContainers[*].securityContext.runAsNonRoot and
+                spec.ephemeralContainers[*].securityContext.runAsNonRoot, must be set to true.
+
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: educates-restricted-require-run-as-non-root-user
+  annotations:
+    policies.kyverno.io/title: Require Run As Non-Root User in CEL
+    policies.kyverno.io/category: Pod Security Standards (Restricted) in CEL
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/minversion: 1.11.0
+    kyverno.io/kyverno-version: 1.11.0
+    kyverno.io/kubernetes-version: "1.26-1.27"
+    policies.kyverno.io/description: >-
+      Containers must be required to run as non-root users. This policy ensures
+      `runAsUser` is either unset or set to a number greater than zero.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: run-as-non-root-user
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            operations:
+            - CREATE
+            - UPDATE
+            namespaceSelector:
+              matchExpressions:
+              - key: {{ printf "training.%s/policy.engine" "educates.dev" }}
+                operator: In
+                values:
+                - kyverno
+              - key: {{ printf "training.%s/policy.name" "educates.dev" }}
+                operator: In
+                values:
+                - restricted
+      validate:
+        cel:
+          expressions:
+            - expression: >-
+                !has(object.spec.securityContext) ||
+                !has(object.spec.securityContext.runAsUser) ||
+                object.spec.securityContext.runAsUser > 0
+              message: >-
+                Running as root is not allowed. The field spec.securityContext.runAsUser must be unset or
+                set to a number greater than zero.
+
+            - expression: >-
+                object.spec.containers.all(container, !has(container.securityContext) ||
+                !has(container.securityContext.runAsUser) ||
+                container.securityContext.runAsUser > 0)
+              message: >-
+                Running as root is not allowed. The field spec.containers[*].securityContext.runAsUser must be unset or
+                set to a number greater than zero
+
+            - expression: >-
+                !has(object.spec.initContainers) ||
+                object.spec.initContainers.all(container, !has(container.securityContext) ||
+                !has(container.securityContext.runAsUser) ||
+                container.securityContext.runAsUser > 0)
+              message: >-
+                Running as root is not allowed. The field spec.initContainers[*].securityContext.runAsUser must be unset or
+                set to a number greater than zero
+
+            - expression: >-
+                !has(object.spec.ephemeralContainers) ||
+                object.spec.ephemeralContainers.all(container, !has(container.securityContext) ||
+                !has(container.securityContext.runAsUser) ||
+                container.securityContext.runAsUser > 0)
+              message: >-
+                Running as root is not allowed. The field spec.ephemeralContainers[*].securityContext.runAsUser must be unset or
+                set to a number greater than zero
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: educates-restricted-restrict-volume-types
+  annotations:
+    policies.kyverno.io/title: Restrict Volume Types in CEL
+    policies.kyverno.io/category: Pod Security Standards (Restricted) in CEL
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod,Volume
+    policies.kyverno.io/minversion: 1.11.0
+    kyverno.io/kubernetes-version: "1.26-1.27"
+    kyverno.io/kyverno-version: 1.11.0
+    policies.kyverno.io/description: >-
+      In addition to restricting HostPath volumes, the restricted pod security profile
+      limits usage of non-core volume types to those defined through PersistentVolumes.
+      This policy blocks any other type of volume other than those in the allow list.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: restricted-volumes
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            operations:
+            - CREATE
+            - UPDATE
+            namespaceSelector:
+              matchExpressions:
+              - key: {{ printf "training.%s/policy.engine" "educates.dev" }}
+                operator: In
+                values:
+                - kyverno
+              - key: {{ printf "training.%s/policy.name" "educates.dev" }}
+                operator: In
+                values:
+                - restricted
+      validate:
+        cel:
+          expressions:
+            - expression: >-
+                !has(object.spec.volumes) ||
+                object.spec.volumes.all(vol, has(vol.configMap) ||
+                has(vol.csi) ||
+                has(vol.downwardAPI) ||
+                has(vol.emptyDir) ||
+                has(vol.ephemeral) ||
+                has(vol.persistentVolumeClaim) ||
+                has(vol.projected) ||
+                has(vol.secret))
+              message: >-
+                Only the following types of volumes may be used: configMap, csi, downwardAPI,
+                emptyDir, ephemeral, persistentVolumeClaim, projected, and secret.
+{{- end }}

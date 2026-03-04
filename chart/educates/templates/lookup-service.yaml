@@ -1,0 +1,231 @@
+{{- if .Values.lookupService.enabled }}
+
+{{- $ns := include "educates.operator.namespace" . }}
+{{- $lsImage := include "educates.image" (dict "name" "lookup-service" "context" .) }}
+{{- $pullPolicy := include "educates.imagePullPolicy" $lsImage }}
+{{- $baseImage := include "educates.image" (dict "name" "base-environment" "context" .) }}
+{{- $basePullPolicy := include "educates.imagePullPolicy" $baseImage }}
+{{- $caRef := .Values.clusterIngress.caCertificateRef.name }}
+{{- $caCert := index .Values.clusterIngress.caCertificate "ca.crt" }}
+{{- $hasCA := or $caRef $caCert }}
+{{- $caSecret := $caRef | default (printf "%s-ca" .Values.clusterIngress.domain) }}
+{{- $tlsRef := .Values.clusterIngress.tlsCertificateRef.name }}
+{{- $tlsCert := index .Values.clusterIngress.tlsCertificate "tls.crt" }}
+{{- $hasTLS := or $tlsRef $tlsCert }}
+{{- $tlsSecret := $tlsRef | default (printf "%s-tls" .Values.clusterIngress.domain) }}
+---
+# ServiceAccount for the lookup service.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lookup-service
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/name: {{ include "educates.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+# ClusterRole for the lookup service.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates-lookup-service
+rules:
+  # We need the ability to watch for namespace changes. This is required by
+  # kopf to know when to start and stop watching for changes to the specific
+  # namespace is has been told to monitor.
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+  # We need the ability to create events in the application namespace so kopf
+  # can log events.
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+  # We need read/write access to the ClusterConfig, ClientConfig and
+  # TenantConfig custom resources from the lookup.educates.dev API group.
+  - apiGroups:
+      - lookup.educates.dev
+    resources:
+      - clusterconfigs
+      - clientconfigs
+      - tenantconfigs
+    verbs:
+      - get
+      - list
+      - watch
+      - patch
+      - update
+  # We need update access to the finalizers of the ClusterConfig, ClientConfig
+  # and TenantConfig custom resources from the lookup.educates.dev API group so
+  # kopf can track deletion.
+  - apiGroups:
+      - lookup.educates.dev
+    resources:
+      - clusterconfigs/finalizers
+      - clientconfigs/finalizers
+      - tenantconfigs/finalizers
+    verbs:
+      - update
+  # We need read access to the secrets in the application namespace, so we can
+  # read the kubeconfig for the managed cluster. This is done as cluster role
+  # rather than role against a namespace, as the actual namespace name is
+  # configurable and not fixed.
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+---
+# ClusterRoleBinding for the lookup service.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: educates-lookup-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: educates-lookup-service
+subjects:
+  - kind: ServiceAccount
+    name: lookup-service
+    namespace: {{ $ns }}
+---
+# Deployment for the lookup service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lookup-service
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/name: {{ include "educates.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    deployment: lookup-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lookup-service
+  template:
+    metadata:
+      labels:
+        app: lookup-service
+        deployment: lookup-service
+        app.kubernetes.io/name: {{ include "educates.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: lookup-service
+      {{- with .Values.clusterSecrets.pullSecretRefs }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ .name }}
+        {{- end }}
+      {{- end }}
+      {{- if $hasCA }}
+      initContainers:
+      - name: ca-trust-store-initialization
+        image: {{ $baseImage }}
+        imagePullPolicy: {{ $basePullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: false
+          runAsUser: 0
+        command:
+        - /opt/eduk8s/sbin/setup-certificates
+        volumeMounts:
+        - name: workshop-ca
+          mountPath: /etc/pki/ca-trust/source/anchors/Cluster_Ingress_CA.pem
+          subPath: ca.crt
+        - name: workshop-ca-trust
+          mountPath: /mnt
+      {{- end }}
+      containers:
+      - name: lookup-service
+        image: {{ $lsImage }}
+        imagePullPolicy: {{ $pullPolicy }}
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: cluster-access-token
+          mountPath: /opt/cluster-access-token
+        {{- if $hasCA }}
+        - name: workshop-ca-trust
+          mountPath: /etc/pki/ca-trust
+          readOnly: true
+        {{- end }}
+      volumes:
+      - name: cluster-access-token
+        secret:
+          secretName: remote-access-token
+      {{- if $hasCA }}
+      - name: workshop-ca
+        secret:
+          secretName: {{ $caSecret }}
+      - name: workshop-ca-trust
+        emptyDir: {}
+      {{- end }}
+---
+# Service for the lookup service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: lookup-service
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/name: {{ include "educates.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: lookup-service
+---
+# Ingress for the lookup service.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lookup-service
+  namespace: {{ $ns }}
+  {{- if $hasTLS }}
+  annotations:
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: {{ include "educates.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  {{- if .Values.clusterIngress.class }}
+  ingressClassName: {{ .Values.clusterIngress.class }}
+  {{- end }}
+  rules:
+  - host: {{ .Values.lookupService.ingressPrefix }}.{{ .Values.clusterIngress.domain }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lookup-service
+            port:
+              number: 80
+  {{- if $hasTLS }}
+  tls:
+  - hosts:
+    - {{ .Values.lookupService.ingressPrefix }}.{{ .Values.clusterIngress.domain }}
+    secretName: {{ $tlsSecret }}
+  {{- end }}
+{{- end }}

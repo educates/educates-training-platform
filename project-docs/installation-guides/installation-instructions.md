@@ -95,6 +95,7 @@ To perform the installation see the documentation on the process you intend usin
 
 * [CLI Based Installation](cli-based-installation) - Installing Educates using the Educates CLI.
 * [Carvel Based Installation](carvel-based-installation) - Installing Educates using pre-installed `kapp-controller` operator.
+* [Helm Installation](helm-installation) - Installing the Educates package only using the provided Helm chart.
 
 Note that both of these relate to installing Educates into an existing Kubernetes cluster. If you are trying Educates for the first time it is recommended not to use an existing Kubernetes cluster, but use the Educates CLI to create a local Educates environment, including a Kubernetes cluster, for you.
 

@@ -525,6 +525,7 @@ def process_workshop_environment(portal, workshop, position):
             "labels": {
                 "training.educates.dev/portal.name": portal.name,
                 "training.educates.dev/portal.uid": portal.uid,
+                "training.educates.dev/portal.workshop": workshop_name,
             },
             "ownerReferences": [
                 {

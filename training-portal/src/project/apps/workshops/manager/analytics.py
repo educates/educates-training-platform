@@ -1,7 +1,6 @@
 import logging
 
 import requests
-
 from django.conf import settings
 from django.utils import timezone
 
@@ -13,7 +12,14 @@ logger = logging.getLogger("educates")
 @background_task
 def send_event_to_webhook(url, message):
     try:
-        requests.post(url, json=message, timeout=2.5)
+        response = requests.post(url, json=message, timeout=2.5)
+        if response.status_code >= 400:
+            logger.error(
+                "Failed to report event to %s: %s (status code %s)",
+                url,
+                message,
+                response.status_code,
+            )
     except Exception:
         logger.exception("Unable to report event to %s: %s", url, message)
 

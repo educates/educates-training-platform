@@ -1,37 +1,24 @@
 import logging
 
-import pykube
 import kopf
+import pykube
 
-from .helpers import xget, image_pull_policy, resource_owned_by
-from .objects import SecretCopier
 from .analytics import report_analytics_event
-
-from .operator_config import (
-    OPERATOR_NAMESPACE,
-    INGRESS_DOMAIN,
-    INGRESS_PROTOCOL,
-    INGRESS_SECRET,
-    INGRESS_CLASS,
-    SESSION_COOKIE_DOMAIN,
-    CLUSTER_STORAGE_CLASS,
-    CLUSTER_STORAGE_USER,
-    CLUSTER_STORAGE_GROUP,
-    CLUSTER_SECURITY_POLICY_ENGINE,
-    DEFAULT_THEME_NAME,
-    FRAME_ANCESTORS,
-    GOOGLE_TRACKING_ID,
-    CLARITY_TRACKING_ID,
-    AMPLITUDE_TRACKING_ID,
-    ANALYTICS_WEBHOOK_URL,
-    PORTAL_ADMIN_USERNAME,
-    PORTAL_ADMIN_PASSWORD,
-    PORTAL_ROBOT_USERNAME,
-    PORTAL_ROBOT_PASSWORD,
-    PORTAL_ROBOT_CLIENT_ID,
-    PORTAL_ROBOT_CLIENT_SECRET,
-    TRAINING_PORTAL_IMAGE,
-)
+from .helpers import image_pull_policy, resource_owned_by, xget
+from .objects import SecretCopier
+from .operator_config import (AMPLITUDE_TRACKING_ID, ANALYTICS_WEBHOOK_URL,
+                              CLARITY_TRACKING_ID,
+                              CLUSTER_SECURITY_POLICY_ENGINE,
+                              CLUSTER_STORAGE_CLASS, CLUSTER_STORAGE_GROUP,
+                              CLUSTER_STORAGE_USER, DEFAULT_THEME_NAME,
+                              FRAME_ANCESTORS, GOOGLE_TRACKING_ID,
+                              INGRESS_CA_SECRET, INGRESS_CLASS, INGRESS_DOMAIN,
+                              INGRESS_PROTOCOL, INGRESS_SECRET,
+                              OPERATOR_NAMESPACE, PORTAL_ADMIN_PASSWORD,
+                              PORTAL_ADMIN_USERNAME, PORTAL_ROBOT_CLIENT_ID,
+                              PORTAL_ROBOT_CLIENT_SECRET,
+                              PORTAL_ROBOT_PASSWORD, PORTAL_ROBOT_USERNAME,
+                              SESSION_COOKIE_DOMAIN, TRAINING_PORTAL_IMAGE)
 
 __all__ = ["training_portal_create", "training_portal_delete"]
 
@@ -838,6 +825,21 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             storage_init_container
         ]
 
+    if INGRESS_SECRET and INGRESS_CA_SECRET:
+            deployment_body["spec"]["template"]["spec"]["volumes"].append(
+                {
+                    "name": "ingress-ca",
+                    "secret": {"secretName": INGRESS_CA_SECRET},
+                }
+            )
+            deployment_body["spec"]["template"]["spec"]["containers"][0]["volumeMounts"].append(
+                {
+                    "name": "ingress-ca",
+                    "mountPath": "/opt/app-root/certs/ingress-ca",
+                    "readOnly": True,
+                }
+            )
+
     service_body = {
         "apiVersion": "v1",
         "kind": "Service",
@@ -984,6 +986,20 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                     ]
                 },
             }
+
+        if INGRESS_CA_SECRET:
+            xget(ingress_secret_copier_body, "spec.rules").append(
+                {
+                    "sourceSecret": {
+                        "name": INGRESS_CA_SECRET,
+                        "namespace": OPERATOR_NAMESPACE,
+                    },
+                    "targetNamespaces": {
+                        "nameSelector": {"matchNames": [portal_namespace]}
+                    },
+                    "reclaimPolicy": "Delete",
+                }
+            )
 
         if ingress_secret_copier_body:
             kopf.adopt(ingress_secret_copier_body, namespace_instance.obj)

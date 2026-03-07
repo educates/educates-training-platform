@@ -17,3 +17,13 @@ Bugs Fixed
   requested, ie., the alias if defined or otherwise the name of the `Workshop`.
   This is now used by the lookup service to properly expose the workshop
   allowing to be requested.
+
+* When a ingress CA was being supplied this was not being injected into the
+  training portal, so if analytics webhook URL tried to report events to a
+  service in the same cluster where CA was required, it would fail as it would
+  not trust service certificate.
+
+* When analytics were being reported by the training portal and the service
+  receiving the event accepted the connection but returned a non 200 response,
+  it would be silently ignored and nothing was logged. If a non 200 response
+  is returned details will now be logged.

@@ -27,3 +27,6 @@ Bugs Fixed
   receiving the event accepted the connection but returned a non 200 response,
   it would be silently ignored and nothing was logged. If a non 200 response
   is returned details will now be logged.
+
+* ACME http01 solver image properly set in cert-manager Deployment, which was
+  failing for http01 resolver types in Certificate Issuers.

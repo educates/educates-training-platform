@@ -3,11 +3,13 @@
 #@ load("@ytt:yaml", "yaml")
 
 #@ def addImageAnnotation(l,image):
-metadata:
-  #@overlay/match missing_ok=True
-  annotations:
-    #@overlay/match missing_ok=True
-    acmesolver-image: #@ image
+spec:
+  template:
+    metadata:
+      #@overlay/match missing_ok=True
+      annotations:
+        #@overlay/match missing_ok=True
+        acmesolver-image: #@ image
 #@ end
 
 #@ def moveImageName(l,r):

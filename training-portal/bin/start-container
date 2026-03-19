@@ -36,6 +36,15 @@ export ADMIN_PASSWORD
 
 source $VENV_DIR/bin/activate
 
+# If a CA certificate bundle is provided we need to merge it with the default
+# CA bundle used by Python and set the REQUESTS_CA_BUNDLE environment variable
+# to point to the merged CA bundle.
+
+if [ -f /opt/app-root/certs/ingress-ca/ca.crt ]; then
+    cat $(python -c "import certifi; print(certifi.where())") /opt/app-root/certs/ingress-ca/ca.crt > /opt/app-root/combined-ca-bundle.crt
+    export REQUESTS_CA_BUNDLE=/opt/app-root/combined-ca-bundle.crt
+fi
+
 # Initialize the database if it doesn't already exist. We always
 # perform database migration in case database models were updated.
 

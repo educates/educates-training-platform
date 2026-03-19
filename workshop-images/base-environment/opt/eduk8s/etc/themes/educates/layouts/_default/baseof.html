@@ -67,7 +67,7 @@
   data-ingress-protocol='{{ .Param "ingress_protocol" }}' data-ingress-port-suffix='{{ .Param "ingress_port_suffix" }}'
   data-prev-page='{{ $current_module.prev_page }}' data-current-page='{{ index $current_module "path" }}'
   data-next-page='{{ $current_module.next_page }}' data-page-format='markdown' data-code-fences='chroma'
-  data-page-step='{{ $current_module.step }}' data-pages-total='{{ len $modules }}'>
+  data-page-number='{{ $current_module.step }}' data-pages-total='{{ len $modules }}'>
 
   {{ partial "header.html" . }}
 

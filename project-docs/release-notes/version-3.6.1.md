@@ -28,5 +28,9 @@ Bugs Fixed
   it would be silently ignored and nothing was logged. If a non 200 response
   is returned details will now be logged.
 
-* ACME http01 solver image properly set in cert-manager Deployment, which was
-  failing for http01 resolver types in Certificate Issuers.
+* Fixed ACME HTTP-01 solver image not being properly set in the cert-manager
+  Deployment, which caused HTTP-01 challenge resolution to fail for Certificate
+  Issuers.
+
+* The `page_number` property in analytics events for pages was not being passed
+  through.

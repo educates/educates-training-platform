@@ -60,9 +60,9 @@ clusterStorage:
   group: #@ data.values.clusterStorage.group
 #@ if/end hasattr(data.values, "clusterSecrets") and data.values.clusterSecrets != None:
 clusterSecrets: #@ data.values.clusterSecrets
-#! Should not allow cluster security policy engine default to be overridden as must be set to security-context-constraints
-#! #@ if/end hasattr(data.values, "clusterSecurity") and data.values.clusterSecurity != None:
-#! clusterSecurity: #@ data.values.clusterSecurity
+#! Policy engine must always be security-context-constraints on openshift
+clusterSecurity:
+  policyEngine: security-context-constraints
 #@ if/end hasattr(data.values, "workshopSecurity") and data.values.workshopSecurity != None:
 workshopSecurity: #@ data.values.workshopSecurity
 #@ if/end hasattr(data.values, "trainingPortal") and data.values.trainingPortal != None:

@@ -1,7 +1,6 @@
 #@ load("@ytt:data", "data")
 #@ load("@ytt:overlay", "overlay")
 #@ load("functions.star", "isClusterPackageEnableByDefault")
-#@ load("functions.star", "isClusterPackageExplicitDisabled")
 
 #! This file contains default values for the custom infrastructure provider.
 #! These are the values that will be set if not overridden by the user.

@@ -5,6 +5,24 @@
 
 #@overlay/match-child-defaults missing_ok=True
 clusterPackages:
+  contour:
+    #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "contour") and hasattr(data.values.clusterPackages.contour, "enabled"):
+    enabled: #@ data.values.clusterPackages.contour.enabled
+  cert-manager:
+    #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "cert-manager") and hasattr(data.values.clusterPackages["cert-manager"], "enabled"):
+    enabled: #@ data.values.clusterPackages["cert-manager"].enabled
+  external-dns:
+    #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "external-dns") and hasattr(data.values.clusterPackages["external-dns"], "enabled"):
+    enabled: #@ data.values.clusterPackages["external-dns"].enabled
+  certs:
+    #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "certs") and hasattr(data.values.clusterPackages.certs, "enabled"):
+    enabled: #@ data.values.clusterPackages.certs.enabled
   kyverno:
     #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "kyverno") and hasattr(data.values.clusterPackages.kyverno, "enabled"):
     enabled: #@ data.values.clusterPackages.kyverno.enabled
+  kapp-controller:
+    #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "kapp-controller") and hasattr(data.values.clusterPackages["kapp-controller"], "enabled"):
+    enabled: #@ data.values.clusterPackages["kapp-controller"].enabled
+  educates:
+    #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "educates") and hasattr(data.values.clusterPackages.educates, "enabled"):
+    enabled: #@ data.values.clusterPackages.educates.enabled

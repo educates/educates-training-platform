@@ -5,9 +5,7 @@
 
 #@overlay/match-child-defaults missing_ok=True
 clusterPackages:
-  contour:
-    #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "contour") and hasattr(data.values.clusterPackages.contour, "enabled"):
-    enabled: #@ data.values.clusterPackages.contour.enabled
+  #! contour enablement is immutable for generic provider (cannot be enabled via values)
   cert-manager:
     #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "cert-manager") and hasattr(data.values.clusterPackages["cert-manager"], "enabled"):
     enabled: #@ data.values.clusterPackages["cert-manager"].enabled
@@ -23,6 +21,4 @@ clusterPackages:
   kapp-controller:
     #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "kapp-controller") and hasattr(data.values.clusterPackages["kapp-controller"], "enabled"):
     enabled: #@ data.values.clusterPackages["kapp-controller"].enabled
-  educates:
-    #@ if/end hasattr(data.values, "clusterPackages") and hasattr(data.values.clusterPackages, "educates") and hasattr(data.values.clusterPackages.educates, "enabled"):
-    enabled: #@ data.values.clusterPackages.educates.enabled
+  #! educates enablement is immutable for generic provider (always enabled)

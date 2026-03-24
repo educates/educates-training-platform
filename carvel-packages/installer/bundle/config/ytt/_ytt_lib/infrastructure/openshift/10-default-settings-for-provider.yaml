@@ -1,7 +1,6 @@
 #@ load("@ytt:data", "data")
 #@ load("@ytt:overlay", "overlay")
-#@ load("functions.star", "isClusterPackageEnableByDefault")
-#@ load("functions.star", "isClusterPackageExplicitDisabled")
+#@ load("functions.star", "xgetattr", "isClusterPackageEnableByDefault")
 
 #! This file contains default values for the custom infrastructure provider.
 #! These are the values that will be set if not overridden by the user.
@@ -29,6 +28,4 @@ clusterPackages:
     settings: {}
   educates:
     enabled: #@ isClusterPackageEnableByDefault("educates")
-    settings:
-      clusterSecurity:
-        policyEngine: security-context-constraints
+    settings: #@ xgetattr(data.values, "clusterPackages.educates.settings")

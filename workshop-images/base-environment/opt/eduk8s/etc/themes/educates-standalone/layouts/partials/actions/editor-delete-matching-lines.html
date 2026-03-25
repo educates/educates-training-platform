@@ -1,0 +1,23 @@
+{{- $defaults := dict "cooldown" 3 -}}
+{{- $args := merge $defaults (.Inner | default "{}" | printf "%s\n" | unmarshal) -}}
+{{- if isset $args "before" -}}
+    {{- if or (eq (printf "%v" $args.before) "+Inf") (eq (printf "%v" $args.before) "-Inf") -}}
+        {{- $args = merge $args (dict "before" -1) -}}
+    {{- end -}}
+{{- end -}}
+{{- if isset $args "after" -}}
+    {{- if or (eq (printf "%v" $args.after) "+Inf") (eq (printf "%v" $args.after) "-Inf") -}}
+        {{- $args = merge $args (dict "after" -1) -}}
+    {{- end -}}
+{{- end -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "editor:delete-matching-lines" -}}
+{{- $glyph := "fa-eraser" -}}
+{{- $prefix := default "Editor" $args.prefix -}}
+{{- $title := default (printf "Delete lines matching \"%s\" in file \"%s\"" $args.match $args.file) $args.title -}}
+{{- $body := $args.match -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

@@ -1,0 +1,9 @@
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "terminal:execute" -}}
+{{- $glyph := "fa-running" -}}
+{{- $prefix := "Terminal" -}}
+{{- $title := "Execute command in terminal 2" -}}
+{{- $body := .Inner -}}
+{{- $args := dict "command" .Inner "session" "2" -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

@@ -1,0 +1,12 @@
+{{- $args := .Inner | default "{}" | unmarshal -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "dashboard:open-dashboard" -}}
+{{- $glyph := "fa-play" -}}
+{{- $prefix := default "Dashboard" $args.prefix -}}
+{{- $title := default (printf "Expose dashboard \"%s\"" $args.name) $args.title -}}
+{{- $body := "" -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

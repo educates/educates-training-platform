@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>{{ .Site.Title }} - Print View</title>
+
+  <link rel="stylesheet" href='/workshop/static/bootstrap/css/bootstrap.css'>
+  <link rel="stylesheet" href='/workshop/static/styles/educates.css'>
+  <link rel="stylesheet" href='/workshop/static/styles/educates-markdown.css'>
+  <link rel="stylesheet" href='/workshop/static/theme/workshop-instructions.css'>
+
+  <style>
+    /* Override educates.css overflow restrictions for scrolling */
+    html {
+      height: auto;
+      overflow: auto;
+    }
+    body {
+      height: auto;
+      overflow: auto;
+      padding: 2rem;
+    }
+    @media print {
+      .page-break { page-break-before: always; }
+      .page-break:first-child { page-break-before: avoid; }
+    }
+    @media screen {
+      .print-section { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid #ddd; }
+      .print-section:last-child { border-bottom: none; }
+    }
+  </style>
+</head>
+
+{{/* Module discovery logic - copied from baseof.html */}}
+
+{{ .Scratch.Set "__modules__" (.Site.Param "__modules__") }}
+{{ .Scratch.Set "__first_page__" (.Site.Param "__first_page__") }}
+
+{{ $modules := (.Scratch.Get "__modules__") }}
+{{ $first_page := (.Scratch.Get "__first_page__") }}
+
+{{ if not $modules }}
+
+{{ $count := 1 }}
+{{ $first_page = "" }}
+{{ $by_weight := false }}
+{{ $prev_page := "" }}
+
+{{ $all_pages := slice }}
+
+{{ range $page := .Site.RegularPages }}
+{{ $path := $page.File.Path }}
+{{ $path = $path | replaceRE "^/+" "" }}
+{{ $path = $path | replaceRE "/index\\.md$" "" }}
+{{ $path = $path | replaceRE "\\.md$" "" }}
+{{ $entry := (dict "path" $path "title" $page.Title "Page" $page) }}
+{{ $all_pages = $all_pages | append $entry }}
+{{ if $page.Weight }}
+{{ $by_weight = true }}
+{{ end }}
+{{ end }}
+
+{{ if not $by_weight }}
+{{ $all_pages = sort $all_pages "path" }}
+{{ end }}
+
+{{ range $page := $all_pages }}
+{{ if not $first_page }}
+{{ $first_page = $page.path }}
+{{ end }}
+{{ $entry := (dict "path" $page.path "title" $page.title "prev_page" $prev_page "step" $count "Page" $page.Page) }}
+{{ $modules = merge $modules (dict $page.path $entry) }}
+{{ if $prev_page }}
+{{ $item := index $modules $prev_page }}
+{{ $item = merge $item (dict "next_page" $page.path) }}
+{{ $modules = merge $modules (dict $prev_page $item) }}
+{{ end }}
+{{ $prev_page = $page.path }}
+{{ $count = add $count 1}}
+{{ end }}
+
+{{ .Scratch.Set "__modules__" $modules }}
+{{ .Scratch.Set "__first_page__" $first_page }}
+
+{{ end }}
+
+<body>
+  <main class="container">
+    <article>
+      <header>
+        <h1 class="mb-4">{{ .Param "workshop_title" }}</h1>
+      </header>
+
+      {{ $site := .Site }}
+
+      {{ range $module := sort $modules "step" }}
+      <section class="print-section page-break" id="{{ $module.path | urlize }}">
+        {{ $title := $module.title }}
+        {{ if not $title }}
+        {{ with $site.GetPage $module.path }}
+        {{ $title = .Title }}
+        {{ end }}
+        {{ end }}
+        {{ if not $title }}
+        {{ $title = $module.path }}
+        {{ end }}
+        <h2 class="title">{{ $module.step }}: {{ $title }}</h2>
+        <div class="rendered-content">
+          {{ with $site.GetPage $module.path }}
+          {{ .Content }}
+          {{ end }}
+        </div>
+      </section>
+      {{ end }}
+    </article>
+  </main>
+</body>
+
+</html>

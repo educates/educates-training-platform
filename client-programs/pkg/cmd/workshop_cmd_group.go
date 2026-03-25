@@ -26,6 +26,7 @@ func (p *ProjectInfo) NewWorkshopCmdGroup() *cobra.Command {
 				p.NewWorkshopNewCmd(),
 				p.NewWorkshopPublishCmd(),
 				p.NewWorkshopExportCmd(),
+				p.NewWorkshopRenderCmd(),
 			},
 		},
 	}

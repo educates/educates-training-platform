@@ -1,0 +1,710 @@
+html {
+    height: 100%;
+    overflow-x: hidden;
+}
+
+body {
+    height: 100%;
+    overflow: hidden;
+}
+
+.page-navbar {
+    padding-top: 1px;
+    padding-bottom: 1px;
+    padding-left: 0px;
+    padding-right: 0px;
+}
+
+.header {
+    color: #CCC;
+    background: #2C323D;
+}
+
+.header .container-fluid {
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+.header a {
+    color: #DDD;
+}
+
+.header a:hover {
+    color: #FFF;
+    text-decoration: none;
+}
+
+.header .logo {
+    margin-left: 16px;
+    font-size: 16px;
+    line-height: 30px;
+}
+
+button#header-goto-home {
+    border: 0px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 0.95em;
+}
+
+.header-step-counter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.7em;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 0.75rem;
+    padding: 0.25em 0.6em;
+    line-height: 1;
+    margin: 0 0.15rem;
+    box-sizing: border-box;
+}
+
+.page-navbar .row {
+    display: flex;
+    align-items: center;
+}
+
+.page-navbar .col-sm-12 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.page-navbar .btn-toolbar {
+    display: flex;
+    align-items: center;
+}
+
+.page-navbar .btn-group {
+    display: flex;
+    align-items: center;
+}
+
+.header-progress-track {
+    width: 100%;
+    height: 3px;
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+.header-progress-bar {
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8);
+    transition: width 0.3s ease;
+}
+
+button#header-prev-page {
+    border: 0px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 0.95em;
+}
+
+button#header-goto-toc {
+    border: 0px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 0.95em;
+}
+
+button#header-print-page {
+    border: 0px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 0.95em;
+}
+
+button#header-next-page {
+    border: 0px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 0.95em;
+}
+
+.menu {
+    padding: 0;
+    margin: 0px 5px;
+    list-style: none;
+}
+
+.menu .modules {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.menu li {
+    line-height: 30px;
+}
+
+.menu .category-title {
+    margin: 25px 0 10px 0;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.menu .category.active .category-title {
+    font-weight: bold;
+}
+
+.menu a {
+    display: inline-block;
+    line-height: 20px;
+    color: #888;
+}
+
+.menu a:hover {
+    color: #444;
+    text-decoration: none;
+}
+
+.menu .page.active a {
+    font-weight: bold;
+    color: #444;
+}
+
+.main-content {
+    height: calc(100% - 33px - 52px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-top: 0px;
+    padding-right: 1px;
+    padding-left: 1px;
+}
+
+.rendered-content {
+    padding-bottom: 20vh;
+}
+
+.page-content {
+    padding: 15px;
+    margin: 4px 0px;
+    color: #555;
+    background-color: #FAFAFA;
+    border: 1px solid #E9E9E9;
+    -webkit-box-shadow: 0 1px 50px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 50px rgba(0, 0, 0, 0.1);
+}
+
+.page-content .title {
+    margin: 0 0 30px 0;
+}
+
+.page-content .title .title-step {
+    display: inline-block;
+    background-color: #d4e9f7;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.375rem;
+    margin-right: 0.75rem;
+    min-width: 2.5rem;
+    text-align: center;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.modules .page {
+    display: flex;
+    align-items: baseline;
+}
+
+.modules .page .toc-step {
+    display: inline-block;
+    background-color: #d4e9f7;
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.3rem;
+    margin-right: 0.5rem;
+    min-width: 1.8rem;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.85em;
+    line-height: 1.2;
+    flex-shrink: 0;
+}
+
+/* Unvisited TOC links are dimmed and clicks are blocked by JS.
+   Shift+clicking the step-number badge bypasses the restriction. */
+
+.modules .page a.toc-link-unvisited {
+    opacity: 0.5;
+    cursor: default;
+    color: inherit;
+    text-decoration: none;
+}
+
+/* Visual hint when Shift is held and hovering the step badge. */
+
+.modules .page .toc-step-shift {
+    cursor: pointer;
+    background-color: #a8d4f0;
+}
+
+.page-content h1,
+.page-content h2,
+.page-content h3,
+.page-content h4,
+.page-content h5,
+.page-content h6 {
+    color: #222;
+}
+
+.page-content p,
+.page-content ul,
+.page-content ol,
+.page-content pre,
+.page-content blockquote,
+.page-content table,
+.page-content iframe {
+    margin-bottom: 1em;
+}
+
+.page-content img {
+    display: block;
+    height: auto;
+    max-width: 100%;
+    padding: 15px;
+    margin: 15px 5px;
+    background: #fff;
+    border: 1px solid #D6D6D6;
+    border-radius: 4px;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+.page-content blockquote {
+    border-left: .25em solid #dfe2e5;
+    color: #6a737d;
+    padding: 0 0.5em;
+}
+
+.page-content code {
+    color: #555;
+    background-color: lightyellow;
+}
+
+.page-content pre {
+    background: lightyellow;
+    border: 0;
+    padding: 6px;
+    white-space: pre-wrap;
+    word-break: keep-all;
+}
+
+.page-content pre code {
+    color: #657B83;
+}
+
+.page-content .page-meta {
+    margin-top: 25px;
+    font-size: 85%;
+    color: #999;
+}
+
+.page-content .page-meta a {
+    color: #999;
+    border-bottom: 1px dotted #999;
+}
+
+.page-content .page-meta a:hover {
+    color: #428BCA;
+    text-decoration: none;
+}
+
+.btn-transparent {
+    background: none;
+}
+
+.btn:focus,
+.btn:active {
+    outline: none !important;
+    box-shadow: none;
+}
+
+div.magic-code-block-upload {
+    color: #555;
+    background-color: lightyellow;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 12px;
+    padding-bottom: 0px;
+    border-top: 0px;
+    border-style: solid;
+    border-right-color: #eee;
+    border-left-color: #eee;
+    border-bottom-color: #eee;
+    margin-bottom: 1em;
+}
+
+.clickable-action {
+    user-select: none;
+}
+
+.clickable-action__header {
+    background-color: lightskyblue;
+    padding: 2px 4px;
+    font-size: 0.8em;
+    user-select: none;
+}
+
+.clickable-action__icon {
+    display: block;
+    float: right;
+    padding: 3px;
+    margin-left: 10px;
+    pointer-events: none;
+    user-select: none;
+}
+
+.clickable-action__body {
+    color: #555;
+    background-color: lightyellow;
+    padding: 8px;
+    border: 0;
+    border-style: solid;
+    border-right-color: #eee;
+    border-left-color: #eee;
+    border-bottom-color: #eee;
+    margin-bottom: 1em;
+}
+
+.clickable-action__form {
+    background-color: lightyellow;
+    padding: 8px;
+    border: 0;
+    border-style: solid;
+    border-right-color: #eee;
+    border-left-color: #eee;
+    border-bottom-color: #eee;
+    margin-bottom: 1em;
+}
+
+#preview-image-dialog>.modal-dialog {
+    min-width: 30%;
+    max-width: 95%;
+}
+
+.modal-body.preview-image-body {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.clickable-action[data-action-result='success'] .clickable-action__header {
+    background-color: yellowgreen;
+}
+
+.clickable-action[data-action-result='pending'] .clickable-action__header {
+    background-color: orange;
+}
+
+.clickable-action[data-action-result='failure'] .clickable-action__header {
+    background-color: orangered;
+}
+
+/* Required action indicator */
+
+.clickable-action__header {
+    padding-left: 6px;
+}
+
+.clickable-action[data-action-required='true'] .clickable-action__header {
+    border-left: 2px solid #dc3545;
+    padding-left: 4px;
+}
+
+.clickable-action__required {
+    color: #dc3545;
+    font-size: 0.55em;
+    margin-left: 4px;
+    vertical-align: super;
+}
+
+.clickable-action[data-action-result='success'] .clickable-action__required {
+    display: none;
+}
+
+/* Pulse animation for the next clickable action needing attention */
+
+@keyframes action-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(135, 206, 250, 0.6);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(135, 206, 250, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(135, 206, 250, 0);
+    }
+}
+
+@keyframes action-pulse-failure {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 165, 0, 0.6);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(255, 165, 0, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 165, 0, 0);
+    }
+}
+
+.clickable-action.action-pulse-hint {
+    animation: action-pulse 2s ease-in-out 3;
+    border-radius: 2px;
+}
+
+.clickable-action.action-pulse-hint-failure {
+    animation: action-pulse-failure 2s ease-in-out infinite;
+    border-radius: 2px;
+}
+
+/* Hover state for clickable actions to indicate interactivity */
+
+/*
+.clickable-action {
+    cursor: pointer;
+    transition: box-shadow 0.15s ease-in-out;
+}
+
+.clickable-action:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.clickable-action__header {
+    transition: background-color 0.15s ease-in-out;
+}
+*/
+
+/*
+.clickable-action:hover .clickable-action__header {
+    background-color: deepskyblue;
+} */
+
+/*
+.clickable-action[data-action-result='success']:hover .clickable-action__header {
+    background-color: limegreen;
+}
+
+.clickable-action[data-action-result='pending']:hover .clickable-action__header {
+    background-color: darkorange;
+}
+
+.clickable-action[data-action-result='failure']:hover .clickable-action__header {
+    background-color: red;
+} */
+
+.inline-copy {
+    padding-left: 1px;
+    font-size: 0.5em;
+    user-select: none;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    display: inline;
+}
+
+.admonition {
+    padding: 10px;
+    margin-bottom: 20px;
+    border: 1px solid transparent;
+    border-radius: 0px;
+    text-align: left;
+}
+
+.admonition.note {
+    color: #2e6b89;
+    background-color: #e2f0f7;
+    border-color: #bce8f1;
+}
+
+.admonition.warning {
+    color: #7a6032;
+    background-color: #fffae5;
+    border-color: #fbeed5;
+}
+
+.admonition.danger {
+    color: #7f3130;
+    background-color: #fde3e3;
+    border-color: #eed3d7;
+}
+
+.admonition-title {
+    font-weight: bold;
+    text-align: left;
+}
+
+.admonition>p:last-child {
+    margin-bottom: 0;
+}
+
+form.jsonform-hasrequired div.form-group {
+    margin-bottom: 1rem;
+}
+
+/* Persistent bottom navigation bar */
+
+.workshop-bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1030;
+    background: #ffffff;
+    border-top: 1px solid #dee2e6;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.bottom-bar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    max-width: 100%;
+}
+
+.bottom-bar-progress {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.bottom-bar-step-label {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #555;
+    white-space: nowrap;
+}
+
+.bottom-bar-toc {
+    font-size: 0.8em;
+    padding: 3px 8px;
+    border-color: #adb5bd;
+    color: #555;
+}
+
+.bottom-bar-toc:hover {
+    background-color: #e9ecef;
+    color: #333;
+}
+
+.bottom-bar-progress-track {
+    flex: 1;
+    height: 4px;
+    background-color: #e9ecef;
+    border-radius: 2px;
+    overflow: hidden;
+    max-width: 200px;
+}
+
+.bottom-bar-progress-fill {
+    height: 100%;
+    width: 0%;
+    background-color: #0d6efd;
+    border-radius: 2px;
+    transition: width 0.15s ease;
+}
+
+.bottom-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 16px;
+}
+
+.bottom-bar-back {
+    font-size: 0.85em;
+}
+
+.bottom-bar-continue {
+    font-size: 0.9em;
+    padding: 6px 20px;
+    transition: opacity 0.2s ease;
+}
+
+.bottom-bar-continue:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: auto;
+}
+
+.bottom-bar-continue.enabled {
+    opacity: 1;
+}
+
+/* Required-actions badge on Continue/Finish button */
+
+.bottom-bar-continue {
+    position: relative;
+}
+
+.bottom-bar-required-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    font-size: 0.6em;
+    min-width: 18px;
+    padding: 3px 5px;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.bottom-bar-scroll-hint {
+    font-size: 0.7em;
+    color: #999;
+    margin-right: 4px;
+    transition: opacity 0.3s ease;
+}
+
+@media print {
+    html {
+        height: auto;
+        overflow: visible;
+    }
+
+    body {
+        height: auto;
+        overflow: visible;
+    }
+
+    .main-content {
+        height: auto;
+        overflow: visible;
+        page-break-inside: avoid;
+    }
+
+    .page-content {
+        page-break-inside: avoid;
+        box-shadow: none;
+    }
+
+    .header,
+    .menu {
+        display: none;
+    }
+
+    .navigation-buttons {
+        display: none;
+    }
+
+    .workshop-bottom-bar {
+        display: none;
+    }
+}

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  {{ partial "page-head.html" . }}
+</head>
+
+{{ .Scratch.Set "__modules__" (.Site.Param "__modules__") }}
+{{ .Scratch.Set "__first_page__" (.Site.Param "__first_page__") }}
+
+{{ $modules := (.Scratch.Get "__modules__") }}
+{{ $first_page := (.Scratch.Get "__first_page__") }}
+
+{{ $prev_page := "" }}
+
+{{ if not $modules }}
+
+{{ $count := 1 }}
+{{ $first_page = "" }}
+{{ $by_weight := false }}
+
+{{ $all_pages := slice }}
+
+{{ range $page := .Site.RegularPages }}
+{{ $path := $page.File.Path }}
+{{ $path = $path | replaceRE "^/+" "" }}
+{{ $path = $path | replaceRE "/index\\.md$" "" }}
+{{ $path = $path | replaceRE "\\.md$" "" }}
+{{ $entry := (dict "path" $path "title" $page.Title) }}
+{{ $all_pages = $all_pages | append $entry }}
+{{ if $page.Weight }}
+{{ $by_weight = true }}
+{{ end }}
+{{ end }}
+
+{{ if not $by_weight }}
+{{ $all_pages = sort $all_pages "path" }}
+{{ end }}
+
+{{ range $page := $all_pages }}
+{{ if not $first_page }}
+{{ $first_page = $page.path }}
+{{ end }}
+{{ $entry := (dict "path" $page.path "title" $page.title "prev_page" $prev_page "step" $count) }}
+{{ $modules = merge $modules (dict $page.path $entry) }}
+{{ if $prev_page }}
+{{ $item := index $modules $prev_page }}
+{{ $item = merge $item (dict "next_page" $page.path) }}
+{{ $modules = merge $modules (dict $prev_page $item) }}
+{{ end }}
+{{ $prev_page = $page.path }}
+{{ $count = add $count 1}}
+{{ end }}
+
+{{ .Scratch.Set "__modules__" $modules }}
+{{ .Scratch.Set "__first_page__" $first_page }}
+
+{{ end }}
+
+{{ $current_module := (index $modules (trim (substr (.Page.RelPermalink) (len (relURL ""))) "/")) }}
+
+<body data-google-tracking-id='{{ .Param "google_tracking_id" }}'
+  data-clarity-tracking-id='{{ .Param "clarity_tracking_id" }}'
+  data-amplitude-tracking-id='{{ .Param "amplitude_tracking_id" }}' data-workshop-name='{{ .Param "workshop_name" }}'
+  data-session-namespace='{{ .Param "session_namespace" }}' data-workshop-namespace='{{ .Param "workshop_namespace" }}'
+  data-training-portal='{{ .Param "training_portal" }}' data-ingress-domain='{{ .Param "ingress_domain" }}'
+  data-ingress-protocol='{{ .Param "ingress_protocol" }}' data-ingress-port-suffix='{{ .Param "ingress_port_suffix" }}'
+  data-prev-page='{{ $current_module.prev_page }}' data-current-page='{{ index $current_module "path" }}'
+  data-next-page='{{ $current_module.next_page }}' data-page-format='markdown' data-code-fences='chroma'
+  data-page-step='{{ $current_module.step }}' data-pages-total='{{ len $modules }}'>
+
+  {{ partial "page-header.html" . }}
+
+  {{ partial "image-popup.html" . }}
+
+  {{ block "main" . }}
+  {{ end }}
+
+  {{ partial "page-footer.html" . }}
+
+</body>
+
+</html>

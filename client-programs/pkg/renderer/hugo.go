@@ -23,8 +23,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -195,7 +195,7 @@ func fetchSessionVariables(sessionURL string, password string) (map[string]strin
 	return params, nil
 }
 
-func generateHugoConfiguration(workshopDir string, target string, params map[string]string, sessionURL string) error {
+func GenerateHugoConfiguration(workshopDir string, target string, params map[string]string, sessionURL string) error {
 	var err error
 
 	// Read user workshop config with details of any pathways.
@@ -374,7 +374,7 @@ func startHugoServer(workshopDir string, tempDir string, port int, sessionURL st
 	return nil
 }
 
-func populateTemporaryDirectory() (string, error) {
+func PopulateTemporaryDirectory() (string, error) {
 	tempDir, err := ioutil.TempDir("", "educates")
 
 	if err != nil {
@@ -400,7 +400,7 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 
 	// First create directory to hold unpacked files for Hugo to use.
 
-	if tempDir, err = populateTemporaryDirectory(); err != nil {
+	if tempDir, err = PopulateTemporaryDirectory(); err != nil {
 		return err
 	}
 
@@ -493,7 +493,7 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 
 			// Generate (or regenerate) the Hugo configuration.
 
-			err = generateHugoConfiguration(workshopDir, tempDir, params, sessionURL)
+			err = GenerateHugoConfiguration(workshopDir, tempDir, params, sessionURL)
 
 			if err != nil {
 				fmt.Println("Unable to generate Hugo configuration:", err)
@@ -605,6 +605,65 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 	fmt.Println("Proxy listening on:", portString)
 
 	log.Fatal(http.ListenAndServe(portString, nil))
+
+	return nil
+}
+
+func RenderHugoStaticHTML(workshopDir string, tempDir string) error {
+	commandArgs := []string{
+		"build",
+		"--source", workshopDir,
+		"--config", filepath.Join(tempDir, "hugo.yaml"),
+		"--themesDir", filepath.Join(tempDir, "themes"),
+		"--theme", "educates-standalone",
+		"--destination", filepath.Join(tempDir, "public"),
+		"--logLevel", "debug",
+		"--baseURL", "",
+		"--ignoreCache",
+		"--cleanDestinationDir",
+		// "--minify",
+	}
+
+	commandPath, err := exec.LookPath("hugo")
+
+	if err != nil {
+		fmt.Println("ERROR: Unable to find hugo program")
+		return errors.Wrapf(err, "unable to find hugo program")
+	}
+
+	command := exec.Command(commandPath, commandArgs...)
+
+	stdout, err := command.StdoutPipe()
+	command.Stderr = command.Stdout
+
+	if err != nil {
+		return errors.Wrapf(err, "unable to create command output pipe")
+	}
+
+	if err = command.Start(); err != nil {
+		return errors.Wrapf(err, "failed to execute hugo program")
+	}
+
+	for {
+		tmp := make([]byte, 1024)
+		_, err := stdout.Read(tmp)
+		fmt.Print(string(tmp))
+		if err != nil {
+			break
+		}
+	}
+
+	command.Wait()
+
+	if err != nil {
+		return errors.Wrapf(err, "failed to execute hugo program")
+	}
+
+	status := command.ProcessState.ExitCode()
+
+	if status != 0 {
+		return errors.New("hugo build failed")
+	}
 
 	return nil
 }

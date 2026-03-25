@@ -1,0 +1,141 @@
+{{ define "main" }}
+
+{{ $first_page := (.Scratch.Get "__first_page__") }}
+
+<div class="container-fluid main-content">
+  <div class="row">
+    <div class="col-sm-12">
+      <section class="page-content" id="main">
+        {{ if $first_page }}
+        <div id="resume-dialog" style="display: none; margin-top: 2rem;">
+          <div class="card">
+            <div class="card-body text-center">
+              <h5 class="card-title" id="resume-dialog-title">Resume Workshop</h5>
+              <p class="card-text" id="resume-dialog-text"></p>
+              <div class="d-flex justify-content-center gap-2 mt-3">
+                <button class="btn btn-primary" id="resume-dialog-yes">Resume</button>
+                <button class="btn btn-outline-secondary" id="resume-dialog-no">Start from Beginning</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <script>
+          (function() {
+            var firstPage = '{{ relURL $first_page }}';
+
+            // Check if running inside the dashboard iframe.
+
+            var inDashboard = !!(parent && parent.educates && parent.educates.dashboard);
+
+            if (!inDashboard) {
+              window.location.replace(firstPage);
+              return;
+            }
+
+            // Build the sessionStorage key prefix using the same convention
+            // as educates.js.
+
+            var timeStarted;
+            try {
+              timeStarted = parent.document.body.dataset.timeStarted;
+            } catch (e) {
+              // Cross-origin — can't read parent.
+            }
+
+            if (!timeStarted) {
+              window.location.replace(firstPage);
+              return;
+            }
+
+            var hostname = location.hostname;
+            var prefix = 'educates:' + hostname + ':' + timeStarted;
+
+            // Check if the home button was intentionally clicked (suppress
+            // resume popup). The flag is consumed immediately.
+
+            var homeClickedKey = prefix + ':home-clicked';
+            var homeClicked = sessionStorage.getItem(homeClickedKey);
+
+            if (homeClicked) {
+              sessionStorage.removeItem(homeClickedKey);
+
+              var elapsed = Date.now() - parseInt(homeClicked, 10);
+
+              if (elapsed < 5000) {
+                window.location.replace(firstPage);
+                return;
+              }
+            }
+
+            // Check for a saved last-visited page.
+
+            var lastPageKey = prefix + ':last-page';
+            var raw = sessionStorage.getItem(lastPageKey);
+
+            if (!raw) {
+              window.location.replace(firstPage);
+              return;
+            }
+
+            var lastPage;
+
+            try {
+              lastPage = JSON.parse(raw);
+            } catch (e) {
+              window.location.replace(firstPage);
+              return;
+            }
+
+            // If the last page is the first page, no need to offer resume.
+
+            if (!lastPage || !lastPage.path || lastPage.path === '{{ $first_page }}') {
+              window.location.replace(firstPage);
+              return;
+            }
+
+            // Show the resume dialog instead of redirecting.
+
+            var dialog = document.getElementById('resume-dialog');
+            var textEl = document.getElementById('resume-dialog-text');
+            var yesBtn = document.getElementById('resume-dialog-yes');
+            var noBtn = document.getElementById('resume-dialog-no');
+
+            var stepInfo = '';
+            if (lastPage.step && lastPage.total) {
+              stepInfo = ' (step ' + lastPage.step + ' of ' + lastPage.total + ')';
+            }
+
+            textEl.textContent = 'You were previously on: ' + lastPage.title + stepInfo + '. Would you like to continue where you left off?';
+
+            yesBtn.addEventListener('click', function() {
+              window.location.replace(lastPage.path);
+            });
+
+            noBtn.addEventListener('click', function() {
+              window.location.replace(firstPage);
+            });
+
+            dialog.style.display = '';
+          })();
+        </script>
+        {{ else }}
+        <div class="admonition danger">
+            <p class="admonition-title">Renderer Failed</p>
+            <p>An unknown error occured preparing the workshop and no workshop instructions were found. Check available workshop error logs for details.</p>
+        </div>
+        {{ if .Param "restart_url" }}
+        <div class="page-meta clearfix">
+          <form>
+            <button class="btn btn-lg btn-primary float-end" id="next-page" type="button" aria-label="finish"
+              onclick="educates.finished_workshop()">
+              Terminate Session </button>
+          </form>
+        </div>
+        {{ end }}
+        {{ end }}
+      </section>
+    </div>
+  </div>
+</div>
+</section>
+{{ end }}

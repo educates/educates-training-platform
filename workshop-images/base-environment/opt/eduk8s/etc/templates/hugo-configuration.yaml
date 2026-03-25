@@ -59,3 +59,23 @@
 #@ end
 
 params: #@ params
+
+outputFormats:
+  print:
+    baseName: print
+    mediaType: text/html
+    isHTML: true
+
+outputs:
+  home:
+    - HTML
+    - print
+
+module:
+  mounts:
+    - source: static
+      target: static
+    - source: /opt/eduk8s/theme
+      target: static/static/theme
+    - source: /opt/eduk8s/theme
+      target: assets/theme

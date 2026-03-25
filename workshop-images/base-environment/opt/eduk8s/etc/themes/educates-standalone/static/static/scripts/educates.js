@@ -1630,14 +1630,41 @@ const educates = (function () {
             });
         }
 
-        // Persistent bottom bar: scroll-based progress and Continue button
-        // enablement. The main-content div is the scroll container (not the
-        // window), so we listen for scroll events on that element.
+        // Persistent bottom bar: scroll-based progress indicator and
+        // Continue button enablement. The main-content div is the scroll
+        // container (not the window), so we listen for scroll events on
+        // that element. Button enablement uses an IntersectionObserver on
+        // a sentinel element at the end of the rendered content rather
+        // than a scroll-percentage threshold, so it handles dynamic
+        // content growth, window resizes, and varying viewport sizes.
 
         const bottomBarNext = document.getElementById('bottom-bar-next');
         let bottomBarNextTooltip = null;
         const scrollProgress = document.getElementById('scroll-progress');
         const mainContent = document.querySelector('.main-content');
+        const contentSentinel = document.getElementById('content-sentinel');
+
+        let hasSeenBottom = false;
+        let sentinelVisible = false;
+        let lastScrollHeight = mainContent ? mainContent.scrollHeight : 0;
+
+        // Centralized button enable/disable logic. The button is enabled
+        // only when the user has scrolled far enough to see the sentinel
+        // AND all required actions are complete.
+
+        function updateButtonEnabled() {
+            if (!bottomBarNext) return;
+            if (hasSeenBottom && getIncompleteRequiredCount() === 0) {
+                bottomBarNext.disabled = false;
+                bottomBarNext.classList.add('enabled');
+            } else {
+                bottomBarNext.disabled = true;
+                bottomBarNext.classList.remove('enabled');
+            }
+        }
+
+        // Update the visual scroll progress bar (cosmetic only — does
+        // not gate button enablement).
 
         function updateScrollProgress() {
             if (!mainContent) return;
@@ -1645,29 +1672,30 @@ const educates = (function () {
             const scrollTop = mainContent.scrollTop;
             const scrollHeight = mainContent.scrollHeight - mainContent.clientHeight;
 
-            // Calculate progress as a fraction 0..1. If there's no
-            // scrollable overflow treat as fully scrolled.
-
             const progress = scrollHeight > 0
                 ? Math.min(scrollTop / scrollHeight, 1)
                 : 1;
 
-            // Update the progress bar fill width.
-
             if (scrollProgress) {
                 scrollProgress.style.width = (progress * 100) + '%';
             }
+        }
 
-            // Enable the Continue/Finish button once the user has
-            // scrolled to at least 90% of the content, or if the
-            // content fits entirely within the viewport.
+        // Set up the IntersectionObserver on the content sentinel to
+        // detect when the user has scrolled to the end of the content.
 
-            if (bottomBarNext && progress >= 0.9) {
-                if (getIncompleteRequiredCount() === 0) {
-                    bottomBarNext.disabled = false;
-                    bottomBarNext.classList.add('enabled');
-                }
-            }
+        if (mainContent && contentSentinel) {
+            const sentinelObserver = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    sentinelVisible = entry.isIntersecting;
+                    if (entry.isIntersecting) {
+                        hasSeenBottom = true;
+                        updateButtonEnabled();
+                    }
+                });
+            }, { root: mainContent });
+
+            sentinelObserver.observe(contentSentinel);
         }
 
         if (mainContent) {
@@ -1750,12 +1778,10 @@ const educates = (function () {
                 bottomBarNextTooltip = null;
             }
 
-            // If required actions remain, force button disabled.
+            // Update button enabled/disabled based on both required
+            // actions and whether the user has seen the bottom.
 
-            if (remaining > 0) {
-                bottomBarNext.disabled = true;
-                bottomBarNext.classList.remove('enabled');
-            }
+            updateButtonEnabled();
         }
 
         // Clickable action pulse hint: visually guide users to the next
@@ -1898,6 +1924,20 @@ const educates = (function () {
                 updateActionPulse();
                 updateRequiredState();
                 updateScrollProgress();
+
+                // If content has grown (e.g., action output expanded the
+                // page), reset the seen-bottom latch so the user must
+                // scroll to the new bottom. The IntersectionObserver will
+                // immediately re-set hasSeenBottom if the sentinel is
+                // still visible.
+
+                if (mainContent && mainContent.scrollHeight > lastScrollHeight) {
+                    if (!sentinelVisible) {
+                        hasSeenBottom = false;
+                        updateButtonEnabled();
+                    }
+                    lastScrollHeight = mainContent.scrollHeight;
+                }
             }, 150);
         });
 

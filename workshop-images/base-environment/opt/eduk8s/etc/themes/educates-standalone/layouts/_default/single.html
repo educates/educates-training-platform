@@ -16,6 +16,7 @@
         {{ end }}
         <div class="rendered-content">
           {{ .Content }}
+          <div id="content-sentinel" aria-hidden="true" style="height:1px;width:100%;pointer-events:none;"></div>
         </div>
         <div class="navigation-buttons" style="display: none;">
           {{ if $current_module.next_page }}

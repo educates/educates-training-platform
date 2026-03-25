@@ -187,6 +187,10 @@ button#header-next-page {
     padding-left: 1px;
 }
 
+.rendered-content {
+    padding-bottom: 20vh;
+}
+
 .page-content {
     padding: 15px;
     margin: 4px 0px;

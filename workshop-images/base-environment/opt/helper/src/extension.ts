@@ -1063,9 +1063,14 @@ function createResponse(result: Promise<any>, req: Request<any>, res: Response<a
 
 // --- Extension activation ---
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 
     log('Activating Educates helper');
+
+    if (!context.workspaceState.get('hasActivatedBefore')) {
+        await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+        await context.workspaceState.update('hasActivatedBefore', true);
+    }
 
     const port = process.env.EDUCATES_VSCODE_HELPER_PORT || 10011;
 

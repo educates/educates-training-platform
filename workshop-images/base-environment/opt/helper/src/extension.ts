@@ -716,7 +716,10 @@ async function handleAppendAfterSelection(params: AppendAfterSelectionParams) {
     log(`  text = ${text}`);
 
     const editor = await showEditor(params.file);
-    const lineAfter = editor.selection.end.line + 1;
+    const selection = editor.selection;
+    const lineAfter = (selection.end.character === 0 && !selection.isEmpty)
+        ? selection.end.line
+        : selection.end.line + 1;
     log(`  lineAfter = ${lineAfter}`);
     await insertTextAtLine(editor, lineAfter, text);
     await editor.document.save();

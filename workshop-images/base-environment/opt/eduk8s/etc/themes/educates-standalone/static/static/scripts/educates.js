@@ -586,7 +586,7 @@ const educates = (function () {
             if (step_span) step_span.remove();
             title = clone.textContent.trim() || page_path;
         }
-        const step = body.dataset.pageStep || '';
+        const step = body.dataset.pageNumber || '';
         const total = body.dataset.pagesTotal || '';
 
         const key = `${state_key_prefix}:last-page`;
@@ -1607,8 +1607,8 @@ const educates = (function () {
                 prev_page: body.dataset.prevPage,
                 current_page: body.dataset.currentPage,
                 next_page: body.dataset.nextPage,
-                page_number: body.dataset.pageNumber,
-                pages_total: body.dataset.pagesTotal,
+                page_number: Number(body.dataset.pageNumber),
+                pages_total: Number(body.dataset.pagesTotal),
             });
         }
 
@@ -1616,8 +1616,8 @@ const educates = (function () {
             prev_page: body.dataset.prevPage,
             current_page: body.dataset.currentPage,
             next_page: body.dataset.nextPage,
-            page_number: body.dataset.pageNumber,
-            pages_total: body.dataset.pagesTotal,
+            page_number: Number(body.dataset.pageNumber),
+            pages_total: Number(body.dataset.pagesTotal),
         });
 
         if (!body.dataset.nextPage) {
@@ -1625,8 +1625,8 @@ const educates = (function () {
                 prev_page: body.dataset.prevPage,
                 current_page: body.dataset.currentPage,
                 next_page: body.dataset.nextPage,
-                page_number: body.dataset.pageNumber,
-                pages_total: body.dataset.pagesTotal,
+                page_number: Number(body.dataset.pageNumber),
+                pages_total: Number(body.dataset.pagesTotal),
             });
         }
 
@@ -2331,8 +2331,8 @@ const educates = (function () {
                 prev_page: body.dataset.prevPage,
                 current_page: body.dataset.currentPage,
                 next_page: body.dataset.nextPage,
-                page_number: body.dataset.pageNumber,
-                pages_total: body.dataset.pagesTotal,
+                page_number: Number(body.dataset.pageNumber),
+                pages_total: Number(body.dataset.pagesTotal),
                 event_name: args.event,
             });
         }

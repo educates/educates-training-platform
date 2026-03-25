@@ -59,6 +59,10 @@ if [ -f $WORKSHOP_DIR/workshop.yaml -o -f $WORKSHOP_DIR/modules.yaml ]; then
     exit 0
 fi
 
+# Setup default Hugo theme for renderer.
+
+WORKSHOP_RENDERER_THEME=${WORKSHOP_RENDERER_THEME:-educates}
+
 # Generate Hugo configuration.
 
 YTT_ARGS=()
@@ -85,7 +89,7 @@ HUGO_ARGS+=(--minify)
 HUGO_ARGS+=(--config $HOME/.local/share/workshop/hugo-configuration.yaml)
 
 HUGO_ARGS+=(--themesDir /opt/eduk8s/etc/themes)
-HUGO_ARGS+=(--theme educates-standalone)
+HUGO_ARGS+=(--theme $WORKSHOP_RENDERER_THEME)
 
 HUGO_ARGS+=(--baseURL $INGRESS_PROTOCOL://$SESSION_NAMESPACE.$INGRESS_DOMAIN$INGRESS_PORT_SUFFIX/workshop/content/)
 

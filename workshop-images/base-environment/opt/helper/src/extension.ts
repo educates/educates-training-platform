@@ -61,15 +61,27 @@ function showEditor(file: string): Thenable<vscode.TextEditor> {
 function insertTextAtLine(editor: vscode.TextEditor, line: number, text: string): Thenable<any> {
     log(`called insertTextAtLine(${line})`);
     let lines = editor.document.lineCount;
+    let paddingLines = 0;
     while (lines <= line) {
         lines++;
+        paddingLines++;
         text = "\n" + text;
     }
+    let contentLineCount = (text.match(/\n/g) || []).length - paddingLines;
     return editor.edit(editBuilder => {
         const loc = new vscode.Position(line, 0);
         editBuilder.insert(loc, text);
     })
-        .then(() => revealLine(editor, line));
+        .then(() => {
+            let contentStart = line;
+            let contentEnd = contentStart + contentLineCount;
+            let sel = new vscode.Selection(
+                new vscode.Position(contentStart, 0),
+                new vscode.Position(contentEnd, 0)
+            );
+            editor.selection = sel;
+            editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter);
+        });
 }
 
 function revealLine(editor: vscode.TextEditor, line: number, before: number = 0, after: number = 0): void {
@@ -280,7 +292,7 @@ interface InsertAfterLineParams {
     text: string;
 }
 
-async function handleInsertAfterLine(params: InsertAfterLineParams) {
+async function handleAppendAfterLine(params: InsertAfterLineParams) {
     // Insert after line N means insert before line N+1.
     // The line number from the frontend is 1-based, so after converting to
     // 0-based by subtracting 1, we add 1 to get the position after.
@@ -586,7 +598,24 @@ async function handleReplaceLines(params: ReplaceLinesParams) {
         editBuilder.replace(range, replacement);
     });
 
-    editor.revealRange(new vscode.Range(startPosition, startPosition), vscode.TextEditorRevealType.InCenter);
+    // Select the replacement content so it is highlighted in the editor.
+
+    let contentStart = new vscode.Position(startLine, 0);
+    let contentEnd: vscode.Position;
+
+    if (replacement.endsWith('\n')) {
+        // Normal case: replacement ends with newline, select full lines.
+        let repLineCount = (replacement.match(/\n/g) || []).length;
+        contentEnd = new vscode.Position(startLine + repLineCount, 0);
+    } else {
+        // Last-lines case: replacement starts with \n, no trailing newline.
+        let repLines = replacement.split('\n');
+        let repNewlineCount = repLines.length - 1;
+        contentEnd = new vscode.Position(startLine + repNewlineCount - 1, repLines[repLines.length - 1].length);
+    }
+
+    editor.selection = new vscode.Selection(contentStart, contentEnd);
+    editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter);
 
     await doc.save();
 }
@@ -619,6 +648,133 @@ async function handleInsertAfterMatch(params: InsertAfterMatchParams) {
         await writeFile(params.file, text);
         await showEditor(params.file);
     }
+}
+
+// --- Handler: insert-before-match ---
+
+interface InsertBeforeMatchParams {
+    file: string;
+    match: string;
+    text: string;
+}
+
+async function handleInsertBeforeMatch(params: InsertBeforeMatchParams) {
+    let text = ensureNewlineTerminated(params.text || "");
+
+    log('Requesting to insert before match:');
+    log(`  file = ${params.file}`);
+    log(`  match = ${params.match}`);
+    log(`  text = ${text}`);
+
+    if (await fileExists(params.file)) {
+        const editor = await showEditor(params.file);
+        const line = findLineContaining(editor, params.match);
+        log("line = " + line);
+        if (line >= 0) {
+            await insertTextAtLine(editor, line, text);
+        }
+        await editor.document.save();
+    } else {
+        await writeFile(params.file, text);
+        await showEditor(params.file);
+    }
+}
+
+// --- Handler: insert-before-selection ---
+
+interface InsertBeforeSelectionParams {
+    file: string;
+    text: string;
+}
+
+async function handleInsertBeforeSelection(params: InsertBeforeSelectionParams) {
+    let text = ensureNewlineTerminated(params.text || "");
+
+    log('Requesting to insert before selection:');
+    log(`  file = ${params.file}`);
+    log(`  text = ${text}`);
+
+    const editor = await showEditor(params.file);
+    const selectionLine = editor.selection.start.line;
+    log(`  selectionLine = ${selectionLine}`);
+    await insertTextAtLine(editor, selectionLine, text);
+    await editor.document.save();
+}
+
+// --- Handler: append-after-selection ---
+
+interface AppendAfterSelectionParams {
+    file: string;
+    text: string;
+}
+
+async function handleAppendAfterSelection(params: AppendAfterSelectionParams) {
+    let text = ensureNewlineTerminated(params.text || "");
+
+    log('Requesting to append after selection:');
+    log(`  file = ${params.file}`);
+    log(`  text = ${text}`);
+
+    const editor = await showEditor(params.file);
+    const selection = editor.selection;
+    const lineAfter = (selection.end.character === 0 && !selection.isEmpty)
+        ? selection.end.line
+        : selection.end.line + 1;
+    log(`  lineAfter = ${lineAfter}`);
+    await insertTextAtLine(editor, lineAfter, text);
+    await editor.document.save();
+}
+
+// --- Handler: prepend-to-file ---
+
+interface PrependToFileParams {
+    file: string;
+    text: string;
+}
+
+async function handlePrependToFile(params: PrependToFileParams) {
+    let text = ensureNewlineTerminated(params.text || "");
+
+    log('Requesting to prepend to file:');
+    log(`  file = ${params.file}`);
+    log(`  text = ${text}`);
+
+    if (await fileExists(params.file)) {
+        const editor = await showEditor(params.file);
+        await insertTextAtLine(editor, 0, text);
+        await editor.document.save();
+    } else {
+        await writeFile(params.file, text);
+        await showEditor(params.file);
+    }
+}
+
+// --- Handler: delete-text-selection ---
+
+interface DeleteTextSelectionParams {
+    file: string;
+}
+
+async function handleDeleteTextSelection(params: DeleteTextSelectionParams) {
+    log('Requesting to delete text selection:');
+    log(`  file = ${params.file}`);
+
+    const doc = await vscode.workspace.openTextDocument(params.file);
+    const editor = await vscode.window.showTextDocument(doc);
+
+    const selection = editor.selection;
+
+    if (selection.isEmpty)
+        return;
+
+    const posAfterDelete = selection.start;
+
+    await editor.edit(builder => builder.delete(selection));
+
+    editor.selection = new vscode.Selection(posAfterDelete, posAfterDelete);
+    editor.revealRange(new vscode.Range(posAfterDelete, posAfterDelete), vscode.TextEditorRevealType.InCenter);
+
+    await editor.document.save();
 }
 
 // --- Handler: copy-file ---
@@ -910,9 +1066,14 @@ function createResponse(result: Promise<any>, req: Request<any>, res: Response<a
 
 // --- Extension activation ---
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 
     log('Activating Educates helper');
+
+    if (!context.workspaceState.get('hasActivatedBefore')) {
+        await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+        await context.workspaceState.update('hasActivatedBefore', true);
+    }
 
     const port = process.env.EDUCATES_VSCODE_HELPER_PORT || 10011;
 
@@ -972,19 +1133,35 @@ export function activate(context: vscode.ExtensionContext) {
         createResponse(handleAppendToFile(parameters), req, res);
     });
 
+    app.post('/editor/prepend-to-file', (req, res) => {
+        const parameters = req.body as PrependToFileParams;
+        createResponse(handlePrependToFile(parameters), req, res);
+    });
+
     app.post('/editor/insert-before-line', (req, res) => {
         const parameters = req.body as InsertBeforeLineParams;
         createResponse(handleInsertBeforeLine(parameters), req, res);
     });
 
+    // Deprecated: use /editor/append-after-line instead.
     app.post('/editor/insert-after-line', (req, res) => {
         const parameters = req.body as InsertAfterLineParams;
-        createResponse(handleInsertAfterLine(parameters), req, res);
+        createResponse(handleAppendAfterLine(parameters), req, res);
+    });
+
+    app.post('/editor/append-after-line', (req, res) => {
+        const parameters = req.body as InsertAfterLineParams;
+        createResponse(handleAppendAfterLine(parameters), req, res);
     });
 
     app.post('/editor/insert-after-match', (req, res) => {
         const parameters = req.body as InsertAfterMatchParams;
         createResponse(handleInsertAfterMatch(parameters), req, res);
+    });
+
+    app.post('/editor/insert-before-match', (req, res) => {
+        const parameters = req.body as InsertBeforeMatchParams;
+        createResponse(handleInsertBeforeMatch(parameters), req, res);
     });
 
     app.post('/editor/select-matching-text', (req, res) => {
@@ -995,6 +1172,21 @@ export function activate(context: vscode.ExtensionContext) {
     app.post('/editor/replace-text-selection', (req, res) => {
         const parameters = req.body as ReplaceTextSelectionParams;
         createResponse(replaceTextSelection(parameters), req, res);
+    });
+
+    app.post('/editor/delete-text-selection', (req, res) => {
+        const parameters = req.body as DeleteTextSelectionParams;
+        createResponse(handleDeleteTextSelection(parameters), req, res);
+    });
+
+    app.post('/editor/insert-before-selection', (req, res) => {
+        const parameters = req.body as InsertBeforeSelectionParams;
+        createResponse(handleInsertBeforeSelection(parameters), req, res);
+    });
+
+    app.post('/editor/append-after-selection', (req, res) => {
+        const parameters = req.body as AppendAfterSelectionParams;
+        createResponse(handleAppendAfterSelection(parameters), req, res);
     });
 
     app.post('/editor/replace-matching-text', (req, res) => {

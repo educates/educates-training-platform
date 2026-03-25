@@ -304,7 +304,9 @@ class ClusterOperator(GenericOperator):
             environment_name = xgetattr(metadata, "name")
             environment_uid = xgetattr(metadata, "uid")
 
-            workshop_name = xgetattr(spec, "workshop.name")
+            workshop_name = xgetattr(metadata, "labels", {}).get(
+                "training.educates.dev/portal.workshop", ""
+            ) or xgetattr(spec, "workshop.name")
 
             workshop_generation = xgetattr(status, "educates.workshop.generation", 0)
             workshop_spec = xgetattr(status, "educates.workshop.spec", {})

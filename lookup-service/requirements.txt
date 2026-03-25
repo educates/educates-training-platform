@@ -4,4 +4,4 @@ aiohttp==3.13.3
 PyYAML==6.0.1
 pykube-ng==23.6.0
 wrapt==1.16.0
-PyJWT==2.8.0
+PyJWT==2.12.0

@@ -3,7 +3,7 @@ Platform Architecture
 
 Educates has a layered architecture made up of three main concerns: how workshop content is authored and distributed, what each user gets when they start a workshop session, and how the platform is deployed and manages sessions at scale. This page covers each of these layers, starting with a high-level view before diving into the Kubernetes-specific internals.
 
-![](platform-conceptual-overview.svg)
+![](platform-conceptual-overview.png)
 
 Content authoring and distribution
 ----------------------------------
@@ -27,7 +27,7 @@ The workshop session
 
 When a user starts a workshop, they are given their own isolated session. The primary interface is the workshop dashboard, which is displayed in the user's web browser. The dashboard is split into two halves: the instructions panel on the left and a set of tabbed views on the right.
 
-![](session-environment-overview.svg)
+![](session-environment-overview.png)
 
 The dashboard provides the following components:
 

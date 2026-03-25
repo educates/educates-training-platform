@@ -301,6 +301,42 @@ class Editor {
         this.execute_call("/editor/replace-text-selection", data, done, fail)
     }
 
+    delete_text_selection(file: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file })
+        this.execute_call("/editor/delete-text-selection", data, done, fail)
+    }
+
+    insert_lines_before_selection(file: string, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, text })
+        this.execute_call("/editor/insert-before-selection", data, done, fail)
+    }
+
+    append_lines_after_selection(file: string, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, text })
+        this.execute_call("/editor/append-after-selection", data, done, fail)
+    }
+
     replace_matching_text(file: string, match: string, replacement: string, start: number, stop: number, isRegex: boolean, group: number, count: number, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -331,6 +367,18 @@ class Editor {
         this.execute_call("/editor/append-to-file", data, done, fail)
     }
 
+    prepend_lines_to_file(file: string, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, text })
+        this.execute_call("/editor/prepend-to-file", data, done, fail)
+    }
+
     insert_lines_before_line(file: string, line: number, text: string, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -343,6 +391,7 @@ class Editor {
         this.execute_call("/editor/insert-before-line", data, done, fail)
     }
 
+    // Deprecated: use append_lines_after_line instead.
     insert_lines_after_line(file: string, line: number, text: string, done, fail) {
         if (!this.url)
             return fail("Editor not available")
@@ -353,6 +402,18 @@ class Editor {
         file = this.fixup_path(file)
         let data = JSON.stringify({ file, line, text })
         this.execute_call("/editor/insert-after-line", data, done, fail)
+    }
+
+    append_lines_after_line(file: string, line: number, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, line, text })
+        this.execute_call("/editor/append-after-line", data, done, fail)
     }
 
     append_lines_after_match(file: string, match: string, text: string, done, fail) {
@@ -368,6 +429,21 @@ class Editor {
         file = this.fixup_path(file)
         let data = JSON.stringify({ file, match, text })
         this.execute_call("/editor/insert-after-match", data, done, fail)
+    }
+
+    insert_lines_before_match(file: string, match: string, text: string, done, fail) {
+        if (!this.url)
+            return fail("Editor not available")
+
+        if (!file)
+            return fail("No file name provided")
+
+        if (!match)
+            return fail("No string to match provided")
+
+        file = this.fixup_path(file)
+        let data = JSON.stringify({ file, match, text })
+        this.execute_call("/editor/insert-before-match", data, done, fail)
     }
 
     select_lines_in_range(file: string, start: number, stop: number, done, fail) {
@@ -1854,6 +1930,75 @@ $(document).ready(async () => {
     })
 
     register_action({
+        name: "editor:delete-text-selection",
+        glyph: "fa-eraser",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Delete text selection in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return ""
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.delete_text_selection(args.file, done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:insert-lines-before-selection",
+        glyph: "fa-file-import",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Insert lines before selection in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.insert_lines_before_selection(args.file, args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:append-lines-after-selection",
+        glyph: "fa-file-import",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Append lines after selection in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.append_lines_after_selection(args.file, args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
         name: "editor:append-lines-to-file",
         glyph: "fa-file-import",
         args: "yaml",
@@ -1870,6 +2015,29 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.append_lines_to_file(args.file, args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:prepend-lines-to-file",
+        glyph: "fa-file-import",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Prepend lines to file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.prepend_lines_to_file(args.file, args.text || "", done, fail)
         },
         waiting: "fa-cog",
         spinner: true,
@@ -1923,6 +2091,29 @@ $(document).ready(async () => {
     })
 
     register_action({
+        name: "editor:insert-lines-before-match",
+        glyph: "fa-file-import",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Insert lines before "${args.match}" in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.insert_lines_before_match(args.file, args.match || "", args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
         name: "editor:replace-matching-text",
         glyph: "fa-exchange-alt",
         args: "yaml",
@@ -1945,6 +2136,7 @@ $(document).ready(async () => {
         cooldown: 3
     })
 
+    // Deprecated: use editor:append-lines-after-line instead.
     register_action({
         name: "editor:insert-lines-after-line",
         glyph: "fa-file-import",
@@ -1962,6 +2154,29 @@ $(document).ready(async () => {
         handler: (args, element, done, fail) => {
             expose_dashboard("editor")
             editor.insert_lines_after_line(args.file, args.line || "", args.text || "", done, fail)
+        },
+        waiting: "fa-cog",
+        spinner: true,
+        cooldown: 3
+    })
+
+    register_action({
+        name: "editor:append-lines-after-line",
+        glyph: "fa-file-import",
+        args: "yaml",
+        title: (args) => {
+            let prefix = args.prefix || "Editor"
+            let subject = args.title || `Append lines after line ${args.line} in file "${args.file}"`
+            return `${prefix}: ${subject}`
+        },
+        body: (args) => {
+            if (args.description !== undefined)
+                return args.description
+            return args.text
+        },
+        handler: (args, element, done, fail) => {
+            expose_dashboard("editor")
+            editor.append_lines_after_line(args.file, args.line || "", args.text || "", done, fail)
         },
         waiting: "fa-cog",
         spinner: true,

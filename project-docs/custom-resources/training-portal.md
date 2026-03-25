@@ -745,7 +745,7 @@ Where an event has associated data, it is included in the ``data`` dictionary.
       "current_page": "workshop-overview",
       "next_page": "setup-environment",
       "page_number": 1,
-      "total_pages": 4
+      "pages_total": 4
     }
   }
 }
@@ -772,7 +772,7 @@ In the case of clickable action which has been designated to generate an event, 
       "current_page": "workshop-overview",
       "next_page": "setup-environment",
       "page_number": 1,
-      "total_pages": 4,
+      "pages_total": 4,
       "event_name": "open-example-web-site"
     }
   }

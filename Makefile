@@ -173,12 +173,12 @@ build-all-images: setup-buildx build-session-manager build-training-portal \
   build-conda-environment build-docker-registry \
   build-pause-container build-secrets-manager build-tunnel-manager \
   build-image-cache build-assets-server build-lookup-service \
-  build-cli-image
+  build-node-ca-injector build-cli-image
 
 build-core-images: setup-buildx build-session-manager build-training-portal \
   build-base-environment build-docker-registry build-pause-container \
   build-secrets-manager build-tunnel-manager build-image-cache \
-  build-assets-server build-lookup-service
+  build-assets-server build-lookup-service build-node-ca-injector
 
 build-session-manager:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
@@ -281,6 +281,12 @@ build-lookup-service:
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-lookup-service:$(PACKAGE_VERSION) \
 		lookup-service
+
+build-node-ca-injector:
+	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
+	    $(DOCKER_BUILDER) \
+		-t $(IMAGE_REPOSITORY)/educates-node-ca-injector:$(PACKAGE_VERSION) \
+		node-ca-injector
 
 verify-installer-config:
 ifneq ("$(wildcard developer-testing/educates-installer-values.yaml)","")

@@ -1,6 +1,9 @@
 {
     "terminal.integrated.automationShell.linux": "/bin/bash",
     "workbench.startupEditor": "none",
+    "window.restoreWindows": "none",
+    "workbench.secondarySideBar.defaultVisibility": "hidden",
+    "files.hotExit": "off",
     "update.showReleaseNotes": false,
     "python.autoUpdateLanguageServer": false,
     "extensions.autoCheckUpdates": false,

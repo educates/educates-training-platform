@@ -15,13 +15,17 @@ This workshop tested the following editor clickable action features:
 - Overwrite an existing file
 - Append lines to a file (`editor:append-lines-to-file`)
 - Append to a non-existent file (creates it)
+- Prepend lines to a file (`editor:prepend-lines-to-file`)
+- Prepend to a non-existent file (creates it)
 
 **Line insertion:**
 
 - Insert lines before a line number (`editor:insert-lines-before-line`)
 - Insert lines after a line number (`editor:insert-lines-after-line`)
+- Append lines after a line number (`editor:append-lines-after-line`)
 - Insert multiple lines at once
 - Insert lines after a matching string (`editor:append-lines-after-match`)
+- Insert lines before a matching string (`editor:insert-lines-before-match`)
 
 **Text selection:**
 
@@ -42,6 +46,12 @@ This workshop tested the following editor clickable action features:
 - Replace selected text (`editor:replace-text-selection`)
 - Replace with multi-line text
 - Replace a regex group selection
+- Delete selected text (`editor:delete-text-selection`)
+- Delete a single line selection
+- Delete a regex group selection
+- Insert lines before selection (`editor:insert-lines-before-selection`)
+- Append lines after selection (`editor:append-lines-after-selection`)
+- Wrap a selection with content above and below
 - Find and replace in one step (`editor:replace-matching-text`)
 - Replace using regular expression
 - Replace within a search range

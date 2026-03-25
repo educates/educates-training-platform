@@ -994,7 +994,7 @@ const educates = (function () {
             return this.execute_call('/editor/replace-matching-text', data);
         }
 
-        // Insert lines after a specific line number.
+        // Deprecated: use append_lines_after_line instead.
 
         insert_lines_after_line(file, line, text) {
             if (!file) {
@@ -1004,6 +1004,82 @@ const educates = (function () {
             file = this.fixup_path(file);
             const data = JSON.stringify({ file, line, text });
             return this.execute_call('/editor/insert-after-line', data);
+        }
+
+        // Append lines after a specific line number.
+
+        append_lines_after_line(file, line, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, line, text });
+            return this.execute_call('/editor/append-after-line', data);
+        }
+
+        // Prepend lines to the beginning of a file.
+
+        prepend_lines_to_file(file, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, text });
+            return this.execute_call('/editor/prepend-to-file', data);
+        }
+
+        // Insert lines before a matching string.
+
+        insert_lines_before_match(file, match, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            if (!match) {
+                return Promise.reject(new Error('No string to match provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, match, text });
+            return this.execute_call('/editor/insert-before-match', data);
+        }
+
+        // Insert lines before current selection.
+
+        insert_lines_before_selection(file, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, text });
+            return this.execute_call('/editor/insert-before-selection', data);
+        }
+
+        // Append lines after current selection.
+
+        append_lines_after_selection(file, text) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file, text });
+            return this.execute_call('/editor/append-after-selection', data);
+        }
+
+        // Delete current text selection.
+
+        delete_text_selection(file) {
+            if (!file) {
+                return Promise.reject(new Error('No file name provided'));
+            }
+
+            file = this.fixup_path(file);
+            const data = JSON.stringify({ file });
+            return this.execute_call('/editor/delete-text-selection', data);
         }
 
         // Select lines in a range.
@@ -2847,6 +2923,8 @@ const educates = (function () {
         }
     });
 
+    // Deprecated: use editor:append-lines-after-line instead.
+
     clickable_action_handler("editor:insert-lines-after-line", {
         handler: function (_element, args) {
             const defaults = {
@@ -2868,6 +2946,129 @@ const educates = (function () {
             dashboard.expose_dashboard("editor");
 
             return editor.insert_lines_after_line(args.file, args.line, args.text);
+        }
+    });
+
+    clickable_action_handler("editor:append-lines-after-line", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "line": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (args.line === undefined) {
+                throw new Error("Line number not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.append_lines_after_line(args.file, args.line, args.text);
+        }
+    });
+
+    clickable_action_handler("editor:prepend-lines-to-file", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.prepend_lines_to_file(args.file, args.text);
+        }
+    });
+
+    clickable_action_handler("editor:insert-lines-before-match", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "match": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            if (!args.match) {
+                throw new Error("Match string not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.insert_lines_before_match(args.file, args.match, args.text);
+        }
+    });
+
+    clickable_action_handler("editor:insert-lines-before-selection", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.insert_lines_before_selection(args.file, args.text);
+        }
+    });
+
+    clickable_action_handler("editor:append-lines-after-selection", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined,
+                "text": ""
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.append_lines_after_selection(args.file, args.text);
+        }
+    });
+
+    clickable_action_handler("editor:delete-text-selection", {
+        handler: function (_element, args) {
+            const defaults = {
+                "file": undefined
+            };
+
+            args = { ...defaults, ...args };
+
+            if (!args.file) {
+                throw new Error("File not provided");
+            }
+
+            dashboard.expose_dashboard("editor");
+
+            return editor.delete_text_selection(args.file);
         }
     });
 

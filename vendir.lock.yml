@@ -60,4 +60,28 @@ directories:
       url: https://api.github.com/repos/carvel-dev/kapp-controller/releases/200878709
     path: .
   path: carvel-packages/installer/bundle/config/ytt/_ytt_lib/packages/kapp-controller/upstream
+- contents:
+  - http: {}
+    path: .
+  path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/jquery
+- contents:
+  - http: {}
+    path: .
+  path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/underscore
+- contents:
+  - http: {}
+    path: .
+  path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/jsonform
+- contents:
+  - http: {}
+    path: .
+  path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/js-yaml
+- contents:
+  - http: {}
+    path: .
+  path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/bootstrap
+- contents:
+  - http: {}
+    path: .
+  path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/font-awesome
 kind: LockConfig

@@ -330,6 +330,15 @@ func startHugoServer(workshopDir string, tempDir string, port int, sessionURL st
 		wsPort = 443
 	}
 
+	// Temporarily allow theme to be overriden by WORKSHOP_RENDERER_THEME
+	// environment variable for testing of new Hugo renderer.
+
+	theme := "educates"
+
+	if envTheme := os.Getenv("WORKSHOP_RENDERER_THEME"); envTheme != "" {
+		theme = envTheme
+	}
+
 	commandArgs := []string{
 		"server",
 		"--source", workshopDir,
@@ -338,7 +347,7 @@ func startHugoServer(workshopDir string, tempDir string, port int, sessionURL st
 		"--liveReloadPort", fmt.Sprintf("%d", wsPort),
 		"--config", filepath.Join(tempDir, "hugo.yaml"),
 		"--themesDir", filepath.Join(tempDir, "themes"),
-		"--theme", "educates",
+		"--theme", theme,
 		"--watch",
 	}
 

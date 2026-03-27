@@ -270,14 +270,34 @@ func GenerateHugoConfiguration(workshopDir string, target string, params map[str
 		}
 	}
 
+	type OutputFormatConfig struct {
+		BaseName  string `yaml:"baseName"`
+		MediaType string `yaml:"mediaType"`
+		IsHTML    bool   `yaml:"isHTML"`
+	}
+
 	type HugoConfig struct {
-		BaseURL string                 `yaml:"baseURL"`
-		Params  map[string]interface{} `yaml:"params"`
+		BaseURL       string                          `yaml:"baseURL"`
+		Params        map[string]interface{}           `yaml:"params"`
+		OutputFormats map[string]OutputFormatConfig    `yaml:"outputFormats"`
+		Outputs       map[string][]string              `yaml:"outputs"`
 	}
 
 	config := HugoConfig{Params: make(map[string]interface{})}
 
 	config.BaseURL = fmt.Sprintf("%s/workshop/content/", sessionURL)
+
+	config.OutputFormats = map[string]OutputFormatConfig{
+		"print": {
+			BaseName:  "print",
+			MediaType: "text/html",
+			IsHTML:    true,
+		},
+	}
+
+	config.Outputs = map[string][]string{
+		"home": {"HTML", "print"},
+	}
 
 	for paramName, paramValue := range params {
 		config.Params[paramName] = paramValue

@@ -32,6 +32,7 @@ func (p *ProjectInfo) NewEducatesCmdGroup() *cobra.Command {
 				overrideCommandName(p.NewWorkshopNewCmd(), "new-workshop"),
 				overrideCommandName(p.NewWorkshopPublishCmd(), "publish-workshop"),
 				overrideCommandName(p.NewWorkshopExportCmd(), "export-workshop"),
+				overrideCommandName(p.NewWorkshopRenderCmd(), "render-workshop"),
 			},
 		},
 		{

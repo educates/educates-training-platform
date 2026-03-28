@@ -81,7 +81,7 @@ DATABASES = {
         "NAME": os.path.join(DATA_DIR, "db.sqlite3"),
         "OPTIONS": {
             "timeout": 15,
-        }
+        },
     }
 }
 
@@ -197,6 +197,8 @@ PORTAL_HOSTNAME = os.environ.get(
     "PORTAL_HOSTNAME", f"{TRAINING_PORTAL}-ui.{INGRESS_DOMAIN}"
 )
 
+PORTAL_NAMESPACE = os.environ.get("PORTAL_NAMESPACE", f"{TRAINING_PORTAL}-ui")
+
 PORTAL_PASSWORD = os.environ.get("PORTAL_PASSWORD")
 PORTAL_INDEX = os.environ.get("PORTAL_INDEX")
 
@@ -263,9 +265,8 @@ OAUTH2_PROVIDER = {
     "SCOPES": {
         "user:info": "User information",
     },
-    "ACCESS_TOKEN_EXPIRE_SECONDS": 10*60*60, # 10 Hours.
-    "REFRESH_TOKEN_EXPIRE_SECONDS": 30*24*60*60, # 30 Days.
-
+    "ACCESS_TOKEN_EXPIRE_SECONDS": 10 * 60 * 60,  # 10 Hours.
+    "REFRESH_TOKEN_EXPIRE_SECONDS": 30 * 24 * 60 * 60,  # 30 Days.
     "PKCE_REQUIRED": False,
 }
 

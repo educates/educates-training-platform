@@ -18,6 +18,12 @@ Features Changed
   The old action name will continue to work but should be replaced with the new
   name in workshop content.
 
+* When the workshop session container fetches the OAuth access token from the
+  training portal, it will now use internal Kubernetes service for the training
+  portal instead of using the public URL. This means it should work even when
+  pods in the cluster cannot access the external load balancer for the cluster
+  ingress router.
+
 Bugs Fixed
 ----------
 

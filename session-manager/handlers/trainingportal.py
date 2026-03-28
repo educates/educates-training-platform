@@ -679,6 +679,10 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                                     "value": uid,
                                 },
                                 {
+                                    "name": "PORTAL_NAMESPACE",
+                                    "value": portal_namespace,
+                                },
+                                {
                                     "name": "PORTAL_HOSTNAME",
                                     "value": portal_hostname,
                                 },

@@ -114,3 +114,48 @@ directories:
           disableAutoChecksumValidation: true
         includePaths:
           - release.yml
+  - path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/bootstrap
+    contents:
+      - path: "."
+        http:
+          url: https://github.com/twbs/bootstrap/releases/download/v5.3.8/bootstrap-5.3.8-dist.zip
+        newRootPath: bootstrap-5.3.8-dist
+        includePaths:
+          - "bootstrap-5.3.8-dist/css/bootstrap.min.css"
+          - "bootstrap-5.3.8-dist/js/bootstrap.bundle.min.js"
+  - path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/font-awesome
+    contents:
+      - path: "."
+        http:
+          url: https://github.com/FortAwesome/Font-Awesome/releases/download/6.5.1/fontawesome-free-6.5.1-web.zip
+        newRootPath: fontawesome-free-6.5.1-web
+        includePaths:
+          - fontawesome-free-6.5.1-web/css/all.min.css
+          - fontawesome-free-6.5.1-web/webfonts/fa-brands-400.woff2
+          - fontawesome-free-6.5.1-web/webfonts/fa-brands-400.ttf
+          - fontawesome-free-6.5.1-web/webfonts/fa-regular-400.woff2
+          - fontawesome-free-6.5.1-web/webfonts/fa-regular-400.ttf
+          - fontawesome-free-6.5.1-web/webfonts/fa-solid-900.woff2
+          - fontawesome-free-6.5.1-web/webfonts/fa-solid-900.ttf
+          - fontawesome-free-6.5.1-web/webfonts/fa-v4compatibility.woff2
+          - fontawesome-free-6.5.1-web/webfonts/fa-v4compatibility.ttf
+  - path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/jquery
+    contents:
+      - path: "."
+        http:
+          url: https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js
+  - path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/underscore
+    contents:
+      - path: "."
+        http:
+          url: https://cdn.jsdelivr.net/npm/underscore@1.13.8/underscore-umd-min.js
+  - path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/jsonform
+    contents:
+      - path: "."
+        http:
+          url: https://cdn.jsdelivr.net/npm/jsonform@2.2.5/lib/jsonform.min.js
+  - path: workshop-images/base-environment/opt/eduk8s/etc/themes/educates-standalone/static/static/libraries/js-yaml
+    contents:
+      - path: "."
+        http:
+          url: https://cdn.jsdelivr.net/npm/js-yaml@4.1.1/dist/js-yaml.min.js

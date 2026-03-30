@@ -1,0 +1,14 @@
+{{- $action := replace .Type ":" "-" -}}
+{{- $partialFile := printf "actions/%s.html" $action -}}
+{{- $partialFullPath := printf "partials/%s" $partialFile -}}
+{{- if templates.Exists $partialFullPath -}}
+{{- if eq (.Page.Scratch.Get "action_counter") nil -}}
+{{- .Page.Scratch.Set "action_counter" 1 -}}
+{{- else -}}
+{{- .Page.Scratch.Add "action_counter" 1 -}}
+{{- end -}}
+{{- partial $partialFile . -}}
+{{- else -}}
+{{- $result := transform.HighlightCodeBlock . -}}
+{{ $result.Wrapped }}
+{{- end -}}

@@ -15,18 +15,24 @@ The following features are tested across the workshop pages:
 - `editor:create-file` — Create a new file or overwrite an existing file
 - `editor:create-directory` — Create a new directory
 - `editor:append-lines-to-file` — Append lines to the end of a file
+- `editor:prepend-lines-to-file` — Prepend lines to the beginning of a file
 
 **Line insertion:**
 
 - `editor:insert-lines-before-line` — Insert lines before a specified line number
-- `editor:insert-lines-after-line` — Insert lines after a specified line number
+- `editor:insert-lines-after-line` — Insert lines after a specified line number (deprecated)
+- `editor:append-lines-after-line` — Append lines after a specified line number
 - `editor:append-lines-after-match` — Insert lines after a line matching a string
+- `editor:insert-lines-before-match` — Insert lines before a line matching a string
 
 **Text matching and replacement:**
 
 - `editor:select-matching-text` — Select text by exact match or regular expression
 - `editor:select-lines-in-range` — Select a range of lines by line number
 - `editor:replace-text-selection` — Replace the currently selected text
+- `editor:delete-text-selection` — Delete the currently selected text
+- `editor:insert-lines-before-selection` — Insert lines before the current selection
+- `editor:append-lines-after-selection` — Append lines after the current selection
 - `editor:replace-matching-text` — Find and replace text in a single step
 
 **Line deletion and replacement:**

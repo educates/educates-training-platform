@@ -1,0 +1,12 @@
+{{- $args := .Inner | default "{}" | unmarshal -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "section:heading" -}}
+{{- $glyph := "fa-info-circle" -}}
+{{- $prefix := default "Section" $args.prefix -}}
+{{- $title := default "Instructions" $args.title -}}
+{{- $body := "" -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

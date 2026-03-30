@@ -27,7 +27,8 @@ clusterPackages:
       aws:
         args:
           domain_filter: example.com
-          txt_owner_id: educates
+          policy: sync
+          txt_owner_id: educates.example.com
   certs:
     enabled: true
     settings:

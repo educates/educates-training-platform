@@ -27,8 +27,9 @@ clusterPackages:
       gcp:
         args:
           project: my-project
+          policy: sync
           domain_filter: example.com
-          txt_owner_id: educates
+          txt_owner_id: educates.example.com
   certs:
     enabled: true
     settings:

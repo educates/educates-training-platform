@@ -1,0 +1,16 @@
+{{- $args := .Inner | default "{}" | unmarshal -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "terminal:input" -}}
+{{- $glyph := "fa-running" -}}
+{{- $prefix := "Terminal" -}}
+{{- $endl := default true $args.endl -}}
+{{- $title := printf "Input text into terminal %v" (default "1" $args.session) -}}
+{{- if $endl -}}
+{{- $title = printf "Input text with newline into terminal %v" (default "1" $args.session) -}}
+{{- end -}}
+{{- $body := $args.text -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

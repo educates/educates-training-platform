@@ -1,0 +1,17 @@
+{{- $defaults := dict "cooldown" 3 -}}
+{{- $args := merge $defaults (.Inner | default "{}" | printf "%s\n" | unmarshal) -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "editor:select-lines-in-range" -}}
+{{- $glyph := "fa-i-cursor" -}}
+{{- $prefix := default "Editor" $args.prefix -}}
+{{- $title := default (printf "Select lines %v-%v in file \"%s\"" $args.start (default $args.start $args.stop) $args.file) $args.title -}}
+{{- $body := "" -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- else if and $args.stop (ne $args.stop $args.start) -}}
+{{- $body = printf "Select lines %v to %v" $args.start $args.stop -}}
+{{- else -}}
+{{- $body = printf "Select line %v" $args.start -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

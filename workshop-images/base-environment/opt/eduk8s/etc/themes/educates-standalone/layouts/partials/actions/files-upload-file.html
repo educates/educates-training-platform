@@ -1,0 +1,13 @@
+{{- $defaults := dict "cooldown" 3 -}}
+{{- $args := merge $defaults (.Inner | default "{}" | printf "%s\n" | unmarshal) -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "files:upload-file" -}}
+{{- $glyph := "fa-upload" -}}
+{{- $prefix := default "Files" $args.prefix -}}
+{{- $title := default (printf "Upload file as \"%s\"" (default $args.path $args.upload)) $args.title -}}
+{{- $body := "" -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

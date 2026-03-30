@@ -29,7 +29,7 @@
 	"dependencies": {
 		"express": "^4.22.1",
 		"regexp-match-indices": "^1.0.2",
-		"yaml": "^1.10.2",
+		"yaml": "^1.10.3",
 		"ansi-regex": ">=6.0.1",
 		"minimist": ">=1.2.7"
 	},

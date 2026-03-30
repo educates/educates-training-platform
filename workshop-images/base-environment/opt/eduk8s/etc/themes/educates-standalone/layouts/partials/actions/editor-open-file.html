@@ -1,0 +1,20 @@
+{{- $defaults := dict "cooldown" 3 -}}
+{{- $args := merge $defaults (.Inner | default "{}" | printf "%s\n" | unmarshal) -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "editor:open-file" -}}
+{{- $glyph := "fa-edit" -}}
+{{- $prefix := default "Editor" $args.prefix -}}
+{{- $title := "" -}}
+{{- if $args.title -}}
+{{- $title = $args.title -}}
+{{- else if $args.line -}}
+{{- $title = printf "Open file \"%s\" at line %v" $args.file $args.line -}}
+{{- else -}}
+{{- $title = printf "Open file \"%s\"" $args.file -}}
+{{- end -}}
+{{- $body := "" -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

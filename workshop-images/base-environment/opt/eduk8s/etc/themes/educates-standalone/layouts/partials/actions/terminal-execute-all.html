@@ -1,0 +1,12 @@
+{{- $args := .Inner | default "{}" | unmarshal -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "terminal:execute-all" -}}
+{{- $glyph := "fa-running" -}}
+{{- $prefix := "Terminal" -}}
+{{- $title := "Execute command in all terminals" -}}
+{{- $body := $args.command -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

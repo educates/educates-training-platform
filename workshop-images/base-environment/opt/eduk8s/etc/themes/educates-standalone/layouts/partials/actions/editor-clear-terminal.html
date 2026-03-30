@@ -1,0 +1,13 @@
+{{- $defaults := dict "cooldown" 3 "session" "educates" -}}
+{{- $args := merge $defaults (.Inner | default "{}" | printf "%s\n" | unmarshal) -}}
+{{- $action := .Page.Scratch.Get "action_counter" -}}
+{{- $name := "editor:clear-terminal" -}}
+{{- $glyph := "fa-terminal" -}}
+{{- $prefix := default "Editor" $args.prefix -}}
+{{- $title := default (printf "Clear terminal \"%v\"" $args.session) $args.title -}}
+{{- $body := "" -}}
+{{- if isset $args "description" -}}
+{{- $body = $args.description -}}
+{{- end -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- partial "clickable-action.html" $context -}}

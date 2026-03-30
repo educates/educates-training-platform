@@ -225,6 +225,7 @@ function setup_oauth_config(metadata: any, client_id: string, client_secret: str
 
 async function install_portal_auth(app: express.Application) {
     const issuer = PORTAL_URL
+    const portal_api_url = PORTAL_API_URL
 
     const client_id: string = PORTAL_CLIENT_ID
     const client_secret: string = PORTAL_CLIENT_SECRET
@@ -232,7 +233,7 @@ async function install_portal_auth(app: express.Application) {
     const oauth2_metadata = {
         issuer: issuer,
         authorization_endpoint: issuer + "/oauth2/authorize/",
-        token_endpoint: issuer + "/oauth2/token/"
+        token_endpoint: portal_api_url + "/oauth2/token/"
     }
 
     logger.info("OAuth server metadata", { metadata: oauth2_metadata })

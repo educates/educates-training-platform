@@ -600,16 +600,14 @@ form.jsonform-hasrequired div.form-group {
     min-width: 0;
 }
 
-.bottom-bar-step-label {
-    font-size: 0.8em;
-    font-weight: 600;
-    color: #555;
-    white-space: nowrap;
-}
-
 .bottom-bar-toc {
     font-size: 0.8em;
-    padding: 3px 8px;
+    height: 36px;
+    width: 36px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-color: #adb5bd;
     color: #555;
 }
@@ -619,21 +617,45 @@ form.jsonform-hasrequired div.form-group {
     color: #333;
 }
 
-.bottom-bar-progress-track {
-    flex: 1;
-    height: 4px;
-    background-color: #e9ecef;
-    border-radius: 2px;
-    overflow: hidden;
-    max-width: 200px;
+/* Circular step progress ring */
+
+.bottom-bar-step-ring {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    margin-top: 2px;
 }
 
-.bottom-bar-progress-fill {
+.step-ring-svg {
+    width: 100%;
     height: 100%;
-    width: 0%;
-    background-color: #0d6efd;
-    border-radius: 2px;
-    transition: width 0.15s ease;
+    transform: rotate(-90deg);
+}
+
+.step-ring-bg {
+    fill: none;
+    stroke: #e9ecef;
+    stroke-width: 3;
+}
+
+.step-ring-fill {
+    fill: none;
+    stroke: #0d6efd;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.3s ease;
+}
+
+.step-ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.6em;
+    font-weight: 600;
+    color: #555;
+    white-space: nowrap;
 }
 
 .bottom-bar-actions {

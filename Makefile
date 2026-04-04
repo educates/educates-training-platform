@@ -425,3 +425,38 @@ clean-buildx: ## Clean up builder
 # Multiarch utility targets
 list-platforms: ## List available platforms for multiarch builds
 	@echo "Supported platforms: $(MULTIARCH_PLATFORMS)"
+
+# =============================================================================
+# CODE FORMATTING
+# =============================================================================
+
+PYTHON_DIRS = secrets-manager session-manager training-portal lookup-service tunnel-manager
+GO_DIRS = assets-server/ client-programs/ tunnel-manager/
+
+format: format-prettier format-python format-go ## Format all code
+	@echo "All formatting complete."
+
+format-check: format-check-prettier format-check-python format-check-go format-check-yaml ## Check all formatting
+	@echo "All formatting checks passed."
+
+format-prettier: ## Format TypeScript/JavaScript/JSON/Markdown with Prettier
+	npm run format
+
+format-check-prettier: ## Check TypeScript/JavaScript/JSON/Markdown formatting
+	npm run format:check
+
+format-python: ## Format Python code with Ruff
+	ruff format $(PYTHON_DIRS)
+
+format-check-python: ## Check Python code formatting and linting
+	ruff format --check $(PYTHON_DIRS)
+	ruff check $(PYTHON_DIRS)
+
+format-go: ## Format Go code with gofmt
+	gofmt -w $(GO_DIRS)
+
+format-check-go: ## Check Go code formatting
+	@test -z "$$(gofmt -l $(GO_DIRS))" || (echo "Go files need formatting:"; gofmt -l $(GO_DIRS); exit 1)
+
+format-check-yaml: ## Lint YAML files with yamllint
+	yamllint -c .yamllint.yml .

@@ -48,10 +48,20 @@
         data-bs-toggle="modal" data-bs-target="#table-of-contents">
         <span class="fas fa-list" aria-hidden="true"></span>
       </button>
-      <span class="bottom-bar-step-label">Step {{ $current_module.step }} of {{ len $modules }}</span>
-      <div class="bottom-bar-progress-track">
-        <div class="bottom-bar-progress-fill" id="scroll-progress"></div>
+      {{ if gt (len $modules) 1 }}
+      {{ $step := $current_module.step }}
+      {{ $total := len $modules }}
+      {{ $pct := mul (div (float $step) (float $total)) 100 }}
+      {{ $dashoffset := sub 100 $pct }}
+      <div class="bottom-bar-step-ring" aria-label="Step {{ $step }} of {{ $total }}">
+        <svg viewBox="0 0 36 36" class="step-ring-svg">
+          <circle class="step-ring-bg" cx="18" cy="18" r="15.9155" />
+          <circle class="step-ring-fill" cx="18" cy="18" r="15.9155"
+            stroke-dasharray="100" stroke-dashoffset="{{ $dashoffset }}" />
+        </svg>
+        <span class="step-ring-text">{{ $step }}/{{ $total }}</span>
       </div>
+      {{ end }}
     </div>
     <div class="bottom-bar-actions">
       {{ if $current_module.prev_page }}

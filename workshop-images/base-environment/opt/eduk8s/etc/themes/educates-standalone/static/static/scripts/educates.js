@@ -1784,6 +1784,124 @@ const educates = (function () {
             updateButtonEnabled();
         }
 
+        // Click hint: on the first page that contains clickable actions,
+        // show an animated hand pointer + "Click to run" label on the
+        // header of the first idle action after a short delay. This helps
+        // new users understand that action blocks are interactive. The
+        // hint is shown only once per session (tracked via sessionStorage)
+        // and is dismissed as soon as any action is clicked.
+
+        function setupClickHint() {
+            // Determine the sessionStorage key for tracking dismissal.
+
+            const hintKey = state_key_prefix
+                ? `${state_key_prefix}:click-hint-dismissed`
+                : 'educates:click-hint-dismissed';
+
+            // If already dismissed this session, nothing to do.
+
+            try {
+                if (sessionStorage.getItem(hintKey)) return;
+            } catch (e) {
+                // sessionStorage unavailable — skip the hint.
+                return;
+            }
+
+            // Find all visible, non-content-body clickable actions.
+
+            const allActions = Array.from(
+                document.querySelectorAll('.clickable-action:not([hidden]):not([data-content-body])')
+            );
+
+            if (allActions.length === 0) return;
+
+            // Find the first idle action (not yet executed or restored).
+
+            let firstIdleAction = null;
+
+            for (const action of allActions) {
+                const result = action.dataset.actionResult;
+
+                if (result === 'success' || result === 'pending') {
+                    // User has already interacted with actions (possibly
+                    // restored from a previous visit). Dismiss permanently.
+
+                    try { sessionStorage.setItem(hintKey, '1'); } catch (e) {}
+                    return;
+                }
+
+                if (!result || result === '' || result === 'idle') {
+                    // Skip actions where direct clicking is disabled
+                    // (e.g., examiner actions with a form submit button).
+
+                    if (action.dataset.clickDisabled === 'true') continue;
+
+                    firstIdleAction = action;
+                    break;
+                }
+            }
+
+            if (!firstIdleAction) return;
+
+            // Wait before showing the hint so the user has time to read
+            // the page content and notice the action block naturally.
+
+            setTimeout(function () {
+                // Re-check: if the action was clicked during the delay,
+                // don't show the hint.
+
+                const result = firstIdleAction.dataset.actionResult;
+
+                if (result && result !== '' && result !== 'idle') {
+                    try { sessionStorage.setItem(hintKey, '1'); } catch (e) {}
+                    return;
+                }
+
+                // Create the hint element and position it absolutely
+                // above the action block header, overlaying the
+                // whitespace without causing layout reflow.
+
+                firstIdleAction.classList.add('has-click-hint');
+
+                const hint = document.createElement('div');
+                hint.className = 'clickable-action__click-hint';
+                hint.innerHTML = 'Click on action below to run it <span class="fas fa-angle-double-down" aria-hidden="true"></span>';
+
+                firstIdleAction.insertBefore(hint, firstIdleAction.firstChild);
+
+                // Dismiss the hint when any action changes state.
+
+                function dismissHint() {
+                    if (!hint.parentNode) return;
+
+                    hint.classList.add('clickable-action__click-hint--hiding');
+
+                    setTimeout(function () {
+                        if (hint.parentNode) {
+                            hint.parentNode.removeChild(hint);
+                        }
+                        firstIdleAction.classList.remove('has-click-hint');
+                    }, 400);
+
+                    try { sessionStorage.setItem(hintKey, '1'); } catch (e) {}
+                }
+
+                // Watch for data-action-result changes on all actions.
+
+                const hintObserver = new MutationObserver(function () {
+                    dismissHint();
+                    hintObserver.disconnect();
+                });
+
+                allActions.forEach(function (el) {
+                    hintObserver.observe(el, {
+                        attributes: true,
+                        attributeFilter: ['data-action-result']
+                    });
+                });
+            }, 5000);
+        }
+
         // Clickable action pulse hint: visually guide users to the next
         // clickable action that needs their attention. The pulse is applied
         // to the first visible clickable action on the page that has not
@@ -1910,6 +2028,7 @@ const educates = (function () {
         setTimeout(function () {
             updateActionPulse();
             updateRequiredState();
+            setupClickHint();
         }, 500);
 
         // Observe data-action-result attribute changes on all clickable

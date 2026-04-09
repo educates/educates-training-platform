@@ -16,15 +16,22 @@ class ClusterConfig:
     uid: str
     labels: List[Dict[str, str]]
     kubeconfig: Dict[str, Any]
+    local: bool
     portals: Dict[str, "TrainingPortal"]
 
     def __init__(
-        self, name: str, uid: str, labels: List[Dict[str, str]], kubeconfig: Dict[str, Any]
+        self,
+        name: str,
+        uid: str,
+        labels: List[Dict[str, str]],
+        kubeconfig: Dict[str, Any],
+        local: bool = False,
     ):
         self.name = name
         self.uid = uid
         self.labels = labels
         self.kubeconfig = kubeconfig
+        self.local = local
         self.portals = {}
 
     def add_portal(self, portal: "TrainingPortal") -> None:

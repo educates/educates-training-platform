@@ -37,6 +37,7 @@ class TrainingPortal:
     generation: int
     labels: List[Dict[str, str]]
     url: str
+    namespace: str
     credentials: PortalCredentials
     phase: str
     capacity: int
@@ -51,6 +52,7 @@ class TrainingPortal:
         generation: int,
         labels: List[Dict[str, str]],
         url: str,
+        namespace: str,
         credentials: PortalCredentials,
         phase: str,
         capacity: int,
@@ -62,11 +64,23 @@ class TrainingPortal:
         self.generation = generation
         self.labels = labels
         self.url = url
+        self.namespace = namespace
         self.credentials = credentials
         self.phase = phase
         self.capacity = capacity
         self.allocated = allocated
         self.environments = {}
+
+    @property
+    def api_url(self) -> str:
+        """Return the URL to use for REST API calls to the training portal. For
+        local clusters, use the internal Kubernetes service URL. For remote
+        clusters, use the public URL."""
+
+        if self.cluster.local:
+            return f"http://training-portal.{self.namespace}"
+
+        return self.url
 
     def get_environments(self) -> List["WorkshopEnvironment"]:
         """Returns all workshop environments."""
@@ -181,7 +195,7 @@ class TrainingPortalClientSession:
 
         try:
             async with self.session.post(
-                f"{self.portal.url}/oauth2/token/",
+                f"{self.portal.api_url}/oauth2/token/",
                 data={
                     "grant_type": "password",
                     "username": self.portal.credentials.username,
@@ -225,7 +239,7 @@ class TrainingPortalClientSession:
 
         try:
             async with self.session.post(
-                f"{self.portal.url}/oauth2/revoke-token/",
+                f"{self.portal.api_url}/oauth2/revoke-token/",
                 data={
                     "client_id": self.portal.credentials.client_id,
                     "client_secret": self.portal.credentials.client_secret,
@@ -262,7 +276,7 @@ class TrainingPortalClientSession:
 
         try:
             async with self.session.get(
-                f"{self.portal.url}/workshops/environment/{environment_name}/request/",
+                f"{self.portal.api_url}/workshops/environment/{environment_name}/request/",
                 headers=headers,
                 params={
                     "index_url": index_url,
@@ -327,7 +341,7 @@ class TrainingPortalClientSession:
 
         try:
             async with self.session.get(
-                f"{self.portal.url}/workshops/environment/{environment_name}/request/",
+                f"{self.portal.api_url}/workshops/environment/{environment_name}/request/",
                 headers=headers,
                 params={
                     "user": user_id,

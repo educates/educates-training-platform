@@ -134,6 +134,11 @@ def clusterconfigs_update(
             "/opt/cluster-access-token", name, server
         )
 
+    # Determine if this is the local cluster based on whether a kubeconfig
+    # secret reference was provided.
+
+    local = secret_ref_name is None
+
     # Update the cluster configuration in the cluster database.
 
     cluster_database = memo.cluster_database
@@ -154,6 +159,7 @@ def clusterconfigs_update(
                     uid=uid,
                     labels=xgetattr(spec, "labels", []),
                     kubeconfig=kubeconfig,
+                    local=local,
                 )
             )
 
@@ -166,6 +172,7 @@ def clusterconfigs_update(
 
             cluster_config.labels = xgetattr(spec, "labels", [])
             cluster_config.kubeconfig = kubeconfig
+            cluster_config.local = local
 
 
 @kopf.on.delete("clusterconfigs.lookup.educates.dev")
@@ -252,6 +259,7 @@ class ClusterOperator(GenericOperator):
                                 generation=xgetattr(metadata, "generation"),
                                 labels=xgetattr(spec, "portal.labels", []),
                                 url=xgetattr(status, "educates.url"),
+                                namespace=xgetattr(status, "educates.namespace"),
                                 phase=xgetattr(status, "educates.phase"),
                                 credentials=credentials,
                                 capacity=xgetattr(spec, "portal.sessions.maximum", 0),
@@ -273,6 +281,7 @@ class ClusterOperator(GenericOperator):
                         portal_state.generation = xgetattr(metadata, "generation")
                         portal_state.labels = xgetattr(spec, "portal.labels", [])
                         portal_state.url = xgetattr(status, "educates.url")
+                        portal_state.namespace = xgetattr(status, "educates.namespace")
                         portal_state.phase = xgetattr(status, "educates.phase")
                         portal_state.credentials = credentials
                         portal_state.capacity = xgetattr(

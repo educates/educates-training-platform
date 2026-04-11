@@ -102,12 +102,12 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 	var workshop *unstructured.Unstructured
 
 	definitionConfig := educates.WorkshopDefinitionConfig{
-		Name: name,
-		Path: path,
-		Portal: portal,
-		WorkshopFile: o.WorkshopFile,
+		Name:            name,
+		Path:            path,
+		Portal:          portal,
+		WorkshopFile:    o.WorkshopFile,
 		WorkshopVersion: o.WorkshopVersion,
-		DataValueFlags: o.DataValuesFlags,
+		DataValueFlags:  o.DataValuesFlags,
 	}
 	if workshop, err = educates.LoadWorkshopDefinition(&definitionConfig); err != nil {
 		return err
@@ -194,16 +194,16 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 	// Run the proxy server and Hugo server.
 	return renderer.RunHugoServer(&renderer.RunHugoServerConfig{
 		WorkshopRoot: path,
-		Kubeconfig: o.Kubeconfig,
-		Context: o.Context,
-		Workshop: name,
-		Portal: portal,
-		LocalHost: o.LocalHost,
-		LocalPort: o.LocalPort,
-		HugoPort: o.HugoPort,
-		Token: token,
-		Files: o.Files,
-		CleanupFunc: cleanupFunc,
+		Kubeconfig:   o.Kubeconfig,
+		Context:      o.Context,
+		Workshop:     name,
+		Portal:       portal,
+		LocalHost:    o.LocalHost,
+		LocalPort:    o.LocalPort,
+		HugoPort:     o.HugoPort,
+		Token:        token,
+		Files:        o.Files,
+		CleanupFunc:  cleanupFunc,
 	})
 }
 
@@ -211,10 +211,10 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 	var o ClusterWorkshopServeOptions
 
 	var c = &cobra.Command{
-		Args:  cobra.NoArgs,
-		Use:   "serve",
-		Short: "Serve workshop from local system",
-		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Args:    cobra.NoArgs,
+		Use:     "serve",
+		Short:   "Serve workshop from local system",
+		RunE:    func(_ *cobra.Command, _ []string) error { return o.Run() },
 		Example: clusterWorkshopServeExample,
 	}
 

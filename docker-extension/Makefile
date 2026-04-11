@@ -1,9 +1,5 @@
-IMAGE_REPOSITORY = localhost:5001
-PACKAGE_VERSION = latest
-
-# Export variables to recursive make invocations and shell commands so
-# env/CLI overrides are inherited consistently.
-.EXPORT_ALL_VARIABLES:
+IMAGE_REPOSITORY ?= localhost:5001
+PACKAGE_VERSION ?= latest
 
 # Create an alias for the image repository that sanitizes invalid characters
 # Docker Compose project names must consist only of lowercase alphanumeric characters,
@@ -23,30 +19,20 @@ TARGET_MACHINE = amd64
 endif
 
 TARGET_PLATFORM = $(TARGET_SYSTEM)-$(TARGET_MACHINE)
-BUILDX_BUILDER = educates-multiarch-builder
+BUILDX_BUILDER ?= educates-multiarch-builder
 
-TARGET_PLATFORMS ?= $(TARGET_PLATFORMS)
+TARGET_PLATFORMS ?=
 
 # Platform configuration - can be overridden by TARGET_PLATFORMS env var or make parameter
 ifeq ($(TARGET_PLATFORMS),)
-# Default to current platform when TARGET_PLATFORMS is not set
-DOCKER_PLATFORM = linux/$(TARGET_MACHINE)
+# Default to both platforms when TARGET_PLATFORMS is not set
 MULTIARCH_PLATFORMS = linux/amd64,linux/arm64
 else
 # Use TARGET_PLATFORMS when set (allows for custom multiarch builds)
-DOCKER_PLATFORM = $(TARGET_PLATFORMS)
 MULTIARCH_PLATFORMS = $(TARGET_PLATFORMS)
 endif
 
-# Push/Load configuration - can be overridden by PUSH_IMAGES env var or make parameter
-ifeq ($(PUSH_IMAGES),false)
-# Load images locally when PUSH_IMAGES is not true (default)
-DOCKER_BUILDER = --builder ${BUILDX_BUILDER} --load
-MULTIARCH_PLATFORMS = $(DOCKER_PLATFORM)
-else
-# Push images to registry when PUSH_IMAGES is true
 DOCKER_BUILDER = --builder ${BUILDX_BUILDER} --push
-endif
 
 INFO_COLOR = \033[0;36m
 NO_COLOR   = \033[m
@@ -60,26 +46,25 @@ print-vars:
 	@echo "TARGET_SYSTEM: $(TARGET_SYSTEM)"
 	@echo "TARGET_MACHINE: $(TARGET_MACHINE)"
 	@echo "TARGET_PLATFORM: $(TARGET_PLATFORM)"
-	@echo "DOCKER_PLATFORM: $(DOCKER_PLATFORM)"
 	@echo "MULTIARCH_PLATFORMS: $(MULTIARCH_PLATFORMS)"
 	@echo "DOCKER_BUILDER: $(DOCKER_BUILDER)"
-	@echo "PUSH_IMAGES: $(PUSH_IMAGES)"
 
 
 build-extension: setup-buildx ## Build service image to be deployed as a desktop extension
-	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
+	docker build --pull --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE) \
 		.
+	docker pull $(IMAGE)
 
-# Internal target to ensure alias tag exists when repository has invalid characters
+# Internal target to ensure alias tag is always up to date after a build+push+pull.
+# The inspect-then-tag guard was intentionally removed: if the alias already exists
+# but points to the old digest, the guard would skip the retag and leave a stale image.
 .PHONY: _ensure-alias-tag
 _ensure-alias-tag: build-extension
 	@if [ "$(IMAGE)" != "$(IMAGE_ALIAS_FULL)" ]; then \
-		if ! docker image inspect $(IMAGE_ALIAS_FULL) >/dev/null 2>&1; then \
-			echo "Tagging image with alias: $(IMAGE_ALIAS_FULL)"; \
-			docker tag $(IMAGE) $(IMAGE_ALIAS_FULL) || true; \
-		fi; \
+		echo "Tagging $(IMAGE) as $(IMAGE_ALIAS_FULL)"; \
+		docker tag $(IMAGE) $(IMAGE_ALIAS_FULL); \
 	fi
 
 install-extension: _ensure-alias-tag ## Install the extension
@@ -109,7 +94,7 @@ dev-enable: source debug
 
 .PHONY: dev-reset
 dev-reset: ## Reset development status of the extension
-	docker extension dev reset educates-docker-extension:$(PACKAGE_VERSION)
+	docker extension dev reset $(IMAGE_ALIAS_FULL)
 
 help: ## Show this help
 	@echo Please specify a build target. The choices are:

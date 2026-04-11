@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/spf13/cobra"
 )
@@ -21,11 +24,16 @@ func (p *ProjectInfo) NewDockerExtensionBackendCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Use:   "backend",
 		Short: "Docker desktop extension backend",
-		RunE:  func(_ *cobra.Command, _ []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
+			fmt.Fprintf(os.Stdout, "starting extension backend version=%s imageRepository=%s socket=%s\n", p.Version, p.ImageRepository, o.Socket)
 			dockerExtensionBackend := docker.NewDockerExtensionBackend(p.Version, p.ImageRepository)
-			return dockerExtensionBackend.Run(&docker.DockerExtensionBackendConfig{
+			err := dockerExtensionBackend.Run(&docker.DockerExtensionBackendConfig{
 				Socket: o.Socket,
 			})
+			if err != nil {
+				fmt.Fprintf(os.Stdout, "extension backend exited with error: %v\n", err)
+			}
+			return err
 		},
 		Example: dockerExtensionBackendExample,
 	}

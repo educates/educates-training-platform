@@ -84,9 +84,11 @@ export function App() {
   const start = async () => {
     if (isValidURL(url)) {
       console.log("start");
+      const wholeUrl = "/workshop/deploy?url=" + encodeURIComponent(url) + "&port=" + port;
+      console.log(wholeUrl);
       setQueryingBackend(true);
       ddClient.extension.vm?.service
-        ?.get("/workshop/deploy?url=" + encodeURIComponent(url) + "&port=" + port)
+        ?.get(wholeUrl)
         .then((result: unknown) => {
           const _ = result as DeployResponse;
           setQueryingBackend(false);
@@ -104,8 +106,10 @@ export function App() {
 
   const stop = async (name: string) => {
     console.log("stop: " + name);
+    const wholeUrl = "/workshop/delete?name=" + name;
+    console.log(wholeUrl);
     ddClient.extension.vm?.service
-      ?.get("/workshop/delete?name=" + name)
+      ?.get(wholeUrl)
       .then((result: unknown) => {
         const _ = result as DeleteResponse;
         list();

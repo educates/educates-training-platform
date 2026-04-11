@@ -111,21 +111,20 @@ type DockerWorkshopDetails struct {
 }
 
 type DockerWorkshopDeployConfig struct {
-	Path               string
-	Host               string
-	Port               uint
-	LocalRepository    string
-	ImageRepository    string
-	ImageVersion       string
-	Cluster            string
-	KubeConfig         string
-	Assets             string
-	WorkshopFile       string
-	WorkshopImage      string
-	WorkshopVersion    string
-	DataValuesFlags    yttcmd.DataValuesFlags
+	Path            string
+	Host            string
+	Port            uint
+	LocalRepository string
+	ImageRepository string
+	ImageVersion    string
+	Cluster         string
+	KubeConfig      string
+	Assets          string
+	WorkshopFile    string
+	WorkshopImage   string
+	WorkshopVersion string
+	DataValuesFlags yttcmd.DataValuesFlags
 }
-
 
 func (m *DockerWorkshopsManager) WorkshopStatus(name string) (DockerWorkshopDetails, bool) {
 	workshops, err := m.ListWorkshops()
@@ -296,7 +295,6 @@ func getContainerScriptTemplate() (*template.Template, error) {
 	return containerScriptTemplateCached, containerScriptTemplateErr
 }
 
-
 // isDockerSocketEnabled checks if Docker socket is enabled in the workshop spec.
 func isDockerSocketEnabled(workshop *unstructured.Unstructured) bool {
 	dockerEnabled, found, _ := unstructured.NestedBool(
@@ -347,12 +345,12 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 	var workshop *unstructured.Unstructured
 
 	definitionConfig := educates.WorkshopDefinitionConfig{
-		Name: "",
-		Path: o.Path,
-		Portal: constants.DefaultPortalName,
-		WorkshopFile: o.WorkshopFile,
+		Name:            "",
+		Path:            o.Path,
+		Portal:          constants.DefaultPortalName,
+		WorkshopFile:    o.WorkshopFile,
 		WorkshopVersion: o.WorkshopVersion,
-		DataValueFlags: o.DataValuesFlags,
+		DataValueFlags:  o.DataValuesFlags,
 	}
 	if workshop, err = educates.LoadWorkshopDefinition(&definitionConfig); err != nil {
 		return "", err
@@ -398,6 +396,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 
 	registryInfo, err := cli.ContainerInspect(ctx, constants.EducatesRegistryContainer)
 
+	// TODO: Try to fix this instead of erroring
 	if err == nil {
 		educatesNetwork, exists := registryInfo.NetworkSettings.Networks[constants.EducatesNetworkName]
 
@@ -632,7 +631,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployConfig, s
 		Create: api.CreateOptions{
 			Recreate:             api.RecreateDiverged,
 			RecreateDependencies: api.RecreateDiverged,
-			RemoveOrphans:       false,
+			RemoveOrphans:        false,
 		},
 		Start: api.StartOptions{},
 	})
@@ -714,7 +713,6 @@ func (m *DockerWorkshopsManager) DeleteWorkshop(name string, stdout io.Writer, s
 
 	return nil
 }
-
 
 func generateWorkshopConfig(workshop *unstructured.Unstructured) (string, error) {
 	workshopTitle, _, _ := unstructured.NestedFieldNoCopy(workshop.Object, "spec", "title")

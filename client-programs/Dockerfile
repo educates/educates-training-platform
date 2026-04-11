@@ -1,23 +1,17 @@
 ARG REPOSITORY=localhost:5001
 ARG TAG=latest
 
-# Add this stage before the builder stage
-FROM ${REPOSITORY}/educates-base-environment:${TAG} AS themes-source
+# Themes are not platform-dependent; always pull from the build host's platform
+FROM --platform=$BUILDPLATFORM ${REPOSITORY}/educates-base-environment:${TAG} AS themes-source
 
-# Multi-stage build for client-programs
-FROM golang:1.25.6 AS builder
+# Run the Go compiler on the build host platform and cross-compile via GOOS/GOARCH
+FROM --platform=$BUILDPLATFORM golang:1.25.6 AS builder
 
 # Set working directory
 WORKDIR /src
 
 # Copy go mod files
 COPY go.mod go.sum ./
-
-# Tidy up dependencies
-RUN go mod tidy
-
-# Download dependencies
-RUN go mod download
 
 # Copy source code
 COPY . .
@@ -34,7 +28,7 @@ COPY --from=themes-source /opt/eduk8s/etc/themes pkg/renderer/files/
 ARG TARGETOS
 ARG TARGETARCH
 
-RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -o bin/educates-${TARGETOS}-${TARGETARCH} \
     cmd/educates/main.go
 

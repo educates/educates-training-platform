@@ -1,8 +1,10 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -49,7 +51,7 @@ func (b *DockerExtensionBackend) Run(config *DockerExtensionBackendConfig) error
 	router.HandleFunc("/workshop/delete", b.Api.DeleteWorkshop)
 
 	server := http.Server{
-		Handler: router,
+		Handler: loggingMiddleware(router),
 	}
 
 	// The socket string can either be of the form host:nnn, or it can be a file
@@ -100,4 +102,40 @@ func (b *DockerExtensionBackend) Run(config *DockerExtensionBackendConfig) error
 	}
 
 	return nil
+}
+
+// responseRecorder captures the status code and body written by a handler.
+type responseRecorder struct {
+	http.ResponseWriter
+	status int
+	body   bytes.Buffer
+}
+
+func (rr *responseRecorder) WriteHeader(code int) {
+	rr.status = code
+	rr.ResponseWriter.WriteHeader(code)
+}
+
+func (rr *responseRecorder) Write(b []byte) (int, error) {
+	rr.body.Write(b)
+	return rr.ResponseWriter.Write(b)
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/workshop/deploy" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Log request body without consuming it.
+		reqBody, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(reqBody))
+		fmt.Fprintf(os.Stdout, "deploy request params=%s query=%s\n", reqBody, r.URL.RawQuery)
+
+		rr := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rr, r)
+
+		fmt.Fprintf(os.Stdout, "deploy response status=%d body=%s\n", rr.status, rr.body.String())
+	})
 }

@@ -13,6 +13,19 @@ To create a local Kubernetes cluster using Kind and deploy Educates, run the com
 educates create-cluster
 ```
 
+Selecting the Kubernetes version
+--------------------------------
+
+By default, the local Kubernetes cluster is created using Kubernetes version ``1.34``. You can select a different version using the ``--kubernetes-version`` flag:
+
+```
+educates local cluster create --kubernetes-version 1.35
+```
+
+The supported versions are: ``1.32``, ``1.33``, ``1.34``, ``1.35``.
+
+If you need to use a specific Kind node image rather than a predefined version, you can use the lower-level ``--kind-cluster-image`` flag to supply the full image reference directly. This overrides ``--kubernetes-version`` when both are provided.
+
 Deleting the cluster
 --------------------
 
@@ -50,6 +63,31 @@ educates local config view
 ```
 
 You can also supply a YAML data values file via the `--config` option when running the `educates create-cluster` command, however by doing so any secrets in the local secrets cache will not be automatically copied to the cluster.
+
+Applying installer overlays
+----------------------------
+
+Installer overlays allow you to apply additional ytt patches on top of the default Educates installer configuration without forking the installer bundle. This is useful for customising the installation for a specific environment or organisation without maintaining a full custom bundle.
+
+Overlays are OCI image references to imgpkg bundles. Each bundle's root directory is passed to the ytt template phase after the base installer templates, so later entries override or extend earlier ones.
+
+To use overlays, add the following to your local Educates configuration via ``educates local config edit``:
+
+```yaml
+installerImages:
+  overlays:
+    - "registry.example.com/my-org/educates-overlays:v1"
+    - "registry.example.com/my-org/extra-patches:latest"
+```
+
+You can also replace the entire installer bundle with a custom one:
+
+```yaml
+installerImages:
+  bundle: "registry.example.com/my-org/custom-installer-bundle:v1"
+```
+
+Both options can be used together. For full details, see the :ref:`configuration-settings` documentation.
 
 Local image registry
 --------------------

@@ -442,13 +442,13 @@ div.magic-code-block-upload {
 
 @keyframes action-pulse {
     0% {
-        box-shadow: 0 0 0 0 rgba(135, 206, 250, 0.6);
+        box-shadow: 0 0 0 0 rgba(30, 144, 255, 0.6);
     }
     70% {
-        box-shadow: 0 0 0 8px rgba(135, 206, 250, 0);
+        box-shadow: 0 0 0 8px rgba(30, 144, 255, 0);
     }
     100% {
-        box-shadow: 0 0 0 0 rgba(135, 206, 250, 0);
+        box-shadow: 0 0 0 0 rgba(30, 144, 255, 0);
     }
 }
 
@@ -474,9 +474,46 @@ div.magic-code-block-upload {
     border-radius: 2px;
 }
 
+/* Click hint: animated hand pointer + label shown on the first action
+   block for new users who haven't clicked an action yet. */
+
+@keyframes click-hint-bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(3px);
+    }
+}
+
+.clickable-action.has-click-hint {
+    position: relative;
+}
+
+.clickable-action__click-hint {
+    position: absolute;
+    top: -1.7em;
+    right: 7px;
+    font-size: 0.6em;
+    color: #1a5276;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+    animation: click-hint-bounce 1s ease-in-out infinite;
+    opacity: 1;
+    transition: opacity 0.4s ease-out;
+}
+
+.clickable-action__click-hint--hiding {
+    opacity: 0;
+}
+
+.clickable-action__click-hint .fas {
+    margin-left: 4px;
+}
+
 /* Hover state for clickable actions to indicate interactivity */
 
-/*
 .clickable-action {
     cursor: pointer;
     transition: box-shadow 0.15s ease-in-out;
@@ -485,29 +522,6 @@ div.magic-code-block-upload {
 .clickable-action:hover {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
-
-.clickable-action__header {
-    transition: background-color 0.15s ease-in-out;
-}
-*/
-
-/*
-.clickable-action:hover .clickable-action__header {
-    background-color: deepskyblue;
-} */
-
-/*
-.clickable-action[data-action-result='success']:hover .clickable-action__header {
-    background-color: limegreen;
-}
-
-.clickable-action[data-action-result='pending']:hover .clickable-action__header {
-    background-color: darkorange;
-}
-
-.clickable-action[data-action-result='failure']:hover .clickable-action__header {
-    background-color: red;
-} */
 
 .inline-copy {
     padding-left: 1px;
@@ -586,16 +600,14 @@ form.jsonform-hasrequired div.form-group {
     min-width: 0;
 }
 
-.bottom-bar-step-label {
-    font-size: 0.8em;
-    font-weight: 600;
-    color: #555;
-    white-space: nowrap;
-}
-
 .bottom-bar-toc {
     font-size: 0.8em;
-    padding: 3px 8px;
+    height: 36px;
+    width: 36px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-color: #adb5bd;
     color: #555;
 }
@@ -605,21 +617,45 @@ form.jsonform-hasrequired div.form-group {
     color: #333;
 }
 
-.bottom-bar-progress-track {
-    flex: 1;
-    height: 4px;
-    background-color: #e9ecef;
-    border-radius: 2px;
-    overflow: hidden;
-    max-width: 200px;
+/* Circular step progress ring */
+
+.bottom-bar-step-ring {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    margin-top: 2px;
 }
 
-.bottom-bar-progress-fill {
+.step-ring-svg {
+    width: 100%;
     height: 100%;
-    width: 0%;
-    background-color: #0d6efd;
-    border-radius: 2px;
-    transition: width 0.15s ease;
+    transform: rotate(-90deg);
+}
+
+.step-ring-bg {
+    fill: none;
+    stroke: #e9ecef;
+    stroke-width: 3;
+}
+
+.step-ring-fill {
+    fill: none;
+    stroke: #0d6efd;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.3s ease;
+}
+
+.step-ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.6em;
+    font-weight: 600;
+    color: #555;
+    white-space: nowrap;
 }
 
 .bottom-bar-actions {

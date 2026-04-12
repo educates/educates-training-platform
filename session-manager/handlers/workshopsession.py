@@ -1591,6 +1591,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                         "fsGroup": CLUSTER_STORAGE_GROUP,
                         "supplementalGroups": [CLUSTER_STORAGE_GROUP],
                     },
+                    "enableServiceLinks": False,
                     "initContainers": [],
                     "containers": [
                         {

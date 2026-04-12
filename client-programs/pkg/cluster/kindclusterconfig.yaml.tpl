@@ -11,7 +11,7 @@ networking:
   # By default the API server listens on a random open port.
   # You may choose a specific port but probably don't need to in most cases.
   # Using a random port makes it easier to spin up multiple clusters.
-  apiServerPort: {{- .LocalKindCluster.ApiServer.Port }}
+  apiServerPort: {{ .LocalKindCluster.ApiServer.Port }}
   {{- end }}
   {{- if .LocalKindCluster.Networking.ServiceSubnet }}
   serviceSubnet: "{{ .LocalKindCluster.Networking.ServiceSubnet }}"

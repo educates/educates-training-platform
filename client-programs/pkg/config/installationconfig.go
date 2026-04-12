@@ -19,16 +19,16 @@ type VolumeMountConfig struct {
 
 // NodeConfig defines configuration for a single kind node
 type NodeConfig struct {
-	Role   string            `yaml:"role"`            // "control-plane" or "worker"
+	Role   string            `yaml:"role"`             // "control-plane" or "worker"
 	Labels map[string]string `yaml:"labels,omitempty"` // Custom labels for the node
 	Taints []TaintConfig     `yaml:"taints,omitempty"` // Taints for the node
 }
 
 // TaintConfig defines a Kubernetes taint
 type TaintConfig struct {
-	Key    string `yaml:"key"`              // Taint key
-	Value  string `yaml:"value,omitempty"`  // Taint value (optional)
-	Effect string `yaml:"effect"`           // NoSchedule, PreferNoSchedule, or NoExecute
+	Key    string `yaml:"key"`             // Taint key
+	Value  string `yaml:"value,omitempty"` // Taint value (optional)
+	Effect string `yaml:"effect"`          // NoSchedule, PreferNoSchedule, or NoExecute
 }
 
 type LocalKindClusterConfig struct {
@@ -325,7 +325,7 @@ type TrainingPlatformConfig struct {
 }
 
 type InstallerImagesConfig struct {
-	Bundle string `yaml:"bundle,omitempty"`
+	Bundle   string   `yaml:"bundle,omitempty"`
 	Overlays []string `yaml:"overlays,omitempty"`
 }
 
@@ -475,15 +475,18 @@ func ConfigForLocalClusters(configFile string, domain string, local bool) (fullC
 	fullConfig.ClusterIngress.Domain = EducatesDomain(fullConfig)
 
 	if local {
-		// This augments the installation config with the secrets that are cached locally
-		if secretName := secrets.LocalCachedSecretForIngressDomain(fullConfig.ClusterIngress.Domain); secretName != "" {
-			fullConfig.ClusterIngress.TLSCertificateRef.Namespace = constants.EducatesSecretsNamespace
-			fullConfig.ClusterIngress.TLSCertificateRef.Name = secretName
-		}
+		// Only augment if there's no clusterInfrastructure.caCertificate defined
+		if fullConfig.ClusterInfrastructure.CertificateRef.Name == "" {
+			// This augments the installation config with the secrets that are cached locally
+			if secretName := secrets.LocalCachedSecretForIngressDomain(fullConfig.ClusterIngress.Domain); secretName != "" {
+				fullConfig.ClusterIngress.TLSCertificateRef.Namespace = constants.EducatesSecretsNamespace
+				fullConfig.ClusterIngress.TLSCertificateRef.Name = secretName
+			}
 
-		if secretName := secrets.LocalCachedSecretForCertificateAuthority(fullConfig.ClusterIngress.Domain); secretName != "" {
-			fullConfig.ClusterIngress.CACertificateRef.Namespace = constants.EducatesSecretsNamespace
-			fullConfig.ClusterIngress.CACertificateRef.Name = secretName
+			if secretName := secrets.LocalCachedSecretForCertificateAuthority(fullConfig.ClusterIngress.Domain); secretName != "" {
+				fullConfig.ClusterIngress.CACertificateRef.Namespace = constants.EducatesSecretsNamespace
+				fullConfig.ClusterIngress.CACertificateRef.Name = secretName
+			}
 		}
 	}
 

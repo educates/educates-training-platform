@@ -28,7 +28,10 @@ clusterPackages:
       clusterIngress:
         caCertificateRef:
           namespace: #@ data.values.clusterInfrastructure.caCertificateRef.namespace
-          name: #@ data.values.clusterInfrastructure.caCertificateRef.name
+          name: educateswildcard
+        tlsCertificateRef:
+          namespace: #@ data.values.clusterInfrastructure.caCertificateRef.namespace
+          name: educateswildcard
         #! NOTE: Nodes Operating System must be based of Debian in order to allow NodeInjector
         caNodeInjector:
           enabled: true

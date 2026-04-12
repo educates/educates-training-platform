@@ -2,12 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path"
-	"strings"
 
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
-	"github.com/pkg/errors"
+	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 	"github.com/spf13/cobra"
 )
 
@@ -16,29 +12,12 @@ const localSecretsListExample = `
   educates local secrets list
 `
 
-type LocalSecretsListOptions struct {}
+type LocalSecretsListOptions struct{}
 
 func (o *LocalSecretsListOptions) Run() error {
-	secretsCacheDir := path.Join(utils.GetEducatesHomeDir(), "secrets")
+	list, _ := secrets.List()
 
-	err := os.MkdirAll(secretsCacheDir, os.ModePerm)
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to create secrets cache directory")
-	}
-
-	files, err := os.ReadDir(secretsCacheDir)
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to read secrets cache directory")
-	}
-
-	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".yaml") {
-			name := strings.TrimSuffix(f.Name(), ".yaml")
-			fmt.Println(name)
-		}
-	}
+	fmt.Println(list)
 
 	return nil
 }

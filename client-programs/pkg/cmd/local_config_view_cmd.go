@@ -3,13 +3,13 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"gopkg.in/yaml.v2"
 )
 
-var (
+const (
 	localConfigViewExample = `
   # View local educates cluster configuration by default. Uses nip.io wildcard domain and Kind as provider config defaults
   educates local config view --config NULL
@@ -54,7 +54,7 @@ func (p *ProjectInfo) NewLocalConfigViewCmd() *cobra.Command {
 		Args:    cobra.NoArgs,
 		Use:     "view",
 		Short:   "View local configuration",
-		Long:    "View local configuration. Uses nip.io wildcard domain and Kind as provider config defaults",
+		Long:    "View local configuration. Uses nip.io wildcard domain and Kind as provider config defaults if not specified",
 		RunE:    func(_ *cobra.Command, _ []string) error { return o.Run() },
 		Example: localConfigViewExample,
 	}

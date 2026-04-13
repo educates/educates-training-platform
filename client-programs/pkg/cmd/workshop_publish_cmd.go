@@ -1,45 +1,90 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"time"
 
-	"github.com/educates/educates-training-platform/client-programs/pkg/workshops"
+	imgpkgcmd "carvel.dev/imgpkg/pkg/imgpkg/cmd"
+	yttcmd "carvel.dev/ytt/pkg/cmd/template"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
-var (
-	workshopPublishExample = `
-  # Publish workshop files to local registry
+type FilesPublishOptions struct {
+	Image           string
+	Repository      string
+	WorkshopFile    string
+	ExportWorkshop  string
+	WorkshopVersion string
+	RegistryFlags   imgpkgcmd.RegistryFlags
+	DataValuesFlags yttcmd.DataValuesFlags
+}
+
+const workshopPublishExample = `
+  # Publish workshop files to repository in current directory
   educates workshop publish
 
-  # Publish workshop files to specific registry
-  educates workshop publish --image-repository ghcr.io/myorg
+  # Publish workshop files to repository in my-workshop directory
+  educates workshop publish my-workshop
 
-  # Publish workshop files with specific version
-  educates workshop publish --workshop-version v1.0.0
+  # Publish workshop files to repository with a specific image in my-workshop directory
+  educates workshop publish my-workshop --image=my-workshop-image-files
 
-  # Publish workshop files with custom workshop definition
-  educates workshop publish --workshop-file custom-workshop.yaml
-
-  # Publish workshop files and export modified workshop definition
-  educates workshop publish --export-workshop exported-workshop.yaml
-
-  # Publish workshop files with registry authentication
-  educates workshop publish --registry-username user --registry-password pass
-
-  # Publish workshop files with data values
-  educates workshop publish --data-value workshop.title="My Workshop" --data-value workshop.description="A great workshop"
+  # Publish workshop files to repository with a specific image and repository in my-workshop directory
+  educates workshop publish my-workshop --image=my-workshop-image-files --image-repository=ghcr.io/educates --workshop-version=1.0.0
 `
-)
+func (o *FilesPublishOptions) Run(args []string) error {
+	var err error
+
+	var directory string
+
+	if len(args) != 0 {
+		directory = filepath.Clean(args[0])
+	} else {
+		directory = "."
+	}
+
+	if directory, err = filepath.Abs(directory); err != nil {
+		return errors.Wrap(err, "couldn't convert workshop directory to absolute path")
+	}
+
+	fileInfo, err := os.Stat(directory)
+
+	if err != nil || !fileInfo.IsDir() {
+		return errors.New("workshop directory does not exist or path is not a directory")
+	}
+
+	config := educates.PublishWorkshopDefinitionConfig{
+		Image: o.Image,
+		Repository: o.Repository,
+		WorkshopFile: o.WorkshopFile,
+		ExportWorkshop: o.ExportWorkshop,
+		WorkshopVersion: o.WorkshopVersion,
+		RegistryFlags: o.RegistryFlags,
+		DataValuesFlags: o.DataValuesFlags,
+	}
+
+	m := educates.NewWorkshopDefinitionManager()
+
+	return m.Publish(directory, &config)
+}
 
 func (p *ProjectInfo) NewWorkshopPublishCmd() *cobra.Command {
-	var o workshops.FilesPublishOptions
+	var o FilesPublishOptions
 
 	var c = &cobra.Command{
-		Args:    cobra.MaximumNArgs(1),
-		Use:     "publish [PATH]",
-		Short:   "Publish workshop files to repository",
-		RunE:    func(cmd *cobra.Command, args []string) error { return o.Run(args) },
+		Args:  func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return utils.CmdError(cmd, "too many arguments", "[PATH]")
+			}
+			return nil
+		},
+		Use:   "publish [PATH]",
+		Short: "Publish workshop files to repository",
+		RunE:  func(cmd *cobra.Command, args []string) error { return o.Run(args) },
 		Example: workshopPublishExample,
 	}
 

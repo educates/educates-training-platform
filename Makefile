@@ -11,23 +11,9 @@
 #
 # The following parameters can be set via environment variables or make arguments:
 #
-# PUSH_IMAGES
-#   Description: Controls whether images are pushed to registry or loaded locally
-#   Note: If PUSH_IMAGES is false, the images are loaded locally with --load
-#         and only one image is built for the current platform.
-#   Default: true (images are pushed to a registry)
-#   Values: true/false
-#   Examples:
-#     - Load locally: PUSH_IMAGES=false
-#     - Push to registry: PUSH_IMAGES=true (or omit)
-#   Usage:
-#     make build-all-images PUSH_IMAGES=false
-#     export PUSH_IMAGES=false && make build-all-images
-#
 # TARGET_PLATFORMS
 #   Description: Controls target platform(s) for Docker builds
-#   Default: Current platform (e.g., linux/amd64 on x86_64 systems)
-#   Note: If PUSH_IMAGES is false, TARGET_PLATFORMS is ignored.
+#   Default: linux/amd64,linux/arm64
 #   Examples:
 #     - Single platform: TARGET_PLATFORMS=linux/arm64
 #     - Multi-platform: TARGET_PLATFORMS=linux/amd64,linux/arm64
@@ -47,6 +33,18 @@
 #   Description: Version tag for built images
 #   Default: latest
 #   Examples: v1.0.0, dev, latest
+#
+# IMGPKG_IMAGE_REPOSITORY
+#   Description: Registry/repository used for image refs inside the installer bundle (kbld-images).
+#   Default: same as IMAGE_REPOSITORY
+#   Override when developing installer carvel-packages to use released images in the bundle
+#   instead of local images (e.g. IMGPKG_IMAGE_REPOSITORY=ghcr.io/educates).
+#
+# IMGPKG_PACKAGE_VERSION
+#   Description: Version tag used for image refs inside the installer bundle (kbld-images).
+#   Default: same as PACKAGE_VERSION
+#   Override when developing installer to pin bundle to a released version's images
+#   (e.g. IMGPKG_PACKAGE_VERSION=3.5.1).
 #
 # =============================================================================
 # BUILD TARGETS
@@ -130,8 +128,16 @@ IMAGE_REPOSITORY = localhost:5001
 PACKAGE_VERSION = latest
 RELEASE_VERSION = 0.0.1
 
-UNAME_SYSTEM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
-UNAME_MACHINE := $(shell uname -m)
+# Export variables to recursive make invocations so CLI/env overrides
+# (for example TARGET_PLATFORMS, IMAGE_REPOSITORY) are inherited.
+.EXPORT_ALL_VARIABLES:
+
+# Installer bundle image refs: default to same as build repo/version; override to use released images when developing installer
+IMGPKG_IMAGE_REPOSITORY ?= $(IMAGE_REPOSITORY)
+IMGPKG_PACKAGE_VERSION ?= $(PACKAGE_VERSION)
+
+UNAME_SYSTEM ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+UNAME_MACHINE ?= $(shell uname -m)
 
 TARGET_SYSTEM = $(UNAME_SYSTEM)
 TARGET_MACHINE = $(UNAME_MACHINE)
@@ -143,26 +149,34 @@ endif
 TARGET_PLATFORM = $(TARGET_SYSTEM)-$(TARGET_MACHINE)
 BUILDX_BUILDER = educates-multiarch-builder
 
+TARGET_PLATFORMS := $(TARGET_PLATFORMS)
+
 # Platform configuration - can be overridden by TARGET_PLATFORMS env var or make parameter
 ifeq ($(TARGET_PLATFORMS),)
-# Default to current platform when TARGET_PLATFORMS is not set
-DOCKER_PLATFORM = linux/$(TARGET_MACHINE)
+# Default to both platforms when TARGET_PLATFORMS is not set
 MULTIARCH_PLATFORMS = linux/amd64,linux/arm64
 else
 # Use TARGET_PLATFORMS when set (allows for custom multiarch builds)
-DOCKER_PLATFORM = $(TARGET_PLATFORMS)
 MULTIARCH_PLATFORMS = $(TARGET_PLATFORMS)
 endif
 
-# Push/Load configuration - can be overridden by PUSH_IMAGES env var or make parameter
-ifeq ($(PUSH_IMAGES),false)
-# Load images locally when PUSH_IMAGES is not true (default)
-DOCKER_BUILDER =
-MULTIARCH_PLATFORMS = $(DOCKER_PLATFORM)
-else
-# Push images to registry when PUSH_IMAGES is true
 DOCKER_BUILDER = --builder ${BUILDX_BUILDER} --push
-endif
+
+# After pushing a multi-arch image, pull it so the local daemon cache is up to date.
+define docker-pull-after-push
+	docker pull $(1)
+endef
+
+print-vars:
+	@echo "--- Makefile Variables ---"
+	@echo "OS:      $(UNAME_SYSTEM)"
+	@echo "Arch:    $(UNAME_MACHINE)"
+	@echo "Shell:   $(SHELL)"
+	@echo "TARGET_SYSTEM: $(TARGET_SYSTEM)"
+	@echo "TARGET_MACHINE: $(TARGET_MACHINE)"
+	@echo "TARGET_PLATFORM: $(TARGET_PLATFORM)"
+	@echo "MULTIARCH_PLATFORMS: $(MULTIARCH_PLATFORMS)"
+	@echo "DOCKER_BUILDER: $(DOCKER_BUILDER)"
 
 all: build-all-images # deploy-installer deploy-workshop
 
@@ -173,7 +187,7 @@ build-all-images: setup-buildx build-session-manager build-training-portal \
   build-conda-environment build-docker-registry \
   build-pause-container build-secrets-manager build-tunnel-manager \
   build-image-cache build-assets-server build-lookup-service \
-  build-node-ca-injector build-cli-image
+  build-node-ca-injector build-cli-image build-docker-extension
 
 build-core-images: setup-buildx build-session-manager build-training-portal \
   build-base-environment build-docker-registry build-pause-container \
@@ -185,18 +199,21 @@ build-session-manager:
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-session-manager:$(PACKAGE_VERSION) \
 		session-manager
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-session-manager:$(PACKAGE_VERSION))
 
 build-training-portal:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-training-portal:$(PACKAGE_VERSION) \
 		training-portal
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-training-portal:$(PACKAGE_VERSION))
 
 build-base-environment:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-base-environment:$(PACKAGE_VERSION) \
 		workshop-images/base-environment
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-base-environment:$(PACKAGE_VERSION))
 
 build-jdk8-environment: build-base-environment
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
@@ -204,6 +221,7 @@ build-jdk8-environment: build-base-environment
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-jdk8-environment:$(PACKAGE_VERSION) \
 		workshop-images/jdk8-environment
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-jdk8-environment:$(PACKAGE_VERSION))
 
 build-jdk11-environment: build-base-environment
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
@@ -211,6 +229,7 @@ build-jdk11-environment: build-base-environment
 		--build-arg PACKAGE_VERSION=$(PACKAGE_VERSION) \
 		-t $(IMAGE_REPOSITORY)/educates-jdk11-environment:$(PACKAGE_VERSION) \
 		workshop-images/jdk11-environment
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-jdk11-environment:$(PACKAGE_VERSION))
 
 build-jdk17-environment: build-base-environment
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
@@ -218,6 +237,7 @@ build-jdk17-environment: build-base-environment
 		--build-arg PACKAGE_VERSION=$(PACKAGE_VERSION) \
 		-t $(IMAGE_REPOSITORY)/educates-jdk17-environment:$(PACKAGE_VERSION) \
 		workshop-images/jdk17-environment
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-jdk17-environment:$(PACKAGE_VERSION))
 
 build-jdk21-environment: build-base-environment
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
@@ -225,6 +245,7 @@ build-jdk21-environment: build-base-environment
 		--build-arg PACKAGE_VERSION=$(PACKAGE_VERSION) \
 		-t $(IMAGE_REPOSITORY)/educates-jdk21-environment:$(PACKAGE_VERSION) \
 		workshop-images/jdk21-environment
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-jdk21-environment:$(PACKAGE_VERSION))
 
 build-conda-environment: build-base-environment
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
@@ -232,6 +253,7 @@ build-conda-environment: build-base-environment
 		--build-arg PACKAGE_VERSION=$(PACKAGE_VERSION) \
 		-t $(IMAGE_REPOSITORY)/educates-conda-environment:$(PACKAGE_VERSION) \
 		workshop-images/conda-environment
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-conda-environment:$(PACKAGE_VERSION))
 
 build-desktop-environment: build-base-environment
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
@@ -239,54 +261,63 @@ build-desktop-environment: build-base-environment
 		--build-arg PACKAGE_VERSION=$(PACKAGE_VERSION) \
 		-t $(IMAGE_REPOSITORY)/educates-desktop-environment:$(PACKAGE_VERSION) \
 		workshop-images/desktop-environment
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-desktop-environment:$(PACKAGE_VERSION))
 
 build-docker-registry:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-docker-registry:$(PACKAGE_VERSION) \
 		docker-registry
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-docker-registry:$(PACKAGE_VERSION))
 
 build-pause-container:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-pause-container:$(PACKAGE_VERSION) \
 		pause-container
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-pause-container:$(PACKAGE_VERSION))
 
 build-secrets-manager:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-secrets-manager:$(PACKAGE_VERSION) \
 		secrets-manager
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-secrets-manager:$(PACKAGE_VERSION))
 
 build-tunnel-manager:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-tunnel-manager:$(PACKAGE_VERSION) \
 		tunnel-manager
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-tunnel-manager:$(PACKAGE_VERSION))
 
 build-image-cache:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-image-cache:$(PACKAGE_VERSION) \
 		image-cache
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-image-cache:$(PACKAGE_VERSION))
 
 build-assets-server:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-assets-server:$(PACKAGE_VERSION) \
 		assets-server
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-assets-server:$(PACKAGE_VERSION))
 
 build-lookup-service:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-lookup-service:$(PACKAGE_VERSION) \
 		lookup-service
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-lookup-service:$(PACKAGE_VERSION))
 
 build-node-ca-injector:
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-node-ca-injector:$(PACKAGE_VERSION) \
 		node-ca-injector
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-node-ca-injector:$(PACKAGE_VERSION))
 
 verify-installer-config:
 ifneq ("$(wildcard developer-testing/educates-installer-values.yaml)","")
@@ -297,7 +328,7 @@ else
 endif
 
 push-installer-bundle:
-	ytt -f carvel-packages/installer/config/images.yaml -f carvel-packages/installer/config/schema.yaml -v imageRegistry.host=$(IMAGE_REPOSITORY) -v version=$(PACKAGE_VERSION) > carvel-packages/installer/bundle/kbld/kbld-images.yaml
+	ytt -f carvel-packages/installer/config/images.yaml -f carvel-packages/installer/config/schema.yaml -v imageRegistry.host=$(IMGPKG_IMAGE_REPOSITORY) -v version=$(IMGPKG_PACKAGE_VERSION) > carvel-packages/installer/bundle/kbld/kbld-images.yaml
    # For local development, we just need to lock educates images. Everything else can be referenced by tag from real origin.
 	cat carvel-packages/installer/bundle/kbld/kbld-images.yaml | kbld -f - --imgpkg-lock-output carvel-packages/installer/bundle/.imgpkg/images.yml
 	imgpkg push -b $(IMAGE_REPOSITORY)/educates-installer:$(RELEASE_VERSION) -f carvel-packages/installer/bundle
@@ -338,36 +369,38 @@ client-programs-educates:
 	mkdir client-programs/pkg/renderer/files
 	mkdir -p client-programs/bin
 	cp -rp workshop-images/base-environment/opt/eduk8s/etc/themes client-programs/pkg/renderer/files/
+	(cd client-programs; go mod tidy)
 	(cd client-programs; go build -gcflags=all="-N -l" -o bin/educates-$(TARGET_PLATFORM) cmd/educates/main.go)
 
 build-client-programs: client-programs-educates
 
 push-client-programs: build-client-programs
-	(cd client-programs; GOOS=linux GOARCH=amd64 go build -o bin/educates-linux-amd64 cmd/educates/main.go)
-	(cd client-programs; GOOS=linux GOARCH=arm64 go build -o bin/educates-linux-arm64 cmd/educates/main.go)
-	(cd client-programs; GOOS=linux GOARCH=amd64 go build -o bin/educates-linux-amd64 cmd/educates/main.go)
-	(cd client-programs; GOOS=linux GOARCH=arm64 go build -o bin/educates-linux-arm64 cmd/educates/main.go)
+	(cd client-programs; CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/educates-linux-amd64 cmd/educates/main.go)
+	(cd client-programs; CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/educates-linux-arm64 cmd/educates/main.go)
+	(cd client-programs; CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o bin/educates-darwin-amd64 cmd/educates/main.go)
+	(cd client-programs; CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o bin/educates-darwin-arm64 cmd/educates/main.go)
 	imgpkg push -i $(IMAGE_REPOSITORY)/educates-client-programs:$(PACKAGE_VERSION) -f client-programs/bin
 
-build-cli-image:
+build-cli-image: build-base-environment
 	docker build --progress plain --platform $(MULTIARCH_PLATFORMS) \
 	    $(DOCKER_BUILDER) \
 		-t $(IMAGE_REPOSITORY)/educates-cli:$(PACKAGE_VERSION) \
 		client-programs
+	$(call docker-pull-after-push,$(IMAGE_REPOSITORY)/educates-cli:$(PACKAGE_VERSION))
 
 build-docker-extension : build-cli-image
-	$(MAKE) -C docker-extension build-extension REPOSITORY=$(IMAGE_REPOSITORY) TAG=$(PACKAGE_VERSION)
+	$(MAKE) -C docker-extension build-extension
 
 install-docker-extension : build-docker-extension
-	$(MAKE) -C docker-extension install-extension REPOSITORY=$(IMAGE_REPOSITORY) TAG=$(PACKAGE_VERSION)
+	$(MAKE) -C docker-extension install-extension
 
 update-docker-extension : build-docker-extension
-	$(MAKE) -C docker-extension update-extension REPOSITORY=$(IMAGE_REPOSITORY) TAG=$(PACKAGE_VERSION)
+	$(MAKE) -C docker-extension update-extension
 
 project-docs/venv :
 	python3 -m venv project-docs/venv
 	project-docs/venv/bin/pip install -r project-docs/requirements.txt
- 
+
 build-project-docs : project-docs/venv
 	source project-docs/venv/bin/activate && make -C project-docs html
 

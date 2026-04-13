@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
 )
 
 type ClusterDiagnostics struct {
@@ -35,22 +37,22 @@ func (c *ClusterDiagnostics) Run() error {
 	clusterDiagnosticsFetcher := &ClusterDiagnosticsFetcher{c.clusterConfig, tempDir, c.verbose}
 
 	// Fetch all Educates training related resources
-	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(trainingportalResource, "training-portals.yaml"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(educatesTypes.TrainingPortalResource, "training-portals.yaml"); err != nil {
 		fmt.Println("Error fetching training portals: ", err)
 	}
-	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(workshopResource, "workshops.yaml"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(educatesTypes.WorkshopResource, "workshops.yaml"); err != nil {
 		fmt.Println("Error fetching workshops: ", err)
 	}
-	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(workshopsessionsResource, "workshop-sessions.yaml"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(educatesTypes.WorkshopsessionsResource, "workshop-sessions.yaml"); err != nil {
 		fmt.Println("Error fetching workshop sessions: ", err)
 	}
-	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(workshoprequestsResource, "workshop-requests.yaml"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(educatesTypes.WorkshoprequestsResource, "workshop-requests.yaml"); err != nil {
 		fmt.Println("Error fetching workshop requests: ", err)
 	}
-	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(workshopenvironmentsResource, "workshop-environments.yaml"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(educatesTypes.WorkshopenvironmentsResource, "workshop-environments.yaml"); err != nil {
 		fmt.Println("Error fetching workshop environments: ", err)
 	}
-	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(workshopallocationsResource, "workshop-allocations.yaml"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(educatesTypes.WorkshopallocationsResource, "workshop-allocations.yaml"); err != nil {
 		fmt.Println("Error fetching workshop allocations: ", err)
 	}
 
@@ -60,28 +62,28 @@ func (c *ClusterDiagnostics) Run() error {
 	}
 
 	// Fetch all Educates secrets related resources
-	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(secretcopierResource, "secret-copiers.yaml"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(educatesTypes.SecretcopierResource, "secret-copiers.yaml"); err != nil {
 		fmt.Println("Error fetching secret copiers: ", err)
 	}
-	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(secretinjectorsResource, "secret-injectors.yaml"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(educatesTypes.SecretinjectorsResource, "secret-injectors.yaml"); err != nil {
 		fmt.Println("Error fetching secret injectors: ", err)
 	}
-	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(secretexportersResource, "secret-exporters.yaml"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(educatesTypes.SecretexportersResource, "secret-exporters.yaml"); err != nil {
 		fmt.Println("Error fetching secret injectors: ", err)
 	}
-	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(secretimportersResource, "secret-importers.yaml"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(educatesTypes.SecretimportersResource, "secret-importers.yaml"); err != nil {
 		fmt.Println("Error fetching secret injectors: ", err)
 	}
 
 	// fetch logs for the session-manager, secret-manager deploymentments
-	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=session-manager", "educates", "session-manager.log"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=session-manager", constants.EducatesNamespace, "session-manager.log"); err != nil {
 		fmt.Println("Error fetching logs for session-manager: ", err)
 	}
-	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=secrets-manager", "educates", "secrets-manager.log"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=secrets-manager", constants.EducatesNamespace, "secrets-manager.log"); err != nil {
 		fmt.Println("Error fetching logs for secrets-manager: ", err)
 	}
 	// dump logs for all training-portal deployments
-	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=training-portal", "training.educates.dev/component=portal", "training-portal-%v.log"); err != nil {
+	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=training-portal", constants.EducatesWorkshopLabelAnnotationComponentPortal, "training-portal-%v.log"); err != nil {
 		fmt.Println("Error fetching logs for secrets-manager: ", err)
 	}
 	// Fetch workshop_list from Rest API for each training-portal

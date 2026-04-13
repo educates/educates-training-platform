@@ -1,6 +1,6 @@
 module github.com/educates/educates-training-platform/node-ca-injector
 
-go 1.24.10
+go 1.25.6
 
 require (
 	k8s.io/api v0.34.2

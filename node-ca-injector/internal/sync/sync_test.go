@@ -25,7 +25,7 @@ func setupTestDir(t *testing.T) (Config, string) {
 
 	cfg := Config{
 		HostsFile: hostsFile,
-		CAFile:    caFile,
+		CAFiles:   []string{caFile},
 		CertsD:    certsD,
 	}
 
@@ -142,7 +142,7 @@ func TestSyncOnce_UpdatesCAContent(t *testing.T) {
 
 	// Update CA file
 	newCA := []byte("-----BEGIN CERTIFICATE-----\nnew-ca-content\n-----END CERTIFICATE-----\n")
-	os.WriteFile(cfg.CAFile, newCA, 0644)
+	os.WriteFile(cfg.CAFiles[0], newCA, 0644)
 
 	if err := SyncOnce(cfg); err != nil {
 		t.Fatal(err)
@@ -169,6 +169,44 @@ func TestSyncOnce_EmptyHostsJSON(t *testing.T) {
 	caPath := filepath.Join(cfg.CertsD, caDestDir, "ca.crt")
 	if _, err := os.Stat(caPath); os.IsNotExist(err) {
 		t.Error("CA file was not created for empty host list")
+	}
+}
+
+func TestSyncOnce_FallsBackToSecondCAFile(t *testing.T) {
+	cfg, tmpDir := setupTestDir(t)
+	writeHostsJSON(t, cfg.HostsFile, []string{})
+
+	// Replace primary CA with a non-existent path; add a fallback that exists
+	fallbackCA := filepath.Join(tmpDir, "tls.crt")
+	if err := os.WriteFile(fallbackCA, []byte("-----BEGIN CERTIFICATE-----\nfallback-ca\n-----END CERTIFICATE-----\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg.CAFiles = []string{filepath.Join(tmpDir, "missing.crt"), fallbackCA}
+
+	if err := SyncOnce(cfg); err != nil {
+		t.Fatalf("SyncOnce failed with fallback CA: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(cfg.CertsD, caDestDir, "ca.crt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "-----BEGIN CERTIFICATE-----\nfallback-ca\n-----END CERTIFICATE-----\n" {
+		t.Errorf("unexpected CA content: %q", content)
+	}
+}
+
+func TestSyncOnce_ErrorsWhenNoCAFileExists(t *testing.T) {
+	cfg, tmpDir := setupTestDir(t)
+	writeHostsJSON(t, cfg.HostsFile, []string{})
+
+	cfg.CAFiles = []string{
+		filepath.Join(tmpDir, "missing1.crt"),
+		filepath.Join(tmpDir, "missing2.crt"),
+	}
+
+	if err := SyncOnce(cfg); err == nil {
+		t.Fatal("expected error when no CA files exist, got nil")
 	}
 }
 

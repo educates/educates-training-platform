@@ -61,7 +61,7 @@ func copyFiles(fs embed.FS, src string, dst string) error {
 				return errors.Wrapf(err, "unable to open source file %q", srcFile)
 			}
 
-			err = ioutil.WriteFile(dstFile, input, 0644)
+			err = os.WriteFile(dstFile, input, 0644)
 
 			if err != nil {
 				return errors.Wrapf(err, "unable to create source file %q", dstFile)
@@ -102,6 +102,20 @@ type WorkshopPathwaysConfig struct {
 type WorkshopConfig struct {
 	Pathways WorkshopPathwaysConfig `yaml:"pathways,omitempty"`
 	Params   []WorkshopParamsConfig `yaml:"params,omitempty"`
+}
+
+type RunHugoServerConfig struct {
+	WorkshopRoot string
+	Kubeconfig   string
+	Context      string
+	Workshop     string
+	Portal       string
+	LocalHost    string
+	LocalPort    int
+	HugoPort     int
+	Token        string
+	Files        bool
+	CleanupFunc  ServerCleanupFunc
 }
 
 var workshopSessionResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshopsessions"}
@@ -180,7 +194,7 @@ func fetchSessionVariables(sessionURL string, password string) (map[string]strin
 		return params, errors.New("unexpected failure querying workshop session config")
 	}
 
-	resBody, err := ioutil.ReadAll(res.Body)
+	resBody, err := io.ReadAll(res.Body)
 
 	if err != nil {
 		return params, errors.Wrapf(err, "failed to read workshop session config")
@@ -277,10 +291,10 @@ func GenerateHugoConfiguration(workshopDir string, target string, params map[str
 	}
 
 	type HugoConfig struct {
-		BaseURL       string                          `yaml:"baseURL"`
-		Params        map[string]interface{}           `yaml:"params"`
-		OutputFormats map[string]OutputFormatConfig    `yaml:"outputFormats"`
-		Outputs       map[string][]string              `yaml:"outputs"`
+		BaseURL       string                        `yaml:"baseURL"`
+		Params        map[string]interface{}        `yaml:"params"`
+		OutputFormats map[string]OutputFormatConfig `yaml:"outputFormats"`
+		Outputs       map[string][]string           `yaml:"outputs"`
 	}
 
 	config := HugoConfig{Params: make(map[string]interface{})}
@@ -421,11 +435,11 @@ func PopulateTemporaryDirectory() (string, error) {
 
 type ServerCleanupFunc func()
 
-func RunHugoServer(workshopRoot string, kubeconfig string, context string, workshop string, portal string, localHost string, localPort int, hugoPort int, token string, files bool, cleanupFunc ServerCleanupFunc) error {
+func RunHugoServer(o *RunHugoServerConfig) error {
 	var err error
 	var tempDir string
 
-	workshopDir := filepath.Join(workshopRoot, "workshop")
+	workshopDir := filepath.Join(o.WorkshopRoot, "workshop")
 
 	// First create directory to hold unpacked files for Hugo to use.
 
@@ -446,8 +460,8 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 
 		os.RemoveAll(tempDir)
 
-		if cleanupFunc != nil {
-			cleanupFunc()
+		if o.CleanupFunc != nil {
+			o.CleanupFunc()
 		}
 
 		os.Exit(1)
@@ -463,10 +477,10 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 	proxyHandler := func(w http.ResponseWriter, r *http.Request) {
 		// If an access token is provided validate it.
 
-		if token != "" {
+		if o.Token != "" {
 			accessToken := r.Header.Get("X-Access-Token")
 
-			if accessToken != token {
+			if accessToken != o.Token {
 				w.WriteHeader(http.StatusForbidden)
 				w.Write([]byte("403 - Invalid access token"))
 
@@ -492,7 +506,7 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 		if sessionName != lastSessionName {
 			// First validate that can access workshop session.
 
-			sessionURL, password, err := fetchWorkshopSessionAndValidate(kubeconfig, context, workshop, portal, sessionName)
+			sessionURL, password, err := fetchWorkshopSessionAndValidate(o.Kubeconfig, o.Context, o.Workshop, o.Portal, sessionName)
 
 			if err != nil {
 				fmt.Println("Error validating workshop session:", err)
@@ -541,7 +555,7 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 			if !hugoStarted {
 				fmt.Println("Starting Hugo server")
 
-				go startHugoServer(workshopDir, tempDir, hugoPort, sessionURL)
+				go startHugoServer(workshopDir, tempDir, o.HugoPort, sessionURL)
 
 				time.Sleep(4 * time.Second)
 
@@ -557,7 +571,7 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 
 		serverDetailsLock.Unlock()
 
-		hugoServerURL := fmt.Sprintf("http://localhost:%d", hugoPort)
+		hugoServerURL := fmt.Sprintf("http://localhost:%d", o.HugoPort)
 		target, _ := url.Parse(hugoServerURL)
 
 		proxy := httputil.NewSingleHostReverseProxy(target)
@@ -572,10 +586,10 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 	http.HandleFunc("/workshop/content/", proxyHandler)
 
 	filesHandler := func(w http.ResponseWriter, r *http.Request) {
-		if token != "" {
+		if o.Token != "" {
 			accessToken := r.URL.Query().Get("token")
 
-			if accessToken != token {
+			if accessToken != o.Token {
 				w.WriteHeader(http.StatusForbidden)
 				w.Write([]byte("403 - Invalid access token"))
 
@@ -587,7 +601,7 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 
 		tw := tar.NewWriter(w)
 
-		filepath.Walk(workshopRoot, func(file string, fi os.FileInfo, err error) error {
+		filepath.Walk(o.WorkshopRoot, func(file string, fi os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -597,7 +611,7 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 				return err
 			}
 
-			header.Name, err = filepath.Rel(workshopRoot, filepath.ToSlash(file))
+			header.Name, err = filepath.Rel(o.WorkshopRoot, filepath.ToSlash(file))
 
 			if err != nil {
 				return err
@@ -625,11 +639,11 @@ func RunHugoServer(workshopRoot string, kubeconfig string, context string, works
 		})
 	}
 
-	if files {
+	if o.Files {
 		http.HandleFunc("/workshop/files.tar", filesHandler)
 	}
 
-	portString := fmt.Sprintf("%s:%d", localHost, localPort)
+	portString := fmt.Sprintf("%s:%d", o.LocalHost, o.LocalPort)
 
 	fmt.Println("Proxy listening on:", portString)
 

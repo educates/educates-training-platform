@@ -3,10 +3,11 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
+	"github.com/spf13/cobra"
 )
 
 type ClusterSessionTerminateOptions struct {
@@ -15,32 +16,33 @@ type ClusterSessionTerminateOptions struct {
 	Name   string
 }
 
+const clusterSessionTerminateExample = `
+# Terminate running Educatessession "my-session" in default Educates portal
+educates cluster session terminate my-session
+
+# Terminate running Educates session "my-session" using a specific portal
+educates cluster session terminate my-session --portal=my-portal
+
+# Terminate running Educates session "my-session" using a specific portal and context
+educates cluster session terminate my-session --portal=my-portal --kubeconfig ~/.kube/config --context=my-context
+`
+
 func (o *ClusterSessionTerminateOptions) Run() error {
 	var err error
 
 	clusterConfig := cluster.NewClusterConfig(o.Kubeconfig, o.Context)
 
-	catalogApiRequester := educatesrestapi.NewWorkshopsCatalogRequester(
-		clusterConfig,
-		o.Portal,
-	)
-	logout, err := catalogApiRequester.Login()
-	defer logout()
-	if err != nil {
-		return errors.Wrap(err, "failed to login to training portal")
-	}
-
-	details, err := catalogApiRequester.TerminateWorkshopSession(o.Name)
+	manager := educatesResources.NewSessionManager()
+	result, err := manager.TerminateSession(educatesResources.TerminateSessionConfig{
+		ClusterConfig: clusterConfig,
+		Portal: o.Portal,
+		Name: o.Name,
+	})
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Started:", details.Started)
-	fmt.Println("Expires:", details.Expires)
-	fmt.Println("Expiring:", details.Expiring)
-	fmt.Println("Countdown:", details.Countdown)
-	fmt.Println("Extendable:", details.Extendable)
-	fmt.Println("Status:", details.Status)
+	fmt.Println(result)
 
 	return nil
 }
@@ -49,11 +51,17 @@ func (p *ProjectInfo) NewClusterSessionTerminateCmd() *cobra.Command {
 	var o ClusterSessionTerminateOptions
 
 	var c = &cobra.Command{
-		Args:    cobra.ExactArgs(1),
+		Args:    func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return utils.CmdError(cmd, "session name is required", "NAME")
+			}
+			return nil
+		},
 		Use:     "delete NAME",
 		Aliases: []string{"terminate"},
 		Short:   "Terminate running session in Kubernetes",
 		RunE:    func(_ *cobra.Command, args []string) error { o.Name = args[0]; return o.Run() },
+		Example: clusterSessionTerminateExample,
 	}
 
 	c.Flags().StringVar(
@@ -72,7 +80,7 @@ func (p *ProjectInfo) NewClusterSessionTerminateCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name of the training portal",
 	)
 

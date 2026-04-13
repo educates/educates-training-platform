@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"context"
-
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type ClusterPortalDeleteOptions struct {
@@ -15,13 +13,24 @@ type ClusterPortalDeleteOptions struct {
 	Portal string
 }
 
+const clusterPortalDeleteExample = `
+# Delete TrainingPortal from Educates cluster with default name
+educates cluster portal delete
+
+# Delete TrainingPortal from Educates cluster with specific name
+educates cluster portal delete --portal=my-portal
+
+# Delete given TrainingPortal from given Educates cluster
+educates cluster portal delete --portal=my-portal --kubeconfig ~/.kube/config --context=my-context
+`
+
 func (o *ClusterPortalDeleteOptions) Run() error {
 	var err error
 
 	// Ensure have portal name.
 
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
@@ -36,18 +45,16 @@ func (o *ClusterPortalDeleteOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	trainingPortalClient := dynamicClient.Resource(trainingPortalResource)
-
-	_, err = trainingPortalClient.Get(context.TODO(), o.Portal, metav1.GetOptions{})
-
-	if k8serrors.IsNotFound(err) {
-		return errors.New("no portal found")
+	config := educatesResources.TrainingPortalDeleteConfig{
+		Portal: o.Portal,
 	}
 
-	err = trainingPortalClient.Delete(context.TODO(), o.Portal, metav1.DeleteOptions{})
+	manager := educatesResources.NewPortalManager(dynamicClient)
+
+	err = manager.DeleteTrainingPortal(&config)
 
 	if err != nil {
-		return errors.Wrap(err, "unable to delete portal")
+		return err
 	}
 
 	return nil
@@ -61,6 +68,7 @@ func (p *ProjectInfo) NewClusterPortalDeleteCmd() *cobra.Command {
 		Use:   "delete",
 		Short: "Delete portal from Kubernetes",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: clusterPortalDeleteExample,
 	}
 
 	c.Flags().StringVar(
@@ -79,7 +87,7 @@ func (p *ProjectInfo) NewClusterPortalDeleteCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 

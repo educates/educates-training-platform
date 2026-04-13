@@ -1,18 +1,31 @@
 package cmd
 
 import (
-	"context"
-
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
+const (
+	clusterWorkshopDeleteExample = `
+  # Delete Educates workshop from cluster in current workshop directory and using default workshop file
+  educates cluster workshop delete
+
+  # Delete Educates workshop from cluster from specific portal
+  educates cluster workshop delete --portal my-portal
+
+  # Delete Educates workshop from cluster defined with custom path and workshop file
+  educates cluster workshop delete --path ./workshop --workshop-file custom-workshop.yaml
+
+  # Delete Educates workshop from alternate cluster
+  educates cluster workshop delete --kubeconfig ~/.kube/config --context=my-context
+`
+)
 type ClusterWorkshopDeleteOptions struct {
 	KubeconfigOptions
 	Name            string
@@ -32,7 +45,7 @@ func (o *ClusterWorkshopDeleteOptions) Run() error {
 	// Ensure have portal name.
 
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	if name == "" {
@@ -52,7 +65,16 @@ func (o *ClusterWorkshopDeleteOptions) Run() error {
 
 		var workshop *unstructured.Unstructured
 
-		if workshop, err = loadWorkshopDefinition(o.Name, path, o.Portal, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+		definitionConfig := educates.WorkshopDefinitionConfig{
+			Name: o.Name,
+			Path: path,
+			Portal: o.Portal,
+			WorkshopFile: o.WorkshopFile,
+			WorkshopVersion: o.WorkshopVersion,
+			DataValueFlags: o.DataValuesFlags,
+		}
+
+		if workshop, err = educates.LoadWorkshopDefinition(&definitionConfig); err != nil {
 			return err
 		}
 
@@ -71,9 +93,15 @@ func (o *ClusterWorkshopDeleteOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	// Delete the deployed workshop from the Kubernetes cluster.
+	manager := educatesResources.NewWorkshopManager(dynamicClient)
 
-	err = deleteWorkshopResource(dynamicClient, name, o.Alias, o.Portal)
+	// Delete the deployed workshop from the Kubernetes cluster.
+	deleteConfig := educatesResources.DeleteWorkshopResourceConfig{
+		Name: name,
+		Alias: o.Alias,
+		Portal: o.Portal,
+	}
+	err = manager.DeleteWorkshopResource(&deleteConfig)
 
 	if err != nil {
 		return err
@@ -90,6 +118,7 @@ func (p *ProjectInfo) NewClusterWorkshopDeleteCmd() *cobra.Command {
 		Use:   "delete",
 		Short: "Delete workshop from Kubernetes",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: clusterWorkshopDeleteExample,
 	}
 
 	c.Flags().StringVarP(
@@ -129,7 +158,7 @@ func (p *ProjectInfo) NewClusterWorkshopDeleteCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 
@@ -186,48 +215,4 @@ func (p *ProjectInfo) NewClusterWorkshopDeleteCmd() *cobra.Command {
 	)
 
 	return c
-}
-
-func deleteWorkshopResource(client dynamic.Interface, name string, alias string, portal string) error {
-	trainingPortalClient := client.Resource(trainingPortalResource)
-
-	trainingPortal, err := trainingPortalClient.Get(context.TODO(), portal, metav1.GetOptions{})
-
-	if k8serrors.IsNotFound(err) {
-		return nil
-	}
-
-	workshops, _, err := unstructured.NestedSlice(trainingPortal.Object, "spec", "workshops")
-
-	if err != nil {
-		return errors.Wrap(err, "unable to retrieve workshops from training portal")
-	}
-
-	var found = false
-
-	var updatedWorkshops []interface{}
-
-	for _, item := range workshops {
-		object := item.(map[string]interface{})
-
-		if object["name"] != name || object["alias"] != alias {
-			updatedWorkshops = append(updatedWorkshops, object)
-		} else {
-			found = true
-		}
-	}
-
-	if !found {
-		return nil
-	}
-
-	unstructured.SetNestedSlice(trainingPortal.Object, updatedWorkshops, "spec", "workshops")
-
-	_, err = trainingPortalClient.Update(context.TODO(), trainingPortal, metav1.UpdateOptions{FieldManager: "educates-cli"})
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to update training portal %q in cluster", portal)
-	}
-
-	return nil
 }

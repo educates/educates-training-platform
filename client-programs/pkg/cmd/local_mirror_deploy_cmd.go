@@ -8,17 +8,17 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 )
 
-var (
+const (
 	localMirrorDeployExample = `
   # Mirror DockerHub anonymously (may be subject to rate limits):
   educates local mirror deploy docker.io
 
   # Mirror DockerHub with credentials (recommended to avoid throttling):
   educates local mirror deploy docker.io --username <DOCKERHUB_USER> --password <DOCKERHUB_PASS>
-  
+
   # Mirror a private registry:
   educates local mirror deploy myprivateregistry.com --username <USER> --password <PASS>
-  
+
   # Mirror a registry with a different remote URL:
   educates local mirror deploy mymirror --url registry.example.com
 `
@@ -39,7 +39,8 @@ func (o *LocalMirrorDeployOptions) Run() error {
 		Password: o.Password,
 	}
 
-	err := registry.DeployMirrorAndLinkToCluster(mirrorConfig)
+	mirror := registry.NewMirror(mirrorConfig)
+	err := mirror.DeployAndLinkToCluster()
 
 	if err != nil {
 		return errors.Wrap(err, "failed to deploy registry mirror")

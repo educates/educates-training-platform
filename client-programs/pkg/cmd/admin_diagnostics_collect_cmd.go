@@ -4,10 +4,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mitchellh/go-homedir"
-	"github.com/spf13/cobra"
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/diagnostics"
+	"github.com/mitchellh/go-homedir"
+	"github.com/spf13/cobra"
 )
 
 type AdminDiagnosticsCollectOptions struct {
@@ -15,6 +15,20 @@ type AdminDiagnosticsCollectOptions struct {
 	Dest    string
 	Verbose bool
 }
+
+const adminDiagnosticsCollectExample = `
+  # Collect diagnostic information for current Educates cluster in current directory
+  educates admin diagnostics collect
+
+  # Collect diagnostic information ffor current Educates cluster in current directory with verbose output
+  educates admin diagnostics collect --verbose
+
+  # Collect diagnostic information for an Educates cluster and save to a specific directory
+  educates admin diagnostics collect --dest ./diagnostics
+
+  # Collect diagnostic information for a specific Educates Cluster in current directory
+  educates admin diagnostics collect --kubeconfig /path/to/kubeconfig --context my-cluster
+`
 
 func (o *AdminDiagnosticsCollectOptions) Run() error {
 	clusterConfig := cluster.NewClusterConfig(o.Kubeconfig, o.Context)
@@ -36,6 +50,7 @@ func (p *ProjectInfo) NewAdminDiagnosticsCollectCmd() *cobra.Command {
 		Use:   "collect",
 		Short: "Collect diagnostic information for an Educates cluster",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: adminDiagnosticsCollectExample,
 	}
 
 	c.Flags().StringVar(

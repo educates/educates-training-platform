@@ -43,7 +43,10 @@ clusterPackages:
         domain: educates.example.com
         caCertificateRef:
           namespace: educates-secrets
-          name: educates-example-com-ca
+          name: educateswildcard
+        tlsCertificateRef:
+          namespace: educates-secrets
+          name: educateswildcard
         caNodeInjector:
           enabled: true
       clusterSecurity:

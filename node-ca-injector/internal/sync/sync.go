@@ -13,12 +13,18 @@ import (
 
 const (
 	defaultHostsFile    = "/config/hosts/hosts.json"
-	defaultCAFile       = "/config/ca/ca.crt"
 	defaultCertsD       = "/host/etc/containerd/certs.d"
 	caDestDir           = "_educates-ca"
 	managedMarker       = ".educates-managed"
 	defaultSyncInterval = 10 * time.Second
 )
+
+// defaultCAFiles is the ordered list of candidate CA certificate paths.
+// The first file that exists will be used.
+var defaultCAFiles = []string{
+	"/config/ca/ca.crt",
+	"/config/ca/tls.crt",
+}
 
 // hostsTomlContent generates the hosts.toml content for a registry host.
 // Paths reference the node's filesystem, not the container's mount path.
@@ -29,7 +35,7 @@ func hostsTomlContent() []byte {
 // Config holds the sync configuration, injectable for testing.
 type Config struct {
 	HostsFile    string
-	CAFile       string
+	CAFiles      []string
 	CertsD       string
 	SyncInterval time.Duration
 }
@@ -38,7 +44,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		HostsFile:    defaultHostsFile,
-		CAFile:       defaultCAFile,
+		CAFiles:      defaultCAFiles,
 		CertsD:       defaultCertsD,
 		SyncInterval: defaultSyncInterval,
 	}
@@ -52,7 +58,7 @@ func SyncOnce(cfg Config) error {
 		return fmt.Errorf("creating CA directory: %w", err)
 	}
 
-	caContent, err := os.ReadFile(cfg.CAFile)
+	caContent, err := readFirstExisting(cfg.CAFiles)
 	if err != nil {
 		return fmt.Errorf("reading CA file: %w", err)
 	}
@@ -136,6 +142,20 @@ func SyncOnce(cfg Config) error {
 	return nil
 }
 
+// readFirstExisting reads the first file from paths that exists. Returns an error if none exist.
+func readFirstExisting(paths []string) ([]byte, error) {
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err == nil {
+			return data, nil
+		}
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("reading %s: %w", p, err)
+		}
+	}
+	return nil, fmt.Errorf("no CA file found, tried: %v", paths)
+}
+
 // writeIfChanged writes content to path only if the file doesn't exist or has different content.
 func writeIfChanged(path string, content []byte) error {
 	existing, err := os.ReadFile(path)
@@ -154,14 +174,14 @@ func Run() error {
 		cfg.HostsFile = v
 	}
 	if v := os.Getenv("CA_FILE"); v != "" {
-		cfg.CAFile = v
+		cfg.CAFiles = []string{v}
 	}
 	if v := os.Getenv("CERTS_D"); v != "" {
 		cfg.CertsD = v
 	}
 
-	fmt.Printf("starting sync loop: hosts=%s ca=%s certs.d=%s interval=%s\n",
-		cfg.HostsFile, cfg.CAFile, cfg.CertsD, cfg.SyncInterval)
+	fmt.Printf("starting sync loop: hosts=%s ca=%v certs.d=%s interval=%s\n",
+		cfg.HostsFile, cfg.CAFiles, cfg.CertsD, cfg.SyncInterval)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)

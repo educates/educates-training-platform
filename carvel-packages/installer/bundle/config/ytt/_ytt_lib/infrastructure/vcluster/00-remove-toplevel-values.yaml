@@ -48,3 +48,5 @@ websiteStyling:
 imagePuller:
 #@overlay/remove
 lookupService:
+#@overlay/remove
+installerImages:

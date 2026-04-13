@@ -1,17 +1,26 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
+
+const (
+	clusterWorkshopListExample = `
+  # List Educates workshops deployed to Kubernetes cluster
+  educates cluster workshop list
+
+  # List Educates workshops deployed to Kubernetes cluster with a specific portal
+  educates cluster workshop list --portal=my-portal
+
+  # List Educates workshops deployed to alternateKubernetes cluster
+  educates cluster workshop list --kubeconfig ~/.kube/config --context=my-context
+`
 )
 
 type ClusterWorkshopsListOptions struct {
@@ -25,7 +34,7 @@ func (o *ClusterWorkshopsListOptions) Run() error {
 	// Ensure have portal name.
 
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
@@ -39,65 +48,17 @@ func (o *ClusterWorkshopsListOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	trainingPortalClient := dynamicClient.Resource(trainingPortalResource)
+	manager := educatesResources.NewWorkshopManager(dynamicClient)
 
-	trainingPortal, err := trainingPortalClient.Get(context.TODO(), o.Portal, metav1.GetOptions{})
-
-	if k8serrors.IsNotFound(err) {
-		fmt.Println("No workshops found.")
-		return nil
-	}
-
-	sessionsMaximum, sessionsMaximumExists, _ := unstructured.NestedInt64(trainingPortal.Object, "spec", "portal", "sessions", "maximum")
-
-	workshops, _, err := unstructured.NestedSlice(trainingPortal.Object, "spec", "workshops")
+	list, err := manager.ListWorkshopResources(&educatesResources.ListWorkshopResourcesConfig{
+		Portal: o.Portal,
+	})
 
 	if err != nil {
-		return errors.Wrap(err, "unable to retrieve workshops from training portal")
+		return err
 	}
 
-	if len(workshops) == 0 {
-		fmt.Println("No workshops found.")
-		return nil
-	}
-
-	w := new(tabwriter.Writer)
-	w.Init(os.Stdout, 8, 8, 3, ' ', 0)
-
-	defer w.Flush()
-
-	fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "NAME", "ALIAS", "CAPACITY", "SOURCE")
-
-	workshopsClient := dynamicClient.Resource(workshopResource)
-
-	for _, item := range workshops {
-		object := item.(map[string]interface{})
-		name := object["name"].(string)
-
-		var capacityField string
-
-		capacity, capacityExists := object["capacity"]
-
-		if capacityExists {
-			capacityField = fmt.Sprintf("%d", capacity)
-		} else if sessionsMaximumExists {
-			capacityField = fmt.Sprintf("%d", sessionsMaximum)
-		}
-
-		workshop, err := workshopsClient.Get(context.TODO(), name, metav1.GetOptions{})
-
-		source := ""
-
-		if err == nil {
-			annotations := workshop.GetAnnotations()
-
-			if val, ok := annotations["training.educates.dev/source"]; ok {
-				source = val
-			}
-		}
-
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", object["name"], object["alias"], capacityField, source)
-	}
+	fmt.Println(list)
 
 	return nil
 }
@@ -110,6 +71,7 @@ func (p *ProjectInfo) NewClusterWorkshopListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List workshops deployed to Kubernetes",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: clusterWorkshopListExample,
 	}
 
 	c.Flags().StringVar(
@@ -128,7 +90,7 @@ func (p *ProjectInfo) NewClusterWorkshopListCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 

@@ -2,19 +2,28 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
-	"os/exec"
-	"runtime"
 	"time"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
-	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+const dockerWorkshopOpenExample = `
+  # Open Educates workshop in browser in current workshop directory
+  educates docker workshop open
+
+  # Open Educates workshop in browser with provided name
+  educates docker workshop open --name my-workshop
+
+  # Open Educates workshop in browser from specific path and using custom workshop file
+  educates docker workshop open --path ./workshop --workshop-file custom-workshop.yaml
+`
 
 type DockerWorkshopOpenOptions struct {
 	Name            string
@@ -25,8 +34,6 @@ type DockerWorkshopOpenOptions struct {
 }
 
 func (o *DockerWorkshopOpenOptions) Run() error {
-	var err error
-
 	var name = o.Name
 
 	if name == "" {
@@ -36,17 +43,22 @@ func (o *DockerWorkshopOpenOptions) Run() error {
 		// the workshop will then expect the workshop definition to reside in the
 		// resources/workshop.yaml file under the directory, the same as if a
 		// directory path was provided explicitly.
-
 		if path == "" {
 			path = "."
 		}
 
 		// Load the workshop definition. The path can be a HTTP/HTTPS URL for a
 		// local file system path for a directory or file.
-
-		var workshop *unstructured.Unstructured
-
-		if workshop, err = loadWorkshopDefinition(o.Name, path, "educates-cli", o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+		definitionConfig := educates.WorkshopDefinitionConfig{
+			Name: o.Name,
+			Path: path,
+			Portal: constants.DefaultPortalName,
+			WorkshopFile: o.WorkshopFile,
+			WorkshopVersion: o.WorkshopVersion,
+			DataValueFlags: o.DataValuesFlags,
+		}
+		workshop, err := educates.LoadWorkshopDefinition(&definitionConfig)
+		if err != nil {
 			return err
 		}
 
@@ -57,7 +69,7 @@ func (o *DockerWorkshopOpenOptions) Run() error {
 
 	ctx := context.Background()
 
-	cli, err := docker.NewDockerClient()
+	cli, err := utils.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
@@ -69,15 +81,14 @@ func (o *DockerWorkshopOpenOptions) Run() error {
 		return errors.New("unable to find workshop")
 	}
 
-	url, found := container.Config.Labels["training.educates.dev/url"]
+	url, found := container.Config.Labels[constants.EducatesWorkshopLabelAnnotationURL]
 
 	if !found || url == "" {
 		return errors.New("can't determine URL for workshop")
 	}
 
-	// XXX Need a better way of handling very long startup times for container
+	// TODO: XXX Need a better way of handling very long startup times for container
 	// due to workshop content or package downloads.
-
 	for i := 1; i < 120; i++ {
 		time.Sleep(time.Second)
 
@@ -93,22 +104,7 @@ func (o *DockerWorkshopOpenOptions) Run() error {
 		break
 	}
 
-	switch runtime.GOOS {
-	case "linux":
-		err = exec.Command("xdg-open", url).Start()
-	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	case "darwin":
-		err = exec.Command("open", url).Start()
-	default:
-		err = fmt.Errorf("unsupported platform")
-	}
-
-	if err != nil {
-		return errors.Wrap(err, "unable to open web browser")
-	}
-
-	return nil
+	return utils.OpenBrowser(url)
 }
 
 func (p *ProjectInfo) NewDockerWorkshopOpenCmd() *cobra.Command {
@@ -119,6 +115,7 @@ func (p *ProjectInfo) NewDockerWorkshopOpenCmd() *cobra.Command {
 		Use:   "open",
 		Short: "Open workshop in browser",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: dockerWorkshopOpenExample,
 	}
 
 	c.Flags().StringVarP(

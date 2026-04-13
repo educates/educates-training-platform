@@ -1,22 +1,25 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
-	"os"
-	"text/tabwriter"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	educatesResources "github.com/educates/educates-training-platform/client-programs/pkg/educates/resources"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type ClusterPortalListOptions struct {
 	KubeconfigOptions
 }
+
+const clusterPortalListExample = `
+# List TrainingPortals deployed to Educates cluster
+educates cluster portal list
+
+# List TrainingPortals deployed to Educaets cluster and save to file
+educates cluster portal list --kubeconfig ~/.kube/config --context=my-context
+`
 
 func (o *ClusterPortalListOptions) Run() error {
 	var err error
@@ -33,37 +36,15 @@ func (o *ClusterPortalListOptions) Run() error {
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	trainingPortalClient := dynamicClient.Resource(trainingPortalResource)
+	manager := educatesResources.NewPortalManager(dynamicClient)
 
-	trainingPortals, err := trainingPortalClient.List(context.TODO(), metav1.ListOptions{})
+	list, err := manager.ListTrainingPortals(nil)
 
-	if k8serrors.IsNotFound(err) {
-		fmt.Println("No portals found.")
-		return nil
+	if err != nil {
+		return err
 	}
 
-	w := new(tabwriter.Writer)
-	w.Init(os.Stdout, 8, 8, 3, ' ', 0)
-
-	defer w.Flush()
-
-	fmt.Fprintf(w, "%s\t%s\t%s\n", "NAME", "CAPACITY", "URL")
-
-	for _, item := range trainingPortals.Items {
-		name := item.GetName()
-
-		sessionsMaximum, propertyExists, err := unstructured.NestedInt64(item.Object, "spec", "portal", "sessions", "maximum")
-
-		var capacity string
-
-		if err == nil && propertyExists {
-			capacity = fmt.Sprintf("%d", sessionsMaximum)
-		}
-
-		url, _, _ := unstructured.NestedString(item.Object, "status", "educates", "url")
-
-		fmt.Fprintf(w, "%s\t%s\t%s\n", name, capacity, url)
-	}
+	fmt.Println(list)
 
 	return nil
 }
@@ -76,6 +57,7 @@ func (p *ProjectInfo) NewClusterPortalListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List portals deployed to Kubernetes",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: clusterPortalListExample,
 	}
 
 	c.Flags().StringVar(

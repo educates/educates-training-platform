@@ -4,19 +4,34 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educates"
+	educatesrestapi "github.com/educates/educates-training-platform/client-programs/pkg/educates/restapi"
+	educatesTypes "github.com/educates/educates-training-platform/client-programs/pkg/educates/types"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/joho/godotenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
+
+const (
+	clusterWorkshopRequestExample = `
+  # Request Educates workshop in cluster in current workshop directory and using default workshop file
+  educates cluster workshop request
+
+  # Request Educates workshop in cluster with custom workshop file
+  educates cluster workshop request --path ./workshop --workshop-file custom-workshop.yaml
+
+  # Request Educates workshop but don't open the browser
+  educates cluster workshop request --no-browser
+`
 )
 
 type ClusterWorkshopRequestOptions struct {
@@ -89,7 +104,7 @@ func (o *ClusterWorkshopRequestOptions) Run() error {
 	// Ensure have portal name.
 
 	if o.Portal == "" {
-		o.Portal = "educates-cli"
+		o.Portal = constants.DefaultPortalName
 	}
 
 	if name == "" {
@@ -109,7 +124,16 @@ func (o *ClusterWorkshopRequestOptions) Run() error {
 
 		var workshop *unstructured.Unstructured
 
-		if workshop, err = loadWorkshopDefinition(o.Name, path, o.Portal, o.WorkshopFile, o.WorkshopVersion, o.DataValuesFlags); err != nil {
+		definitionConfig := educates.WorkshopDefinitionConfig{
+			Name: o.Name,
+			Path: path,
+			Portal: o.Portal,
+			WorkshopFile: o.WorkshopFile,
+			WorkshopVersion: o.WorkshopVersion,
+			DataValueFlags: o.DataValuesFlags,
+		}
+
+		if workshop, err = educates.LoadWorkshopDefinition(&definitionConfig); err != nil {
 			return err
 		}
 
@@ -146,6 +170,7 @@ func (p *ProjectInfo) NewClusterWorkshopRequestCmd() *cobra.Command {
 		Use:   "request",
 		Short: "Request workshop in Kubernetes",
 		RunE:  func(_ *cobra.Command, _ []string) error { return o.Run() },
+		Example: clusterWorkshopRequestExample,
 	}
 
 	c.Flags().StringVarP(
@@ -178,7 +203,7 @@ func (p *ProjectInfo) NewClusterWorkshopRequestCmd() *cobra.Command {
 		&o.Portal,
 		"portal",
 		"p",
-		"educates-cli",
+		constants.DefaultPortalName,
 		"name to be used for training portal and workshop name prefixes",
 	)
 	c.Flags().StringArrayVarP(
@@ -299,7 +324,7 @@ func ensurePortalHasWorkshop(clusterConfig *cluster.ClusterConfig, name string, 
 		return errors.Wrapf(err, "unable to create Kubernetes client")
 	}
 
-	trainingPortalClient := client.Resource(trainingPortalResource)
+	trainingPortalClient := client.Resource(educatesTypes.TrainingPortalResource)
 
 	trainingPortal, err := trainingPortalClient.Get(context.TODO(), portal, metav1.GetOptions{})
 
@@ -378,20 +403,5 @@ func requestWorkshop(clusterConfig *cluster.ClusterConfig, workshopName string, 
 
 	fmt.Printf("Opening workshop URL %s.\n", workshopUrl)
 
-	switch runtime.GOOS {
-	case "linux":
-		err = exec.Command("xdg-open", workshopUrl).Start()
-	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", workshopUrl).Start()
-	case "darwin":
-		err = exec.Command("open", workshopUrl).Start()
-	default:
-		err = fmt.Errorf("unsupported platform")
-	}
-
-	if err != nil {
-		return errors.Wrap(err, "unable to open web browser on workshop")
-	}
-
-	return nil
+	return utils.OpenBrowser(workshopUrl)
 }

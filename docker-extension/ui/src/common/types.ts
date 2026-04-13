@@ -25,3 +25,16 @@ export const NullWorkshop: Workshop = {
   source: "",
   status: "",
 };
+
+// API response types
+export type ListResponse = Workshop[];
+
+export interface DeployResponse {
+  ok: boolean;
+  message?: string;
+}
+
+export interface DeleteResponse {
+  ok: boolean;
+  message?: string;
+}

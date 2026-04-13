@@ -13,6 +13,19 @@ To create a local Kubernetes cluster using Kind and deploy Educates, run the com
 educates create-cluster
 ```
 
+Selecting the Kubernetes version
+--------------------------------
+
+By default, the local Kubernetes cluster is created using Kubernetes version ``1.34``. You can select a different version using the ``--kubernetes-version`` flag:
+
+```
+educates local cluster create --kubernetes-version 1.35
+```
+
+The supported versions are: ``1.32``, ``1.33``, ``1.34``, ``1.35``.
+
+If you need to use a specific Kind node image rather than a predefined version, you can use the lower-level ``--kind-cluster-image`` flag to supply the full image reference directly. This overrides ``--kubernetes-version`` when both are provided.
+
 Deleting the cluster
 --------------------
 
@@ -50,6 +63,31 @@ educates local config view
 ```
 
 You can also supply a YAML data values file via the `--config` option when running the `educates create-cluster` command, however by doing so any secrets in the local secrets cache will not be automatically copied to the cluster.
+
+Applying installer overlays
+----------------------------
+
+Installer overlays allow you to apply additional ytt patches on top of the default Educates installer configuration without forking the installer bundle. This is useful for customising the installation for a specific environment or organisation without maintaining a full custom bundle.
+
+Overlays are OCI image references to imgpkg bundles. Each bundle's root directory is passed to the ytt template phase after the base installer templates, so later entries override or extend earlier ones.
+
+To use overlays, add the following to your local Educates configuration via ``educates local config edit``:
+
+```yaml
+installerImages:
+  overlays:
+    - "registry.example.com/my-org/educates-overlays:v1"
+    - "registry.example.com/my-org/extra-patches:latest"
+```
+
+You can also replace the entire installer bundle with a custom one:
+
+```yaml
+installerImages:
+  bundle: "registry.example.com/my-org/custom-installer-bundle:v1"
+```
+
+Both options can be used together. For full details, see the :ref:`configuration-settings` documentation.
 
 Local image registry
 --------------------
@@ -188,14 +226,14 @@ $ curl -v www.educates-local-dev.test
 > Host: www.educates-local-dev.test
 > User-Agent: curl/7.79.1
 > Accept: */*
-> 
+>
 * Mark bundle as not supporting multiuse
 < HTTP/1.1 404 Not Found
 < vary: Accept-Encoding
 < date: Fri, 25 Mar 2022 03:07:19 GMT
 < server: envoy
 < content-length: 0
-< 
+<
 * Connection #0 to host www.educates-local-dev.test left intact
 ```
 
@@ -287,10 +325,172 @@ To delete a local registry mirror, run:
 educates local mirror delete ghcr.io
 ```
 
-This will stop and remove the mirror container and clean up the configuration from the cluster. 
+This will stop and remove the mirror container and clean up the configuration from the cluster.
 
 As pointed out earlier, if the mirror configuration exists in the local cluster's configuration, if the Educates local cluster is recreated then the mirror will be recreated as well.
 
+Multi-node clusters
+-------------------
+
+By default, Educates creates a local Kind cluster with a single control-plane node. For testing scenarios that require multiple nodes, such as workload isolation, resource management, or simulating production-like environments, you can configure the cluster to include additional worker nodes.
+
+### Default behavior
+
+When no node configuration is provided, Educates automatically creates a cluster with:
+- 1 control-plane node
+- The `ingress-ready=true` label (required for ingress controller)
+- Port mappings for HTTP (80) and HTTPS (443)
+
+### Configuring multiple nodes
+
+To create a multi-node cluster, add a `nodes` section to your local cluster configuration. You can do this by running `educates local config edit` and adding configuration like:
+
+```yaml
+localKindCluster:
+  nodes:
+    - role: control-plane
+      labels:
+        environment: dev
+        node-type: control
+    - role: worker
+      labels:
+        tier: frontend
+        workload-type: web
+    - role: worker
+      labels:
+        tier: backend
+        workload-type: api
+```
+
+Or create a configuration file and use it when creating the cluster:
+
+```
+educates create-cluster --config multi-node-config.yaml
+```
+
+### Node configuration constraints
+
+When configuring nodes, the following constraints apply:
+
+- **Exactly 1 control-plane node** is required (if none is specified, one will be created automatically)
+- **Maximum 5 worker nodes** are allowed
+- Valid node roles are: `control-plane` or `worker`
+
+### Adding labels to nodes
+
+You can add custom labels to nodes to organize and identify them. Labels are key-value pairs that can be used with Kubernetes node selectors and affinity rules.
+
+```yaml
+localKindCluster:
+  nodes:
+    - role: control-plane
+      labels:
+        environment: production
+        region: local
+    - role: worker
+      labels:
+        tier: frontend
+        disk-type: ssd
+    - role: worker
+      labels:
+        tier: backend
+        disk-type: hdd
+```
+
+The control-plane node will automatically have the `ingress-ready: true` label added in addition to any custom labels you specify.
+
+### Adding taints to nodes
+
+Taints allow you to mark nodes so that only pods with matching tolerations can be scheduled on them. This is useful for dedicating nodes to specific workloads.
+
+```yaml
+localKindCluster:
+  nodes:
+    - role: control-plane
+    - role: worker
+      labels:
+        tier: frontend
+    - role: worker
+      labels:
+        tier: backend
+      taints:
+        - key: dedicated
+          value: backend
+          effect: NoSchedule
+    - role: worker
+      labels:
+        tier: database
+      taints:
+        - key: dedicated
+          value: database
+          effect: NoSchedule
+        - key: storage
+          value: "true"
+          effect: NoExecute
+```
+
+Valid taint effects are:
+- `NoSchedule`: Pods will not be scheduled on the node unless they have a matching toleration
+- `PreferNoSchedule`: Kubernetes will try to avoid scheduling pods on the node, but it's not required
+- `NoExecute`: Existing pods without matching tolerations will be evicted from the node
+
+### Registry and mirror configuration
+
+When you create a multi-node cluster, the local image registry and any configured registry mirrors are automatically configured on **all nodes** (both control-plane and workers). This ensures that all nodes can pull images from the local registry and benefit from cached images in the mirrors.
+
+You don't need to do anything special - the registry configuration at `/etc/containerd/certs.d/` is automatically applied to every node in the cluster when the cluster is created.
+
+### Example: Complete multi-node configuration
+
+Here's a complete example showing a 4-node cluster with labels, taints, and registry mirrors:
+
+```yaml
+localKindCluster:
+  nodes:
+    - role: control-plane
+      labels:
+        environment: dev
+        node-type: control
+    - role: worker
+      labels:
+        tier: frontend
+        workload-type: web
+    - role: worker
+      labels:
+        tier: backend
+        workload-type: api
+      taints:
+        - key: dedicated
+          value: backend
+          effect: NoSchedule
+    - role: worker
+      labels:
+        tier: database
+        workload-type: database
+      taints:
+        - key: dedicated
+          value: database
+          effect: NoSchedule
+  registryMirrors:
+    - mirror: ghcr.io
+    - mirror: docker.io
+      url: registry-1.docker.io
+```
+
+This configuration creates:
+- 1 control-plane node with custom labels
+- 1 frontend worker (no taints - accepts all workloads)
+- 1 backend worker with a taint requiring pods to tolerate `dedicated=backend:NoSchedule`
+- 1 database worker with a taint requiring pods to tolerate `dedicated=database:NoSchedule`
+- Registry mirrors for GitHub Container Registry and Docker Hub configured on all nodes
+
+### Viewing node information
+
+After creating a multi-node cluster, you can view detailed information about the cluster status and all the nodes including their labels and taints by running:
+
+```
+educates local cluster status
+```
 
 Customize local pod and service CIDRs
 -------------------------------------

@@ -27,219 +27,217 @@ import (
 
 var secretsCacheDir = path.Join(utils.GetEducatesHomeDir(), "secrets")
 
-const secretsNS = "educates-secrets"
+var secretNameRegex = regexp.MustCompile(`^[a-z0-9]([.a-z0-9-]+)?[a-z0-9]$`)
 
-func LocalCachedSecretForIngressDomain(domain string) string {
+func validateSecretName(name string) error {
+	if !secretNameRegex.MatchString(name) {
+		return errors.New("invalid secret name")
+	}
+	return nil
+}
+
+// iterateSecretFiles calls fn for every .yaml file in secretsCacheDir.
+// Iteration stops early if fn returns a non-nil sentinel value; any other
+// non-nil error is returned to the caller.
+func iterateSecretFiles(fn func(name string, secret *apiv1.Secret) error) error {
 	files, err := os.ReadDir(secretsCacheDir)
-
 	if err != nil {
-		return ""
+		return errors.Wrapf(err, "unable to read secrets cache directory %q", secretsCacheDir)
 	}
 
 	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".yaml") {
-			name := strings.TrimSuffix(f.Name(), ".yaml")
-			secretObj, err := decodeFileIntoSecret(f.Name())
-			if err != nil {
-				continue
-			}
-
-			annotations := secretObj.ObjectMeta.Annotations
-
-			// Domain name must match.
-			if val, found := annotations[constants.EducatesTrainingLabelAnnotationDomain]; !found || val != domain {
-				continue
-			}
-
-			// Type of secret needs to be kubernetes.io/tls.
-			if secretObj.Type != "kubernetes.io/tls" {
-				continue
-			}
-
-			// Needs contain tls.crt and tls.key data.
-			if value, exists := secretObj.Data["tls.crt"]; !exists || len(value) == 0 {
-				continue
-			}
-
-			if value, exists := secretObj.Data["tls.key"]; !exists || len(value) == 0 {
-				continue
-			}
-
-			return name
+		if !strings.HasSuffix(f.Name(), ".yaml") {
+			continue
+		}
+		name := strings.TrimSuffix(f.Name(), ".yaml")
+		secretObj, err := decodeFileIntoSecret(f.Name())
+		if err != nil {
+			continue
+		}
+		if err := fn(name, secretObj); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	return ""
+// secretHasKey returns true when key is present and non-empty in either the
+// binary Data map or the plain-text StringData map.
+func secretHasKey(secret *apiv1.Secret, key string) bool {
+	if v, ok := secret.Data[key]; ok && len(v) > 0 {
+		return true
+	}
+	if v, ok := secret.StringData[key]; ok && len(v) > 0 {
+		return true
+	}
+	return false
+}
+
+func writeSecretToCache(name string, secret *apiv1.Secret) error {
+	secretData, err := json.MarshalIndent(secret, "", "    ")
+	if err != nil {
+		return errors.Wrap(err, "failed to generate secret data")
+	}
+
+	secretData, err = yaml.JSONToYAML(secretData)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate YAML data")
+	}
+
+	if err := os.MkdirAll(secretsCacheDir, os.ModePerm); err != nil {
+		return errors.Wrapf(err, "unable to create secrets cache directory")
+	}
+
+	secretFilePath := path.Join(secretsCacheDir, name+".yaml")
+
+	secretFile, err := os.OpenFile(secretFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
+	if err != nil {
+		return errors.Wrapf(err, "unable to create secret file %s", secretFilePath)
+	}
+	defer secretFile.Close()
+
+	if _, err := secretFile.Write(secretData); err != nil {
+		return errors.Wrapf(err, "unable to write secret file %s", secretFilePath)
+	}
+
+	return nil
+}
+
+func LocalCachedSecretForIngressDomain(domain string) string {
+	var found string
+	iterateSecretFiles(func(name string, secret *apiv1.Secret) error { //nolint:errcheck
+		annotations := secret.ObjectMeta.Annotations
+
+		// Domain name must match.
+		if val := annotations[constants.EducatesTrainingLabelAnnotationDomain]; val != domain {
+			return nil
+		}
+
+		// Type of secret needs to be kubernetes.io/tls.
+		if secret.Type != apiv1.SecretTypeTLS {
+			return nil
+		}
+
+		// Needs to contain tls.crt and tls.key data.
+		if !secretHasKey(secret, "tls.crt") || !secretHasKey(secret, "tls.key") {
+			return nil
+		}
+
+		found = name
+		return errors.New("stop") // sentinel to stop iteration
+	})
+	return found
 }
 
 func LocalCachedSecretForCertificateAuthority(domain string) string {
-	files, err := os.ReadDir(secretsCacheDir)
+	var found string
+	iterateSecretFiles(func(name string, secret *apiv1.Secret) error { //nolint:errcheck
+		annotations := secret.ObjectMeta.Annotations
 
-	if err != nil {
-		return ""
-	}
-
-	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".yaml") {
-			name := strings.TrimSuffix(f.Name(), ".yaml")
-			secretObj, err := decodeFileIntoSecret(f.Name())
-			if err != nil {
-				continue
-			}
-
-			annotations := secretObj.ObjectMeta.Annotations
-
-			// Domain name must match.
-			if val, found := annotations[constants.EducatesTrainingLabelAnnotationDomain]; !found || val != domain {
-				continue
-			}
-
-			// Type of secret needs to be Opaque.
-			if secretObj.Type != "Opaque" && secretObj.Type != "" {
-				continue
-			}
-
-			// Needs contain ca.crt data.
-			if value, exists := secretObj.Data["ca.crt"]; !exists || len(value) == 0 {
-				continue
-			}
-
-			return name
+		// Domain name must match.
+		if val := annotations[constants.EducatesTrainingLabelAnnotationDomain]; val != domain {
+			return nil
 		}
-	}
 
-	return ""
+		// Type of secret needs to be Opaque (or unset).
+		if secret.Type != apiv1.SecretTypeOpaque && secret.Type != "" {
+			return nil
+		}
+
+		// Needs to contain ca.crt data.
+		if !secretHasKey(secret, "ca.crt") {
+			return nil
+		}
+
+		found = name
+		return errors.New("stop") // sentinel to stop iteration
+	})
+	return found
 }
 
 /**
  * SyncSecretsToCluster copies secrets from the local cache to the cluster.
  */
 func SyncLocalCachedSecretsToCluster(client *kubernetes.Clientset) error {
-	err := os.MkdirAll(secretsCacheDir, os.ModePerm)
-
-	if err != nil {
+	if err := os.MkdirAll(secretsCacheDir, os.ModePerm); err != nil {
 		return errors.Wrapf(err, "unable to create secrets cache directory")
 	}
 
 	namespacesClient := client.CoreV1().Namespaces()
 
-	_, err = namespacesClient.Get(context.TODO(), secretsNS, metav1.GetOptions{})
-
+	_, err := namespacesClient.Get(context.TODO(), constants.EducatesSecretsNamespace, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		namespaceObj := apiv1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: secretsNS,
+				Name: constants.EducatesSecretsNamespace,
 			},
 		}
-
 		namespacesClient.Create(context.TODO(), &namespaceObj, metav1.CreateOptions{})
 	}
 
-	secretsClient := client.CoreV1().Secrets(secretsNS)
+	secretsClient := client.CoreV1().Secrets(constants.EducatesSecretsNamespace)
 
-	files, err := os.ReadDir(secretsCacheDir)
+	return iterateSecretFiles(func(name string, secretObj *apiv1.Secret) error {
+		secretObj.ObjectMeta.Namespace = ""
 
-	if err != nil {
-		return errors.Wrapf(err, "unable to read secrets cache directory %q", secretsCacheDir)
-	}
+		_, err := secretsClient.Get(context.TODO(), name, metav1.GetOptions{})
 
-	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".yaml") {
-			name := strings.TrimSuffix(f.Name(), ".yaml")
-			secretObj, err := decodeFileIntoSecret(f.Name())
-			if err != nil {
-				return err
+		// Create the secret if it doesn't exist.
+		if err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return errors.Wrap(err, "unable to read secrets from cluster")
 			}
-
-			secretObj.ObjectMeta.Namespace = ""
-
-			_, err = secretsClient.Get(context.TODO(), name, metav1.GetOptions{})
-
-			// Create the secret if it doesn't exist.
+			_, err = secretsClient.Create(context.TODO(), secretObj, metav1.CreateOptions{})
 			if err != nil {
-				if !k8serrors.IsNotFound(err) {
-					return errors.Wrap(err, "unable to read secrets from cluster")
-				} else {
-					_, err = secretsClient.Create(context.TODO(), secretObj, metav1.CreateOptions{})
-
-					if err != nil {
-						return errors.Wrapf(err, "unable to copy secret to cluster %q", name)
-					}
-				}
-				// Update the secret if it does exist.
-			} else {
-				var patch *applycorev1.SecretApplyConfiguration
-
-				if len(secretObj.StringData) != 0 {
-					patch = applycorev1.Secret(name, secretsNS).WithType(secretObj.Type).WithStringData(secretObj.StringData)
-				} else {
-					patch = applycorev1.Secret(name, secretsNS).WithType(secretObj.Type).WithData(secretObj.Data)
-				}
-
-				_, err = secretsClient.Apply(context.TODO(), patch, metav1.ApplyOptions{FieldManager: constants.DefaultPortalName, Force: true})
-
-				if err != nil {
-					return errors.Wrapf(err, "unable to update secret in cluster %q", name)
-				}
+				return errors.Wrapf(err, "unable to copy secret to cluster %q", name)
 			}
+			return nil
 		}
-	}
 
-	return nil
+		// Update the secret if it does exist.
+		var patch *applycorev1.SecretApplyConfiguration
+		if len(secretObj.StringData) != 0 {
+			patch = applycorev1.Secret(name, constants.EducatesSecretsNamespace).WithType(secretObj.Type).WithStringData(secretObj.StringData)
+		} else {
+			patch = applycorev1.Secret(name, constants.EducatesSecretsNamespace).WithType(secretObj.Type).WithData(secretObj.Data)
+		}
+
+		_, err = secretsClient.Apply(context.TODO(), patch, metav1.ApplyOptions{FieldManager: constants.DefaultPortalName, Force: true})
+		if err != nil {
+			return errors.Wrapf(err, "unable to update secret in cluster %q", name)
+		}
+		return nil
+	})
 }
 
 func List() (string, error) {
-	secretsCacheDir := path.Join(utils.GetEducatesHomeDir(), "secrets")
-
-	err := os.MkdirAll(secretsCacheDir, os.ModePerm)
-
-	if err != nil {
+	if err := os.MkdirAll(secretsCacheDir, os.ModePerm); err != nil {
 		return "", errors.Wrapf(err, "unable to create secrets cache directory")
 	}
 
-	files, err := os.ReadDir(secretsCacheDir)
-
-	if err != nil {
-		return "", errors.Wrapf(err, "unable to read secrets cache directory")
-	}
-
 	var data [][]string
-	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".yaml") {
-			name := strings.TrimSuffix(f.Name(), ".yaml")
-			secretObj, err := decodeFileIntoSecret(f.Name())
-			if err != nil {
-				continue
-			}
+	iterateSecretFiles(func(name string, secretObj *apiv1.Secret) error { //nolint:errcheck
+		annotations := secretObj.ObjectMeta.Annotations
+		domain := annotations[constants.EducatesTrainingLabelAnnotationDomain]
+		secretObjType := secretType(secretObj.Type)
+		dataKeys := secretDataKeys(secretObj.Data, secretObj.StringData)
+		data = append(data, []string{name, secretObjType, dataKeys, domain})
+		return nil
+	})
 
-			annotations := secretObj.ObjectMeta.Annotations
-			domain := annotations[constants.EducatesTrainingLabelAnnotationDomain]
-			secretObjType := secretType(secretObj.Type)
-			dataKeys := secretDataKeys(secretObj.Data, secretObj.StringData)
-			data = append(data, []string{name, secretObjType, dataKeys, domain})
-		}
-	}
 	return utils.PrintTable([]string{"NAME", "TYPE", "KEYS", "DOMAIN"}, data), nil
 }
 
 func AddTLSSecret(name, certFile, keyFile, ingressDomain string, asString bool) error {
+	if err := validateSecretName(name); err != nil {
+		return err
+	}
+
+	var certificateFileData, certificateKeyFileData []byte
 	var err error
-	var matched bool
-
-	if matched, err = regexp.MatchString("^[a-z0-9]([.a-z0-9-]+)?[a-z0-9]$", name); err != nil {
-		return errors.Wrapf(err, "regex match on secret name failed")
-	}
-
-	if !matched {
-		return errors.New("invalid secret name")
-	}
-
-	var certificateFileData []byte
-	var certificateKeyFileData []byte
 
 	if certFile != "" {
 		certificateFileData, err = os.ReadFile(certFile)
-
 		if err != nil {
 			return errors.Wrapf(err, "failed to read certificate file %s", certFile)
 		}
@@ -247,7 +245,6 @@ func AddTLSSecret(name, certFile, keyFile, ingressDomain string, asString bool) 
 
 	if keyFile != "" {
 		certificateKeyFileData, err = os.ReadFile(keyFile)
-
 		if err != nil {
 			return errors.Wrapf(err, "failed to read certificate key file %s", keyFile)
 		}
@@ -258,7 +255,7 @@ func AddTLSSecret(name, certFile, keyFile, ingressDomain string, asString bool) 
 			Name:        name,
 			Annotations: map[string]string{},
 		},
-		Type: "kubernetes.io/tls",
+		Type: apiv1.SecretTypeTLS,
 	}
 	if asString {
 		secret.StringData = map[string]string{
@@ -276,62 +273,19 @@ func AddTLSSecret(name, certFile, keyFile, ingressDomain string, asString bool) 
 		secret.ObjectMeta.Annotations[constants.EducatesTrainingLabelAnnotationDomain] = ingressDomain
 	}
 
-	secretData, err := json.MarshalIndent(&secret, "", "    ")
-
-	if err != nil {
-		return errors.Wrap(err, "failed to generate secret data")
-	}
-
-	secretData, err = yaml.JSONToYAML(secretData)
-
-	if err != nil {
-		return errors.Wrap(err, "failed to generate YAML data")
-	}
-
-	secretsCacheDir := path.Join(utils.GetEducatesHomeDir(), "secrets")
-
-	err = os.MkdirAll(secretsCacheDir, os.ModePerm)
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to create secrets cache directory")
-	}
-
-	secretFilePath := path.Join(secretsCacheDir, name+".yaml")
-
-	secretFile, err := os.OpenFile(secretFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to create secret file %s", secretFilePath)
-	}
-
-	if _, err := secretFile.Write(secretData); err != nil {
-		return errors.Wrapf(err, "unable to write secret file %s", secretFilePath)
-	}
-
-	if err := secretFile.Close(); err != nil {
-		return errors.Wrapf(err, "unable to close secret file %s", secretFilePath)
-	}
-
-	return nil
+	return writeSecretToCache(name, secret)
 }
 
 func AddCASecret(name, certFile, ingressDomain string, asString bool) error {
-	var err error
-	var matched bool
-
-	if matched, err = regexp.MatchString("^[a-z0-9]([.a-z0-9-]+)?[a-z0-9]$", name); err != nil {
-		return errors.Wrapf(err, "regex match on secret name failed")
-	}
-
-	if !matched {
-		return errors.New("invalid secret name")
+	if err := validateSecretName(name); err != nil {
+		return err
 	}
 
 	var certificateFileData []byte
+	var err error
 
 	if certFile != "" {
 		certificateFileData, err = os.ReadFile(certFile)
-
 		if err != nil {
 			return errors.Wrapf(err, "failed to read certificate file %s", certFile)
 		}
@@ -342,7 +296,6 @@ func AddCASecret(name, certFile, ingressDomain string, asString bool) error {
 			Name:        name,
 			Annotations: map[string]string{},
 		},
-		// Type: "kubernetes.io/tls",
 	}
 	if asString {
 		secret.StringData = map[string]string{
@@ -358,55 +311,12 @@ func AddCASecret(name, certFile, ingressDomain string, asString bool) error {
 		secret.ObjectMeta.Annotations[constants.EducatesTrainingLabelAnnotationDomain] = ingressDomain
 	}
 
-	secretData, err := json.MarshalIndent(&secret, "", "    ")
-
-	if err != nil {
-		return errors.Wrap(err, "failed to generate secret data")
-	}
-
-	secretData, err = yaml.JSONToYAML(secretData)
-
-	if err != nil {
-		return errors.Wrap(err, "failed to generate YAML data")
-	}
-
-	secretsCacheDir := path.Join(utils.GetEducatesHomeDir(), "secrets")
-
-	err = os.MkdirAll(secretsCacheDir, os.ModePerm)
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to create secrets cache directory")
-	}
-
-	secretFilePath := path.Join(secretsCacheDir, name+".yaml")
-
-	secretFile, err := os.OpenFile(secretFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to create secret file %s", secretFilePath)
-	}
-
-	if _, err := secretFile.Write(secretData); err != nil {
-		return errors.Wrapf(err, "unable to write secret file %s", secretFilePath)
-	}
-
-	if err := secretFile.Close(); err != nil {
-		return errors.Wrapf(err, "unable to close secret file %s", secretFilePath)
-	}
-
-	return nil
+	return writeSecretToCache(name, secret)
 }
 
 func AddRegistrySecret(name, server, username, password, email string, asString bool) error {
-	var err error
-	var matched bool
-
-	if matched, err = regexp.MatchString("^[a-z0-9]([.a-z0-9-]+)?[a-z0-9]$", name); err != nil {
-		return errors.Wrapf(err, "regex match on secret name failed")
-	}
-
-	if !matched {
-		return errors.New("invalid secret name")
+	if err := validateSecretName(name); err != nil {
+		return err
 	}
 
 	authString := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
@@ -422,13 +332,16 @@ func AddRegistrySecret(name, server, username, password, email string, asString 
 		},
 	}
 
-	dockerConfigData, _ := json.Marshal(dockerConfig)
+	dockerConfigData, err := json.Marshal(dockerConfig)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate docker config data")
+	}
 
 	secret := &apiv1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
-		Type: apiv1.SecretTypeDockerConfigJson, // Use the built-in constant
+		Type: apiv1.SecretTypeDockerConfigJson,
 	}
 
 	if asString {
@@ -441,43 +354,7 @@ func AddRegistrySecret(name, server, username, password, email string, asString 
 		}
 	}
 
-	secretData, err := json.MarshalIndent(&secret, "", "    ")
-
-	if err != nil {
-		return errors.Wrap(err, "failed to generate secret data")
-	}
-
-	secretData, err = yaml.JSONToYAML(secretData)
-
-	if err != nil {
-		return errors.Wrap(err, "failed to generate YAML data")
-	}
-
-	secretsCacheDir := path.Join(utils.GetEducatesHomeDir(), "secrets")
-
-	err = os.MkdirAll(secretsCacheDir, os.ModePerm)
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to create secrets cache directory")
-	}
-
-	secretFilePath := path.Join(secretsCacheDir, name+".yaml")
-
-	secretFile, err := os.OpenFile(secretFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
-
-	if err != nil {
-		return errors.Wrapf(err, "unable to create secret file %s", secretFilePath)
-	}
-
-	if _, err = secretFile.Write(secretData); err != nil {
-		return errors.Wrapf(err, "unable to write secret file %s", secretFilePath)
-	}
-
-	if err := secretFile.Close(); err != nil {
-		return errors.Wrapf(err, "unable to close secret file %s", secretFilePath)
-	}
-
-	return nil
+	return writeSecretToCache(name, secret)
 }
 
 func decodeFileIntoSecret(fileName string) (*apiv1.Secret, error) {
@@ -498,22 +375,14 @@ func decodeFileIntoSecret(fileName string) (*apiv1.Secret, error) {
 }
 
 func secretDataKeys(d map[string][]byte, s map[string]string) string {
-	// 1. Collect all keys into a single slice
-	// Pre-allocate memory for efficiency
 	keys := make([]string, 0, len(d)+len(s))
-
 	for k := range d {
 		keys = append(keys, k)
 	}
 	for k := range s {
 		keys = append(keys, k)
 	}
-
-	// 2. Sort the keys alphabetically
-	// This makes the output deterministic and easier to read/test
 	sort.Strings(keys)
-
-	// 3. Join them with a comma and space
 	return strings.Join(keys, ", ")
 }
 
@@ -521,13 +390,13 @@ func secretType(t apiv1.SecretType) string {
 	switch t {
 	case apiv1.SecretTypeTLS:
 		return "TLS"
-	case apiv1.SecretTypeOpaque:
+	case apiv1.SecretTypeDockerConfigJson:
+		return "Registry"
+	case apiv1.SecretTypeOpaque, "":
 		return "Opaque"
-	// You can easily add more cases as needed
 	case apiv1.SecretTypeServiceAccountToken:
 		return "Service Account Token"
 	default:
-		// Defaulting to Opaque is standard K8s behavior
-		return "Opaque"
+		return string(t)
 	}
 }

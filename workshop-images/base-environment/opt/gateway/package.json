@@ -48,7 +48,7 @@
     "simple-oauth2": "^5.0.0",
     "split.js": "^1.6.5",
     "utf-8-validate": "^6.0.3",
-    "uuid": "^9.0.1",
+    "uuid": "^14.0.0",
     "winston": "^3.11.0",
     "ws": "^8.17.1",
     "@xterm/xterm": "^5.5.0",

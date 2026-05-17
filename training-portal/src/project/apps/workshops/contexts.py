@@ -11,6 +11,7 @@ def portal(request):
     context = {}
     context["portal_title"] = settings.PORTAL_TITLE
     context["portal_logo"] = settings.PORTAL_LOGO
+    context["portal_favicon"] = settings.PORTAL_FAVICON
     context["google_tracking_id"] = settings.GOOGLE_TRACKING_ID
     context["clarity_tracking_id"] = settings.CLARITY_TRACKING_ID
     context["amplitude_tracking_id"] = settings.AMPLITUDE_TRACKING_ID

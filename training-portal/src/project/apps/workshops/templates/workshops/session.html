@@ -9,7 +9,11 @@
     <link rel="stylesheet" href="{% static "styles/bootstrap.min.css" %}" crossorigin="anonymous">
     <link rel="stylesheet" href="{% static "workshops/styles/session.css" %}" crossorigin="anonymous">
     <link rel="stylesheet" href="{% static "workshops/theme/training-portal.css" %}" crossorigin="anonymous">
+    {% if portal_favicon %}
+    <link rel="shortcut icon" href="{{ portal_favicon | escape }}"/>
+    {% else %}
     <link rel="shortcut icon" href="{% static "images/favicon.ico" %}"/>
+    {% endif %}
 
     {% if google_tracking_id %}
     <script async src="https://www.googletagmanager.com/gtag/js?id={{ google_tracking_id }}" nonce={{ request.csp_nonce }}></script>

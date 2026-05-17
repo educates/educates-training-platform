@@ -1,4 +1,5 @@
 import * as express from "express"
+import * as fs from "fs"
 import * as http from "http"
 import * as path from "path"
 import * as WebSocket from "ws"
@@ -9,6 +10,10 @@ import * as pty from "node-pty"
 import { IPty } from "node-pty"
 
 const BASEDIR = path.dirname(path.dirname(path.dirname(__dirname)))
+
+const favicon_url = fs.existsSync("/opt/eduk8s/theme/favicon.ico")
+    ? "/static/theme/favicon.ico"
+    : "/static/images/favicon.ico"
 
 enum TerminalsPacketType {
     HELLO,
@@ -387,6 +392,6 @@ export function setup_terminals(app: express.Application, server: http.Server) {
     app.get("/terminal/session/:session_id", (req, res) => {
         let session_id = req.params.session_id || "1"
 
-        res.render("terminal-page", { session_id: session_id })
+        res.render("terminal-page", { session_id: session_id, favicon_url: favicon_url })
     })
 }

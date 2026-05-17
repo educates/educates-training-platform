@@ -64,6 +64,10 @@ function load_head_html() {
     return fs.readFileSync(html_pathname, "utf8")
 }
 
+const favicon_url = fs.existsSync("/opt/eduk8s/theme/favicon.ico")
+    ? "/workshop/static/theme/favicon.ico"
+    : "/workshop/static/images/favicon.ico"
+
 router.get("/workshop/content/:pathname(*)", async function (req, res, next) {
     // Only allow a .html extension if an extension is supplied with the
     // request path. This is for compatability with previous rendering system.
@@ -97,6 +101,7 @@ router.get("/workshop/content/:pathname(*)", async function (req, res, next) {
                     module: module,
                     modules: modules,
                     workshop_head_html: load_head_html(),
+                    favicon_url: favicon_url,
                 }
 
                 return res.render("content-page", options)

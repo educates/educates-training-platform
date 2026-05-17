@@ -35,6 +35,10 @@ function load_finished_html() {
     return fs.readFileSync(html_pathname, "utf8")
 }
 
+const favicon_url = fs.existsSync("/opt/eduk8s/theme/favicon.ico")
+    ? "/static/theme/favicon.ico"
+    : "/static/images/favicon.ico"
+
 export function setup_dashboard(app: express.Application, oauth2_client: any) {
     if (!config.enable_dashboard)
         return
@@ -91,6 +95,7 @@ export function setup_dashboard(app: express.Application, oauth2_client: any) {
         locals["workshop_head_html"] = load_head_html()
         locals["workshop_started_html"] = load_started_html()
         locals["workshop_finished_html"] = load_finished_html()
+        locals["favicon_url"] = favicon_url
 
         res.render("dashboard-page", locals)
     })

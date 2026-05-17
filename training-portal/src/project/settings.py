@@ -179,6 +179,11 @@ if os.path.exists(portal_log_path):
     with open(portal_log_path) as fp:
         PORTAL_LOGO = fp.read()
 
+PORTAL_FAVICON = None
+
+if os.path.exists("/opt/app-root/static/theme/favicon.ico"):
+    PORTAL_FAVICON = "/static/workshops/theme/favicon.ico"
+
 GOOGLE_TRACKING_ID = os.environ.get("GOOGLE_TRACKING_ID", "")
 CLARITY_TRACKING_ID = os.environ.get("CLARITY_TRACKING_ID", "")
 AMPLITUDE_TRACKING_ID = os.environ.get("AMPLITUDE_TRACKING_ID", "")

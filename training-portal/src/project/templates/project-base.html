@@ -9,7 +9,11 @@
     {% endblock %}
     <link rel="stylesheet" href="{% static "styles/bootstrap.min.css" %}" crossorigin="anonymous">
     <link rel="stylesheet" href="{% static "styles/project.css" %}" crossorigin="anonymous">
+    {% if portal_favicon %}
+    <link rel="shortcut icon" href="{{ portal_favicon | escape }}"/>
+    {% else %}
     <link rel="shortcut icon" href="{% static "images/favicon.ico" %}"/>
+    {% endif %}
     <title>{{ portal_title | escape }}</title>
     {% block head_styles %}
     {% endblock %}

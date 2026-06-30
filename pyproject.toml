@@ -1,0 +1,35 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = [
+    "venv",
+    ".venv",
+    "__pycache__",
+    "*.egg-info",
+    "build",
+    "dist",
+    "node_modules",
+    "project-docs/conf.py",
+    "**/migrations/**",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = [
+    "E501",  # Line too long — handled by formatter
+    "E402",  # Module level import not at top — common in Django settings
+    "E713",  # Test for membership should be 'not in x' — existing style
+    "E721",  # Do not compare types, use isinstance() — existing pattern
+    "F401",  # Unused import — many intentional re-exports in __init__.py
+    "F403",  # Wildcard import — used deliberately in some modules
+    "F811",  # Redefinition of unused name — kopf handler patterns
+    "F841",  # Local variable assigned but never used — may be intentional
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["project", "handlers"]

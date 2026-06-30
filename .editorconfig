@@ -1,0 +1,56 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+# Unix-style newlines with a newline ending every file
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# TypeScript and JavaScript files
+# Note: Formatting rules (semicolons, trailing commas, etc.) are in .prettierrc.json
+# This only sets basic editor indentation
+[*.{ts,tsx,js,jsx}]
+indent_style = space
+indent_size = 4
+
+# JSON files
+# Note: Formatting rules are in .prettierrc.json
+[*.json]
+indent_style = space
+indent_size = 4
+
+# Markdown files
+# Note: Formatting rules are in .prettierrc.json
+[*.md]
+trim_trailing_whitespace = false
+
+# YAML files
+# Note: Prettier CAN format YAML, but it's excluded in .prettierignore
+# because YAML formatting can be sensitive (e.g., Kubernetes manifests)
+# If you want Prettier to format YAML, remove *.yaml and *.yml from .prettierignore
+[*.{yaml,yml}]
+indent_style = space
+indent_size = 2
+
+# Go files (Prettier doesn't format these)
+[*.go]
+indent_style = tab
+indent_size = 4
+
+# Python files (Prettier doesn't format these)
+[*.py]
+indent_style = space
+indent_size = 4
+
+# Shell scripts (Prettier doesn't format these)
+[*.sh]
+indent_style = space
+indent_size = 4
+
+# Makefile
+[Makefile]
+indent_style = tab

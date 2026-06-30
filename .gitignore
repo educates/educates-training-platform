@@ -34,3 +34,7 @@ vendor
 
 # AI Assistant specific files
 .cursor
+
+# Root level Node.js files (for formatting tools only)
+/node_modules
+/package-lock.json

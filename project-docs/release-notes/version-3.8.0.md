@@ -235,3 +235,22 @@ Bugs Fixed
   the time which has elapsed since the workshop session was allocated to the
   user when checking whether a workshop session should be deleted due to
   being orphaned or inactive.
+
+* Every reconcile of the installer created a new version of the
+  ``educates-config`` secret even when the rendered configuration was
+  identical to the previous version, causing a rolling restart of the
+  ``session-manager`` and ``secrets-manager`` operators on every reconcile.
+  This was because the secret is populated using ``stringData``, which the
+  Kubernetes API server converts to ``data`` on the live object, while the
+  ``kapp.k14s.io/original`` annotation was disabled for all resources, so
+  ``kapp`` compared the rendered resource against the live cluster state and
+  treated every deploy as a change to the versioned secret. Versioned
+  resources now retain the ``kapp.k14s.io/original`` annotation so that
+  unchanged deploys are recognised as unchanged, and a new secret version,
+  with the resulting restart of the operators, only occurs when the
+  configuration has actually changed. The ``azure-config-file`` secret used
+  by ``external-dns`` for Azure DNS suffered the same mismatch and is now
+  populated using ``data`` with explicit base64 encoding, and the
+  ``remote-access-token`` service account token secret is no longer
+  re-applied on every reconcile as the token contents populated by
+  Kubernetes are now preserved when calculating changes.

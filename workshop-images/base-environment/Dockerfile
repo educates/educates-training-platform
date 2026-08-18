@@ -13,6 +13,10 @@ FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26 AS k8s-console-buil
 
 ARG TARGETARCH
 
+# Pin the exact Go release: the golang:1.26 image can lag a patch behind,
+# and the current patch carries stdlib security fixes the binary must have.
+ENV GOTOOLCHAIN=go1.26.6
+
 RUN <<EOF
     set -eo pipefail
     DASHBOARD_VERSION=2.7.0
@@ -110,14 +114,18 @@ RUN npm install && \
 
 FROM golang:1.26 as builder-image
 
+# Pin the exact Go release: the golang:1.26 image can lag a patch behind,
+# and the current patch carries stdlib security fixes the binary must have.
+ENV GOTOOLCHAIN=go1.26.6
+
 WORKDIR /app
 
 # git-serve 0.0.5 is the last release its author published, in 2021, so its
 # dependencies are pinned at versions with known vulnerabilities and no newer
-# release will pick up fixes. Bump the flagged modules before building. The
-# release tarball is still checksum pinned, so only the dependency graph
-# moves.
-RUN curl --silent --fail -L -o /tmp/git-serve.tar.gz https://github.com/cirocosta/git-serve/archive/refs/tags/v0.0.5.tar.gz && \
+# release will pick up fixes. Bump the flagged modules before building, the
+# same approach the Kubernetes dashboard backend above uses. The release
+# tarball is still checksum pinned, so only the dependency graph moves.
+RUN curl --silent --fail --retry 3 -L -o /tmp/git-serve.tar.gz https://github.com/cirocosta/git-serve/archive/refs/tags/v0.0.5.tar.gz && \
 echo "09cd14a34f17d88cd4f0d2b73e0bbd0bf56984be21bc947f416a7824a709011e /tmp/git-serve.tar.gz" | sha256sum --check --status && \
     tar xvf /tmp/git-serve.tar.gz && \
     cd git-serve-0.0.5 && \
@@ -127,6 +135,97 @@ echo "09cd14a34f17d88cd4f0d2b73e0bbd0bf56984be21bc947f416a7824a709011e /tmp/git-
         golang.org/x/net@v0.57.0 && \
     go mod tidy && \
     go build -o git-serve cmd/git-serve/main.go
+
+# The bundled vendir, k9s and kustomize releases each carry critical
+# vulnerabilities in their dependency graphs or Go toolchains, and each is
+# already the newest release upstream has published, so there is nothing to
+# upgrade to. Rebuild them from their pinned release sources with a fixed Go
+# toolchain and patched dependencies instead, the same approach used for the
+# dashboard backend and git-serve above. GOTOOLCHAIN pins the exact Go
+# release, so the build does not depend on how fresh the golang base image
+# happens to be.
+FROM --platform=$BUILDPLATFORM golang:1.26 AS vendir-build
+
+ARG TARGETOS
+ARG TARGETARCH
+
+ENV GOTOOLCHAIN=go1.26.6 CGO_ENABLED=0
+
+RUN <<EOF
+    set -eo pipefail
+    VENDIR_VERSION=0.46.0
+    VENDIR_COMMIT=a7fb189b2a1d1be30ccdf0049ae62b17d83240bc
+    # Bounded retry: transient clone failures have repeatedly broken builds.
+    for attempt in 1 2 3; do
+        git clone --depth 1 --branch v${VENDIR_VERSION} https://github.com/carvel-dev/vendir /build && break || { rm -rf /build; sleep 5; }
+    done
+    cd /build
+    test "$(git rev-parse HEAD)" = "${VENDIR_COMMIT}"
+    go get golang.org/x/crypto@v0.54.0 golang.org/x/net@v0.57.0
+    go mod tidy
+    # vendir commits a vendor/ tree, which must be regenerated after the
+    # dependency bumps or the build refuses to run with -mod=vendor.
+    go mod vendor
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
+        -ldflags "-s -w -X carvel.dev/vendir/pkg/vendir/version.Version=${VENDIR_VERSION}" \
+        -o /vendir ./cmd/vendir/...
+EOF
+
+FROM --platform=$BUILDPLATFORM golang:1.26 AS k9s-build
+
+ARG TARGETOS
+ARG TARGETARCH
+
+ENV GOTOOLCHAIN=go1.26.6 CGO_ENABLED=0
+
+RUN <<EOF
+    set -eo pipefail
+    K9S_VERSION=0.51.0
+    K9S_COMMIT=558caafe7ba067467de46b320cc22ef11fef9c34
+    # Bounded retry: transient clone failures have repeatedly broken builds.
+    for attempt in 1 2 3; do
+        git clone --depth 1 --branch v${K9S_VERSION} https://github.com/derailed/k9s /build && break || { rm -rf /build; sleep 5; }
+    done
+    cd /build
+    test "$(git rev-parse HEAD)" = "${K9S_COMMIT}"
+    go get \
+        github.com/containerd/containerd@v1.7.33 \
+        github.com/containerd/containerd/v2@v2.2.5 \
+        github.com/go-git/go-git/v5@v5.19.2 \
+        golang.org/x/crypto@v0.54.0 \
+        golang.org/x/net@v0.57.0 \
+        google.golang.org/grpc@v1.82.1 \
+        oras.land/oras-go/v2@v2.6.2
+    go mod tidy
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
+        -ldflags "-s -w -X github.com/derailed/k9s/cmd.version=v${K9S_VERSION}" \
+        -o /k9s main.go
+EOF
+
+FROM --platform=$BUILDPLATFORM golang:1.26 AS kustomize-build
+
+ARG TARGETOS
+ARG TARGETARCH
+
+ENV GOTOOLCHAIN=go1.26.6 CGO_ENABLED=0
+
+RUN <<EOF
+    set -eo pipefail
+    KUSTOMIZE_VERSION=5.8.1
+    KUSTOMIZE_COMMIT=9790a1c3efd2fd35f1b768d495112834176581c1
+    # Bounded retry: transient clone failures have repeatedly broken builds.
+    for attempt in 1 2 3; do
+        git clone --depth 1 --branch kustomize/v${KUSTOMIZE_VERSION} https://github.com/kubernetes-sigs/kustomize /build && break || { rm -rf /build; sleep 5; }
+    done
+    cd /build
+    test "$(git rev-parse HEAD)" = "${KUSTOMIZE_COMMIT}"
+    cd kustomize
+    go get golang.org/x/text@v0.40.0
+    go mod tidy
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
+        -ldflags "-s -w -X sigs.k8s.io/kustomize/api/provenance.version=v${KUSTOMIZE_VERSION}" \
+        -o /kustomize .
+EOF
 
 FROM system-base AS scratch-image
 
@@ -153,9 +252,9 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    HUGO_VERSION=0.164.0
-    CHECKSUM_amd64="d9c8b17285ea4ec004d9f814273ea910f2051ce02c284993fd1f91ba455ae50d"
-    CHECKSUM_arm64="948ee5f0ed30175f31937d592d63a2712f0761a69f1cbe812f780eb918a08b8e"
+    HUGO_VERSION=0.165.0
+    CHECKSUM_amd64="5c3a37a5450b3e386e5b75a87a790fea2d04a796d75e171216c80ef48a32b432"
+    CHECKSUM_arm64="65c9fdd75e82d5f1eaf565f6e9fede6c0ceecaa267798e10c73068986996b77d"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/hugo.tar.gz https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_linux-${TARGETARCH}.tar.gz
@@ -244,18 +343,8 @@ RUN <<EOF
     rm -f /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz
 EOF
 
-RUN <<EOF
-    K9S_VERSION=0.51.0
-    CHECKSUM_amd64="c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7"
-    CHECKSUM_arm64="3ee05c82e5f9198928a4e86133608ba6a2c10a2244d6a7789e820f78319d640c"
-    CHECKSUM=CHECKSUM_${TARGETARCH}
-    set -eo pipefail
-    curl --silent --fail -L -o /tmp/k9s.tar.gz https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linux_${TARGETARCH}.tar.gz
-    echo "${!CHECKSUM} /tmp/k9s.tar.gz" | sha256sum --check --status
-    tar -C /tmp -zxf /tmp/k9s.tar.gz k9s
-    mv /tmp/k9s /opt/kubernetes/bin/k9s
-    rm /tmp/k9s.tar.gz
-EOF
+# k9s is the patched source rebuild from the k9s-build stage.
+COPY --from=k9s-build /k9s /opt/kubernetes/bin/k9s
 
 RUN <<EOF
     YTT_VERSION=0.55.1
@@ -301,16 +390,8 @@ RUN <<EOF
     chmod +x /opt/kubernetes/bin/kapp
 EOF
 
-RUN <<EOF
-    VENDIR_VERSION=0.46.0
-    CHECKSUM_amd64="878f3c77cae21b9b63d0ea6c11454c0008d41652d2eb3d1844fdcf69cca6ae9e"
-    CHECKSUM_arm64="f80a27f1247ad4353b6054ca9d7e13e2511bf70c0e28d85bc314d2177ec2b0d2"
-    CHECKSUM=CHECKSUM_${TARGETARCH}
-    set -eo pipefail
-    curl --silent --fail -L -o /opt/kubernetes/bin/vendir https://github.com/carvel-dev/vendir/releases/download/v${VENDIR_VERSION}/vendir-linux-${TARGETARCH}
-    echo "${!CHECKSUM} /opt/kubernetes/bin/vendir" | sha256sum --check --status
-    chmod +x /opt/kubernetes/bin/vendir
-EOF
+# vendir is the patched source rebuild from the vendir-build stage.
+COPY --from=vendir-build /vendir /opt/kubernetes/bin/vendir
 
 RUN <<EOF
     HELM_VERSION=4.2.3
@@ -335,17 +416,8 @@ RUN <<EOF
     chmod +x /opt/kubernetes/bin/skaffold
 EOF
 
-RUN <<EOF
-    KUSTOMIZE_VERSION=5.8.1
-    CHECKSUM_amd64="029a7f0f4e1932c52a0476cf02a0fd855c0bb85694b82c338fc648dcb53a819d"
-    CHECKSUM_arm64="0953ea3e476f66d6ddfcd911d750f5167b9365aa9491b2326398e289fef2c142"
-    CHECKSUM=CHECKSUM_${TARGETARCH}
-    set -eo pipefail
-    curl --silent --fail -L -o /tmp/kustomize.tar.gz https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_${TARGETARCH}.tar.gz
-    echo "${!CHECKSUM} /tmp/kustomize.tar.gz" | sha256sum --check --status
-    tar -C /opt/kubernetes/bin -zxvf /tmp/kustomize.tar.gz kustomize
-    rm /tmp/kustomize.tar.gz
-EOF
+# kustomize is the patched source rebuild from the kustomize-build stage.
+COPY --from=kustomize-build /kustomize /opt/kubernetes/bin/kustomize
 
 # VS Code editor and dashboard extension.
 # Make sure when updating that AI features are disabled and working https://github.com/coder/code-server/issues/7540

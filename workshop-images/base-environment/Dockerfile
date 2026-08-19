@@ -125,7 +125,7 @@ WORKDIR /app
 # release will pick up fixes. Bump the flagged modules before building, the
 # same approach the Kubernetes dashboard backend above uses. The release
 # tarball is still checksum pinned, so only the dependency graph moves.
-RUN curl --silent --fail --retry 3 -L -o /tmp/git-serve.tar.gz https://github.com/cirocosta/git-serve/archive/refs/tags/v0.0.5.tar.gz && \
+RUN curl --silent --fail -L -o /tmp/git-serve.tar.gz https://github.com/cirocosta/git-serve/archive/refs/tags/v0.0.5.tar.gz && \
 echo "09cd14a34f17d88cd4f0d2b73e0bbd0bf56984be21bc947f416a7824a709011e /tmp/git-serve.tar.gz" | sha256sum --check --status && \
     tar xvf /tmp/git-serve.tar.gz && \
     cd git-serve-0.0.5 && \
@@ -155,10 +155,7 @@ RUN <<EOF
     set -eo pipefail
     VENDIR_VERSION=0.46.0
     VENDIR_COMMIT=a7fb189b2a1d1be30ccdf0049ae62b17d83240bc
-    # Bounded retry: transient clone failures have repeatedly broken builds.
-    for attempt in 1 2 3; do
-        git clone --depth 1 --branch v${VENDIR_VERSION} https://github.com/carvel-dev/vendir /build && break || { rm -rf /build; sleep 5; }
-    done
+    git clone --depth 1 --branch v${VENDIR_VERSION} https://github.com/carvel-dev/vendir /build
     cd /build
     test "$(git rev-parse HEAD)" = "${VENDIR_COMMIT}"
     go get golang.org/x/crypto@v0.54.0 golang.org/x/net@v0.57.0
@@ -182,10 +179,7 @@ RUN <<EOF
     set -eo pipefail
     K9S_VERSION=0.51.0
     K9S_COMMIT=558caafe7ba067467de46b320cc22ef11fef9c34
-    # Bounded retry: transient clone failures have repeatedly broken builds.
-    for attempt in 1 2 3; do
-        git clone --depth 1 --branch v${K9S_VERSION} https://github.com/derailed/k9s /build && break || { rm -rf /build; sleep 5; }
-    done
+    git clone --depth 1 --branch v${K9S_VERSION} https://github.com/derailed/k9s /build
     cd /build
     test "$(git rev-parse HEAD)" = "${K9S_COMMIT}"
     go get \
@@ -213,10 +207,7 @@ RUN <<EOF
     set -eo pipefail
     KUSTOMIZE_VERSION=5.8.1
     KUSTOMIZE_COMMIT=9790a1c3efd2fd35f1b768d495112834176581c1
-    # Bounded retry: transient clone failures have repeatedly broken builds.
-    for attempt in 1 2 3; do
-        git clone --depth 1 --branch kustomize/v${KUSTOMIZE_VERSION} https://github.com/kubernetes-sigs/kustomize /build && break || { rm -rf /build; sleep 5; }
-    done
+    git clone --depth 1 --branch kustomize/v${KUSTOMIZE_VERSION} https://github.com/kubernetes-sigs/kustomize /build
     cd /build
     test "$(git rev-parse HEAD)" = "${KUSTOMIZE_COMMIT}"
     cd kustomize

@@ -28,6 +28,14 @@ Features Changed
   ``kctrl`` here refers only to the copy bundled inside workshop sessions;
   the Carvel based installation of Educates itself is unaffected.
 
+* The ``kubectl-convert`` plugin is no longer included in the workshop base
+  environment image. It existed to migrate manifests away from long removed
+  Kubernetes API versions, nothing in Educates itself uses it, and each of
+  the four bundled copies carried vulnerabilities which only a Kubernetes
+  patch release can resolve. Workshops which run ``kubectl-convert`` from
+  workshop instructions or setup scripts need to install it in a custom
+  workshop image, or perform the conversion outside the workshop session.
+
 * The Kubernetes dashboard backend used for the workshop console is now
   rebuilt from the upstream 2.7.0 sources with a current Go toolchain and
   patched dependency versions, rather than being copied as a prebuilt binary

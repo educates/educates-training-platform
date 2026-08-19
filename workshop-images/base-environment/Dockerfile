@@ -193,9 +193,8 @@ RUN <<EOF
     set -eo pipefail
     curl --silent --fail -L -o /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz https://dl.k8s.io/v${KUBECTL_VERSION}/kubernetes-client-linux-${TARGETARCH}.tar.gz
     echo "${!CHECKSUM} /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz" | sha512sum --check --status
-    tar -C /opt/kubernetes/bin --strip-components 3 -zxf /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz kubernetes/client/bin/kubectl kubernetes/client/bin/kubectl-convert
+    tar -C /opt/kubernetes/bin --strip-components 3 -zxf /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz kubernetes/client/bin/kubectl
     mv /opt/kubernetes/bin/kubectl /opt/kubernetes/bin/kubectl@${KUBECTL_SHORT_VERSION}
-    mv /opt/kubernetes/bin/kubectl-convert /opt/kubernetes/bin/kubectl-convert@${KUBECTL_SHORT_VERSION}
     rm -f /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz
 EOF
 
@@ -208,9 +207,8 @@ RUN <<EOF
     set -eo pipefail
     curl --silent --fail -L -o /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz https://dl.k8s.io/v${KUBECTL_VERSION}/kubernetes-client-linux-${TARGETARCH}.tar.gz
     echo "${!CHECKSUM} /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz" | sha512sum --check --status
-    tar -C /opt/kubernetes/bin --strip-components 3 -zxf /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz kubernetes/client/bin/kubectl kubernetes/client/bin/kubectl-convert
+    tar -C /opt/kubernetes/bin --strip-components 3 -zxf /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz kubernetes/client/bin/kubectl
     mv /opt/kubernetes/bin/kubectl /opt/kubernetes/bin/kubectl@${KUBECTL_SHORT_VERSION}
-    mv /opt/kubernetes/bin/kubectl-convert /opt/kubernetes/bin/kubectl-convert@${KUBECTL_SHORT_VERSION}
     rm -f /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz
 EOF
 
@@ -223,9 +221,8 @@ RUN <<EOF
     set -eo pipefail
     curl --silent --fail -L -o /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz https://dl.k8s.io/v${KUBECTL_VERSION}/kubernetes-client-linux-${TARGETARCH}.tar.gz
     echo "${!CHECKSUM} /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz" | sha512sum --check --status
-    tar -C /opt/kubernetes/bin --strip-components 3 -zxf /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz kubernetes/client/bin/kubectl kubernetes/client/bin/kubectl-convert
+    tar -C /opt/kubernetes/bin --strip-components 3 -zxf /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz kubernetes/client/bin/kubectl
     mv /opt/kubernetes/bin/kubectl /opt/kubernetes/bin/kubectl@${KUBECTL_SHORT_VERSION}
-    mv /opt/kubernetes/bin/kubectl-convert /opt/kubernetes/bin/kubectl-convert@${KUBECTL_SHORT_VERSION}
     rm -f /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz
 EOF
 
@@ -238,9 +235,8 @@ RUN <<EOF
     set -eo pipefail
     curl --silent --fail -L -o /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz https://dl.k8s.io/v${KUBECTL_VERSION}/kubernetes-client-linux-${TARGETARCH}.tar.gz
     echo "${!CHECKSUM} /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz" | sha512sum --check --status
-    tar -C /opt/kubernetes/bin --strip-components 3 -zxf /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz kubernetes/client/bin/kubectl kubernetes/client/bin/kubectl-convert
+    tar -C /opt/kubernetes/bin --strip-components 3 -zxf /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz kubernetes/client/bin/kubectl
     mv /opt/kubernetes/bin/kubectl /opt/kubernetes/bin/kubectl@${KUBECTL_SHORT_VERSION}
-    mv /opt/kubernetes/bin/kubectl-convert /opt/kubernetes/bin/kubectl-convert@${KUBECTL_SHORT_VERSION}
     rm -f /tmp/kubernetes-client-linux-${TARGETARCH}.tar.gz
 EOF
 

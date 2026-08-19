@@ -4,7 +4,7 @@
 #@ load("@ytt:overlay", "overlay")
 #@ load("@ytt:struct", "struct")
 #@ load("@ytt:yaml", "yaml")
-#@ load("functions/kapp-annotations.lib.yaml", "addKappAnnotations")
+#@ load("functions/kapp-annotations.lib.yaml", "addKappAnnotations", "keepOriginalOnVersioned")
 
 #@ orderedPackagesList = [
 #@    "cert-manager",
@@ -38,13 +38,13 @@
 #@     packagePath = "packages/" + name
 #@     packageValues = package.settings
 #@     if package.enabled:
---- #@ template.replace(overlay.apply(library.get(packagePath).with_data_values(packageValues).eval(), addKappAnnotations(name, overlayedValues, orderedPackagesList)))
+--- #@ template.replace(overlay.apply(library.get(packagePath).with_data_values(packageValues).eval(), addKappAnnotations(name, overlayedValues, orderedPackagesList), keepOriginalOnVersioned()))
 #@     end
 #@   end
 
 #@ allInfo = struct.make(config=data.values, values=overlayedValues)
 #@ if overlayedValues.clusterPackages["educates"].enabled:
---- #@ template.replace(overlay.apply(library.get("config").with_data_values(allInfo).eval(), addKappAnnotations("educates", overlayedValues, orderedPackagesList)))
+--- #@ template.replace(overlay.apply(library.get("config").with_data_values(allInfo).eval(), addKappAnnotations("educates", overlayedValues, orderedPackagesList), keepOriginalOnVersioned()))
 #@ else:
 --- #@ template.replace(overlay.apply(library.get("config").with_data_values(allInfo).eval()))
 #@ end

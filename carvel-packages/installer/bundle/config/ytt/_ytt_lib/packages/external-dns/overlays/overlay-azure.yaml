@@ -1,6 +1,7 @@
 #@ load("@ytt:overlay", "overlay")
 #@ load("@ytt:data", "data")
 #@ load("@ytt:json", "json")
+#@ load("@ytt:base64", "base64")
 #@ load("@ytt:struct", "struct")
 #@ load("@ytt:assert", "assert")
 
@@ -36,8 +37,8 @@ metadata:
   name: azure-config-file
   namespace: #@ data.values.namespace
 type: Opaque
-stringData:
-  azure.json: #@ json.encode(json_data)
+data:
+  azure.json: #@ base64.encode(json.encode(json_data))
 
 #@overlay/match by=overlay.subset({"kind":"Deployment", "metadata":{"name":"external-dns"}})
 #@overlay/match-child-defaults missing_ok=True

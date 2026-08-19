@@ -47,3 +47,32 @@ metadata:
     kapp.k14s.io/change-rule.delete: #@ "delete after deleting educates-installer/{}".format(next)
     #@ end
 #@ end
+
+#! Versioned resources must keep the kapp.k14s.io/original annotation. Without
+#! it kapp diffs the rendered resource against live cluster state, and any
+#! deterministic server-side mutation (such as Secret stringData being
+#! converted to data) makes every deploy look like a change, minting a new
+#! version and rolling every consumer of the versioned name on each reconcile.
+#@ def isVersioned(index, left, right):
+#@   if "metadata" not in left:
+#@     return False
+#@   end
+#@   metadata = left["metadata"]
+#@   if not metadata or "annotations" not in metadata:
+#@     return False
+#@   end
+#@   annotations = metadata["annotations"]
+#@   if not annotations:
+#@     return False
+#@   end
+#@   return "kapp.k14s.io/versioned" in annotations
+#@ end
+
+#@ def keepOriginalOnVersioned():
+#@overlay/match by=isVersioned, expects="0+"
+---
+metadata:
+  annotations:
+    #@overlay/remove
+    kapp.k14s.io/disable-original:
+#@ end

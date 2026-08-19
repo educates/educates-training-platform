@@ -44,6 +44,19 @@ Features Changed
   bundled binary. The dashboard version and its behavior within workshop
   sessions are unchanged.
 
+* The ``vendir``, ``k9s`` and ``kustomize`` command line tools bundled in the
+  workshop base environment image are now rebuilt from their upstream release
+  sources with a current Go toolchain and patched dependency versions, rather
+  than using the prebuilt release binaries. Each of these tools is already at
+  the newest release its authors have published, and those releases still
+  carry critical vulnerabilities in their bundled dependencies, so rebuilding
+  is the only way to resolve them. The tool versions and their behavior are
+  unchanged.
+
+* The ``hugo`` static site generator bundled in the workshop base environment
+  image has been updated from 0.164.0 to 0.165.0, which resolves a critical
+  vulnerability reported against a library bundled with the previous release.
+
 * Octant is no longer available as the web console for a workshop session and
   the Octant binaries are no longer included in the workshop base image.
   Octant was archived by its authors, with no release since ``0.25.1`` and no

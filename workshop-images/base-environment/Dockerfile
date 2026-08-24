@@ -103,6 +103,13 @@ RUN HOME=/root && \
     chown 1001:0 /opt && \
     ln -s /var/run/docker/docker.sock /var/run/docker.sock
 
+# Node 24 bundles an npm whose vendored tar lags the security fixes;
+# newer Node lines already bundle npm 11.19+, which carries the fixed
+# tar. Take the newest npm 11.x so rebuilds keep absorbing 11.x fixes.
+RUN npm install -g npm@11 && \
+    npm --version && \
+    rm -rf /root/.npm
+
 FROM system-base AS vscode-helper
 
 COPY opt/helper /opt/helper

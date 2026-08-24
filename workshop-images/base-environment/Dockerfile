@@ -256,12 +256,12 @@ RUN <<EOF
 EOF
 
 RUN <<EOF
-    UV_VERSION=0.11.23
+    UV_VERSION=0.12.5
     ARCHNAME_amd64=x86_64
     ARCHNAME_arm64=aarch64
     ARCHNAME=ARCHNAME_${TARGETARCH}
-    CHECKSUM_amd64="e12c4cda2fe8c305510a78380a88f2c32a27e90cdcd123cefd2873388f0ebb5f"
-    CHECKSUM_arm64="1873a77350f6621279ae1a0d2227f2bd8b67131598f14a7eb0ba2215d3da2c98"
+    CHECKSUM_amd64="68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2"
+    CHECKSUM_arm64="9bf43b4d1a07665bf64d4c4e710930b382321a785e0eb10aac07f46471f86a31"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/uv.tar.gz https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${!ARCHNAME}-unknown-linux-gnu.tar.gz
@@ -381,9 +381,9 @@ EOF
 COPY --from=vendir-build /vendir /opt/kubernetes/bin/vendir
 
 RUN <<EOF
-    HELM_VERSION=4.2.3
-    CHECKSUM_amd64="e9b88b4ee95b18c706839c28d3a0220e5bc470e9cd9262410c90793c45ff8b7c"
-    CHECKSUM_arm64="21abd9354d39b2cd79a8d76be6912cd137a983cbf997193503fb8a6a6e2f2785"
+    HELM_VERSION=4.2.4
+    CHECKSUM_amd64="c306b46f719b0a4da32d0f78ee21bf90ce8d602f15b22ab753f0674d1670a7f3"
+    CHECKSUM_arm64="564de2191b881e9f71b5606b25345821ea1682f06ab90499d3ab22b530176da1"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     curl --silent --fail -L -o /tmp/helm.tar.gz https://get.helm.sh/helm-v${HELM_VERSION}-linux-${TARGETARCH}.tar.gz
@@ -409,9 +409,9 @@ COPY --from=kustomize-build /kustomize /opt/kubernetes/bin/kustomize
 # VS Code editor and dashboard extension.
 # Make sure when updating that AI features are disabled and working https://github.com/coder/code-server/issues/7540
 RUN <<EOF
-    CODE_VERSION=4.131.0
-    CHECKSUM_amd64="f6316f0b14ef5c12ed6e67e0154dd02ccf5e66112064687d7e93c51763105361"
-    CHECKSUM_arm64="4d2a8b2f755446079c4364b18e71c9121181e4e605c6c35939e5f1aac8d1eae8"
+    CODE_VERSION=4.133.0
+    CHECKSUM_amd64="a4e0f8f8c76e7de8e7424289f74e507af4c97bfe104c3e8ee272b8cc7b46c6f1"
+    CHECKSUM_arm64="d999d8b0256e5537f3b62e6c09f624220026e19107a04a876c0cef62d1c71147"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     set -eo pipefail
     mkdir /opt/editor

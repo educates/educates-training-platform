@@ -158,7 +158,7 @@ type EducatesClusterConfigReconciler struct {
 // Helm-managed resources (cert-manager's own ConfigMaps, Services,
 // MutatingWebhookConfigurations, etc.) ride on the helm SDK's internal
 // kube client under this same ServiceAccount; their verbs live in the
-// generated educates-installer-charts ClusterRole
+// generated educates:installer:charts ClusterRole
 // (hack/generate-installer-rbac.sh), not in these markers.
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=create;update;patch;delete

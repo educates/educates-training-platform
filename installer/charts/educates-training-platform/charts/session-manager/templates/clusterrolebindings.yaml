@@ -1,13 +1,13 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-session-manager
+  name: educates:session-manager
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: educates-session-manager
+  name: educates:session-manager
 subjects:
   - kind: ServiceAccount
     name: session-manager
@@ -19,7 +19,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-session-manager:admin
+  name: educates:session-manager:admin
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 roleRef:
@@ -40,7 +40,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-session-manager:kyverno-policies
+  name: educates:session-manager:kyverno-policies
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 roleRef:
@@ -59,13 +59,13 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-session-manager:kyverno-validatingpolicies
+  name: educates:session-manager:kyverno-validatingpolicies
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: educates-session-manager:kyverno-validatingpolicies
+  name: educates:session-manager:kyverno-validatingpolicies
 subjects:
   - kind: ServiceAccount
     name: session-manager
@@ -75,7 +75,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-session-manager:cluster-admin
+  name: educates:session-manager:cluster-admin
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 roleRef:
@@ -93,13 +93,13 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-session-manager-scc
+  name: educates:session-manager:scc
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: educates-baseline-scc
+  name: educates:scc:baseline
 subjects:
   - kind: ServiceAccount
     name: session-manager
@@ -108,14 +108,14 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-image-puller-scc
+  name: educates:image-puller:scc
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
     app.kubernetes.io/component: image-puller
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: educates-baseline-scc
+  name: educates:scc:baseline
 subjects:
   - kind: ServiceAccount
     name: image-puller

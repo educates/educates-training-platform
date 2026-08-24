@@ -572,7 +572,7 @@ def workshop_environment_create(
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": "educates-privileged-scc",
+                "name": "educates:scc:privileged",
             },
             "subjects": [
                 {
@@ -856,7 +856,7 @@ def workshop_environment_create(
         "apiVersion": "rbac.authorization.k8s.io/v1",
         "kind": "ClusterRole",
         "metadata": {
-            "name": f"educates-web-console-{workshop_namespace}",
+            "name": f"educates:environment:console:{workshop_namespace}",
             "labels": {
                 "training.educates.dev/component": "environment",
                 "training.educates.dev/workshop.name": workshop_name,
@@ -2034,7 +2034,7 @@ def workshop_environment_create(
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "ClusterRoleBinding",
             "metadata": {
-                "name": f"educates-tunnel-manager-{workshop_namespace}",
+                "name": f"educates:tunnel-manager:{workshop_namespace}",
                 "labels": {
                     "training.educates.dev/component": "session",
                     "training.educates.dev/workshop.name": workshop_name,
@@ -2047,7 +2047,7 @@ def workshop_environment_create(
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": "educates-tunnel-manager",
+                "name": "educates:tunnel-manager",
             },
             "subjects": [
                 {

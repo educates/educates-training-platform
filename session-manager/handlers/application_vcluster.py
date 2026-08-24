@@ -387,7 +387,7 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
         # session-manager can only CREATE them if it already HOLDS every
         # permission they grant (Kubernetes privilege-escalation
         # prevention). Those held permissions come from the
-        # `educates-session-manager:vcluster` ClusterRole in the chart
+        # `educates:session-manager:vcluster` ClusterRole in the chart
         # (installer/charts/educates-training-platform/charts/session-manager/
         # templates/clusterroles.yaml). If you add or change a rule here,
         # mirror it there, or vcluster session creation fails with a 403

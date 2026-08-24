@@ -113,8 +113,8 @@ helm upgrade --install "$RELEASE" "$CHART_DIR" \
     --wait --timeout 2m
 
 # Guard: confirm the operator is NOT bound to cluster-admin for this run.
-if kubectl get clusterrolebinding educates-installer-cluster-admin >/dev/null 2>&1; then
-    fail "educates-installer-cluster-admin binding exists — cluster-admin is not off; this run would not prove the fine-grained role"
+if kubectl get clusterrolebinding educates:installer:cluster-admin >/dev/null 2>&1; then
+    fail "educates:installer:cluster-admin binding exists — cluster-admin is not off; this run would not prove the fine-grained role"
 fi
 echo "Confirmed: operator running without the cluster-admin binding."
 

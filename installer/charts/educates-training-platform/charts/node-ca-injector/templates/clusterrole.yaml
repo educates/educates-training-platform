@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-node-ca-injector
+  name: educates:node-ca-injector
   labels:
     {{- include "node-ca-injector.labels" . | nindent 4 }}
 rules:

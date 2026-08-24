@@ -1,0 +1,39 @@
+{{- /*
+User-facing ClusterRoles for the secrets.educates.dev custom resources.
+Not bound to anything by the chart — grant them to users or automation
+that needs to manage or inspect SecretCopiers, SecretExporters,
+SecretImporters and SecretInjectors. The aggregation labels also merge
+these rules into the built-in `admin` and `view` ClusterRoles.
+*/ -}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:rbac:admin:secrets
+  labels:
+    {{- include "secrets-manager.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: [secrets.educates.dev]
+    resources:
+      - secretcopiers
+      - secretexporters
+      - secretimporters
+      - secretinjectors
+    verbs: [create, delete, deletecollection, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:rbac:view:secrets
+  labels:
+    {{- include "secrets-manager.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: [secrets.educates.dev]
+    resources:
+      - secretcopiers
+      - secretexporters
+      - secretimporters
+      - secretinjectors
+    verbs: [get, list, watch]

@@ -3,9 +3,9 @@
   to the built-in cluster-admin ClusterRole.
 
   In normal operation the operator runs with the fine-grained
-  educates-installer-charts ClusterRole (generated from what the vendored
+  educates:installer:charts ClusterRole (generated from what the vendored
   charts actually produce — see hack/generate-installer-rbac.sh) alongside
-  its own educates-installer-manager role. Enable this binding
+  its own educates:installer:manager role. Enable this binding
   (rbac.clusterAdmin=true) only as a fallback if the derived role turns out
   to be missing a permission on some cluster or configuration — and please
   report the gap so the generator can be corrected.
@@ -14,7 +14,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-installer-cluster-admin
+  name: educates:installer:cluster-admin
   labels:
     {{- include "educates-installer.labels" . | nindent 4 }}
 roleRef:

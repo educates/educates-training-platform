@@ -6,7 +6,7 @@
 #   hack/generate-installer-rbac.sh
 #
 # Writes installer/charts/educates-installer/templates/rbac/charts-role.yaml
-# (ClusterRole `educates-installer-charts`). Re-run after `make vendor-charts`
+# (ClusterRole `educates:installer:charts`). Re-run after `make vendor-charts`
 # and commit the result; CI (`make ci-operator`) regenerates and fails on any
 # diff.
 #
@@ -37,7 +37,7 @@ cd "$(dirname "$0")/.."
 
 VENDORED=installer/operator/vendored-charts
 OUT=installer/charts/educates-installer/templates/rbac/charts-role.yaml
-ROLE_NAME=educates-installer-charts
+ROLE_NAME=educates:installer:charts
 
 command -v helm >/dev/null 2>&1 || { echo "helm not found on PATH" >&2; exit 1; }
 
@@ -79,6 +79,7 @@ rbac.authorization.k8s.io|rolebindings|RoleBinding
 rbac.authorization.k8s.io|roles|Role
 secrets.educates.dev|secretcopiers|SecretCopier
 secrets.educates.dev|secretinjectors|SecretInjector
+security.openshift.io|securitycontextconstraints|SecurityContextConstraints
 EOF
 )
 

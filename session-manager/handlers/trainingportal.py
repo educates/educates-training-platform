@@ -466,7 +466,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": "educates-baseline-scc",
+                "name": "educates:scc:baseline",
             },
             "subjects": [
                 {
@@ -544,7 +544,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         "apiVersion": "rbac.authorization.k8s.io/v1",
         "kind": "ClusterRoleBinding",
         "metadata": {
-            "name": f"educates-training-portal-{portal_namespace}",
+            "name": f"educates:training-portal:{portal_namespace}",
             "labels": {
                 "training.educates.dev/component": "portal",
                 "training.educates.dev/portal.name": portal_name,
@@ -554,7 +554,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         "roleRef": {
             "apiGroup": "rbac.authorization.k8s.io",
             "kind": "ClusterRole",
-            "name": "educates-training-portal",
+            "name": "educates:training-portal",
         },
         "subjects": [
             {

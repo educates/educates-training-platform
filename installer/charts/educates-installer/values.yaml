@@ -51,8 +51,8 @@ leaderElection:
   enabled: false
 
 # Operator RBAC. In normal use the operator runs with a fine-grained,
-# generated ClusterRole (educates-installer-charts) covering the resources
-# the vendored charts install, plus its own educates-installer-manager
+# generated ClusterRole (educates:installer:charts) covering the resources
+# the vendored charts install, plus its own educates:installer:manager
 # role. Set clusterAdmin to true only as a fallback if that derived role is
 # missing a permission on your cluster — and report the gap so the
 # generator (hack/generate-installer-rbac.sh) can be corrected.

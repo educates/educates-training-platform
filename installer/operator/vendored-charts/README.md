@@ -91,7 +91,7 @@ in `embed_test.go`.
 
 8. **Regenerate the operator's fine-grained install RBAC.** The operator
    installs the vendored charts under its own ServiceAccount, so its
-   `educates-installer-charts` ClusterRole must cover every resource kind
+   `educates:installer:charts` ClusterRole must cover every resource kind
    the charts produce. Run `make generate-installer-rbac` (repo root): it
    renders the vendored charts and rebuilds
    `installer/charts/educates-installer/templates/rbac/charts-role.yaml`,

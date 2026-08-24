@@ -1,13 +1,13 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-installer-manager
+  name: educates:installer:manager
   labels:
     {{- include "educates-installer.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: educates-installer-manager
+  name: educates:installer:manager
 subjects:
   - kind: ServiceAccount
     name: educates-installer

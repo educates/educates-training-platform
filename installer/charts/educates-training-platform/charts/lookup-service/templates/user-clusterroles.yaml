@@ -1,0 +1,37 @@
+{{- /*
+User-facing ClusterRoles for the lookup.educates.dev custom resources.
+Not bound to anything by the chart — grant them to users or automation
+that needs to manage or inspect ClusterConfigs, ClientConfigs and
+TenantConfigs. The aggregation labels also merge these rules into the
+built-in `admin` and `view` ClusterRoles.
+*/ -}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:rbac:admin:lookup
+  labels:
+    {{- include "lookup-service.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: [lookup.educates.dev]
+    resources:
+      - clusterconfigs
+      - clientconfigs
+      - tenantconfigs
+    verbs: [create, delete, deletecollection, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:rbac:view:lookup
+  labels:
+    {{- include "lookup-service.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: [lookup.educates.dev]
+    resources:
+      - clusterconfigs
+      - clientconfigs
+      - tenantconfigs
+    verbs: [get, list, watch]

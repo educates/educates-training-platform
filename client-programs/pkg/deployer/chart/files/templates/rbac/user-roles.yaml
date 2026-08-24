@@ -1,0 +1,44 @@
+{{- /*
+User-facing ClusterRoles for the installer's own custom resources
+(config.educates.dev and platform.educates.dev). Not bound to anything
+by the chart — grant them to users or automation that needs to manage
+or inspect the EducatesClusterConfig and platform component resources.
+The aggregation labels also merge these rules into the built-in `admin`
+and `view` ClusterRoles.
+*/ -}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:rbac:admin:platform
+  labels:
+    {{- include "educates-installer.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: [config.educates.dev]
+    resources: [educatesclusterconfigs]
+    verbs: [create, delete, deletecollection, get, list, patch, update, watch]
+  - apiGroups: [platform.educates.dev]
+    resources:
+      - secretsmanagers
+      - lookupservices
+      - sessionmanagers
+    verbs: [create, delete, deletecollection, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:rbac:view:platform
+  labels:
+    {{- include "educates-installer.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: [config.educates.dev]
+    resources: [educatesclusterconfigs]
+    verbs: [get, list, watch]
+  - apiGroups: [platform.educates.dev]
+    resources:
+      - secretsmanagers
+      - lookupservices
+      - sessionmanagers
+    verbs: [get, list, watch]

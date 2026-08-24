@@ -404,6 +404,20 @@ Deep-merges .Values.config on top so the escape hatch wins on conflict.
 {{- $tlsRef := default dict $ci.tlsCertificateRef -}}
 {{- $caRef := default dict $ci.caCertificateRef -}}
 {{- $cs := include "session-manager.resolvedClusterSecurity" . | fromYaml -}}
+{{/*
+The runtime expects the policy-engine identifiers the handlers compare
+against, which are not a plain lowercasing of the chart enum:
+OpenShiftSCC selects the `security-context-constraints` code path and
+PodSecurityStandards the `pod-security-standards` one. Map explicitly
+so those branches engage.
+*/}}
+{{- $policyEngineNames := dict
+  "Kyverno" "kyverno"
+  "PodSecurityStandards" "pod-security-standards"
+  "OpenShiftSCC" "security-context-constraints"
+  "None" "none"
+-}}
+{{- $policyEngine := get $policyEngineNames $cs.policyEngine | default (lower $cs.policyEngine) -}}
 {{- $ws := .Values.workshopSecurity -}}
 {{/*
 Emit the user-supplied development.imageRegistry verbatim into the runtime
@@ -440,7 +454,7 @@ resolution.
       "namespace" (default "" $caRef.namespace)
     )
   )
-  "clusterSecurity" (dict "policyEngine" (lower $cs.policyEngine))
+  "clusterSecurity" (dict "policyEngine" $policyEngine)
   "workshopSecurity" (dict "rulesEngine" (lower $ws.rulesEngine))
   "imageRegistry" (dict
     "host" (default "" $ir.host)

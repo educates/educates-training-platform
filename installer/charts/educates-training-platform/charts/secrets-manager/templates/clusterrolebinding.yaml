@@ -1,13 +1,13 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-secrets-manager
+  name: educates:secrets-manager
   labels:
     {{- include "secrets-manager.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: educates-secrets-manager
+  name: educates:secrets-manager
 subjects:
   - kind: ServiceAccount
     name: secrets-manager
@@ -15,20 +15,21 @@ subjects:
 {{- $cs := include "secrets-manager.resolvedClusterSecurity" . | fromYaml }}
 {{- if eq $cs.policyEngine "OpenShiftSCC" }}
 ---
-# OpenShift only. Binds the secrets-manager ServiceAccount to the cluster's
-# baseline SCC ClusterRole. The `educates-baseline-scc` ClusterRole itself
-# is expected to be installed out-of-band (or by a future operator-managed
-# step); this binding only takes effect on a cluster where it exists.
+# OpenShift only. Binds the secrets-manager ServiceAccount to the baseline
+# SCC ClusterRole. The `educates:scc:baseline` ClusterRole (and the SCC it
+# grants `use` on) is installed by the session-manager chart when the
+# policy engine is OpenShiftSCC; in a standalone secrets-manager install
+# it must exist already for this binding to take effect.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: educates-secrets-manager-scc
+  name: educates:secrets-manager:scc
   labels:
     {{- include "secrets-manager.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: educates-baseline-scc
+  name: educates:scc:baseline
 subjects:
   - kind: ServiceAccount
     name: secrets-manager

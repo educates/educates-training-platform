@@ -235,9 +235,9 @@ def _setup_session_namespace(
     # be set up so you can define your own, then can set "custom".
 
     role_mappings = {
-        "admin": "educates-admin-session-role",
-        "edit": "educates-edit-session-role",
-        "view": "educates-view-session-role",
+        "admin": "educates:session:admin",
+        "edit": "educates:session:edit",
+        "view": "educates:session:view",
         "cluster-admin": "cluster-admin",
         "custom": None,
     }
@@ -245,7 +245,7 @@ def _setup_session_namespace(
     role_resource_name = role_mappings.get(role)
 
     if role_resource_name is None and role != "custom":
-        role_resource_name = "educates-view-session-role"
+        role_resource_name = "educates:session:view"
 
     if role_resource_name is not None:
         role_binding_body = {
@@ -336,7 +336,7 @@ def _setup_session_namespace(
             "roleRef": {
                 "apiGroup": "rbac.authorization.k8s.io",
                 "kind": "ClusterRole",
-                "name": f"educates-{security_policy}-scc",
+                "name": f"educates:scc:{security_policy}",
             },
             "subjects": [
                 {
@@ -887,7 +887,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         "apiVersion": "rbac.authorization.k8s.io/v1",
         "kind": "ClusterRoleBinding",
         "metadata": {
-            "name": f"educates-web-console-{session_namespace}",
+            "name": f"educates:session:console:{session_namespace}",
             "labels": {
                 "training.educates.dev/component": "session",
                 "training.educates.dev/workshop.name": workshop_name,
@@ -901,7 +901,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         "roleRef": {
             "apiGroup": "rbac.authorization.k8s.io",
             "kind": "ClusterRole",
-            "name": f"educates-web-console-{workshop_namespace}",
+            "name": f"educates:environment:console:{workshop_namespace}",
         },
         "subjects": [
             {
@@ -926,11 +926,11 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         patch["status"] = {
             "educates": {
                 "phase": "Failed",
-                "message": f"Failed to create cluster role binding educates-web-console-{session_namespace}: {exc}",
+                "message": f"Failed to create cluster role binding educates:session:console:{session_namespace}: {exc}",
             }
         }
         raise kopf.PermanentError(
-            f"Failed to create cluster role binding educates-web-console-{session_namespace}: {exc}"
+            f"Failed to create cluster role binding educates:session:console:{session_namespace}: {exc}"
         )
 
     # Setup configuration on the primary session namespace.

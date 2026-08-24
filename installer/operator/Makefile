@@ -58,7 +58,7 @@ manifests: controller-gen ## Generate ClusterRole and CustomResourceDefinition o
 	@mkdir -p "$(CRD_OUTPUT_DIR)" "$(RBAC_OUTPUT_DIR)"
 	"$(CONTROLLER_GEN)" \
 		crd paths="./..." output:crd:artifacts:config="$(CRD_OUTPUT_DIR)" \
-		rbac:roleName=educates-installer-manager output:rbac:artifacts:config="$(RBAC_OUTPUT_DIR)"
+		'rbac:roleName="educates:installer:manager"' output:rbac:artifacts:config="$(RBAC_OUTPUT_DIR)"
 	@# Keep the operator's embedded copy of its CRDs byte-identical to the
 	@# chart's crds/. The operator SSA-applies these at startup (internal/crds)
 	@# so its running code always matches its CRD schemas regardless of how it

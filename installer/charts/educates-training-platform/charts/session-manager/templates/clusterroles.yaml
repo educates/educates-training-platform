@@ -1,15 +1,15 @@
 {{- /*
 ClusterRoles consumed by the session-manager and the runtime it spawns
-(training portal pods, workshop session pods, tunnel manager). Copied
-verbatim from v3 — these are the contract between session-manager and
-its runtime, and changing them is out of scope for the v4 installer
-work. Chart labels are added; the resource bodies are unchanged.
+(training portal pods, workshop session pods, tunnel manager). Names
+follow the `educates:` prefix convention for cluster-scoped RBAC
+(`educates:<service>` for service roles, `educates:session:<level>` for
+the roles bound to workshop session service accounts).
 */ -}}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-session-manager
+  name: educates:session-manager
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 aggregationRule:
@@ -26,7 +26,7 @@ aggregationRule:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-session-manager:core
+  name: educates:session-manager:core
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
     rbac.educates.dev/extends-workshop-permissions: "true"
@@ -56,7 +56,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-view-session-role
+  name: educates:session:view
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 rules:
@@ -133,7 +133,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-edit-session-role
+  name: educates:session:edit
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 rules:
@@ -265,7 +265,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-admin-session-role
+  name: educates:session:admin
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 rules:
@@ -403,7 +403,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-training-portal
+  name: educates:training-portal
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 rules:
@@ -438,7 +438,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-tunnel-manager
+  name: educates:tunnel-manager
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 rules:
@@ -467,7 +467,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-session-manager:kyverno-validatingpolicies
+  name: educates:session-manager:kyverno-validatingpolicies
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 rules:
@@ -483,13 +483,13 @@ rules:
 # every permission it grants. With clusterAdmin: false it no longer inherits
 # these from cluster-admin, so this role adds them via the documented
 # `rbac.educates.dev/extends-workshop-permissions` aggregation label (it
-# merges into the educates-session-manager ClusterRole — no separate binding).
+# merges into the educates:session-manager ClusterRole — no separate binding).
 # Keep it a superset of the rules application_vcluster.py puts in the vcluster
 # Roles/ClusterRole — if a rule is added there, add it here too.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-session-manager:vcluster
+  name: educates:session-manager:vcluster
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
     rbac.educates.dev/extends-workshop-permissions: "true"
@@ -541,14 +541,14 @@ rules:
 # is used by many existing workshops to deploy content — including into a
 # vcluster — so with clusterAdmin: false it must hold this explicitly. Added
 # via the documented `rbac.educates.dev/extends-workshop-permissions`
-# aggregation label (merges into educates-session-manager — no separate
+# aggregation label (merges into educates:session-manager — no separate
 # binding). Add other Carvel kinds here if workshops need them (e.g.
 # packaging.carvel.dev PackageInstalls). Inert when kapp-controller (and its
 # CRD) isn't installed.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: educates-session-manager:kapp-controller
+  name: educates:session-manager:kapp-controller
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
     rbac.educates.dev/extends-workshop-permissions: "true"

@@ -31,7 +31,7 @@ resources: {}
 
 # Cluster-level security policy enforcement. Only `OpenShiftSCC` triggers
 # this subchart to render anything (a ClusterRoleBinding for the secrets-
-# manager ServiceAccount to the `educates-baseline-scc` ClusterRole).
+# manager ServiceAccount to the `educates:scc:baseline` ClusterRole).
 # Other values are no-ops here — full enforcement lives in the session-
 # manager subchart and the umbrella's `global.clusterSecurity`. This local
 # block exists for standalone installs.

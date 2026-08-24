@@ -185,6 +185,20 @@ New Features
   yet ``Ready``), or a fully installed and ready cluster — making it easy to
   tell a working install from a partial or broken one.
 
+* New user-facing ``ClusterRole`` resources are installed for working with the
+  Educates custom resources. For each API group there is an admin and a view
+  role: ``educates:rbac:admin:training`` and ``educates:rbac:view:training``
+  for the ``training.educates.dev`` resources, ``educates:rbac:admin:secrets``
+  and ``educates:rbac:view:secrets`` for the ``secrets.educates.dev``
+  resources, ``educates:rbac:admin:lookup`` and ``educates:rbac:view:lookup``
+  for the ``lookup.educates.dev`` resources, and
+  ``educates:rbac:admin:platform`` and ``educates:rbac:view:platform`` for the
+  installer's ``config.educates.dev`` and ``platform.educates.dev`` resources.
+  Grant these to users or automation that needs to manage or inspect Educates
+  resources. They also carry the standard Kubernetes aggregation labels, so
+  their rules automatically merge into the built-in ``admin`` and ``view``
+  cluster roles.
+
 Features Changed
 ----------------
 
@@ -249,6 +263,28 @@ Features Changed
   reveal.js upgrade guidance since the markup and plugin APIs changed after
   the 3.x series. If the requested version cannot be matched against a
   bundled version the slides are not served for the workshop session.
+
+* The ``ClusterRole`` and ``ClusterRoleBinding`` resources created by Educates
+  have been renamed to follow the Kubernetes convention of an application
+  prefix separated by colons. Service roles are now named after their
+  component — ``educates:session-manager``, ``educates:secrets-manager``,
+  ``educates:lookup-service``, ``educates:training-portal``,
+  ``educates:tunnel-manager``, ``educates:remote-access``,
+  ``educates:node-ca-injector`` and the operator's
+  ``educates:installer:manager`` and ``educates:installer:charts``. The roles
+  bound to workshop session service accounts are now
+  ``educates:session:admin``, ``educates:session:edit`` and
+  ``educates:session:view``, replacing ``educates-admin-session-role``,
+  ``educates-edit-session-role`` and ``educates-view-session-role``. The
+  OpenShift security context constraints roles are now
+  ``educates:scc:privileged``, ``educates:scc:baseline`` and
+  ``educates:scc:restricted``, and are installed together with the
+  ``educates-privileged``, ``educates-baseline`` and ``educates-restricted``
+  ``SecurityContextConstraints`` when the cluster security policy engine is
+  ``OpenShiftSCC``. All references within the platform have been updated, but
+  any workshop definitions or external tooling that reference the old names
+  directly, for example a ``session.objects`` entry binding
+  ``educates-admin-session-role``, need to be updated to the new names.
 
 Deprecations
 ------------

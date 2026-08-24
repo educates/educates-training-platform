@@ -42,7 +42,7 @@ clusterIngress:
 #   restricted profiles), scoped to the namespaces Educates manages.
 #   `additionalKyvernoPolicies` are installed alongside, verbatim, cluster-wide.
 # - OpenShiftSCC: installs ClusterRoleBindings binding the session-manager and
-#   image-puller ServiceAccounts to the `educates-baseline-scc` ClusterRole.
+#   image-puller ServiceAccounts to the `educates:scc:baseline` ClusterRole.
 #   Implies you're on OpenShift; SCC enforcement comes from the platform.
 # - PodSecurityStandards: chart installs nothing at this level; PSS is enforced
 #   by Kubernetes via namespace labels managed by the runtime.
@@ -168,7 +168,7 @@ resources: {}
 
 # Grant the session-manager ServiceAccount the built-in `cluster-admin`
 # ClusterRole. Off by default; enable only when workshops need to manage
-# cluster-scoped resources beyond what the aggregated `educates-session-manager`
+# cluster-scoped resources beyond what the aggregated `educates:session-manager`
 # ClusterRole grants. Note: changed from v3 default of `true`.
 clusterAdmin: false
 

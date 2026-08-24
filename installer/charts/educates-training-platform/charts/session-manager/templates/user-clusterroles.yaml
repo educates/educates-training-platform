@@ -1,0 +1,44 @@
+{{- /*
+User-facing ClusterRoles for the training.educates.dev custom resources.
+Not bound to anything by the chart — grant them to users or automation
+that needs to manage or inspect Workshops, TrainingPortals and related
+resources. The aggregation labels also merge these rules into the
+built-in `admin` and `view` ClusterRoles, so namespace admins and
+viewers get matching access without extra bindings.
+*/ -}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:rbac:admin:training
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: [training.educates.dev]
+    resources:
+      - workshops
+      - workshopenvironments
+      - workshopsessions
+      - workshopallocations
+      - workshoprequests
+      - trainingportals
+    verbs: [create, delete, deletecollection, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:rbac:view:training
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: [training.educates.dev]
+    resources:
+      - workshops
+      - workshopenvironments
+      - workshopsessions
+      - workshopallocations
+      - workshoprequests
+      - trainingportals
+    verbs: [get, list, watch]

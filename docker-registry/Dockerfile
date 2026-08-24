@@ -18,8 +18,9 @@ RUN <<EOF
     cd /distribution
     test "$(git rev-parse HEAD)" = "${DISTRIBUTION_COMMIT}"
     go get \
-        golang.org/x/crypto@v0.52.0 \
-        golang.org/x/net@v0.55.0 \
+        golang.org/x/crypto@v0.54.0 \
+        golang.org/x/net@v0.57.0 \
+        golang.org/x/text@v0.41.0 \
         google.golang.org/grpc@v1.82.1
     go mod tidy
     go mod vendor

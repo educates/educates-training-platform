@@ -1,0 +1,3 @@
+# Stray local `go build` output (the image build writes to bin/ instead).
+/node-ca-injector
+/bin/

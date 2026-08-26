@@ -1,0 +1,20 @@
+[project]
+name = "session-manager"
+version = "0.1.0"
+description = "Kubernetes operator managing workshop sessions and environments for the Educates training platform."
+requires-python = ">=3.14"
+dependencies = [
+    "kopf[full-auth]>=1.44.6",
+    "pykube-ng>=23.6.0",
+    "PyYAML>=6.0.3",
+    # Not imported directly; constrained here to control CVE exposure via kopf.
+    "aiohttp>=3.14.3",
+    "bcrypt>=5.0.0",
+    "cryptography>=50.0.0",
+    "wrapt>=2.2.1",
+]
+
+[tool.uv]
+# This is an application run from source, not an installable package; uv sync
+# should only install the dependencies.
+package = false

@@ -43,13 +43,10 @@ KUBECTL_VERSION=$(kubectl version -o json | jq -re '[.serverVersion.major,.serve
 
 case "$KUBECTL_VERSION" in
 1.2*)
-    KUBECTL_VERSION=1.31
+    KUBECTL_VERSION=1.33
     ;;
-1.3[01])
-    KUBECTL_VERSION=1.31
-    ;;
-1.32)
-    KUBECTL_VERSION=1.32
+1.3[012])
+    KUBECTL_VERSION=1.33
     ;;
 1.33)
     KUBECTL_VERSION=1.33
@@ -57,14 +54,16 @@ case "$KUBECTL_VERSION" in
 1.34)
     KUBECTL_VERSION=1.34
     ;;
-1.3*)
-    KUBECTL_VERSION=1.34
+1.35)
+    KUBECTL_VERSION=1.35
+    ;;
+1.36)
+    KUBECTL_VERSION=1.36
+    ;;
+*)
+    KUBECTL_VERSION=1.36
     ;;
 esac
-
-if [ -z "$KUBECTL_VERSION" ]; then
-    KUBECTL_VERSION=1.34
-fi
 
 # Restrict access permissions on kubeconfig file as some clients will complain
 # if it is readable by group or others.

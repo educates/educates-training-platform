@@ -42,9 +42,6 @@ they will be removed sometime in the 4.X series of Educates releases:
   `spec.content.files` in the workshop definition will be removed. The `vendir`
   based mechanism for workshop files should be used instead.
 
-* The Octant web console for viewing and interacting with a Kubernetes cluster
-  will be removed. The standard Kubernetes dashboard should be used instead.
-
 * The use of `profile.d` files has been superseded by adding environment
   variables to the `WORKSHOP_ENV` file from `setup.d` scripts. Support for
   `profile.d` files will be removed to more easily allow the set of shell

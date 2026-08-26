@@ -855,11 +855,6 @@ spec:
                               type: boolean
                             vendor:
                               type: string
-                            octant:
-                              type: object
-                              properties:
-                                version:
-                                  type: string
                         slides:
                           type: object
                           required:

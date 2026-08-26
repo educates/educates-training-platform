@@ -44,7 +44,7 @@ from ..models import TrainingPortal, SessionState
 from .helpers import update_query_params
 
 
-@login_required(login_url="/")
+@login_required(login_url="/workshops/finished/?notification=session-expired")
 @require_http_methods(["GET"])
 @resources_lock
 @transaction.atomic
@@ -117,8 +117,10 @@ def session(request, name):
     # of the users session.
 
     return csp_update(
-        CONNECT_SRC=f"{instance.name}.{settings.INGRESS_DOMAIN}",
-        FRAME_SRC=f"{instance.name}.{settings.INGRESS_DOMAIN}",
+        {
+            "connect-src": [f"{instance.name}.{settings.INGRESS_DOMAIN}"],
+            "frame-src": [f"{instance.name}.{settings.INGRESS_DOMAIN}"],
+        }
     )(lambda: response)()
 
 
@@ -224,7 +226,7 @@ def session_terminate(request, name):
     return JsonResponse(details)
 
 
-@login_required(login_url="/")
+@login_required(login_url="/workshops/finished/?notification=session-expired")
 @require_http_methods(["GET"])
 @resources_lock
 @transaction.atomic

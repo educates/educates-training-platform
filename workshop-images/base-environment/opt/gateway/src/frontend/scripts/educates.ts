@@ -1,5 +1,3 @@
-import * as url from "url"
-
 import * as $ from "jquery"
 
 import * as bootstrap from "bootstrap"
@@ -230,7 +228,7 @@ class MessagesChannel {
     }
 
     private configure_session() {
-        let parsed_url = url.parse(window.location.origin)
+        let parsed_url = new URL(window.location.origin)
 
         let protocol = parsed_url.protocol == "https:" ? "wss" : "ws"
         let host = parsed_url.host
@@ -355,7 +353,7 @@ class MessagesChannel {
                 if (self.shutdown)
                     return
 
-                let parsed_url = url.parse(window.location.origin)
+                let parsed_url = new URL(window.location.origin)
 
                 let protocol = parsed_url.protocol == "https:" ? "wss" : "ws"
                 let host = parsed_url.host
@@ -592,7 +590,7 @@ class TerminalSession {
 
         this.fitter.fit()
 
-        let parsed_url = url.parse(window.location.origin)
+        let parsed_url = new URL(window.location.origin)
 
         let protocol = parsed_url.protocol == "https:" ? "wss" : "ws"
         let host = parsed_url.host
@@ -915,7 +913,7 @@ class TerminalSession {
                 if (self.shutdown)
                     return
 
-                let parsed_url = url.parse(window.location.origin)
+                let parsed_url = new URL(window.location.origin)
 
                 let protocol = parsed_url.protocol == "https:" ? "wss" : "ws"
                 let host = parsed_url.host
@@ -1172,7 +1170,7 @@ class TerminalSession {
             if (self.shutdown)
                 return
 
-            let parsed_url = url.parse(window.location.origin)
+            let parsed_url = new URL(window.location.origin)
 
             let protocol = parsed_url.protocol == "https:" ? "wss" : "ws"
             let host = parsed_url.host

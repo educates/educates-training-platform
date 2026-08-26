@@ -1377,7 +1377,7 @@ spec:
       memory: 512Mi
 ```
 
-For more details on configuring the synchronization rules for registries see the Zot Registry documentation on [mirroring](https://zotregistry.dev/v1.4.3/articles/mirroring/). Only details under ``registries`` can be supplied, with the exception that providing certificates via ``certDir`` is not supported.
+For more details on configuring the synchronization rules for registries see the Zot Registry documentation on [mirroring](https://zotregistry.dev/v2.1.18/articles/mirroring/). Only details under ``registries`` can be supplied, with the exception that providing certificates via ``certDir`` is not supported.
 
 (injecting-workshop-secrets)=
 Injecting workshop secrets
@@ -1946,7 +1946,7 @@ spec:
 
 For slides bundled as a PDF file, add the PDF file to ``workshop/slides`` and then add an ``index.html`` which displays the PDF [embedded](https://stackoverflow.com/questions/291813/recommended-way-to-embed-pdf-in-html) in the page.
 
-To support the use of [reveal.js](https://revealjs.com/), static media assets for that package are already bundled and available for the two major versions (3.X and 4.X).
+To support the use of [reveal.js](https://revealjs.com/), static media assets for that package are already bundled and available for the major versions 4.X, 5.X and 6.X.
 
 To enable and select the version of reveal.js, supply in the workshop definition:
 
@@ -1957,7 +1957,7 @@ spec:
       slides:
         enabled: true
         reveal.js:
-          version: 3.X
+          version: 6.X
 ```
 
 The version can specify the exact version supplied, or a semver style version selector, including range specification.
@@ -1970,7 +1970,7 @@ If you are using reveal.js for the slides and you have history enabled, or are u
 
 When using embedded links to the slides in workshop content, if the workshop content is displayed as part of the dashboard, the slides will be opened in the tab to the right rather than as a separate browser window or tab.
 
-To support the use of [impress.js](https://impress.js.org/), static media assets for that package are already bundled and available for version 1.X.
+To support the use of [impress.js](https://impress.js.org/), static media assets for that package are already bundled and available for versions 1.X and 2.X.
 
 To enable and select the version of impress.js, supply in the workshop definition:
 
@@ -1997,18 +1997,9 @@ spec:
         enabled: true
 ```
 
-The Kubernetes dashboard provided by the Kubernetes project will be used. If you would rather use Octant as the console, you can set the ``vendor`` property to ``octant``.
+The Kubernetes dashboard provided by the Kubernetes project will be used. It is the only console which is available.
 
-```yaml
-spec:
-  session:
-    applications:
-      console:
-        enabled: true
-        vendor: octant
-```
-
-When ``vendor`` is not set, ``kubernetes`` is assumed.
+The ``vendor`` property is deprecated. It is still accepted so that existing workshop definitions remain valid, but the only value it can be given is ``kubernetes``. Any other value, including the ``octant`` value which was accepted in prior versions, is ignored and the Kubernetes dashboard is used in its place, with a warning being logged against the workshop session. The ``vendor`` property will be removed in a future version.
 
 Enabling the integrated editor
 ------------------------------

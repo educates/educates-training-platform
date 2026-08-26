@@ -1,5 +1,6 @@
 import os
 
+from csp.constants import NONCE, NONE, SELF
 from django.core.management.utils import get_random_secret_key
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -34,7 +35,7 @@ INSTALLED_APPS = [
     "crispy_bootstrap5",
     "oauth2_provider",
     "corsheaders",
-    "mod_wsgi.server",
+    "mod_wsgi.express",
     "project.apps.workshops",
 ]
 
@@ -113,8 +114,6 @@ LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 
 USE_I18N = True
-
-USE_L10N = True
 
 USE_TZ = True
 
@@ -229,35 +228,37 @@ THEME_NAME = os.environ.get("THEME_NAME", "")
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-CSP_CONNECT_SRC = (
-    "'self'",
-    f"*.{INGRESS_DOMAIN}",
-    "*.google-analytics.com",
-    "*.clarity.ms",
-    "c.bing.com",
-    "*.amplitude.com",
-)
-
-CSP_DEFAULT_SRC = ("'none'",)
-CSP_STYLE_SRC = ("'self'",)
-CSP_SCRIPT_SRC = ("'self'", "www.clarity.ms", "cdn.amplitude.com")
-CSP_IMG_SRC = (
-    "'self'",
-    "data:",
-    "*.google-analytics.com",
-    "*.googletagmanager.com",
-)
-CSP_FONT_SRC = ("'self'",)
-CSP_FRAME_SRC = ("'self'",)
-CSP_INCLUDE_NONCE_IN = ("script-src",)
-CSP_FRAME_ANCESTORS = ("'self'",)
+CONTENT_SECURITY_POLICY = {
+    "DIRECTIVES": {
+        "default-src": [NONE],
+        "script-src": [SELF, "www.clarity.ms", "cdn.amplitude.com", NONCE],
+        "style-src": [SELF],
+        "img-src": [
+            SELF,
+            "data:",
+            "*.google-analytics.com",
+            "*.googletagmanager.com",
+        ],
+        "font-src": [SELF],
+        "connect-src": [
+            SELF,
+            f"*.{INGRESS_DOMAIN}",
+            "*.google-analytics.com",
+            "*.clarity.ms",
+            "c.bing.com",
+            "*.amplitude.com",
+        ],
+        "frame-src": [SELF],
+        "frame-ancestors": [SELF],
+    }
+}
 
 CSRF_TRUSTED_ORIGINS = [f"{INGRESS_PROTOCOL}://{PORTAL_HOSTNAME}"]
 
 FRAME_ANCESTORS = os.environ.get("FRAME_ANCESTORS", "")
 
 if FRAME_ANCESTORS:
-    CSP_FRAME_ANCESTORS = FRAME_ANCESTORS.split(",")
+    CONTENT_SECURITY_POLICY["DIRECTIVES"]["frame-ancestors"] = FRAME_ANCESTORS.split(",")
     SESSION_COOKIE_SAMESITE = "None"
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SAMESITE = "None"

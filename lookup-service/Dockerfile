@@ -1,13 +1,12 @@
-FROM fedora:42
+FROM fedora:44
+
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 
 RUN INSTALL_PKGS=" \
         findutils \
-        gcc \
         glibc-langpack-en \
         procps \
-        python3-devel \
-        python3-pip \
-        redhat-rpm-config \
+        python3 \
         which \
     " && \
     dnf install -y --setopt=tsflags=nodocs $INSTALL_PKGS && \
@@ -25,14 +24,14 @@ ENV PYTHONUNBUFFERED=1 \
 
 USER 1001
 
-COPY --chown=1001:0 requirements.txt /opt/app-root/requirements.txt
+ENV PATH=/opt/app-root/bin:/opt/app-root/venv/bin:$PATH \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/opt/app-root/venv \
+    UV_COMPILE_BYTECODE=1
 
-ENV PATH=/opt/app-root/bin:/opt/app-root/venv/bin:$PATH
+COPY --chown=1001:0 pyproject.toml uv.lock /opt/app-root/src/
 
-RUN python3 -m venv /opt/app-root/venv && \
-    . /opt/app-root/venv/bin/activate && \
-    pip install --no-cache-dir -U pip setuptools wheel && \
-    pip install --no-cache-dir -r /opt/app-root/requirements.txt
+RUN uv sync --frozen --no-dev --no-cache
 
 COPY --chown=1001:0 ./ /opt/app-root/src
 

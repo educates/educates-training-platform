@@ -5,3 +5,4 @@ data/secret-key.txt
 src/static
 testing
 venv
+.venv

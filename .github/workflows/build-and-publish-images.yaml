@@ -884,6 +884,7 @@ jobs:
       - build-client-programs-linux-arm64
       - build-client-programs-darwin-amd64
       - build-client-programs-darwin-arm64
+      - publish-client-programs
       - publish-docker-extension
 
     steps:

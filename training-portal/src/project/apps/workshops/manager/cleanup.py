@@ -36,6 +36,113 @@ api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 VANISHED_SESSION_GRACE_PERIOD = timedelta(minutes=2)
 
+# Minimum age before a workshop session record still in the starting state is
+# treated as stranded, where the deployment task for it failed or was lost to
+# a process restart. This is much longer than the vanished grace period as
+# records legitimately sit in the starting state while queued deployment
+# tasks drain, which on a cold start of a large training portal against a
+# slow Kubernetes API can take some minutes.
+
+STRANDED_SESSION_GRACE_PERIOD = timedelta(minutes=10)
+
+
+def session_requires_existence_check(session, now):
+    """Returns whether it needs to be verified that a deployed workshop
+    session still exists for a workshop session record. Requires the session
+    record to have existed for at least a grace period first, so a session
+    whose Kubernetes resource is still being created is never mistaken for
+    one that has vanished; it will be reconsidered on a later pass. A record
+    still in the starting state is subject to a much longer grace period, as
+    creation of the Kubernetes resource for it may still be waiting on a
+    queued deployment task, but is checked eventually so that a record whose
+    deployment task never completed doesn't hold a capacity slot forever.
+
+    """
+
+    if session.is_stopped():
+        return False
+
+    if session.created is None:
+        return not session.is_starting()
+
+    age = now - session.created
+
+    if session.is_starting():
+        return age >= STRANDED_SESSION_GRACE_PERIOD
+
+    return age >= VANISHED_SESSION_GRACE_PERIOD
+
+
+@background_task
+def purge_vanished_workshop_sessions():
+    """Look for workshop session records where the deployed workshop session
+    no longer exists, meaning it was deleted out of band, and schedule
+    cleanup of the workshop session records.
+
+    """
+
+    now = timezone.now()
+
+    # Take a snapshot of the workshop session records which haven't stopped
+    # yet and have passed the applicable grace period, then check whether a
+    # deployed workshop session still exists for each. If one doesn't, it
+    # means it was deleted out of band, or its deployment task never
+    # completed, so trigger a task to clean it up (there will be no
+    # deployment to delete, but the database record still needs to be marked
+    # as deleted). The check is done without holding the global resources
+    # lock or an open database transaction, so a slow Kubernetes API cannot
+    # stall other portal activity for the duration. The actual cleanup is
+    # handed off to delete_workshop_session() which manages its own lock and
+    # transaction.
+
+    sessions = [
+        session
+        for session in Session.objects.select_related("environment").all()
+        if session_requires_existence_check(session, now)
+    ]
+
+    if not sessions:
+        return
+
+    # Query the set of deployed workshop sessions using a single LIST request
+    # against the Kubernetes REST API, rather than a separate GET request for
+    # each workshop session record. The query is constrained to workshop
+    # sessions belonging to this instance of the training portal by matching
+    # on both the portal name and uid labels. If the query fails, skip
+    # detection of vanished workshop sessions and try again on a subsequent
+    # pass.
+
+    K8SWorkshopSession = pykube.object_factory(
+        api, "training.educates.dev/v1beta1", "WorkshopSession"
+    )
+
+    try:
+        deployed_sessions = {
+            resource.name
+            for resource in K8SWorkshopSession.objects(api).filter(
+                selector={
+                    "training.educates.dev/portal.name": settings.PORTAL_NAME,
+                    "training.educates.dev/portal.uid": settings.PORTAL_UID,
+                }
+            )
+        }
+
+    except pykube.exceptions.PyKubeError:
+        logger.exception("Failed to query deployed workshop sessions.")
+
+        return
+
+    for session in sessions:
+        if session.name not in deployed_sessions:
+            logger.info(
+                "Schedule cleanup of vanished workshop session %s.",
+                session.name,
+            )
+
+            report_analytics_event(session, "Session/Vanished")
+
+            delete_workshop_session(session).schedule()
+
 
 @background_task
 def purge_expired_workshop_sessions():
@@ -43,55 +150,16 @@ def purge_expired_workshop_sessions():
 
     now = timezone.now()
 
-    # Take a snapshot of the workshop session records up front, then perform the
-    # per-session Kubernetes and HTTP checks below without holding the global
-    # resources lock or an open database transaction. Each check makes
-    # synchronous network calls, and a slow Kubernetes API or an unresponsive
-    # session pod must not be able to stall other portal activity (session
-    # allocation, the reconcile loop, operator events) for the duration. The
-    # actual deletions are handed off to delete_workshop_session() which manages
-    # its own lock and transaction.
-
-    K8SWorkshopSession = pykube.object_factory(
-        api, "training.educates.dev/v1beta1", "WorkshopSession"
-    )
+    # Take a snapshot of the workshop session records up front, then perform
+    # the per-session HTTP checks below without holding the global resources
+    # lock or an open database transaction. Each check makes synchronous
+    # network calls, and an unresponsive session pod must not be able to
+    # stall other portal activity (session allocation, the reconcile loop,
+    # operator events) for the duration. The actual deletions are handed off
+    # to delete_workshop_session() which manages its own lock and
+    # transaction.
 
     for session in list(Session.objects.select_related("environment").all()):
-        # If the workshop session isn't still starting, and hasn't stopped yet,
-        # check whether there is a deployed workshop session. If there isn't, it
-        # means it was deleted manually, so trigger a task to clean it up (there
-        # will be no deployment to delete, but the database record still needs
-        # to be marked as deleted). Require the session to have existed for at
-        # least a grace period first, so a session whose Kubernetes resource is
-        # still being created is never mistaken for one that has vanished; it
-        # will be reconsidered on a later pass.
-
-        if (
-            not session.is_starting()
-            and not session.is_stopped()
-            and (
-                session.created is None
-                or (now - session.created) >= VANISHED_SESSION_GRACE_PERIOD
-            )
-        ):
-            try:
-                K8SWorkshopSession.objects(api).get(name=session.name)
-
-            except pykube.exceptions.ObjectDoesNotExist:
-                logger.info(
-                    "Schedule cleanup of vanished workshop session %s.",
-                    session.name,
-                )
-
-                report_analytics_event(session, "Session/Vanished")
-
-                delete_workshop_session(session).schedule()
-
-                continue
-
-            except pykube.exceptions.PyKubeError:
-                pass
-
         if session.is_allocated() or session.is_stopping():
             # If the workshop session is in use, including where it has been
             # explicitly marked for expiration, if expiration time has been
@@ -136,6 +204,23 @@ def purge_expired_workshop_sessions():
 
                         idle_time = timedelta(seconds=response.json()["idle-time"])
                         last_view = timedelta(seconds=response.json()["last-view"])
+
+                        # The workshop session gateway measures idle time from
+                        # when its process started, not from when the session
+                        # was allocated to a user, and only a browser poll
+                        # resets it. A reserved session therefore reports the
+                        # whole time it sat unallocated in reserve as idle
+                        # time, which for a long enough reserved period would
+                        # exceed the inactivity timeout the moment the session
+                        # is activated, before the user's browser has had a
+                        # chance to poll. Clamp both reported values to the
+                        # time the user has actually held the session.
+
+                        if session.started:
+                            allocated_time = now - session.started
+
+                            idle_time = min(idle_time, allocated_time)
+                            last_view = min(last_view, allocated_time)
 
                         if idle_time >= session.environment.orphaned:
                             logger.info(

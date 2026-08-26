@@ -380,8 +380,8 @@ clean-project-docs:
 	rm -rf project-docs/_build
 
 deploy-workshop:
-	kubectl apply -f https://github.com/educates/lab-k8s-fundamentals/releases/download/8.4/workshop.yaml
-	kubectl apply -f https://github.com/educates/lab-k8s-fundamentals/releases/download/8.4/trainingportal.yaml
+	kubectl apply -f https://github.com/educates/lab-k8s-fundamentals/releases/download/9.0/workshop.yaml
+	kubectl apply -f https://github.com/educates/lab-k8s-fundamentals/releases/download/9.0/trainingportal.yaml
 	STATUS=1; ATTEMPTS=0; ROLLOUT_STATUS_CMD="kubectl rollout status deployment/training-portal -n lab-k8s-fundamentals-ui"; until [ $$STATUS -eq 0 ] || $$ROLLOUT_STATUS_CMD || [ $$ATTEMPTS -eq 5 ]; do sleep 5; $$ROLLOUT_STATUS_CMD; STATUS=$$?; ATTEMPTS=$$((ATTEMPTS + 1)); done
 
 delete-workshop:

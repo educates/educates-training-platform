@@ -2,7 +2,6 @@ import * as amplitude from '@amplitude/analytics-browser'
 import "bootstrap"
 import * as $ from "jquery"
 import * as yaml from "js-yaml"
-import * as path from "path"
 
 // Hack to get jsonform working.
 
@@ -14,6 +13,10 @@ import "underscore"
 
 declare var gtag: Function
 declare var clarity: Function
+
+function basename(pathname: string): string {
+    return pathname.replace(/\/+$/, "").split("/").pop()
+}
 
 function set_paste_buffer_to_text(text) {
     let tmp = $("<textarea>").appendTo("body").val(text).select()
@@ -231,7 +234,7 @@ class Editor {
         else if (file.startsWith("$HOME/"))
             file = file.replace("$HOME/", "/home/eduk8s/")
         else if (!file.startsWith("/"))
-            file = path.join("/home/eduk8s", file)
+            file = "/home/eduk8s/" + file
         return file
     }
 
@@ -2825,11 +2828,11 @@ $(document).ready(async () => {
                     })
                     .then(text => {
                         let url = new URL(args.url)
-                        let basename = path.basename(url.pathname) || url.hostname || "download.txt"
+                        let filename = basename(url.pathname) || url.hostname || "download.txt"
                         let download = document.createElement("a")
                         let blob = new Blob([text], { type: "octet/stream" })
                         download.setAttribute("href", window.URL.createObjectURL(blob))
-                        download.setAttribute("download", args.download || basename)
+                        download.setAttribute("download", args.download || filename)
                         download.style.display = "none"
                         document.body.appendChild(download)
                         download.click()
@@ -2843,10 +2846,10 @@ $(document).ready(async () => {
             }
             else {
                 let pathname = `/files/${args.path}`
-                let basename = path.basename(pathname)
+                let filename = basename(pathname)
                 let download = document.createElement("a")
                 download.setAttribute("href", pathname)
-                download.setAttribute("download", args.download || basename)
+                download.setAttribute("download", args.download || filename)
                 download.style.display = "none"
                 document.body.appendChild(download)
                 download.click()

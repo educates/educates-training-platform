@@ -229,7 +229,7 @@ func (c *WorkshopsCatalogRequester) RequestWorkshop(workshopName string, environ
 	}
 
 	if indexUrl == "" {
-		indexUrl = fmt.Sprintf("%s/accounts/logout/", c.PortalUrl)
+		indexUrl = fmt.Sprintf("%s/workshops/finished/", c.PortalUrl)
 	}
 
 	queryString := url.Values{}

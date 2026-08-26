@@ -33,6 +33,15 @@ export function setup_workshop(app: express.Application) {
         if (!config.enable_workshop)
             return res.redirect(workshop_url)
 
+        // The local renderer process only runs for the classic renderer type.
+        // For any other local renderer the content is rendered up front and
+        // served statically below, so there is no renderer to wait on and the
+        // check would always fail. Mirrors the condition used when setting up
+        // serving further down.
+
+        if (config.workshop_renderer == "local" && config.local_renderer_type != "classic")
+            return res.redirect(workshop_url)
+
         // Check whether the internal workshop content renderer is ready.
 
         let url = 'http://127.0.0.1:' + config.workshop_port

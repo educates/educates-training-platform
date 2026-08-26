@@ -36,8 +36,6 @@ def vcluster_workshop_spec_patches(workshop_spec, application_properties):
                 "namespaces": {
                     "security": {"policy": policy, "token": {"enabled": False}}
                 },
-                # TODO: Remove octant console
-                "applications": {"console": {"octant": {"version": "latest"}}},
                 "variables": [
                     {
                         "name": "vcluster_secret",

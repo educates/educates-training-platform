@@ -1,21 +1,25 @@
-FROM golang:1.19-buster AS builder-image
+FROM --platform=$BUILDPLATFORM golang:1.26 AS builder
 
-WORKDIR /app
+WORKDIR /src
 
-COPY . /app/
+COPY go.mod go.sum ./
+RUN go mod download
 
-RUN go mod download && \
-    go build -o assets-server main.go
+COPY . .
 
-FROM fedora:42
+ARG TARGETOS
+ARG TARGETARCH
 
-RUN useradd -u 1001 -g 0 -M -d /opt/app-root/src default && \
-    mkdir -p /opt/app-root/src && \
-    chown -R 1001:0 /opt/app-root
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+    -o bin/assets-server-${TARGETOS}-${TARGETARCH} \
+    main.go
 
-WORKDIR /opt/app-root
+FROM scratch
 
-COPY --from=builder-image /app/assets-server /opt/app-root/bin/
+ARG TARGETOS
+ARG TARGETARCH
+
+COPY --from=builder /src/bin/assets-server-${TARGETOS}-${TARGETARCH} /assets-server
 
 USER 1001
 
@@ -23,6 +27,6 @@ EXPOSE 8080
 
 VOLUME ["/opt/app-root/data"]
 
-ENTRYPOINT ["/opt/app-root/bin/assets-server"]
+ENTRYPOINT ["/assets-server"]
 
 CMD ["--dir", "/opt/app-root/data", "--host", "0.0.0.0"]

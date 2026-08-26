@@ -8,5 +8,5 @@ rm -rf build
 
 tsc
 
-browserify build/frontend/scripts/educates.js --standalone educates -o build/frontend/scripts/educates-bundle.js
-cat build/frontend/scripts/educates-bundle.js | uglifyjs > build/frontend/scripts/educates-bundle.min.js
+esbuild build/frontend/scripts/educates.js --bundle --format=iife --global-name=educates --outfile=build/frontend/scripts/educates-bundle.js
+esbuild build/frontend/scripts/educates.js --bundle --format=iife --global-name=educates --minify --outfile=build/frontend/scripts/educates-bundle.min.js

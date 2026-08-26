@@ -2171,26 +2171,25 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     # Add in extra configuation for web console.
 
     if applications.is_enabled("console"):
-        if applications.property("console", "vendor", "kubernetes") == "kubernetes":
-            secret_body = {
-                "apiVersion": "v1",
-                "kind": "Secret",
-                "metadata": {
-                    "name": "kubernetes-dashboard-csrf",
-                    "namespace": session_namespace,
-                    "labels": {
-                        "training.educates.dev/component": "session",
-                        "training.educates.dev/workshop.name": workshop_name,
-                        "training.educates.dev/portal.name": portal_name,
-                        "training.educates.dev/portal.uid": portal_uid,
-                        "training.educates.dev/environment.name": environment_name,
-                        "training.educates.dev/environment.uid": environment_uid,
-                        "training.educates.dev/session.name": session_name,
-                    },
+        secret_body = {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {
+                "name": "kubernetes-dashboard-csrf",
+                "namespace": session_namespace,
+                "labels": {
+                    "training.educates.dev/component": "session",
+                    "training.educates.dev/workshop.name": workshop_name,
+                    "training.educates.dev/portal.name": portal_name,
+                    "training.educates.dev/portal.uid": portal_uid,
+                    "training.educates.dev/environment.name": environment_name,
+                    "training.educates.dev/environment.uid": environment_uid,
+                    "training.educates.dev/session.name": session_name,
                 },
-            }
+            },
+        }
 
-            pykube.Secret(api, secret_body).create()
+        pykube.Secret(api, secret_body).create()
 
     # Add in extra configuration for special cases, as well as bind policy.
 

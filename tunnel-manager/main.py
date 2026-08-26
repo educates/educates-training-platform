@@ -4,6 +4,7 @@ import signal
 import os
 
 import websockets
+from websockets.asyncio.server import serve
 
 import kopf
 import pykube
@@ -145,8 +146,8 @@ async def copy_socket_to_websocket(socket, websocket):
         await websocket.close()
 
 
-async def websocket_proxy(websocket, path):
-    ingress = websocket.request_headers["Host"]
+async def websocket_proxy(websocket):
+    ingress = websocket.request.headers["Host"]
     details = get_endpoint_details(ingress)
 
     # If can't find a workshop session for the host ingress then we just
@@ -180,7 +181,7 @@ async def websocket_proxy(websocket, path):
 
 
 async def proxy_server(stop_flag):
-    async with websockets.serve(websocket_proxy, host="", port=8080):
+    async with serve(websocket_proxy, host="", port=8080):
         await stop_flag
 
         logger.info("proxy server stopped")

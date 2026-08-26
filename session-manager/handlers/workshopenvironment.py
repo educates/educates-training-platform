@@ -1539,7 +1539,7 @@ def workshop_environment_create(
         }
 
         artifacts_config = {
-            "distSpecVersion": "1.0.1",
+            "distSpecVersion": "1.1.1",
             "storage": {
                 "rootDirectory": "/var/lib/registry",
                 "gc": True,
@@ -1552,7 +1552,9 @@ def workshop_environment_create(
                     "htpasswd": {"path": "/dev/null"},
                 },
                 "accessControl": {
-                    "**": {"anonymousPolicy": ["read"]},
+                    "repositories": {
+                        "**": {"anonymousPolicy": ["read"]},
+                    },
                 },
             },
             "log": {"level": "debug"},

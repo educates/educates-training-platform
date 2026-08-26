@@ -1,4 +1,6 @@
-FROM fedora:42
+FROM fedora:44
+
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 
 RUN INSTALL_PKGS=" \
         findutils \
@@ -6,8 +8,6 @@ RUN INSTALL_PKGS=" \
         glibc-langpack-en \
         httpd-devel \
         procps \
-        python3-devel \
-        python3-pip \
         redhat-rpm-config \
         sqlite \
         which \
@@ -27,19 +27,20 @@ ENV PYTHONUNBUFFERED=1 \
 
 USER 1001
 
-COPY --chown=1001:0 requirements.txt /opt/app-root/
+ENV PATH=/opt/app-root/bin:/opt/app-root/venv/bin:$PATH \
+    UV_PYTHON_DOWNLOADS=automatic \
+    UV_PYTHON_PREFERENCE=only-managed \
+    UV_PYTHON_INSTALL_DIR=/opt/app-root/python \
+    UV_PROJECT_ENVIRONMENT=/opt/app-root/venv \
+    UV_COMPILE_BYTECODE=1
 
-ENV PATH=/opt/app-root/bin:/opt/app-root/venv/bin:$PATH
+COPY --chown=1001:0 pyproject.toml uv.lock .python-version /opt/app-root/
 
-RUN python3 -m venv /opt/app-root/venv && \
-    . /opt/app-root/venv/bin/activate && \
-    pip install --no-cache-dir -U pip setuptools wheel && \
-    pip install --no-cache-dir -r /opt/app-root/requirements.txt
+RUN uv sync --project /opt/app-root --frozen --no-dev --no-cache
 
 COPY --chown=1001:0 ./ /opt/app-root
 
-RUN . /opt/app-root/venv/bin/activate && \
-    python manage.py collectstatic
+RUN python manage.py collectstatic --no-input
 
 CMD [ "start-container" ]
 

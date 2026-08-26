@@ -37,7 +37,11 @@ from .sessions import (
     terminate_reserved_sessions,
     update_session_status,
 )
-from .cleanup import cleanup_old_sessions_and_users, purge_expired_workshop_sessions
+from .cleanup import (
+    cleanup_old_sessions_and_users,
+    purge_expired_workshop_sessions,
+    purge_vanished_workshop_sessions,
+)
 from .analytics import report_analytics_event
 
 logger = logging.getLogger("educates")
@@ -325,6 +329,20 @@ def start_hourly_cleanup_task():
     cleanup_old_sessions_and_users().schedule()
 
 
+@background_task(delay=60.0, repeat=True)
+def start_vanished_sessions_task():
+    """Periodic task to detect workshop sessions which were deleted out of
+    band and clean up the workshop session records. This is done separately
+    to the more frequent reconciliation task as detecting deleted workshop
+    sessions requires querying the Kubernetes REST API and manual deletion of
+    a workshop session is a rare event which doesn't need to be acted on as
+    promptly.
+
+    """
+
+    purge_vanished_workshop_sessions().schedule()
+
+
 @background_task(delay=15.0, repeat=True)
 def start_reconciliation_task(name):
     """Periodic reconcilliation task which ensures current deployments of
@@ -400,6 +418,7 @@ def training_portal_event(event, name, body, **_):
 
         start_reconciliation_task(name).schedule()
         start_hourly_cleanup_task().schedule()
+        start_vanished_sessions_task().schedule()
 
     # Wrap up body of the resource to make it easier to work with later.
 

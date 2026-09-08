@@ -22,7 +22,7 @@
     "express": "^4.22.1",
     "highlight.js": "^11.9.0",
     "jquery": "^3.7.1",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^4.3.2",
     "jsonform": "^2.2.5",
     "liquidjs": "^10.27.1",
     "lodash": ">=4.18.1",

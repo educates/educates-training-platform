@@ -829,7 +829,62 @@ type EducatesClusterConfigSpec struct {
 	// mode; ignored in Managed mode.
 	// +optional
 	Inline *InlineConfig `json:"inline,omitempty"`
+
+	// packageDelivery configures how extension packages declared as an
+	// image reach a workshop session. Applies in both modes: it describes
+	// what the cluster can do, not what Educates installs.
+	// +optional
+	PackageDelivery *PackageDelivery `json:"packageDelivery,omitempty"`
 }
+
+// DeliveryMode is the tri-state a delivery mechanism is configured with.
+// Auto resolves from what the cluster supports; the other two settle it.
+// +kubebuilder:validation:Enum=Auto;Enabled;Disabled
+type DeliveryMode string
+
+const (
+	// DeliveryModeAuto resolves the mechanism from cluster capability.
+	DeliveryModeAuto DeliveryMode = "Auto"
+
+	// DeliveryModeEnabled uses the mechanism whatever the probe finds.
+	DeliveryModeEnabled DeliveryMode = "Enabled"
+
+	// DeliveryModeDisabled never uses the mechanism.
+	DeliveryModeDisabled DeliveryMode = "Disabled"
+)
+
+// PackageDelivery configures how extension packages reach a session.
+type PackageDelivery struct {
+	// imageMount controls whether an extension package declared as an
+	// image is mounted into the session read only, rather than having its
+	// contents fetched. Mounting needs a recent Kubernetes and container
+	// runtime on every node; under Auto the operator probes for that and
+	// falls back to fetching, which works anywhere.
+	// +optional
+	// +kubebuilder:default=Auto
+	ImageMount DeliveryMode `json:"imageMount,omitempty"`
+}
+
+// StatusPackageDelivery publishes the resolved delivery mechanisms that
+// components consume. Values are settled: never Auto.
+type StatusPackageDelivery struct {
+	// imageMount reports whether extension packages declared as an image
+	// are mounted into a session.
+	// +required
+	ImageMount EffectiveDeliveryMode `json:"imageMount"`
+}
+
+// EffectiveDeliveryMode is a resolved delivery mechanism.
+// +kubebuilder:validation:Enum=Enabled;Disabled
+type EffectiveDeliveryMode string
+
+const (
+	// EffectiveDeliveryModeEnabled means the mechanism is in use.
+	EffectiveDeliveryModeEnabled EffectiveDeliveryMode = "Enabled"
+
+	// EffectiveDeliveryModeDisabled means it is not.
+	EffectiveDeliveryModeDisabled EffectiveDeliveryMode = "Disabled"
+)
 
 // StatusIngress is the ingress contract published in status. Component
 // CRs consume this; they don't read spec. The wildcard (and optional CA)
@@ -917,6 +972,12 @@ type EducatesClusterConfigStatus struct {
 	// in Inline mode.
 	// +optional
 	BundledChartVersions map[string]string `json:"bundledChartVersions,omitempty"`
+
+	// packageDelivery publishes the resolved delivery mechanisms for
+	// extension packages. Components read this rather than the spec, so
+	// an Auto setting is already settled here.
+	// +optional
+	PackageDelivery *StatusPackageDelivery `json:"packageDelivery,omitempty"`
 
 	// conditions report the resource's state:
 	//   - Ready                (aggregate)

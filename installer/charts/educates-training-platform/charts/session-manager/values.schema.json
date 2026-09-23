@@ -168,6 +168,18 @@
         }
       },
 
+      "packageDelivery": {
+        "description": "How extension packages declared as an image reach a workshop session. With `imageMount` enabled the image is mounted read only into the session; `disabled` means the package contents are fetched instead, which works everywhere.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "imageMount": {
+            "type": "string",
+            "enum": ["enabled", "disabled"]
+          }
+        }
+      },
+
       "development": {
         "description": "Local-development overrides. Leave empty in normal use — Chart.yaml annotations (`educates.dev/image-registry-{host,namespace}`) provide the publish-time defaults for chart-rendered image refs, and the runtime falls back to `registry.default.svc.cluster.local` for `$(image_repository)` workshop-content placeholder resolution.",
         "type": "object",

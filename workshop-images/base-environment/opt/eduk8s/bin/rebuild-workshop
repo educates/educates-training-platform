@@ -54,6 +54,30 @@ for script in /opt/eduk8s/etc/profile.d/*.sh /opt/eduk8s/etc/profile.d/sh.local;
     fi
 done
 
+# Put any bin directory an extension package ships on the PATH, before the
+# package setup scripts run so that a setup script can call its own package's
+# binaries. Packages are added in glob order, so where two packages ship a
+# binary of the same name the alphabetically first package name wins. Only
+# existing directories are added, and each is guarded so that sourcing this
+# script again adds nothing.
+
+PACKAGES_PATH=""
+
+for dir in /opt/packages/*/bin; do
+    if [ -d "$dir" ]; then
+        case ":$PATH:" in
+            *":$dir:"*) ;;
+            *) PACKAGES_PATH="$PACKAGES_PATH$dir:" ;;
+        esac
+    fi
+done
+
+PATH="$PACKAGES_PATH$PATH"
+
+export PATH
+
+unset PACKAGES_PATH dir
+
 touch $WORKSHOP_ENV_ROLLUP
 
 for script in /opt/packages/*/setup.d/*.sh; do

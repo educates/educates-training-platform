@@ -1,0 +1,32 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: lab-extension-packages
+spec:
+  title: Extension Package Images Test
+  description: Test workshop for verifying an extension package declared as an image, covering the delivery it arrives by, the package hooks, the read only rule and the bin directory on the PATH.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/lab-extension-packages-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/lab-extension-packages-files:$(workshop_version)"
+      includePaths:
+      - /workshop/**
+      - /README.md
+    packages:
+    - name: greeter
+      image: "$(image_repository)/greeter:1.0.0"
+  session:
+    namespaces:
+      security:
+        token:
+          enabled: false
+    applications:
+      terminal:
+        enabled: true
+        layout: split
+      editor:
+        enabled: false

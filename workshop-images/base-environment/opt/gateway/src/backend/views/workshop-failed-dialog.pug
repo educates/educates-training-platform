@@ -6,7 +6,7 @@ div.modal.fade#workshop-failed-dialog(tabindex="-1", role="dialog", aria-labelle
                 button.btn.btn-close(type="button", data-bs-dismiss="modal", aria-label="Close")
             div.modal-body
                 if workshop_status == "download-workshop-failed"
-                    p The workshop content was not able to be downloaded successfully. Check that the location specified in the workshop definition is correct, or that any remote site hosting the workshop content is accessible.
+                    p The workshop content or an extension package was not able to be downloaded or mounted successfully. Check that the locations specified in the workshop definition are correct, or that any remote site or registry hosting them is accessible.
                 else if workshop_status == "setup-scripts-failed"
                     p The execution of the workshop setup scripts failed and workshop content may not be setup correctly. Check available workshop error logs for details.
                 else

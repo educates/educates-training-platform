@@ -186,8 +186,124 @@ New Features
   yet ``Ready``), or a fully installed and ready cluster — making it easy to
   tell a working install from a partial or broken one.
 
+* An extension package listed under ``spec.workshop.packages`` of a workshop
+  definition can now be declared as a published image, by setting ``image`` to
+  a tagged image reference instead of listing ``files``. The two are mutually
+  exclusive. An optional ``imagePullPolicy`` and an optional
+  ``pullSecretRef``, naming a secret also listed in
+  ``spec.environment.secrets``, can accompany it. The image reference may use
+  the ``$(image_repository)``, ``$(workshop_name)`` and
+  ``$(workshop_version)`` variables, must carry a tag, and cannot be a digest.
+  A package declared this way needs a name which is a valid DNS label, as the
+  name is used when the package is delivered to a workshop session.
+
+* A new ``educates package publish`` command, also available as ``educates
+  publish-package``, builds and publishes an extension package as an image. It
+  takes a package source directory holding a ``package.yaml`` manifest beside
+  the reserved ``common``, ``linux-amd64`` and ``linux-arm64`` directories, and
+  publishes an image index with one child image per platform. No Docker daemon
+  is required. Two builds of the same source produce the same digests, and
+  ``SOURCE_DATE_EPOCH`` is honoured where a specific build timestamp is wanted.
+  Use ``--dry-run`` to validate a package source and see the digests which
+  would be published without contacting a registry, and ``--digest-file`` to
+  record the published digest for a later step in a pipeline.
+
+* On a cluster which supports it, an extension package declared as an image is
+  now mounted into a workshop session read only, rather than having its
+  contents downloaded. The workshop definition is the same either way, and the
+  platform chooses: the delivery is settled when the workshop environment is
+  created and every session of that environment uses it, so changing the
+  platform setting affects new environments only. A package held in a registry
+  requiring authentication is pulled using the secret named by
+  ``pullSecretRef``, which must also be listed under
+  ``spec.environment.secrets``.
+
+* ``EducatesClusterConfig`` gains ``packageDelivery.imageMount``, controlling
+  whether an extension package declared as an image is mounted into a workshop
+  session or has its contents fetched. The default, ``Auto``, mounts only when
+  the cluster supports it: the API server must be 1.36 or newer, and every
+  Linux node must report a kubelet of 1.35 or newer together with
+  ``containerd`` 2.1 or newer or ``CRI-O`` 1.31 or newer. Where any of those is
+  not met the package contents are fetched instead, which works on any
+  cluster. ``Enabled`` mounts regardless, for a cluster whose support the
+  operator cannot detect, and ``Disabled`` always fetches. The resolved value
+  is published in ``status.packageDelivery.imageMount``, and a
+  ``PackageImageMountAvailable`` condition explains the outcome, naming the
+  API server version or the nodes which fall short. That condition is
+  reported separately from readiness, as fetching is a valid steady state
+  rather than a fault. The resolution is re-evaluated when a node joins,
+  leaves, or is upgraded.
+
+* A ``bin`` directory contained in an installed extension package is now added
+  to the application search path defined by the ``PATH`` environment variable,
+  so a program a package ships can be run by name without the package
+  supplying a ``profile.d`` script to set it up. This applies to a package
+  declared with ``files`` as well as one declared as an image. Packages are
+  added in the alphabetical order of their names, so where two packages ship a
+  program of the same name, the one from the package whose name sorts first is
+  found. The search path is set before package setup scripts run, so a setup
+  script can run programs from its own package.
+
+* Each extension package declared as an image is now checked when a workshop
+  session starts, and one line per package is written to
+  ``download-workshop.log`` naming the package and whether it was mounted or
+  fetched. A package which did not arrive, most commonly because the image
+  reference names an ordinary application image rather than an image built as
+  an extension package, is reported there and an error dialog is shown on the
+  workshop session dashboard, rather than the session starting without the
+  package. Every package is checked before the session reports a failure, so
+  one package which did not arrive does not hide the state of the others or
+  stop the remaining packages' setup scripts from running.
+
+* An extension package declared as an image is now delivered when deploying a
+  workshop with ``educates docker workshop deploy``, where previously such a
+  package was not delivered at all. It is mounted into the session read only
+  where the local Docker daemon supports it, which requires Docker Engine
+  28.0 or newer, Docker Compose 2.35 or newer and the containerd image store,
+  and its contents are fetched where it does not. A current Docker Desktop
+  meets all three. The chosen delivery is printed, along with the reason when
+  it falls back, and one line names each package. A new
+  ``--package-delivery`` option takes ``auto``, ``image-mount`` or ``fetch``,
+  so an author can force either delivery. Asking for a mount on a daemon
+  which cannot do it fails before the workshop is deployed, naming what is
+  missing.
+
+* The ``imagePullPolicy`` of an extension package declared as an image is now
+  honoured by ``educates docker workshop deploy`` where the package is
+  mounted. ``Always`` pulls the image before deploying, which matters when
+  republishing the same tag while working on a package locally, and ``Never``
+  reports an error before deploying when the image is not already held
+  locally. A package which declares no ``imagePullPolicy`` is given the same
+  default as on a cluster, which is ``Always`` for an image with the
+  ``:latest`` tag or no tag, and ``IfNotPresent`` otherwise. If a pull fails
+  but a copy of the image is already held locally, a warning is printed and
+  that copy is used. Where the package contents are fetched instead, the
+  policy continues to be ignored. Note that ``pullSecretRef`` is ignored when
+  deploying with Docker, so an image held in a registry requiring
+  authentication needs ``docker login`` for that registry first. A pull which
+  fails for want of credentials now names the image, the registry and the
+  command to run.
+
 Features Changed
 ----------------
+
+* When deploying a workshop with ``educates docker workshop deploy``, a
+  workshop image using the ``:main``, ``:master``, ``:develop`` or ``:latest``
+  tag, or no tag, is now pulled each time the workshop is deployed, as it is
+  when the workshop is deployed to a cluster. Previously a copy of the image
+  already held by the local Docker daemon was always used, so a newer version
+  pushed under the same tag was not picked up. If the pull fails but a copy of
+  the image is already held locally, a warning is printed and that copy is
+  used, so a workshop can still be deployed without access to the registry.
+
+* An extension package declared as an image is now delivered to a workshop
+  session by a purpose built package fetcher rather than by ``vendir``. The
+  fetcher resolves a multi architecture image to the architecture the session
+  runs on, so an author writes one image reference whichever architecture the
+  node uses, and it preserves the file permissions the package was published
+  with, which ``vendir`` does not. Packages declared with ``files`` continue to
+  be downloaded by ``vendir`` exactly as before, and a workshop can mix the
+  two.
 
 * The bundled Kyverno security policies are now ``ValidatingPolicy`` resources
   (``policies.kyverno.io``), the policy type recommended from Kyverno 1.18,
@@ -546,6 +662,31 @@ Bugs Fixed
   helper in the workshop base environment image have been updated to their
   latest upstream releases, being ``js-yaml`` 4.3.2, ``morgan`` 1.12.0,
   ``multer`` 2.3.0, ``joi`` 17.13.7, ``liquidjs`` 10.27.2 and ``fast-uri``
-  3.1.7. These updates pick up fixes for vulnerabilities reported against the
-  previously bundled versions. The behavior of the workshop dashboard is
-  unchanged.
+  3.1.7, and the copy of ``js-yaml`` shipped with the workshop instructions
+  theme has been updated to the same 4.3.2. These updates pick up fixes for
+  vulnerabilities reported against the previously bundled versions. The
+  gateway and renderer have also been updated to Bootstrap 5.3.8, the version
+  the theme already used. The behavior of the workshop dashboard is unchanged.
+
+* Deploying a workshop with ``educates docker workshop deploy`` crashed with a
+  Go panic when an extension package listed under ``spec.workshop.packages``
+  did not declare a ``files`` property. Such a package is now skipped, since
+  there is nothing for ``vendir`` to download, and the remaining packages are
+  still processed. A package declaring a malformed ``files`` property now
+  reports an error naming the package instead of crashing.
+
+* The workshop session init container which downloads content only ran when a
+  workshop declared assets under ``spec.workshop.files``. A workshop whose only
+  downloads were extension packages therefore downloaded them in the main
+  workshop container instead, where the secrets holding any registry
+  credentials are not mounted, so a package held in a registry requiring
+  authentication could not be downloaded. The init container now runs whenever
+  there is anything to download.
+
+* A custom workshop image given as ``$(image_repository)/...`` could not be
+  pulled when deploying a workshop with ``educates docker workshop deploy``
+  against the local image registry. The reference was expanded to the name the
+  local registry has on the ``educates`` Docker network, which only containers
+  on that network can resolve and the Docker daemon pulling the image cannot.
+  It is now expanded to the address the Docker daemon reaches the local
+  registry by.

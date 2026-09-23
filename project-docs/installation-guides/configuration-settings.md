@@ -141,6 +141,37 @@ sessionManager: {}
 
 The spec blocks are validated by the cluster's CRD schemas at apply time, not by the CLI. The `EducatesConfig` JSON schema is generated from the CRDs, so editors still get full completion. For the custom resource spec reference, see the sample scenarios in [installer/samples](https://github.com/educates/educates-training-platform/tree/develop/installer/samples) and `kubectl explain educatesclusterconfig.spec` against an installed cluster.
 
+(delivery-of-extension-packages)=
+Delivery of extension packages
+------------------------------
+
+An extension package declared as an image reaches a workshop session in one of two ways. It is either mounted into the session read only, which needs support from the cluster, or its contents are fetched, which works anywhere. Workshop authors write the same workshop definition either way.
+
+Which one is used is controlled by `packageDelivery.imageMount` on the `EducatesClusterConfig` custom resource, reachable via the `educatesClusterConfig` block of `EducatesConfig`:
+
+```yaml
+educatesClusterConfig:
+  packageDelivery:
+    imageMount: Auto        # Auto | Enabled | Disabled
+```
+
+``Auto`` is the default and mounts only where the cluster supports it. The operator checks that the Kubernetes API server is version 1.36 or newer, and that every Linux node reports a kubelet of version 1.35 or newer together with ``containerd`` 2.1 or newer or ``CRI-O`` 1.31 or newer. Where any of these is not met, package contents are fetched instead.
+
+``Enabled`` mounts whatever the check finds. Use it on a cluster which supports mounting but which the operator cannot recognise, such as one reporting an unfamiliar container runtime. ``Disabled`` always fetches.
+
+The value in effect is published on the custom resource as ``status.packageDelivery.imageMount``, and the ``PackageImageMountAvailable`` condition explains the outcome, naming the API server version or the specific nodes which fall short:
+
+```
+kubectl get educatesclusterconfig cluster \
+  -o jsonpath='{.status.conditions[?(@.type=="PackageImageMountAvailable")].message}'
+```
+
+This condition is reported separately from the readiness of the installation, because fetching package contents is a normal way to run Educates rather than a fault. The setting is re-evaluated whenever a node joins the cluster, leaves it, or is upgraded, so a cluster which grows support for mounting starts using it without the operator being restarted.
+
+Delivery is settled for a workshop environment when that environment is created, and every session of it follows that choice. Changing this setting therefore affects only workshop environments created afterwards.
+
+This setting applies to workshops deployed to a cluster. A workshop deployed locally with ``educates docker workshop deploy`` makes the same choice against the local Docker daemon instead, and has its own option for overriding it. See [declaring an extension package as an image](declaring-an-extension-package-as-an-image).
+
 (overriding-container-runtime-class)=
 (restricting-session-manager-permissions)=
 (restricting-network-access)=

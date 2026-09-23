@@ -457,6 +457,13 @@ spec:
 
 Note that if you use any of the version tags ``:main``, ``:master``, ``:develop`` and ``:latest``, the Educates operator will set the image pull policy to ``Always`` to ensure that a newer version is always pulled if available, otherwise the image will be cached on the Kubernetes nodes and only pulled when it is initially not present. Any other version tags will always be assumed to be unique and never updated. Do though be aware of image registries which use a CDN as front end. When using these image tags the CDN can still always regard them as unique and they will not do pull through requests to update an image even if it uses a tag of ``:latest``.
 
+The same rule applies when a workshop is deployed locally with ``educates
+docker workshop deploy``. A workshop image using one of these tags, or no tag
+at all, is pulled each time the workshop is deployed, so a newer version pushed
+under the same tag is picked up. If the pull fails but a copy of the image is
+already held by the local Docker daemon, a warning is printed and that copy is
+used, so the workshop can still be deployed without access to the registry.
+
 Where special custom workshop base images are available as part of the Educates project, instead of specifying the full location for the image, including the image registry, you can specify a short name. The Educates operator will then fill in the rest of the details.
 
 ```yaml
@@ -511,11 +518,155 @@ spec:
 
 When a package is installed it is placed under a sub directory of ``/opt/packages`` with name corresponding to the ``name`` field in the ``packages`` configuration. Any setup scripts contained in the ``setup.d`` directory of the installed package will be run when the workshop session starts, with the shell environment being configured using any scripts in the ``profile.d`` of the installed package.
 
+If the installed package contains a ``bin`` directory, it is added to the application search path defined by the ``PATH`` environment variable, so a program the package ships can be run by name without a ``profile.d`` script to set it up. This applies to a package declared either way. Packages are added in the alphabetical order of their names, so where two packages ship a program of the same name, the one from the package whose name sorts first is found. The ``bin`` directory is on the search path before package setup scripts run, so a setup script can run programs from its own package.
+
 In this example ``vendir`` was being used to download an OCI image artefact, but other mechanisms ``vendir`` provides can also be used when downloading remote files. This includes from Git repositories and HTTP web servers. Any configuration for ``vendir`` should be included under ``spec.packages.files``. The format of configuration supplied needs to match the [configuration](https://carvel.dev/vendir/docs/v0.25.0/vendir-spec/) that can be supplied under ``directories.contents`` of the ``Config`` resource used by ``vendir``.
 
 Note that although ``vendir`` will automatically unpack any archive file by default, it is currently limited in that it will not restore execute permissions on files extracted from a tar/zip archive. Educates will restore execute permissions on ``setup.d`` scripts, but if you have other files which have execute permissions, you will need to supply a ``setup.d`` to restore those execute permissions.
 
 If credentials are required to access any remote server, these can be supplied via a Kubernetes secret in your cluster. The ``environment.secrets`` property list should designate the source for the secret, with the secret then being copied into the workshop namespace and automatically injected into the container and passed to ``vendir`` when it is run.
+
+(declaring-an-extension-package-as-an-image)=
+Declaring an extension package as an image
+------------------------------------------
+
+Where an extension package is published as an image built for the purpose, it
+can be declared directly, rather than as a ``vendir`` download:
+
+```yaml
+spec:
+  workshop:
+    packages:
+    - name: argocd
+      image: ghcr.io/educates/educates-extension-packages/argocd:v2.10.6
+```
+
+This is the preferred form for a published package. The ``files`` property
+remains the way to bring in a package from a Git repository or a web server,
+and the way to work on a package locally.
+
+A package declares either ``image`` or ``files``, never both, and no subset of
+the image can be selected: the whole image is the package. The name of the
+package must be a valid DNS label, because it is used when the package is
+delivered to the workshop session.
+
+The image reference must carry a tag and cannot be a digest. The
+``$(image_repository)``, ``$(workshop_name)`` and ``$(workshop_version)``
+variables can be used in the reference, and are the only variables expanded
+in it. The ``$(platform_arch)`` and ``$(oci_image_cache)`` variables are
+rejected: a package image is an image index carrying one child per
+architecture, so the right child is selected when the package is delivered
+and there is no per-architecture reference to construct.
+
+The platform decides how the package reaches a workshop session, either by
+mounting the image read only or by fetching its contents, according to what
+the cluster supports. The workshop definition is the same either way. See
+[delivery of extension packages](delivery-of-extension-packages) for the
+cluster setting which governs this.
+
+An optional ``imagePullPolicy`` can be set alongside ``image``, accepting
+``Always``, ``Never`` or ``IfNotPresent``:
+
+```yaml
+spec:
+  workshop:
+    packages:
+    - name: argocd
+      image: ghcr.io/educates/educates-extension-packages/argocd:v2.10.6
+      imagePullPolicy: IfNotPresent
+```
+
+Where the image is held in a registry requiring credentials, an optional
+``pullSecretRef`` names a secret which must also be listed under
+``spec.environment.secrets`` so that it is copied into the workshop namespace:
+
+```yaml
+spec:
+  workshop:
+    packages:
+    - name: argocd
+      image: registry.example.com/packages/argocd:v2.10.6
+      pullSecretRef:
+        name: registry-credentials
+  environment:
+    secrets:
+    - namespace: educates-secrets
+      name: registry-credentials
+```
+
+Name the secret with ``pullSecretRef`` even where the platform is configured
+with image registry credentials of its own. Those apply when the package image
+is mounted, because the mount is pulled by the cluster the way any other image
+is, but not when the package contents are fetched, because the fetch uses only
+the secret the package names. A package which names its secret works under
+either delivery.
+
+Only an image built to the extension package layout may be declared this way.
+An ordinary application image is not an extension package and will not work.
+See [creating extension packages](creating-extension-packages) for how to
+build and publish one.
+
+An extension package image carries a package manifest named ``package.yaml``
+at its root, alongside the ``setup.d``, ``profile.d`` and ``bin`` directories
+the package provides. The manifest names the package and its version:
+
+```yaml
+apiVersion: packages.educates.dev/v1alpha1
+kind: ExtensionPackage
+name: argocd
+version: 2.10.6
+description: The Argo CD command line client.
+```
+
+The manifest is what a workshop session looks for to confirm that the package
+arrived. When a workshop session starts, each package declared as an image is
+checked for its manifest, and one line per package is written to
+``download-workshop.log`` naming the package and how it was delivered. A
+package whose manifest is missing is reported there and an error dialog is
+shown on the workshop session dashboard, rather than the session starting
+without the package. This is what an image which is not an extension package
+looks like when it is declared as one.
+
+Such an image is built with the ``educates package publish`` command, which
+takes a package source directory holding the manifest beside the reserved
+``common``, ``linux-amd64`` and ``linux-arm64`` directories, and publishes one
+child image per platform. Files common to every platform go in ``common``, and
+a platform directory overlays it, which is how a package ships a different
+binary per architecture under the same image reference.
+
+A package declared as an image is delivered when deploying a workshop locally
+with ``educates docker workshop deploy`` as well as to a cluster. It is
+mounted into the session read only where the local Docker daemon supports it,
+which requires Docker Engine 28.0 or newer, Docker Compose 2.35 or newer and
+the containerd image store, and its contents are fetched where it does not. A
+current Docker Desktop meets all three. Note that a daemon upgraded in place
+from an older release may still be using the earlier image store, in which
+case it cannot mount however recent its version. The chosen delivery is
+printed when the workshop is deployed, with the reason when it falls back.
+
+Pass ``--package-delivery`` with ``image-mount`` or ``fetch`` to force either
+delivery rather than letting the daemon decide, for example to reproduce how
+a package behaves on a cluster which cannot mount. Asking for a mount on a
+daemon which cannot do it reports what is missing rather than deploying.
+
+Where the package is mounted, ``imagePullPolicy`` applies: ``Always`` pulls
+the image before deploying, which is what you want when republishing the same
+tag while working on a package, and ``Never`` reports an error when the image
+is not already held locally. A package which declares no ``imagePullPolicy``
+is given the same default as on a cluster, which is ``Always`` for an image
+with the ``:latest`` tag or no tag, and ``IfNotPresent`` otherwise. If a pull
+fails but a copy of the image is already held locally, a warning is printed
+and that copy is used. Where the contents are fetched instead, the policy is
+ignored.
+
+``pullSecretRef`` is ignored when deploying with Docker, since a local deploy
+has no access to cluster secrets. An image held in a registry requiring
+authentication needs ``docker login`` for that registry first.
+
+When using Podman rather than Docker, the package is mounted only when its
+image is already held locally, because Podman does not pull the image behind
+a volume. Otherwise the contents are fetched, so the deploy succeeds either
+way.
 
 For a number of extension packages being maintained by the Educates team see:
 

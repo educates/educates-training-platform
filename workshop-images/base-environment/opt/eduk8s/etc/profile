@@ -54,6 +54,30 @@ if [ -f $HOME/.local/share/workshop/workshop-env-packages.sh ]; then
     set -a; . $HOME/.local/share/workshop/workshop-env-packages.sh; set +a
 fi
 
+# Put any bin directory an extension package ships on the PATH, before the
+# package profile scripts are sourced. Packages are added in glob order, so
+# where two packages ship a binary of the same name the alphabetically first
+# package name wins. Each directory is guarded against being added twice, since
+# this file is sourced afresh for every shell and the PATH it starts from
+# already carries what the session was started with.
+
+PACKAGES_PATH=""
+
+for dir in /opt/packages/*/bin; do
+    if [ -d "$dir" ]; then
+        case ":$PATH:" in
+            *":$dir:"*) ;;
+            *) PACKAGES_PATH="$PACKAGES_PATH$dir:" ;;
+        esac
+    fi
+done
+
+PATH="$PACKAGES_PATH$PATH"
+
+export PATH
+
+unset PACKAGES_PATH dir
+
 for i in /opt/packages/*/profile.d/*.sh /opt/packages/*/profile.d/sh.local; do
     if [ -r "$i" ]; then
         . "$i" >/dev/null

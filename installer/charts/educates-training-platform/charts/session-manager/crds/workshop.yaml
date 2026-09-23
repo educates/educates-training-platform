@@ -234,14 +234,43 @@ spec:
                             type: string
                     packages:
                       type: array
+                      maxItems: 64
                       items:
                         type: object
                         required:
                         - name
-                        - files
+                        x-kubernetes-validations:
+                        - rule: "has(self.files) != has(self.image)"
+                          message: "an extension package declares either files or image, not both"
+                        - rule: "!has(self.imagePullPolicy) || has(self.image)"
+                          message: "imagePullPolicy requires image"
+                        - rule: "!has(self.pullSecretRef) || has(self.image)"
+                          message: "pullSecretRef requires image"
+                        - rule: "!has(self.image) || (!self.image.contains('$(platform_arch)') && !self.image.contains('$(oci_image_cache)'))"
+                          message: "image must not use the reserved $(platform_arch) or $(oci_image_cache) variables"
+                        - rule: "!has(self.image) || self.name.matches('^[a-z0-9]([-a-z0-9]{0,55}[a-z0-9])?$')"
+                          message: "an extension package delivered as an image needs a DNS label name"
                         properties:
                           name:
                             type: string
+                            maxLength: 63
+                          image:
+                            type: string
+                            maxLength: 256
+                            pattern: '^([^/@]+/)*[^/@:]+:[^/@:]+$'
+                          imagePullPolicy:
+                            type: string
+                            enum:
+                            - Always
+                            - Never
+                            - IfNotPresent
+                          pullSecretRef:
+                            type: object
+                            required:
+                            - name
+                            properties:
+                              name:
+                                type: string
                           files:
                             type: array
                             items:

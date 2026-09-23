@@ -378,6 +378,7 @@ func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *confi
 	applySMImageValues(values, obj, cfg)
 	applySMIngressValues(values, obj, cfg)
 	applySMSecurityValues(values, obj, cfg)
+	applySMPackageDeliveryValues(values, cfg)
 	applySMSessionValues(values, obj)
 	applySMAnalyticsValues(values, obj)
 	applySMStylingValues(values, obj)
@@ -568,6 +569,20 @@ func applySMSecurityValues(values map[string]any, obj *platformv1alpha1.SessionM
 		values["workshopSecurity"] = map[string]any{
 			"rulesEngine": engine,
 		}
+	}
+}
+
+// applySMPackageDeliveryValues maps the delivery the cluster config
+// resolved for extension packages. The session manager reads the
+// resolved value rather than deciding for itself, so a cluster which
+// cannot mount package images fetches their contents instead.
+func applySMPackageDeliveryValues(values map[string]any, cfg *configv1alpha1.EducatesClusterConfig) {
+	if cfg.Status.PackageDelivery == nil || cfg.Status.PackageDelivery.ImageMount == "" {
+		return
+	}
+
+	values["packageDelivery"] = map[string]any{
+		"imageMount": strings.ToLower(string(cfg.Status.PackageDelivery.ImageMount)),
 	}
 }
 

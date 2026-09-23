@@ -352,6 +352,13 @@ components knowing the difference.
   `helm.LoadArchive`. Refresh with `make vendor-charts` after updating the
   version + hash entries. The operator is the sole installer of cluster
   services — there is no `educates-cluster-services` umbrella chart.
+- The runtime subchart tarballs beside them (secrets-manager,
+  lookup-service, session-manager, node-ca-injector, remote-access) are
+  NOT vendored: they are gitignored build output of `make
+  package-local-charts`, packaged from `installer/charts/educates-training-platform/charts/`.
+  Every operator make target that compiles or builds the image packages
+  them first. Never commit them; running `go build`/`go test` directly on
+  a fresh clone needs `make package-local-charts` first.
 
 **Readiness checks for cluster services:**
 - `Deployment.status.availableReplicas == replicas` is necessary but not

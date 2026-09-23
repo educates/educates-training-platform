@@ -99,10 +99,10 @@ var upstreamChartVersions = map[string]string{
 	"kyverno":      KyvernoChartVersion,
 }
 
-// runtimeSubchartFiles are the tarballs repackaged from the in-repo
-// Educates charts. They live in this directory but are produced by
-// `make package-local-charts`, not `make vendor-charts`, so they are
-// intentionally absent from SHA256SUMS and the Makefile list.
+// runtimeSubchartFiles are the tarballs packaged from the in-repo
+// Educates charts. They live in this directory but are gitignored build
+// output of `make package-local-charts`, not `make vendor-charts`, so they
+// are intentionally absent from SHA256SUMS and the Makefile list.
 var runtimeSubchartFiles = map[string]bool{
 	"secrets-manager-" + SecretsManagerChartVersion + ".tgz":  true,
 	"lookup-service-" + LookupServiceChartVersion + ".tgz":    true,
@@ -231,6 +231,8 @@ func TestVendoredCharts_DirectoryConsistent(t *testing.T) {
 			continue
 		}
 		t.Errorf("stale vendored tarball %s — neither SHA256SUMS nor the "+
-			"embedded runtime subcharts reference it; `git rm` it", file)
+			"embedded runtime subcharts reference it; `git rm` it if it is an "+
+			"upstream chart, or re-run `make package-local-charts` if it is a "+
+			"leftover build of a runtime subchart", file)
 	}
 }

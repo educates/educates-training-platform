@@ -30,6 +30,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -257,6 +258,14 @@ func main() {
 		ByObject: map[client.Object]cache.ByObject{
 			&corev1.Secret{}:     {Namespaces: namespaceConfigs},
 			&appsv1.Deployment{}: {Namespaces: deploymentNamespaceConfigs},
+			// Nodes are read only to work out whether the cluster can mount
+			// package images. A platform with many nodes would otherwise hold
+			// every node object in memory, so the cache keeps just the Linux
+			// nodes and, of those, only the fields the check reads.
+			&corev1.Node{}: {
+				Label:     labels.SelectorFromSet(labels.Set{"kubernetes.io/os": "linux"}),
+				Transform: trimNodeForCache,
+			},
 		},
 	}
 
@@ -348,4 +357,25 @@ func main() {
 		setupLog.Error(err, "Failed to run manager")
 		os.Exit(1)
 	}
+}
+
+// trimNodeForCache keeps only what the image volume check reads from a node,
+// so a platform with many nodes does not hold their full objects in memory.
+// Everything dropped here is unused by this operator.
+func trimNodeForCache(object any) (any, error) {
+	node, ok := object.(*corev1.Node)
+
+	if !ok {
+		return object, nil
+	}
+
+	trimmed := &corev1.Node{}
+	trimmed.Name = node.Name
+	trimmed.Labels = node.Labels
+	trimmed.ResourceVersion = node.ResourceVersion
+	trimmed.UID = node.UID
+	trimmed.Status.NodeInfo.KubeletVersion = node.Status.NodeInfo.KubeletVersion
+	trimmed.Status.NodeInfo.ContainerRuntimeVersion = node.Status.NodeInfo.ContainerRuntimeVersion
+
+	return trimmed, nil
 }

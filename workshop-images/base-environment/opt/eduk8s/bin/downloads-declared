@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Succeeds when the workshop declares anything to download: content assets,
+# extension packages fetched by vendir, or extension packages declared as an
+# image. Every caller which decides whether to run a download asks this, so
+# the set of configs is named in one place.
+
+test -f /opt/eduk8s/config/vendir-assets-01.yaml -o \
+     -f /opt/eduk8s/config/vendir-packages.yaml -o \
+     -f /opt/eduk8s/config/packages.yaml

@@ -76,7 +76,7 @@ fmt: ## Run go fmt against code.
 	go fmt ./...
 
 .PHONY: vet
-vet: ## Run go vet against code.
+vet: package-local-charts ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
@@ -102,11 +102,11 @@ rbac-verify: ## Local kind-based RBAC acceptance test (install+teardown, cluster
 	bash hack/rbac-verify.sh
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter
+lint: golangci-lint package-local-charts ## Run golangci-lint linter
 	"$(GOLANGCI_LINT)" run
 
 .PHONY: lint-fix
-lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
+lint-fix: golangci-lint package-local-charts ## Run golangci-lint linter and perform fixes
 	"$(GOLANGCI_LINT)" run --fix
 
 .PHONY: lint-config
@@ -165,19 +165,19 @@ verify-vendored-charts: ## Re-verify SHA256 of every tarball already in vendored
 # In-repo subcharts of the umbrella `educates-training-platform` chart.
 # Operator-driven installs use the same tarball+go:embed pattern as the
 # upstream cluster-services charts (cert-manager, Contour, etc.) so the
-# install mechanism stays uniform across phases. The tarballs are
-# committed to the repo because:
-#   - the operator image embeds them at build time;
-#   - the source charts are deliberately stable (subchart version bumps
-#     are a reviewable git event, not a side effect of every operator
-#     build);
-#   - editors / `go build` work without a separate generate step.
-# Regenerate after editing any of the listed subcharts.
+# install mechanism stays uniform. Unlike the upstream charts, these
+# tarballs are build output: they are packaged from their sources here,
+# are gitignored, and every target which compiles the operator or builds
+# its image runs this first. go:embed cannot reach the sources outside
+# this module, and the image's build context is this directory, so the
+# tarballs have to be placed here, but they never need to be committed.
+# Older builds of each chart are removed first, so a version bump does not
+# leave a stale tarball behind.
 LOCAL_SUBCHARTS_SRC := $(shell pwd)/../charts/educates-training-platform/charts
 LOCAL_SUBCHARTS := secrets-manager lookup-service session-manager node-ca-injector remote-access
 
 .PHONY: package-local-charts
-package-local-charts: ## Repackage in-repo subcharts (secrets-manager, lookup-service, session-manager) into vendored-charts/.
+package-local-charts: ## Package the in-repo runtime subcharts the operator embeds into vendored-charts/.
 	@set -e; \
 	for name in $(LOCAL_SUBCHARTS); do \
 		src="$(LOCAL_SUBCHARTS_SRC)/$$name"; \
@@ -185,6 +185,7 @@ package-local-charts: ## Repackage in-repo subcharts (secrets-manager, lookup-se
 			echo "skip $$name (not present at $$src)"; \
 			continue; \
 		fi; \
+		rm -f "$(VENDORED_CHARTS_DIR)/$$name"-*.tgz; \
 		echo ">> packaging $$name from $$src"; \
 		helm package "$$src" --destination "$(VENDORED_CHARTS_DIR)"; \
 	done
@@ -203,7 +204,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+docker-build: package-local-charts ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build -t ${IMG} .
 
 ##@ Dependencies

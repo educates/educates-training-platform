@@ -129,7 +129,16 @@ type EducatesClusterConfigReconciler struct {
 	// distinguish "RESTMapper cache is stale, CRDs really exist" from
 	// "CRDs are genuinely missing" when SSA / Get calls return
 	// NoMatchError. See handleCertManagerCRDsMissing.
+	//
+	// It is deliberately uncached, because CRDWatcher polls it to notice
+	// CRDs appearing. The package delivery probe wants the opposite, so it
+	// holds its own answer in apiServerVersion rather than asking every
+	// reconcile.
 	Discovery discovery.DiscoveryInterface
+
+	// apiServerVersion holds the API server version between reconciles. See
+	// apiserverversion.go for why the probe does not read it every time.
+	apiServerVersion apiServerVersionCache
 }
 
 // +kubebuilder:rbac:groups=config.educates.dev,resources=educatesclusterconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -149,6 +158,8 @@ type EducatesClusterConfigReconciler struct {
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=cert-manager.io,resources=clusterissuers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingressclasses,verbs=get;list;watch
+// Nodes are read to work out whether the cluster can mount package images.
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 // Managed-mode operations:
 //   - Namespaces (create/patch for cluster-service installs).
@@ -242,6 +253,11 @@ func (r *EducatesClusterConfigReconciler) Reconcile(ctx context.Context, req ctr
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
+
+	// Package delivery describes what the cluster can do rather than what
+	// Educates installs, so it is resolved in both modes, before the two
+	// paths diverge.
+	r.resolvePackageDelivery(ctx, obj)
 
 	// Managed mode delegates to the install pipeline; Inline mode stays
 	// in the validator.
@@ -614,6 +630,14 @@ func (r *EducatesClusterConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToSingleton)).
 		Watches(&networkingv1.IngressClass{}, handler.EnqueueRequestsFromMapFunc(r.mapIngressClassToSingleton)).
 		Watches(&appsv1.Deployment{}, handler.EnqueueRequestsFromMapFunc(r.mapDeploymentToSingleton)).
+		// A node joining, leaving or being upgraded can change whether the
+		// cluster can mount package images. The predicate keeps node
+		// heartbeats from reconciling the singleton.
+		Watches(
+			&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(r.mapNodeToSingleton),
+			builder.WithPredicates(nodeVersionsChanged()),
+		).
 		// Platform component CRs gate the Managed-mode finalizer drain;
 		// their deletion events are what unblock a pending teardown.
 		// Their CRDs ship in the same chart as ours, so unlike the

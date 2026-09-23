@@ -99,7 +99,8 @@ This is the default target (`local-build`). It:
 * builds the `educates` CLI for your host platform into `client-programs/bin/educates-<os>-<arch>`, with compiled-in defaults pointing at the local image registry (`localhost:5001`, tag `latest`);
 * deploys the local image registry container using that CLI if it isn't already running;
 * builds the core platform images and the operator image **for your host architecture only** and pushes them to the local registry;
-* regenerates the committed embedded artifacts (operator CRDs, the runtime subchart tarballs the operator embeds, the CLI-embedded operator chart and JSON schemas) when their sources changed — if `git status` is dirty after `make`, commit the regenerated files.
+* regenerates the committed embedded artifacts (operator CRDs, the CLI-embedded operator chart and JSON schemas) when their sources changed — if `git status` is dirty after `make`, commit the regenerated files;
+* packages the runtime subchart tarballs the operator embeds from their sources under `installer/charts/educates-training-platform/charts/`. These are gitignored build output rather than committed files, and every target which compiles the operator or builds its image packages them first. To run `go build` or `go test` directly in `installer/operator/` on a fresh clone, run `make package-local-charts` first, since `//go:embed` needs the files to exist.
 
 Then deploy the locally built system:
 

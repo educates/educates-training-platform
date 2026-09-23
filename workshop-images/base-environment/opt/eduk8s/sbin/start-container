@@ -78,8 +78,13 @@ DOWNLOAD_FAILED=$HOME/.local/share/workshop/download-workshop.failed
 SETUP_LOGFILE=$HOME/.local/share/workshop/setup-scripts.log
 SETUP_FAILED=$HOME/.local/share/workshop/setup-scripts.failed
 
-if [ -f /opt/eduk8s/config/vendir-assets-01.yaml -o -f /opt/eduk8s/config/vendir-packages.yaml ]; then
-    if [ ! -f /opt/assets/vendir-assets-01.yaml -a ! -f /opt/packages/vendir-packages.yaml ]; then
+if downloads-declared; then
+    # The init container leaves behind the config it copied, so its presence
+    # says the download already happened and only the merge is left.
+
+    if [ ! -f /opt/assets/vendir-assets-01.yaml -a \
+         ! -f /opt/packages/vendir.yaml -a \
+         ! -f /opt/packages/packages.yaml ]; then
         # In this case we are running in the main container and need to do the
         # download of the workshop content using vendir.
 
@@ -111,6 +116,14 @@ else
         (download-workshop "$DOWNLOAD_URL" || touch $DOWNLOAD_FAILED) 2>&1 | tee -a $DOWNLOAD_LOGFILE
     fi
 fi
+
+# Check that every extension package declared as an image actually arrived.
+# This runs in the main container rather than the init container because a
+# mounted package is only visible here, and it reports against the same failure
+# marker as the download above, so a package which did not arrive is one kind of
+# failure however it was delivered.
+
+(verify-packages || touch $DOWNLOAD_FAILED) 2>&1 | tee -a $DOWNLOAD_LOGFILE
 
 # Determine what bundled applications are enabled. These variables will control
 # what is started up from supervisord and also checked by the gateway, rather

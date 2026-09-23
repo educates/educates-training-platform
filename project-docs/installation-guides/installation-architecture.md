@@ -96,7 +96,7 @@ The `EducatesClusterConfig` reconciler renders a values map for each vendored up
 
 In Inline mode this stage installs nothing — the reconciler only validates that the referenced Secrets, IngressClass, and engines exist.
 
-Either way, the stage ends by publishing **status**: the validated ingress contract (`status.ingress.domain`, wildcard certificate and CA Secret references, optional ClusterIssuer), resolved policy engines, image registry, and installed chart versions.
+Either way, the stage ends by publishing **status**: the validated ingress contract (`status.ingress.domain`, wildcard certificate and CA Secret references, optional ClusterIssuer), resolved policy engines, image registry, the resolved extension package delivery (`status.packageDelivery.imageMount`, settled against what the cluster supports), and installed chart versions.
 
 ```shell
 helm -n contour get values contour                  # what the operator computed for a cluster service
@@ -109,7 +109,7 @@ Each component reconciler waits for its gates, then merges its own spec with the
 
 * `SecretsManager` → release `secrets-manager`: `logLevel`, image override, resources, pull secrets from `status.imageRegistry`.
 * `LookupService` → release `lookup-service`: `ingress.host` composed as `<spec.ingress.prefix>.<status.ingress.domain>`, TLS reference from status (or the per-resource override), publishing the result as `status.url`.
-* `SessionManager` → release `session-manager`: `clusterIngress.{domain,tlsCertificateRef,caCertificateRef}` from status, `clusterSecurity.policyEngine` from status, plus everything from its own spec (themes, analytics, storage, network, ingress overrides). Its `nodeCATrust` and `remoteAccess` modes decide two extra releases, `node-ca-injector` and `remote-access`.
+* `SessionManager` → release `session-manager`: `clusterIngress.{domain,tlsCertificateRef,caCertificateRef}` from status, `clusterSecurity.policyEngine` from status, `packageDelivery.imageMount` from status (which decides whether extension packages declared as an image are mounted into a workshop session or have their contents fetched), plus everything from its own spec (themes, analytics, storage, network, ingress overrides). Its `nodeCATrust` and `remoteAccess` modes decide two extra releases, `node-ca-injector` and `remote-access`.
 
 ```shell
 helm -n educates list                              # one release per component

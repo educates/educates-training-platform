@@ -1925,6 +1925,74 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         ]
     )
 
+    # Where the platform delivers extension packages by mounting their images,
+    # each package becomes a read-only image volume nested inside the packages
+    # directory above. The delivery was fixed when the environment was created,
+    # so every session of the environment renders the same way.
+
+    # An environment created before this field existed has no value, and its
+    # download config was written with every package included, so treating it
+    # as a fetch is the only consistent reading.
+
+    image_mount_enabled = (
+        environment_instance.obj["status"]["educates"]
+        .get("packageDelivery", {})
+        .get("imageMount", "disabled")
+        == "enabled"
+    )
+
+    if image_mount_enabled:
+        package_pull_secrets = []
+
+        for package in workshop_spec.get("workshop", {}).get("packages", []):
+            package_image = package.get("image")
+
+            if not package_image:
+                continue
+
+            package_name = package["name"]
+            volume_name = f"package-{package_name}"
+
+            image_volume = {
+                "reference": substitute_variables(
+                    package_image, session_variables
+                ),
+            }
+
+            package_image_pull_policy = package.get("imagePullPolicy")
+
+            if package_image_pull_policy:
+                image_volume["pullPolicy"] = package_image_pull_policy
+
+            deployment_pod_template_spec["volumes"].append(
+                {"name": volume_name, "image": image_volume}
+            )
+
+            deployment_pod_template_spec["containers"][0]["volumeMounts"].append(
+                {
+                    "name": volume_name,
+                    "mountPath": f"/opt/packages/{package_name}",
+                    "readOnly": True,
+                }
+            )
+
+            pull_secret_ref = package.get("pullSecretRef", {}).get("name")
+
+            if pull_secret_ref and pull_secret_ref not in package_pull_secrets:
+                package_pull_secrets.append(pull_secret_ref)
+
+        # The kubelet pulls a mounted image, so any credentials it needs are
+        # the pod's rather than the fetcher's.
+
+        if package_pull_secrets:
+            image_pull_secrets = deployment_pod_template_spec.setdefault(
+                "imagePullSecrets", []
+            )
+
+            for pull_secret_ref in package_pull_secrets:
+                if {"name": pull_secret_ref} not in image_pull_secrets:
+                    image_pull_secrets.append({"name": pull_secret_ref})
+
     # Since using at least an emptyDir for workshop user home directory we
     # must always use an init container to copy the home directory from the
     # workshop image to the volume.
@@ -2022,9 +2090,21 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
 
     if not need_secrets:
         for package in workshop_spec.get("workshop", {}).get("packages", []):
+            # A package declared as an image names its credentials directly,
+            # rather than inside a vendir source. Where such a package is
+            # mounted the kubelet pulls it using the pod's image pull secrets,
+            # so nothing downloads it and no credentials are needed here.
+            if package.get("pullSecretRef", {}).get("name"):
+                if not image_mount_enabled:
+                    need_secrets = True
+                    break
+
+                continue
+
             package_files = package.get("files", [])
-            need_secrets = vendir_secrets_required(package_files)
-            if need_secrets:
+
+            if vendir_secrets_required(package_files):
+                need_secrets = True
                 break
 
     if need_secrets and environment_secrets:

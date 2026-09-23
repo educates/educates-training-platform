@@ -1,0 +1,5 @@
+apiVersion: packages.educates.dev/v1alpha1
+kind: ExtensionPackage
+name: greeter
+version: 1.0.0
+description: A minimal extension package used by the lab-extension-packages sample.

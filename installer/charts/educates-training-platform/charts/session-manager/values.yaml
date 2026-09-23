@@ -89,6 +89,13 @@ workshopSecurity:
     #       resourceRules:
     #         - ...
 
+# How an extension package declared as an image reaches a workshop session.
+# When image mounting is enabled the image is mounted read only into the
+# session; otherwise its contents are fetched, which works on any cluster.
+
+packageDelivery:
+  imageMount: disabled    # enabled | disabled
+
 # =============================================================================
 # Development overrides
 # =============================================================================

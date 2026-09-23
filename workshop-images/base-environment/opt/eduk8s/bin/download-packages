@@ -29,22 +29,32 @@ fi
 
 time vendir sync -f vendir.yaml --lock-file vendir.lock.yaml $VENDIR_ARGS
 
-# As a workaround for vendir not preserving file mode bits when unpacking
-# tarballs downloaded via HTTP, always set setup.d scripts to be executable.
-# Note that packages will need to provide a setup.d script to fix up file mode
-# bits on other files, such as in a bin directory.
+# The repairs below are only for what vendir wrote. A package fetched as an
+# image already carries the modes it was published with, and rewriting them
+# here would undo that, so only the directories named in the vendir config are
+# touched rather than everything under /opt/packages.
 
-chmod +x */setup.d/*.sh || true
+PACKAGE_PATHS=$(yq '.directories[].path' vendir.yaml)
 
-# When using imgpkg push/pull, it does not preserve permissions for groups and
-# other and instead only keeps user permissions. This will break workshops where
-# files are being used with docker builds and things will only work where
-# original permissions exist. To try and avoid problems, if we see that only
-# owner permissions exist, copy those to group and others. There is still a risk
-# that a source file may not have actually had group or other permissions and so
-# that is desired, but not likely and nothing else that can be done. Also note
-# that we don't fail if there are problems. In particular, if a volume mount was
-# used to add files, the directories will not be writable so we want to avoid a
-# hard failure in that case.
+for PACKAGE_PATH in $PACKAGE_PATHS; do
+    # As a workaround for vendir not preserving file mode bits when unpacking
+    # tarballs downloaded via HTTP, always set setup.d scripts to be
+    # executable. Note that packages will need to provide a setup.d script to
+    # fix up file mode bits on other files, such as in a bin directory.
 
-chmod -R go=u-w * || true
+    chmod +x $PACKAGE_PATH/setup.d/*.sh || true
+
+    # When using imgpkg push/pull, it does not preserve permissions for groups
+    # and other and instead only keeps user permissions. This will break
+    # workshops where files are being used with docker builds and things will
+    # only work where original permissions exist. To try and avoid problems, if
+    # we see that only owner permissions exist, copy those to group and others.
+    # There is still a risk that a source file may not have actually had group
+    # or other permissions and so that is desired, but not likely and nothing
+    # else that can be done. Also note that we don't fail if there are
+    # problems. In particular, if a volume mount was used to add files, the
+    # directories will not be writable so we want to avoid a hard failure in
+    # that case.
+
+    chmod -R go=u-w $PACKAGE_PATH || true
+done

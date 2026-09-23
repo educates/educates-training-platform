@@ -122,6 +122,13 @@ jobs:
           password: ${{secrets.GITHUB_TOKEN}}
           registry: ghcr.io
 
+      # The runtime subchart tarballs the operator embeds are build output,
+      # packaged from their sources rather than committed, so they are
+      # produced here before the image is built.
+      - name: Package runtime subcharts into operator chart embeds
+        if: matrix.image == 'operator'
+        run: make -C installer/operator package-local-charts
+
       # On release tags the operator image must embed the runtime
       # subchart tarballs at the released version (versions are stamped
       # in CI, not committed — see decisions.md).
@@ -243,6 +250,9 @@ jobs:
           username: ${{github.actor}}
           password: ${{secrets.GITHUB_TOKEN}}
           registry: ghcr.io
+
+      - name: Stage the package fetcher source
+        run: make stage-base-environment-fetcher
 
       - name: Build and push base-environment image
         uses: docker/build-push-action@v7

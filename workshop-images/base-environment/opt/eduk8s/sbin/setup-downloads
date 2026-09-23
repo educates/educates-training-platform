@@ -6,7 +6,10 @@ DOWNLOAD_LOGFILE=/opt/assets/download-workshop.log
 DOWNLOAD_FAILED=/opt/assets/download-workshop.failed
 
 if [ -d /opt/assets ]; then
-    if [ -f /opt/eduk8s/config/vendir-assets-01.yaml ]; then
+    # A workshop whose only downloads are extension packages needs this
+    # container too, since it is where the registry credentials are mounted.
+
+    if downloads-declared; then
         (vendir-workshop || touch $DOWNLOAD_FAILED) 2>&1 | tee -a $DOWNLOAD_LOGFILE
     fi
 fi

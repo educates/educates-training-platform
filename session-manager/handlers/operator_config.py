@@ -81,6 +81,15 @@ CLUSTER_STORAGE_GROUP = xget(config_values, "clusterStorage.group", 1)
 CLUSTER_SECURITY_POLICY_ENGINE = xget(config_values, "clusterSecurity.policyEngine")
 WORKSHOP_SECURITY_RULES_ENGINE = xget(config_values, "workshopSecurity.rulesEngine")
 
+# Whether an extension package declared as an image is delivered by mounting
+# the image into the session, rather than fetching its contents. The operator
+# resolves this from what the cluster supports; the default is the delivery
+# which works everywhere.
+
+PACKAGE_DELIVERY_IMAGE_MOUNT = xget(
+    config_values, "packageDelivery.imageMount", "disabled"
+)
+
 DOCKERD_MTU = xget(config_values, "dockerDaemon.networkMTU", 1400)
 DOCKERD_MIRROR_REMOTE = xget(config_values, "dockerDaemon.proxyCache.remoteURL")
 DOCKERD_MIRROR_USERNAME = xget(config_values, "dockerDaemon.proxyCache.username", "")

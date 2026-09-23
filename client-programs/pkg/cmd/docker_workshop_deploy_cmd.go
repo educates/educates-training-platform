@@ -52,6 +52,7 @@ type DockerWorkshopDeployOptions struct {
 	WorkshopFile       string
 	WorkshopImage      string
 	WorkshopVersion    string
+	PackageDelivery    string
 	DataValuesFlags    yttcmd.DataValuesFlags
 }
 
@@ -82,6 +83,11 @@ EOS
 {{ if .VendirPackagesConfig -}}
 cat > /opt/eduk8s/config/vendir-packages.yaml << "EOS"
 {{ .VendirPackagesConfig -}}
+EOS
+{{ end -}}
+{{ if .FetchPackagesConfig -}}
+cat > /opt/eduk8s/config/packages.yaml << "EOS"
+{{ .FetchPackagesConfig -}}
 EOS
 {{ end -}}
 {{ if .KubeConfig -}}
@@ -148,6 +154,11 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 
 	registryNetwork := false
 
+	// The session reaches the local registry by its name on the educates
+	// network, which the daemon cannot resolve, so the address the daemon
+	// uses for the same registry is kept for the images it pulls itself.
+	daemonRepository := o.LocalRepository
+
 	if o.LocalRepository == "localhost:5001" {
 		o.LocalRepository = "registry.docker.local:5000"
 	}
@@ -170,6 +181,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 		}
 	} else {
 		o.LocalRepository = ""
+		daemonRepository = ""
 	}
 
 	var kubeConfigData string
@@ -195,6 +207,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 	var workshopConfigData string
 	var vendirFilesConfigData []string
 	var vendirPackagesConfigData string
+	var fetchPackagesConfigData string
 	var workshopImageName string
 
 	var workshopPortsConfig []composetypes.ServicePortConfig
@@ -205,6 +218,14 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 	var workshopExtraHosts map[string]string
 
 	var workshopComposeProject *composetypes.Project
+
+	// Apply the extension package rules the Workshop custom resource
+	// definition enforces on a cluster, so a local deploy gives the same
+	// verdict.
+
+	if err = validateWorkshopPackages(workshop); err != nil {
+		return name, err
+	}
 
 	if workshopConfigData, err = generateWorkshopConfig(workshop); err != nil {
 		return name, err
@@ -218,8 +239,43 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 		return name, err
 	}
 
-	if workshopImageName, err = generateWorkshopImageName(workshop, o.LocalRepository, o.ImageRepository, o.ImageVersion, o.WorkshopImage, o.WorkshopVersion); err != nil {
+	// Settle how extension packages declared as an image reach the session.
+	// This happens before anything is written, so that forcing a mount onto a
+	// daemon which cannot do it fails here rather than once Compose is
+	// already running.
+
+	packageDelivery, err := parseDockerPackageDelivery(o.PackageDelivery)
+
+	if err != nil {
 		return name, err
+	}
+
+	imagePackages, err := resolveImagePackageDelivery(
+		ctx, cli, workshop, packageDelivery, originalName,
+		imageRepositories{Session: o.LocalRepository, Daemon: daemonRepository},
+		o.WorkshopVersion, stdout,
+	)
+
+	if err != nil {
+		return name, err
+	}
+
+	if fetchPackagesConfigData, err = generateFetchPackagesConfig(imagePackages.Fetches); err != nil {
+		return name, err
+	}
+
+	// The daemon pulls the workshop image, so the image is named by the
+	// address the daemon reaches the local registry by.
+	if workshopImageName, err = generateWorkshopImageName(workshop, daemonRepository, o.ImageRepository, o.ImageVersion, o.WorkshopImage, o.WorkshopVersion); err != nil {
+		return name, err
+	}
+
+	// Compose only pulls an image which is missing, so a workshop image whose
+	// tag is expected to move is refreshed first, as a cluster would.
+	if workshopImagePullPolicy(workshopImageName) == imagePullPolicyAlways {
+		if err := refreshImageWithDocker(ctx, cli, workshopImageName, workshopImageDescription, stdout); err != nil {
+			return name, err
+		}
 	}
 
 	if workshopPortsConfig, err = composetypes.ParsePortConfig(fmt.Sprintf("%s:%d:10081", o.Host, o.Port)); err != nil {
@@ -229,6 +285,10 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 	if workshopVolumesConfig, err = generateWorkshopVolumeMounts(workshop, o.Assets); err != nil {
 		return name, err
 	}
+
+	// A mounted extension package is one more volume on the workshop service.
+
+	workshopVolumesConfig = append(workshopVolumesConfig, imagePackages.Mounts...)
 
 	if workshopEnvironment, err = generateWorkshopEnvironment(workshop, o.LocalRepository, o.Host, o.Port); err != nil {
 		return name, err
@@ -252,6 +312,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 		WorkshopConfig       string
 		VendirFilesConfig    []string
 		VendirPackagesConfig string
+		FetchPackagesConfig  string
 		KubeConfig           string
 		Assets               string
 	}
@@ -260,6 +321,7 @@ func (m *DockerWorkshopsManager) DeployWorkshop(o *DockerWorkshopDeployOptions, 
 		WorkshopConfig:       workshopConfigData,
 		VendirFilesConfig:    vendirFilesConfigData,
 		VendirPackagesConfig: vendirPackagesConfigData,
+		FetchPackagesConfig:  fetchPackagesConfigData,
 		KubeConfig:           kubeConfigData,
 		Assets:               o.Assets,
 	}
@@ -568,6 +630,12 @@ func (p *ProjectInfo) NewDockerWorkshopDeployCmd() *cobra.Command {
 		"latest",
 		"version of the workshop definition",
 	)
+	c.Flags().StringVar(
+		&o.PackageDelivery,
+		"package-delivery",
+		"auto",
+		"how extension package images are delivered (auto, image-mount or fetch)",
+	)
 
 	c.Flags().StringArrayVar(
 		&o.DataValuesFlags.EnvFromStrings,
@@ -713,7 +781,11 @@ func generateVendirPackagesConfig(workshop *unstructured.Unstructured, name stri
 		directoriesConfig := []map[string]interface{}{}
 
 		for _, packagesItem := range packagesItems {
-			tmpPackagesItem := packagesItem.(map[string]interface{})
+			tmpPackagesItem, ok := packagesItem.(map[string]interface{})
+
+			if !ok {
+				return "", errors.New("unable to parse extension package, entry is not an object")
+			}
 
 			tmpName, found := tmpPackagesItem["name"]
 
@@ -721,14 +793,38 @@ func generateVendirPackagesConfig(workshop *unstructured.Unstructured, name stri
 				continue
 			}
 
-			packagesItemPath := filepath.Clean(path.Join("/opt/packages", tmpName.(string)))
+			packagesItemName, ok := tmpName.(string)
 
-			tmpPackagesFilesItem := tmpPackagesItem["files"]
+			if !ok {
+				return "", errors.Errorf("unable to parse extension package, name %v is not a string", tmpName)
+			}
 
-			packagesFilesItem := tmpPackagesFilesItem.([]interface{})
+			packagesItemPath := filepath.Clean(path.Join("/opt/packages", packagesItemName))
+
+			tmpPackagesFilesItem, found := tmpPackagesItem["files"]
+
+			// An extension package which declares no files has nothing for
+			// vendir to download, so it contributes no directory to the
+			// config. The remaining packages are still processed. The skip is
+			// silent: the deploy reports which packages it delivered and how,
+			// rather than commenting on each one here.
+
+			if !found || tmpPackagesFilesItem == nil {
+				continue
+			}
+
+			packagesFilesItem, ok := tmpPackagesFilesItem.([]interface{})
+
+			if !ok {
+				return "", errors.Errorf("unable to parse extension package %q, files is not a list", packagesItemName)
+			}
 
 			for _, tmpEntry := range packagesFilesItem {
-				entry := tmpEntry.(map[string]interface{})
+				entry, ok := tmpEntry.(map[string]interface{})
+
+				if !ok {
+					return "", errors.Errorf("unable to parse extension package %q, files entry is not an object", packagesItemName)
+				}
 
 				_, found = entry["path"]
 
@@ -742,6 +838,15 @@ func generateVendirPackagesConfig(workshop *unstructured.Unstructured, name stri
 				"contents": packagesFilesItem,
 			})
 
+		}
+
+		// Every package may have been declared as an image, in which case
+		// vendir has nothing to do. Writing the config anyway would make the
+		// base image run vendir against an empty directory list, so it is
+		// omitted entirely, the same as for a workshop declaring no packages.
+
+		if len(directoriesConfig) == 0 {
+			return "", nil
 		}
 
 		vendirConfig := map[string]interface{}{

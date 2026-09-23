@@ -14,7 +14,13 @@ if [ -f /opt/eduk8s/config/vendir-assets-01.yaml ]; then
 fi
 
 if [ -f /opt/eduk8s/config/vendir-packages.yaml ]; then
-    # Download the extension packages.
+    # Download the extension packages which declare files.
 
     download-packages
+fi
+
+if [ -f /opt/eduk8s/config/packages.yaml ]; then
+    # Fetch the extension packages which declare an image.
+
+    fetch-packages
 fi

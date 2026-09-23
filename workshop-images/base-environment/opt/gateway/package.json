@@ -21,7 +21,7 @@
     "@xterm/xterm": "^5.5.0",
     "axios": "^1.16.1",
     "axios-retry": "^4.5.0",
-    "bootstrap": "^5.3.2",
+    "bootstrap": "^5.3.8",
     "bufferutil": "^4.0.8",
     "color-string": "^1.9.1",
     "cors": "^2.8.5",

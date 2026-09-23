@@ -23,6 +23,7 @@ from .analytics import report_analytics_event
 
 from .operator_config import (
     resolve_workshop_image,
+    PACKAGE_DELIVERY_IMAGE_MOUNT,
     PLATFORM_ARCH,
     OPERATOR_NAMESPACE,
     IMAGE_REPOSITORY,
@@ -810,28 +811,71 @@ def workshop_environment_create(
 
     packages = workshop_spec.get("workshop", {}).get("packages", [])
 
-    if packages:
+    # An extension package declaring files is downloaded by vendir. One
+    # declaring an image is either mounted into the session, in which case
+    # nothing downloads it, or fetched by the package fetcher. Whichever
+    # applies, a package appears in at most one config.
+
+    image_mount_enabled = PACKAGE_DELIVERY_IMAGE_MOUNT == "enabled"
+
+    directories_config = []
+    fetch_packages_config = []
+
+    for package in packages:
+        package_name = package["name"]
+        package_path = f"/opt/packages/{package_name}"
+
+        package_image = package.get("image")
+
+        if package_image:
+            if image_mount_enabled:
+                # The image is mounted into the session by the kubelet, so
+                # there is nothing to download.
+                continue
+
+            fetch_entry = {
+                "path": package_path,
+                "image": substitute_variables(
+                    package_image, environment_downloads_variables
+                ),
+            }
+
+            pull_secret_ref = package.get("pullSecretRef", {}).get("name")
+
+            if pull_secret_ref:
+                fetch_entry["secretRef"] = pull_secret_ref
+
+            fetch_packages_config.append(fetch_entry)
+
+            continue
+
+        package_files = substitute_variables(
+            package["files"], environment_downloads_variables
+        )
+        directories_config.append(
+            {"path": package_path, "contents": package_files}
+        )
+
+    if directories_config:
         vendir_config = {
             "apiVersion": "vendir.k14s.io/v1alpha1",
             "kind": "Config",
-            "directories": [],
+            "directories": directories_config,
         }
-
-        directories_config = []
-
-        for package in packages:
-            package_name = package["name"]
-            package_files = substitute_variables(
-                package["files"], environment_downloads_variables
-            )
-            directories_config.append(
-                {"path": f"/opt/packages/{package_name}", "contents": package_files}
-            )
-
-        vendir_config["directories"] = directories_config
 
         config_secret_body["data"]["vendir-packages.yaml"] = base64.b64encode(
             yaml.dump(vendir_config, Dumper=yaml.Dumper).encode("utf-8")
+        ).decode("utf-8")
+
+    if fetch_packages_config:
+        fetch_config = {
+            "apiVersion": "packages.educates.dev/v1alpha1",
+            "kind": "PackageFetch",
+            "packages": fetch_packages_config,
+        }
+
+        config_secret_body["data"]["packages.yaml"] = base64.b64encode(
+            yaml.dump(fetch_config, Dumper=yaml.Dumper).encode("utf-8")
         ).decode("utf-8")
 
     kopf.adopt(config_secret_body, namespace_instance.obj)
@@ -2312,6 +2356,13 @@ def workshop_environment_create(
             "uid": workshop_uid,
             "generation": workshop_generation,
             "spec": workshop_spec,
+        },
+        # How extension packages declared as an image are delivered is fixed
+        # when the environment is created, so every session of the environment
+        # is the same. Changing the platform setting affects new environments
+        # only.
+        "packageDelivery": {
+            "imageMount": PACKAGE_DELIVERY_IMAGE_MOUNT,
         },
     }
 

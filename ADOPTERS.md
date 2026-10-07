@@ -9,3 +9,4 @@ _You can do this by using the [Adopter request issue](https://github.com/educate
 | [NETWAYS Managed Services GmbH](https://nws.netways.de) | [mocdaniel](https://github.com/mocdaniel) | Used for the [NWS Playground](https://playground.nws.netways.de), internal learning platform(s), and external workshops on demand |
 | [12F APS](https://12f.dk) | [rhjensen79](https://github.com/rhjensen79) | Used for customer workshops on demand, and for implementing at customers, as an internal learning/sandbox platform |
 | [TeraSky](https://terasky.com) | [vrabbi](https://github.com/vrabbi) | Used for internal training, workshops for customers, and demo environments |
+| [VIAM](https://viam.com) | [btshrewsbury-viam](https://github.com/btshrewsbury-viam) | Used for [Viam Education](https://learn.viam.com) to teach robotics courses and provide instruction on how to use the VIAM platform! |

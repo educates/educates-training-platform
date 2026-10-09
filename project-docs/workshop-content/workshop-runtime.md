@@ -48,6 +48,7 @@ kubectl get all -n $SESSION_NAMESPACE
 
 and the value of the environment variable will be inserted by the shell.
 
+(running-steps-on-container-start)=
 Running steps on container start
 --------------------------------
 
@@ -116,7 +117,7 @@ The ``workshop/profile`` script should only be used for customizing the shell en
 
 If you need to run more complicated actions, such as query the Kubernetes REST API, and set environment variables based on the results, you should instead use a ``workshop/setup.d`` script and write out details of any environment variables to the ``.env`` file, the name of which is given by the ``WORKSHOP_ENV`` environment variable, or create a file in the ``workshop/profile.d`` drectory. Any script files with a ``.sh`` extension found in this latter directory will be executed once inline with scripts used to initialize the overall container environment. This is done after the workshop content has been downloaded, with any ``profile.d`` scripts processed after the ``setup.d`` scripts have been run. As the ``profile.d`` scripts are executed inline to scripts used to initialize the container environment, any environment variables set and exported from the ``profile.d`` scripts will flow through and be available for use in the ``setup.d`` scripts, rendered workshop instructions, and the terminal sessions.
 
-Note that it is quite likely that the ``profile.d`` script feature will be deprecated and ultimately removed in a future version. You should use the ``WORKSHOP_ENV`` mechanism for setting environment variables from a ``setup.d`` script instead.
+Note that the ``profile.d`` script feature is deprecated and will be removed in a future version. This applies equally to ``profile.d`` scripts supplied by extension packages. You should use the ``WORKSHOP_ENV`` mechanism for setting environment variables from a ``setup.d`` script instead.
 
 Overriding terminal shell command
 ---------------------------------

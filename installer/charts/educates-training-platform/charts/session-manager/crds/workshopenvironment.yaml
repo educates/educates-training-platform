@@ -167,6 +167,14 @@ spec:
                           type: array
                           items:
                             type: string
+                    packageDelivery:
+                      type: object
+                      properties:
+                        imageMount:
+                          type: object
+                          properties:
+                            enabled:
+                              type: boolean
                     workshop:
                       type: object
                       required:

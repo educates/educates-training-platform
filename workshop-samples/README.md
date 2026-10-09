@@ -55,6 +55,12 @@ Available Workshops
   all examiner clickable action types including basic pass/fail tests, arguments,
   timeout, retries, form inputs, autostart, cascade, and cooldown.
 
+* [lab-extension-packages](lab-extension-packages/) - Test workshop for
+  verifying an extension package declared as an image, covering the delivery it
+  arrives by, the package hooks, the read only rule and the `bin` directory on
+  the `PATH`. This sample ships the package it uses, which must be published
+  before the workshop is deployed.
+
 * [lab-markdown-basics](lab-markdown-basics/) - Test workshop for verifying
   rendering of common markdown formatting including headings, text styles, lists,
   links, code blocks, tables, blockquotes, and admonition shortcodes.

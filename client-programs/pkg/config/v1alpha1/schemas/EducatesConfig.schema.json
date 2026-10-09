@@ -793,6 +793,22 @@
           ],
           "type": "string"
         },
+        "packageDelivery": {
+          "description": "packageDelivery configures how extension packages declared as an\nimage reach a workshop session. Applies in both modes: it describes\nwhat the cluster can do, not what Educates installs.",
+          "properties": {
+            "imageMount": {
+              "default": "Auto",
+              "description": "imageMount controls whether an extension package declared as an\nimage is mounted into the session read only, rather than having its\ncontents fetched. Mounting needs a recent Kubernetes and container\nruntime on every node; under Auto the operator probes for that and\nfalls back to fetching, which works anywhere.",
+              "enum": [
+                "Auto",
+                "Enabled",
+                "Disabled"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
         "policyEnforcement": {
           "description": "policyEnforcement configures the cluster and workshop policy\nengines in Managed mode; ignored in Inline mode.",
           "properties": {

@@ -54,18 +54,50 @@ for script in /opt/eduk8s/etc/profile.d/*.sh /opt/eduk8s/etc/profile.d/sh.local;
     fi
 done
 
+# Run the setup scripts of each extension package in turn. A package which has
+# a bin directory when its turn comes has it put on the PATH just before its
+# own setup scripts run, and it stays there, so a package's binaries are never
+# found on the PATH before that package is set up, while those of packages
+# already set up remain available to the packages after them. A package with no
+# setup scripts still has its bin directory added at its turn. Each directory is
+# prepended, so where two packages ship a binary of the same name the package
+# whose name sorts last wins, and each is guarded against being added twice, so
+# running this script again adds nothing. A package which only creates its bin
+# directory while being set up puts it on the PATH itself through WORKSHOP_ENV.
+#
+# The same PATH line is written to the package rollup, ahead of the package's
+# own lines. Shells started by sshd or kubectl exec do not inherit the
+# environment of this script, but replay the rollups from the shell profile,
+# so this is how they get the bin directories. The line is written on every
+# run, as the rollup is rebuilt from scratch each time.
+
 touch $WORKSHOP_ENV_ROLLUP
 
-for script in /opt/packages/*/setup.d/*.sh; do
-    if [ -x "$script" ]; then
-        truncate -s 0 $WORKSHOP_ENV
-        execute_setup_script $script 2>&1 | tee -a $SETUP_LOGFILE
-        set -a; . $WORKSHOP_ENV; set +a
-        cat $WORKSHOP_ENV >> $WORKSHOP_ENV_ROLLUP
-        [ -n "$(tail -c1 $WORKSHOP_ENV_ROLLUP)" ] && echo >> $WORKSHOP_ENV_ROLLUP
-        rm -f $WORKSHOP_ENV
+for package_dir in /opt/packages/*/; do
+    [ -d "$package_dir" ] || continue
+    package_dir="${package_dir%/}"
+
+    package_bin="$package_dir/bin"
+    if [ -d "$package_bin" ]; then
+        case ":$PATH:" in
+            *":$package_bin:"*) ;;
+            *) export PATH="$package_bin:$PATH" ;;
+        esac
+        echo "PATH=\"$package_bin:\$PATH\"" >> "$WORKSHOP_ENV_ROLLUP"
     fi
+
+    for script in "$package_dir"/setup.d/*.sh; do
+        [ -x "$script" ] || continue
+        truncate -s 0 "$WORKSHOP_ENV"
+        execute_setup_script "$script" 2>&1 | tee -a "$SETUP_LOGFILE"
+        set -a; . "$WORKSHOP_ENV"; set +a
+        cat "$WORKSHOP_ENV" >> "$WORKSHOP_ENV_ROLLUP"
+        [ -n "$(tail -c1 "$WORKSHOP_ENV_ROLLUP")" ] && echo >> "$WORKSHOP_ENV_ROLLUP"
+        rm -f "$WORKSHOP_ENV"
+    done
 done
+
+unset package_dir package_bin
 
 mv $WORKSHOP_ENV_ROLLUP $HOME/.local/share/workshop/workshop-env-packages.sh
 

@@ -46,6 +46,7 @@ Educates
   workshop-content/workshop-instructions
   workshop-content/workshop-runtime
   workshop-content/building-an-image
+  workshop-content/creating-extension-packages
   workshop-content/working-on-content
 
 .. toctree::

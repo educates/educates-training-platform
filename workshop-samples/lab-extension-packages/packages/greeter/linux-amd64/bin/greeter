@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# The amd64 build of the greeter program. A package ships one of these per
+# architecture, under the matching platform directory, and the right one is
+# selected when the package is delivered.
+
+if [ "$1" = "--which" ]; then
+    echo "linux-amd64"
+    exit 0
+fi
+
+if [ -r "${GREETER_CONFIG:-}" ]; then
+    . "$GREETER_CONFIG"
+fi
+
+echo "${greeting:-Hello} ${subject:-world}, from the linux-amd64 build."

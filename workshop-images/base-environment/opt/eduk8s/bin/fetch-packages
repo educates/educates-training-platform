@@ -1,0 +1,41 @@
+#!/bin/bash
+
+set -eo pipefail
+set -x
+
+# Extension packages declared as images are fetched by the package fetcher
+# rather than vendir, which cannot resolve a multi architecture image and
+# drops file modes on the way in. The fetcher resolves the image for the
+# architecture this session runs on.
+
+mkdir -p /opt/packages
+
+FETCHER_ARGS=()
+
+if [ -d /opt/secrets ]; then
+    # In this case we are running in the init container, where the secrets
+    # holding any registry credentials are mounted.
+
+    FETCHER_ARGS+=(--secrets /opt/secrets)
+fi
+
+PLATFORM_ARCH=${PLATFORM_ARCH:-}
+
+if [ -z "$PLATFORM_ARCH" ]; then
+    case "$(uname -m)" in
+        x86_64) PLATFORM_ARCH=amd64 ;;
+        aarch64|arm64) PLATFORM_ARCH=arm64 ;;
+    esac
+fi
+
+if [ -n "$PLATFORM_ARCH" ]; then
+    FETCHER_ARGS+=(--architecture "$PLATFORM_ARCH")
+fi
+
+time educates-package-fetcher --config /opt/eduk8s/config/packages.yaml "${FETCHER_ARGS[@]}"
+
+# Record that the fetch happened, the way the vendir path leaves behind the
+# config it copied. The main container reads this to know the packages were
+# already fetched by the init container.
+
+cp /opt/eduk8s/config/packages.yaml /opt/packages/packages.yaml

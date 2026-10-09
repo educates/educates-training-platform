@@ -14,6 +14,7 @@ Helm SDK. The bytes are checked into the repository so that:
 ```
 installer/operator/vendored-charts/
 ├── README.md                    (this file)
+├── .gitignore                   (ignores the runtime subchart tarballs, which are build output)
 ├── SHA256SUMS                   (one line per upstream tarball: <hash>  <filename>)
 ├── embed.go                     (//go:embed directives + version constants)
 ├── embed_test.go                (load tests + directory-consistency test)
@@ -31,9 +32,16 @@ Two kinds of tarballs live here:
   `installer/operator/Makefile`, integrity-recorded in `SHA256SUMS`,
   downloaded by `make vendor-charts`.
 - **Runtime subchart tarballs** (secrets-manager, lookup-service,
-  session-manager, node-ca-injector, remote-access). Repackaged from the
-  in-repo `educates-training-platform` chart sources; *not* covered by
-  `SHA256SUMS` or `VENDORED_CHARTS`. At release time the publish
+  session-manager, node-ca-injector, remote-access). Build output, not
+  vendored: `make package-local-charts` packages them from the in-repo
+  `educates-training-platform` chart sources, and every target which
+  compiles the operator or builds its image (`vet`, `build`, `test`,
+  `lint`, `docker-build`, and the root `ci-operator` and `image-operator`)
+  runs it first. They are gitignored, so they are never committed and
+  cannot drift from their sources. Running `go build` or `go test`
+  directly on a fresh clone needs `make package-local-charts` first,
+  because `//go:embed` requires the files to exist. They are *not* covered
+  by `SHA256SUMS` or `VENDORED_CHARTS`. At release time the publish
   workflow re-stamps them via `hack/stamp-release-version.sh`.
 
 ## Current contents (upstream charts)
@@ -147,9 +155,9 @@ Chart-specific follow-ups:
   [kyverno/policies](https://github.com/kyverno/policies) at the
   release branch matching `KyvernoAppVersion`. Re-vendor them as part
   of the bump (see
-  `installer/charts/educates-training-platform/charts/session-manager/files/kyverno-policies/README.md`),
-  then repackage the session-manager tarball into this directory with
-  `make package-local-charts`.
+  `installer/charts/educates-training-platform/charts/session-manager/files/kyverno-policies/README.md`).
+  The session-manager tarball the operator embeds is packaged from that
+  source by every operator build, so nothing else needs updating here.
 
 The intent is "we ship the upstream chart unmodified" — never edit a
 vendored tarball or unpack-and-repack it. If a change to the chart is

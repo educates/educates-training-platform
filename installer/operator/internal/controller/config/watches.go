@@ -20,8 +20,11 @@ import (
 	"context"
 	"slices"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
@@ -252,4 +255,39 @@ func (r *EducatesClusterConfigReconciler) mapDeploymentToSingleton(_ context.Con
 		return singletonRequest
 	}
 	return nil
+}
+
+// mapNodeToSingleton fires for any node change which reaches the predicate
+// below, so a cluster upgraded into or out of image volume support is noticed
+// without restarting the operator.
+func (r *EducatesClusterConfigReconciler) mapNodeToSingleton(_ context.Context, _ client.Object) []reconcile.Request {
+	return singletonRequest
+}
+
+// nodeVersionsChanged passes only the node events which can change the
+// outcome of the image volume probe: a node joining or leaving, and an update
+// which alters the reported kubelet or container runtime. Without it every
+// node heartbeat would reconcile the singleton.
+func nodeVersionsChanged() predicate.Predicate {
+	return predicate.Funcs{
+		// A node joining or leaving changes which nodes the check covers,
+		// so both always reconcile. These are stated rather than left to
+		// the default so the intent is on the page.
+		CreateFunc: func(event.CreateEvent) bool { return true },
+		DeleteFunc: func(event.DeleteEvent) bool { return true },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldNode, ok := e.ObjectOld.(*corev1.Node)
+			if !ok {
+				return false
+			}
+
+			newNode, ok := e.ObjectNew.(*corev1.Node)
+			if !ok {
+				return false
+			}
+
+			return oldNode.Status.NodeInfo.KubeletVersion != newNode.Status.NodeInfo.KubeletVersion ||
+				oldNode.Status.NodeInfo.ContainerRuntimeVersion != newNode.Status.NodeInfo.ContainerRuntimeVersion
+		},
+	}
 }

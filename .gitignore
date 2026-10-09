@@ -35,3 +35,4 @@ vendor
 # Local-only agent working context (paired with committed AGENTS.md)
 CLAUDE.local.md
 
+/workshop-images/base-environment/client-programs

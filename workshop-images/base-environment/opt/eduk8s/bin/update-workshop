@@ -2,7 +2,7 @@
 
 set -x
 
-if [ -f /opt/eduk8s/config/vendir-assets-01.yaml -o -f /opt/eduk8s/config/vendir-packages.yaml ]; then
+if downloads-declared; then
     vendir-workshop
 elif [ -d /opt/assets/files ]; then
     merge-workshop /opt/assets/files

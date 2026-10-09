@@ -25,7 +25,11 @@
 #   - Rewrites the //go:embed filenames and <X>ChartVersion constants
 #     in vendored-charts/embed.go (local subcharts only; upstream
 #     charts stay pinned).
-#   - Refreshes the local-subchart entries in SHA256SUMS.
+# The repackaged tarballs are gitignored build output, so only the
+# embed.go rewrite is committed by release-prep. They get no SHA256SUMS
+# entries: that file pins the vendored upstream charts only, and helm
+# package does not produce the same bytes twice, so a recorded checksum
+# could never be verified.
 #
 # --charts-only skips the operator-image pieces; it needs only perl, so
 # the macOS CLI build runners can use it.
@@ -123,21 +127,5 @@ while read -r tarball; do
         exit 1
     }
 done < <(perl -ne 'print "$1\n" if m|^//go:embed (.*\.tgz)$|' "$EMBED_GO")
-
-echo ">> refreshing local-subchart entries in SHA256SUMS"
-sums="$VENDORED_CHARTS_DIR/SHA256SUMS"
-tmp=$(mktemp)
-cp "$sums" "$tmp"
-for name in $LOCAL_SUBCHARTS; do
-    grep -v "  ${name}-" "$tmp" > "$tmp.next" || true
-    mv "$tmp.next" "$tmp"
-done
-(
-    cd "$VENDORED_CHARTS_DIR"
-    for name in $LOCAL_SUBCHARTS; do
-        shasum -a 256 "$name-$VERSION.tgz" >> "$tmp"
-    done
-)
-mv "$tmp" "$sums"
 
 echo ">> done"

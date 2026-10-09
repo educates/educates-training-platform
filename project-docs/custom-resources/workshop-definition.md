@@ -457,6 +457,13 @@ spec:
 
 Note that if you use any of the version tags ``:main``, ``:master``, ``:develop`` and ``:latest``, the Educates operator will set the image pull policy to ``Always`` to ensure that a newer version is always pulled if available, otherwise the image will be cached on the Kubernetes nodes and only pulled when it is initially not present. Any other version tags will always be assumed to be unique and never updated. Do though be aware of image registries which use a CDN as front end. When using these image tags the CDN can still always regard them as unique and they will not do pull through requests to update an image even if it uses a tag of ``:latest``.
 
+The same rule applies when a workshop is deployed locally with ``educates
+docker workshop deploy``. A workshop image using one of these tags, or no tag
+at all, is pulled each time the workshop is deployed, so a newer version pushed
+under the same tag is picked up. If the pull fails but a copy of the image is
+already held by the local Docker daemon, a warning is printed and that copy is
+used, so the workshop can still be deployed without access to the registry.
+
 Where special custom workshop base images are available as part of the Educates project, instead of specifying the full location for the image, including the image registry, you can specify a short name. The Educates operator will then fill in the rest of the details.
 
 ```yaml
@@ -491,11 +498,11 @@ Adding extension packages
 
 Creating a custom workshop base image is one way of making additional applications available for a workshop. The drawback of a custom workshop base image is that it needs to build from a specific version of the standard workshop base image. As new releases of Educates are made available, if the custom workshop image is not continually rebuilt against the newest workshop base image, it may stop working if changes are made in Educates that require the newest workshop image be used. Use of custom workshop base images is therefore discouraged as a general rule, although if the size of the applications required is large, can be the only choice as downloading applications at the start of every session could take too long.
 
-If using the standard workshop base image, rather than a custom workshop base image, and you want to download additional applications or files required for a workshop when the workshop session is created, you can use a workshop ``setup.d`` script. Having installed the additional applications, a workshop ``profile.d`` script file can be used to set up the shell environment so the applications can be found, or to set any special environment variables which may be required when using the applications.
+If using the standard workshop base image, rather than a custom workshop base image, and you want to download additional applications or files required for a workshop when the workshop session is created, you can use a workshop ``setup.d`` script. Having installed the additional applications, the same script can set any environment variables which may be required when using the applications, by writing them to the file named by the ``WORKSHOP_ENV`` environment variable. See [running steps on container start](running-steps-on-container-start).
 
-Where a set of applications are common and used in more than one workshop, having to have a separate copy of the ``setup.d`` and ``profile.d`` scripts in every workshop is not ideal. This is because the multiple copies makes it hard to ensure they are kept up to date, if how applications are downloaded needs to change, or if the versions of any applications need to be updated.
+Where a set of applications are common and used in more than one workshop, having to have a separate copy of the ``setup.d`` scripts in every workshop is not ideal. This is because the multiple copies makes it hard to ensure they are kept up to date, if how applications are downloaded needs to change, or if the versions of any applications need to be updated.
 
-To try and simplify the process of adding additional applications, an extension package feature is available. This relies on ``vendir`` and can be used to download applications as pre-created bundles from an image repository, with the package also containing any ``setup.d`` and ``profile.d`` scripts which may still be required to configure the package when the workshop session starts.
+To try and simplify the process of adding additional applications, an extension package feature is available. This relies on ``vendir`` and can be used to download applications as pre-created bundles from an image repository, with the package also containing any ``setup.d`` scripts which may still be required to configure the package when the workshop session starts.
 
 As an example, installation of extension package which adds additional command line tools to a workshop session might be configured using:
 
@@ -509,13 +516,165 @@ spec:
           url: ghcr.io/educates/educates-extension-packages/tce-0.12:sha-5f9081f
 ```
 
-When a package is installed it is placed under a sub directory of ``/opt/packages`` with name corresponding to the ``name`` field in the ``packages`` configuration. Any setup scripts contained in the ``setup.d`` directory of the installed package will be run when the workshop session starts, with the shell environment being configured using any scripts in the ``profile.d`` of the installed package.
+When a package is installed it is placed under a sub directory of ``/opt/packages`` with name corresponding to the ``name`` field in the ``packages`` configuration. Any setup scripts contained in the ``setup.d`` directory of the installed package will be run when the workshop session starts, and can set environment variables for the session by writing them to the file named by the ``WORKSHOP_ENV`` environment variable. Scripts in a ``profile.d`` directory of the installed package are still sourced into the shell environment, but ``profile.d`` scripts are deprecated and will be removed in a future version.
+
+If the installed package contains a ``bin`` directory, the ``bin`` directory is added to the application search path defined by the ``PATH`` environment variable, so a program the package ships can be run by name. This applies to a package declared either way. Packages are set up in the alphabetical order of their names, and a package's ``bin`` directory is added just before its own setup scripts run, after which it stays on the search path, so a setup script can run programs from its own package and from packages set up before it, but never from a package not yet set up. Each ``bin`` directory is added at the front of the search path, so where two packages ship a program of the same name, the one from the package whose name sorts last is found. The ``bin`` directory has to exist when the package's turn comes, so a package which only creates it from one of its setup scripts puts it on the search path itself. See [what a package can provide](what-an-extension-package-can-provide) for how such a package sets ``PATH``.
 
 In this example ``vendir`` was being used to download an OCI image artefact, but other mechanisms ``vendir`` provides can also be used when downloading remote files. This includes from Git repositories and HTTP web servers. Any configuration for ``vendir`` should be included under ``spec.packages.files``. The format of configuration supplied needs to match the [configuration](https://carvel.dev/vendir/docs/v0.25.0/vendir-spec/) that can be supplied under ``directories.contents`` of the ``Config`` resource used by ``vendir``.
 
 Note that although ``vendir`` will automatically unpack any archive file by default, it is currently limited in that it will not restore execute permissions on files extracted from a tar/zip archive. Educates will restore execute permissions on ``setup.d`` scripts, but if you have other files which have execute permissions, you will need to supply a ``setup.d`` to restore those execute permissions.
 
 If credentials are required to access any remote server, these can be supplied via a Kubernetes secret in your cluster. The ``environment.secrets`` property list should designate the source for the secret, with the secret then being copied into the workshop namespace and automatically injected into the container and passed to ``vendir`` when it is run.
+
+(declaring-an-extension-package-as-an-image)=
+Declaring an extension package as an image
+------------------------------------------
+
+Where an extension package is published as an image built for the purpose, it
+can be declared directly, rather than as a ``vendir`` download:
+
+```yaml
+spec:
+  workshop:
+    packages:
+    - name: argocd
+      image: ghcr.io/educates/educates-extension-packages/argocd:v2.10.6
+```
+
+This is the preferred form for a published package. The ``files`` property
+remains the way to bring in a package from a Git repository or a web server,
+and the way to work on a package locally.
+
+A package declares either ``image`` or ``files``, never both, and no subset of
+the image can be selected: the whole image is the package. The name of the
+package must be a valid DNS label, because it is used when the package is
+delivered to the workshop session.
+
+The image reference must carry a tag and cannot be a digest. The
+``$(image_repository)``, ``$(workshop_name)`` and ``$(workshop_version)``
+variables can be used in the reference, and are the only variables expanded
+in it. The ``$(platform_arch)`` and ``$(oci_image_cache)`` variables are
+rejected: a package image is an image index carrying one child per
+architecture, so the right child is selected when the package is delivered
+and there is no per-architecture reference to construct.
+
+The platform decides how the package reaches a workshop session, either by
+mounting the image read only or by fetching its contents, according to what
+the cluster supports. The workshop definition is the same either way. See
+[delivery of extension packages](delivery-of-extension-packages) for the
+cluster setting which governs this.
+
+An optional ``imagePullPolicy`` can be set alongside ``image``, accepting
+``Always``, ``Never`` or ``IfNotPresent``:
+
+```yaml
+spec:
+  workshop:
+    packages:
+    - name: argocd
+      image: ghcr.io/educates/educates-extension-packages/argocd:v2.10.6
+      imagePullPolicy: IfNotPresent
+```
+
+A package which declares no ``imagePullPolicy`` is given the same pull policy
+as the workshop image. An image with the ``:main``, ``:master``, ``:develop``
+or ``:latest`` tag is pulled with ``Always``, so a newer version pushed under
+the same tag is used when a workshop session starts, and an image with any
+other tag is pulled with ``IfNotPresent``, so a copy already held on the node
+is used. The pull policy applies where the package image is mounted. Where the
+package contents are fetched instead, the pull policy is ignored.
+
+Where the image is held in a registry requiring credentials, an optional
+``pullSecretRef`` names a secret which must also be listed under
+``spec.environment.secrets`` so that it is copied into the workshop namespace:
+
+```yaml
+spec:
+  workshop:
+    packages:
+    - name: argocd
+      image: registry.example.com/packages/argocd:v2.10.6
+      pullSecretRef:
+        name: registry-credentials
+  environment:
+    secrets:
+    - namespace: educates-secrets
+      name: registry-credentials
+```
+
+Name the secret with ``pullSecretRef`` even where the platform is configured
+with image registry credentials of its own. Those apply when the package image
+is mounted, because the mount is pulled by the cluster the way any other image
+is, but not when the package contents are fetched, because the fetch uses only
+the secret the package names. A package which names its secret works under
+either delivery.
+
+Only an image built to the extension package layout may be declared this way.
+An ordinary application image is not an extension package and will not work.
+See [creating extension packages](creating-extension-packages) for how to
+build and publish one.
+
+An extension package image carries a package manifest named ``package.yaml``
+at its root, alongside the ``setup.d`` and ``bin`` directories
+the package provides. The manifest names the package and its version:
+
+```yaml
+apiVersion: packages.educates.dev/v1alpha1
+kind: ExtensionPackage
+name: argocd
+version: 2.10.6
+description: The Argo CD command line client.
+```
+
+The manifest is what a workshop session looks for to confirm that the package
+arrived. When a workshop session starts, each package declared as an image is
+checked for its manifest, and one line per package is written to
+``download-workshop.log`` naming the package and how it was delivered. A
+package whose manifest is missing is reported there and an error dialog is
+shown on the workshop session dashboard, rather than the session starting
+without the package. This is what an image which is not an extension package
+looks like when it is declared as one.
+
+Such an image is built with the ``educates package publish`` command, which
+takes a package source directory holding the manifest beside the reserved
+``common``, ``linux-amd64`` and ``linux-arm64`` directories, and publishes one
+child image per platform. Files common to every platform go in ``common``, and
+a platform directory overlays it, which is how a package ships a different
+binary per architecture under the same image reference.
+
+A package declared as an image is delivered when deploying a workshop locally
+with ``educates docker workshop deploy`` as well as to a cluster. It is
+mounted into the session read only where the local Docker daemon supports it,
+which requires Docker Engine 28.0 or newer, Docker Compose 2.35 or newer and
+the containerd image store, and its contents are fetched where it does not. A
+current Docker Desktop meets all three. Note that a daemon upgraded in place
+from an older release may still be using the earlier image store, in which
+case it cannot mount however recent its version. The chosen delivery is
+printed when the workshop is deployed, with the reason when it falls back.
+
+Pass ``--package-delivery`` with ``image-mount`` or ``fetch`` to force either
+delivery rather than letting the daemon decide, for example to reproduce how
+a package behaves on a cluster which cannot mount. Asking for a mount on a
+daemon which cannot do it reports what is missing rather than deploying.
+
+Where the package is mounted, ``imagePullPolicy`` applies: ``Always`` pulls
+the image before deploying, which is what you want when republishing the same
+tag while working on a package, and ``Never`` reports an error when the image
+is not already held locally. A package which declares no ``imagePullPolicy``
+is given the same default as on a cluster, which is ``Always`` for an image
+with the ``:main``, ``:master``, ``:develop`` or ``:latest`` tag, and
+``IfNotPresent`` otherwise. If a pull fails but a copy of the image is already
+held locally, a warning is printed and that copy is used. Where the contents
+are fetched instead, the policy is ignored.
+
+``pullSecretRef`` is ignored when deploying with Docker, since a local deploy
+has no access to cluster secrets. An image held in a registry requiring
+authentication needs ``docker login`` for that registry first.
+
+When using Podman rather than Docker, the package is mounted only when its
+image is already held locally, because Podman does not pull the image behind
+a volume. Otherwise the contents are fetched, so the deploy succeeds either
+way.
 
 For a number of extension packages being maintained by the Educates team see:
 

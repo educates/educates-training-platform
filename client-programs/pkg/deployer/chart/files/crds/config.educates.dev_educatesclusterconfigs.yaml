@@ -905,6 +905,26 @@ spec:
                 - Managed
                 - Inline
                 type: string
+              packageDelivery:
+                description: |-
+                  packageDelivery configures how extension packages declared as an
+                  image reach a workshop session. Applies in both modes: it describes
+                  what the cluster can do, not what Educates installs.
+                properties:
+                  imageMount:
+                    default: Auto
+                    description: |-
+                      imageMount controls whether an extension package declared as an
+                      image is mounted into the session read only, rather than having its
+                      contents fetched. Mounting needs a recent Kubernetes and container
+                      runtime on every node; under Auto the operator probes for that and
+                      falls back to fetching, which works anywhere.
+                    enum:
+                    - Auto
+                    - Enabled
+                    - Disabled
+                    type: string
+                type: object
               policyEnforcement:
                 description: |-
                   policyEnforcement configures the cluster and workshop policy
@@ -1155,6 +1175,23 @@ spec:
                 description: observedGeneration tracks the spec generation last reconciled.
                 format: int64
                 type: integer
+              packageDelivery:
+                description: |-
+                  packageDelivery publishes the resolved delivery mechanisms for
+                  extension packages. Components read this rather than the spec, so
+                  an Auto setting is already settled here.
+                properties:
+                  imageMount:
+                    description: |-
+                      imageMount reports whether extension packages declared as an image
+                      are mounted into a session.
+                    enum:
+                    - Enabled
+                    - Disabled
+                    type: string
+                required:
+                - imageMount
+                type: object
               phase:
                 description: |-
                   phase is an advisory summary of the operator's current activity on

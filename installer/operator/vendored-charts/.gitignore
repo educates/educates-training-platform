@@ -1,0 +1,10 @@
+# The runtime subcharts are packaged from their sources under
+# installer/charts/educates-training-platform/charts by
+# `make package-local-charts`, which every operator build runs first. They
+# are build output rather than vendored charts, so they are not committed.
+# The upstream charts beside them are vendored and stay committed.
+secrets-manager-*.tgz
+lookup-service-*.tgz
+session-manager-*.tgz
+node-ca-injector-*.tgz
+remote-access-*.tgz

@@ -1,0 +1,110 @@
+#!/bin/bash
+
+# Checks that every extension package declared as an image actually arrived,
+# and reports how each one was delivered.
+#
+# A package image can fail to deliver quietly. An image which is not a package
+# unpacks perfectly well under a fetch and simply leaves nothing behind, and a
+# mount of the wrong image delivers whatever that image happens to hold. Either
+# way the session would otherwise come up missing what the package provides,
+# with nothing in the log saying so.
+#
+# The test is the package manifest which the package image contract requires at
+# the root of every package. Packages declaring files are not checked: they
+# predate the manifest and legitimately do not carry one.
+#
+# The packages are found from what is on disk rather than from the workshop
+# definition, because the definition the session is given is a trimmed one
+# which carries the session configuration and not spec.workshop. Both renderers
+# trim it the same way.
+
+PACKAGES_CONFIG=/opt/eduk8s/config/packages.yaml
+VENDIR_CONFIG=/opt/packages/vendir.yaml
+
+# A package the fetcher was asked for was fetched; one which is simply present
+# was mounted. Between the two, every package declared as an image is covered:
+# a mount leaves a directory, and a fetch is named in the config whether or not
+# it succeeded.
+
+FETCHED_PATHS=""
+
+if [ -f "$PACKAGES_CONFIG" ]; then
+    # A config which exists but cannot be read would make every fetched
+    # package look mounted, which is the one thing these lines exist to say,
+    # so it is a failure rather than something to work around.
+    if ! FETCHED_PATHS=$(yq -r '.packages[].path' "$PACKAGES_CONFIG"); then
+        echo "Packages could not be checked: $PACKAGES_CONFIG could not be read"
+        exit 1
+    fi
+fi
+
+# Packages declaring files are downloaded by vendir into the same tree and
+# carry no manifest, so they are excluded by name rather than reported as
+# having failed to arrive.
+
+VENDIR_PATHS=""
+
+if [ -f "$VENDIR_CONFIG" ]; then
+    if ! VENDIR_PATHS=$(yq -r '.directories[].path' "$VENDIR_CONFIG"); then
+        echo "Packages could not be checked: $VENDIR_CONFIG could not be read"
+        exit 1
+    fi
+fi
+
+# The paths to check: everything present under /opt/packages, plus anything
+# the fetcher was asked for which is not there.
+
+PACKAGE_PATHS=$(
+    for ENTRY in /opt/packages/*/; do
+        [ -d "$ENTRY" ] && printf '%s\n' "${ENTRY%/}"
+    done
+
+    printf '%s' "$FETCHED_PATHS"
+)
+
+STATUS=0
+CHECKED=0
+
+while IFS= read -r PACKAGE_PATH; do
+    if [ -z "$PACKAGE_PATH" ]; then
+        continue
+    fi
+
+    # A files package is vendir's, and has no manifest to test for.
+    if [ -n "$VENDIR_PATHS" ] &&
+       printf '%s\n' "$VENDIR_PATHS" | grep -qxF "$PACKAGE_PATH"; then
+        continue
+    fi
+
+    PACKAGE_NAME=${PACKAGE_PATH##*/}
+
+    DELIVERY="image mount"
+
+    # The fetched paths are matched line by line rather than by word, so a
+    # path is compared whole whatever it contains.
+    if [ -n "$FETCHED_PATHS" ] &&
+       printf '%s\n' "$FETCHED_PATHS" | grep -qxF "$PACKAGE_PATH"; then
+        DELIVERY="package fetch"
+    fi
+
+    CHECKED=$((CHECKED + 1))
+
+    if [ -f "$PACKAGE_PATH/package.yaml" ]; then
+        echo "Package $PACKAGE_NAME: $DELIVERY"
+    else
+        echo "Package $PACKAGE_NAME: manifest missing at $PACKAGE_PATH/package.yaml"
+        STATUS=1
+    fi
+done < <(printf '%s\n' "$PACKAGE_PATHS" | sort -u)
+
+# A workshop with no packages declared as an image is the common case and says
+# nothing at all.
+
+if [ "$CHECKED" -eq 0 ]; then
+    exit 0
+fi
+
+# Every package is checked before failing, so one bad package does not hide the
+# state of the rest.
+
+exit $STATUS

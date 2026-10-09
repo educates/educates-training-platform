@@ -182,6 +182,26 @@ RUN <<EOF
         -o /vendir ./cmd/vendir/...
 EOF
 
+# The package fetcher shares the package image contract with the publish
+# command, so it is built from the client-programs module rather than
+# reimplemented here. Its source is staged into this build context, since the
+# context is this directory (see stage-base-environment-fetcher in the
+# Makefile).
+FROM --platform=$BUILDPLATFORM golang:1.26 AS package-fetcher-build
+
+ARG TARGETOS
+ARG TARGETARCH
+
+ENV GOTOOLCHAIN=go1.26.6 CGO_ENABLED=0
+
+WORKDIR /build
+
+COPY client-programs/ /build/
+
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
+        -ldflags "-s -w" \
+        -o /educates-package-fetcher ./cmd/educates-package-fetcher
+
 FROM --platform=$BUILDPLATFORM golang:1.26 AS k9s-build
 
 ARG TARGETOS
@@ -393,6 +413,11 @@ EOF
 
 # vendir is the patched source rebuild from the vendir-build stage.
 COPY --from=vendir-build /vendir /opt/kubernetes/bin/vendir
+
+# The package fetcher is built from the client-programs module, so that the
+# package image contract has one implementation shared with the publish
+# command rather than a second copy here.
+COPY --from=package-fetcher-build /educates-package-fetcher /opt/kubernetes/bin/educates-package-fetcher
 
 RUN <<EOF
     HELM_VERSION=4.2.4

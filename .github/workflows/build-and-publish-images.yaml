@@ -18,6 +18,37 @@ on:
       - "[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+"
 
 jobs:
+  variables:
+    name: Variables
+    runs-on: ubuntu-latest
+
+    outputs:
+      repository_owner: ${{steps.calc.outputs.repository_owner}}
+      repository_tag: ${{steps.calc.outputs.repository_tag}}
+      repository_sha_tag: ${{steps.calc.outputs.repository_sha_tag}}
+      prerelease: ${{steps.calc.outputs.prerelease}}
+
+    steps:
+      - name: Calculate variables
+        id: calc
+        shell: bash
+        run: |
+          # Values shared by every job. REPOSITORY_TAG must match the image
+          # tag which docker/metadata-action would derive from the ref, so a
+          # branch name such as hotfix/3.8.1 has its slashes replaced with
+          # hyphens, while a version tag is used as is.
+          REPOSITORY_OWNER=${{github.repository_owner}}
+          REPOSITORY_TAG="${GITHUB_REF_NAME//\//-}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${REPOSITORY_TAG}" == *-* ]]; then
+            PRERELEASE=true
+          else
+            PRERELEASE=false
+          fi
+          echo "repository_owner=${REPOSITORY_OWNER,,}" >>${GITHUB_OUTPUT}
+          echo "repository_tag=${REPOSITORY_TAG}" >>${GITHUB_OUTPUT}
+          echo "repository_sha_tag=sha-${GITHUB_SHA::7}" >>${GITHUB_OUTPUT}
+          echo "prerelease=${PRERELEASE}" >>${GITHUB_OUTPUT}
+
   publish-generic-images:
     name: Publish
     runs-on: ubuntu-latest
@@ -42,6 +73,14 @@ jobs:
           - image: lookup-service
           - image: node-ca-injector
 
+    needs:
+      - variables
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
@@ -63,12 +102,6 @@ jobs:
             fi
           fi
           echo "TARGET_PLATFORMS=${TARGET_PLATFORMS}" >>${GITHUB_ENV}
-
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -106,7 +139,7 @@ jobs:
           images: |
             ghcr.io/${{env.REPOSITORY_OWNER}}/educates-${{matrix.image}}
           tags: |
-            type=ref,event=branch
+            type=raw,value=${{env.REPOSITORY_TAG}},enable=${{github.ref_type == 'branch'}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
@@ -153,6 +186,14 @@ jobs:
       packages: write
       id-token: write
 
+    needs:
+      - variables
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
+
     steps:
       - name: Free Disk Space
         uses: endersonmenezes/free-disk-space@v2
@@ -182,12 +223,6 @@ jobs:
             fi
           fi
           echo "TARGET_PLATFORMS=${TARGET_PLATFORMS}" >>${GITHUB_ENV}
-
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -220,7 +255,7 @@ jobs:
           images: |
             ghcr.io/${{env.REPOSITORY_OWNER}}/educates-base-environment
           tags: |
-            type=ref,event=branch
+            type=raw,value=${{env.REPOSITORY_TAG}},enable=${{github.ref_type == 'branch'}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
@@ -266,6 +301,7 @@ jobs:
       id-token: write
 
     needs:
+      - variables
       - publish-workshop-base-image
 
     strategy:
@@ -277,6 +313,11 @@ jobs:
           - image: jdk17-environment
           - image: jdk21-environment
           - image: conda-environment
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
 
     steps:
       - name: Free Disk Space
@@ -307,13 +348,6 @@ jobs:
             fi
           fi
           echo "TARGET_PLATFORMS=${TARGET_PLATFORMS}" >>${GITHUB_ENV}
-
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_SHA_TAG=sha-${GITHUB_SHA::7}" >>${GITHUB_ENV}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -346,7 +380,7 @@ jobs:
           images: |
             ghcr.io/${{env.REPOSITORY_OWNER}}/educates-${{matrix.image}}
           tags: |
-            type=ref,event=branch
+            type=raw,value=${{env.REPOSITORY_TAG}},enable=${{github.ref_type == 'branch'}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
@@ -396,8 +430,14 @@ jobs:
       id-token: write
 
     needs:
+      - variables
       - publish-generic-images
       - publish-workshop-images
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
 
     steps:
       - name: Check out the repository
@@ -406,14 +446,6 @@ jobs:
       - name: Install Carvel tools
         shell: bash
         run: curl -L https://carvel.dev/install.sh | bash
-
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
-          echo "REPOSITORY_SHA_TAG=sha-${GITHUB_SHA::7}" >>${GITHUB_ENV}
 
       - name: Create publish values file
         shell: bash
@@ -510,16 +542,17 @@ jobs:
     name: Build (clients) / amd64@linux
     runs-on: ubuntu-latest
 
+    needs:
+      - variables
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -548,16 +581,17 @@ jobs:
     name: Build (clients) / arm64@linux
     runs-on: ubuntu-latest
 
+    needs:
+      - variables
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -586,16 +620,17 @@ jobs:
     name: Build (clients) / amd64@darwin
     runs-on: macos-latest
 
+    needs:
+      - variables
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=$(echo "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >>${GITHUB_ENV}
-          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -625,16 +660,17 @@ jobs:
     name: Build (clients) / arm64@darwin
     runs-on: macos-latest
 
+    needs:
+      - variables
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=$(echo "$REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >>${GITHUB_ENV}
-          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -669,10 +705,16 @@ jobs:
       id-token: write
 
     needs:
+      - variables
       - build-client-programs-linux-amd64
       - build-client-programs-linux-arm64
       - build-client-programs-darwin-amd64
       - build-client-programs-darwin-arm64
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
 
     steps:
       - name: Restore educates-linux-amd64
@@ -703,13 +745,6 @@ jobs:
         shell: bash
         run: curl -L https://carvel.dev/install.sh | bash
 
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
-
       - name: Publish client programs
         shell: bash
         run: |
@@ -730,18 +765,17 @@ jobs:
       id-token: write
 
     needs:
+      - variables
       - publish-workshop-base-image
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
 
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_SHA_TAG=sha-${GITHUB_SHA::7}" >>${GITHUB_ENV}
 
       - name: Calculate platforms
         shell: bash
@@ -774,7 +808,7 @@ jobs:
           images: |
             ghcr.io/${{env.REPOSITORY_OWNER}}/educates-cli
           tags: |
-            type=ref,event=branch
+            type=raw,value=${{env.REPOSITORY_TAG}},enable=${{github.ref_type == 'branch'}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
@@ -807,18 +841,17 @@ jobs:
       id-token: write
 
     needs:
+      - variables
       - publish-cli-image
+
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
 
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_OWNER=${{github.repository_owner}}
-          echo "REPOSITORY_OWNER=${REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
-          echo "REPOSITORY_SHA_TAG=sha-${GITHUB_SHA::7}" >>${GITHUB_ENV}
 
       - name: Calculate platforms
         shell: bash
@@ -851,7 +884,7 @@ jobs:
           images: |
             ghcr.io/${{env.REPOSITORY_OWNER}}/educates-docker-extension
           tags: |
-            type=ref,event=branch
+            type=raw,value=${{env.REPOSITORY_TAG}},enable=${{github.ref_type == 'branch'}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
@@ -879,6 +912,7 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     needs:
+      - variables
       - publish-carvel-bundles
       - build-client-programs-linux-amd64
       - build-client-programs-linux-arm64
@@ -887,19 +921,12 @@ jobs:
       - publish-client-programs
       - publish-docker-extension
 
-    steps:
-      - name: Calculate variables
-        shell: bash
-        run: |
-          REPOSITORY_TAG="${GITHUB_REF##*/}"
-          if [[ "$REPOSITORY_TAG" == *-* ]]; then
-            PRERELEASE=true
-          else
-            PRERELEASE=false
-          fi
-          echo "REPOSITORY_TAG=${REPOSITORY_TAG}" >>${GITHUB_ENV}
-          echo "PRERELEASE=${PRERELEASE}" >>${GITHUB_ENV}
+    env:
+      REPOSITORY_OWNER: ${{needs.variables.outputs.repository_owner}}
+      REPOSITORY_TAG: ${{needs.variables.outputs.repository_tag}}
+      REPOSITORY_SHA_TAG: ${{needs.variables.outputs.repository_sha_tag}}
 
+    steps:
       - name: Restore educates-installer-app.yaml
         uses: actions/download-artifact@v4
         with:
@@ -964,7 +991,7 @@ jobs:
           tag_name: ${{env.REPOSITORY_TAG}}
           name: "educates:${{env.REPOSITORY_TAG}}"
           draft: false
-          prerelease: ${{env.PRERELEASE}}
+          prerelease: ${{needs.variables.outputs.prerelease}}
           body_path: release-notes.md
           files: |
             checksums.txt

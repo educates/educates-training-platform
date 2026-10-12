@@ -11,8 +11,8 @@ ARG TARGETARCH
 ENV CONDA_DIR=/opt/conda \
     PATH=/opt/conda/bin:$PATH
 
-ENV MINICONDA_VERSION=26.5.3-2 \
-    CONDA_VERSION=26.5.3
+ENV MINICONDA_VERSION=26.7.1-1 \
+    CONDA_VERSION=26.7.1
 
 RUN <<EOF
     set -x
@@ -20,8 +20,8 @@ RUN <<EOF
     ARCHNAME_amd64=x86_64
     ARCHNAME_arm64=aarch64
     ARCHNAME=ARCHNAME_${TARGETARCH}
-    CHECKSUM_amd64="80bc27f13c4de90f10e387aa45e864de4f0860692c1221aef5900009a2b55302"
-    CHECKSUM_arm64="999e8761f4dc74fb8d0dc9f74d5374f6708ff81eebbb0af677a4d5307d38b2e5"
+    CHECKSUM_amd64="e8b25b92b262499141c5bd57a98d3c008024185fa951494b9cd9b6d94e72338b"
+    CHECKSUM_arm64="e31545afd7462d3c9c33b154c7a101c5acb5e01b69380b6994651aead6942893"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     mkdir -p $CONDA_DIR
     cd /tmp
@@ -52,7 +52,7 @@ RUN <<EOF
     set -eo pipefail
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
-    conda install --quiet --yes 'notebook=7.6.1' 'jupyterlab=4.6.2'
+    conda install --quiet --yes 'notebook=7.6.3' 'jupyterlab=4.6.4'
     conda clean --all -f -y
     npm cache clean --force
     rm -rf $CONDA_DIR/share/jupyter/lab/staging

@@ -1,6 +1,6 @@
 module github.com/educates/educates-training-platform/client-programs
 
-go 1.26.3
+go 1.26.9
 
 // replace cloud.google.com/go/compute/metadata => cloud.google.com/go/compute/metadata v0.2.3
 

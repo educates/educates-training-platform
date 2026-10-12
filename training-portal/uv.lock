@@ -525,9 +525,9 @@ wheels = [
 
 [[package]]
 name = "mod-wsgi"
-version = "6.0.4"
+version = "6.1.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/37/58/058684817955d697a6e15ceb479fdcd18c3fe5a2516c88d9092bebc645ed/mod_wsgi-6.0.4.tar.gz", hash = "sha256:fe22e669b66f798c5f7c84b93688d185ef4d70db979daf8ad5e6e85df3815532", size = 607577, upload-time = "2026-06-14T05:17:20.319Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/b1/867ada6512f6cfc8cb599b4e18475ffd8e4ff9ebcc68d22800ec6d3025e3/mod_wsgi-6.1.0.tar.gz", hash = "sha256:9ebb645c899ea6461edf27872c11a6a12c6e819edbcc3652e0b6195d990aa31c", size = 607759, upload-time = "2026-09-26T23:19:43.484Z" }
 
 [[package]]
 name = "multidict"
@@ -852,7 +852,7 @@ requires-dist = [
     { name = "django-oauth-toolkit", specifier = "==3.3.0" },
     { name = "django-registration", specifier = "==5.2.1" },
     { name = "kopf", extras = ["full-auth"], specifier = ">=1.44.6" },
-    { name = "mod-wsgi", specifier = "==6.0.4" },
+    { name = "mod-wsgi", specifier = "==6.1.0" },
     { name = "pykube-ng", specifier = ">=23.6.0" },
     { name = "requests", specifier = ">=2.33.0" },
     { name = "rstr", specifier = ">=3.2.2" },

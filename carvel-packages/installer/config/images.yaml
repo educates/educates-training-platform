@@ -48,7 +48,7 @@ imageVersions:
   - name: debian-base-image
     image: "debian:sid-20230502-slim"
   - name: docker-in-docker
-    image: "docker:27.5.1-dind"
+    image: "docker:29.9.0-dind"
   - name: loftsh-kubernetes-v1.31
     image: "ghcr.io/loft-sh/kubernetes:v1.31.1"
   - name: loftsh-kubernetes-v1.32

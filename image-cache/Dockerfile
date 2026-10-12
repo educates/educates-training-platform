@@ -12,9 +12,9 @@ WORKDIR /opt/app-root/src
 
 RUN <<EOF
     set -eo pipefail
-    VERSION=2.1.20
-    CHECKSUM_amd64="a32e42d042d1f17b5b1317e55cc1a415a744c873dcd05c25c56b665478258bcb"
-    CHECKSUM_arm64="d6a39475587be18ec3d42e0d2bfa50f5c5064cbbcdc222dbd88e55ecf69dd8e9"
+    VERSION=2.1.22
+    CHECKSUM_amd64="33b9b5bfe05d6788c076de951a01920477dbd6395c330146e23cc2340073e52e"
+    CHECKSUM_arm64="abc9bab13c144a4ee2f9067a6bbbe70ca1c018c49dbf521db28975514ea705da"
     CHECKSUM=CHECKSUM_${TARGETARCH}
     curl --silent --fail -L -o /usr/bin/zot https://github.com/project-zot/zot/releases/download/v${VERSION}/zot-linux-${TARGETARCH}
     echo "${!CHECKSUM}  /usr/bin/zot" | sha256sum --check --status

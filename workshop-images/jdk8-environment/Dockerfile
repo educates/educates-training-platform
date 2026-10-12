@@ -15,10 +15,10 @@ RUN <<EOF
     ARCHNAME_amd64=x64
     ARCHNAME_arm64=aarch64
     ARCHNAME=ARCHNAME_${TARGETARCH}
-    CHECKSUM_amd64="b8f5440f64f50193c01f67dacba55c9660caffe13b908baf6bd1955f4dd4c3ea"
-    CHECKSUM_arm64="34912db17786f7144dab274f040a42028e25da6e7a6a09780d7013339a56bdb2"
+    CHECKSUM_amd64="9c70e102f527ac674ac2fe9c7d47b9a04e2d19842ba5ab8e9b33f368bbadfaea"
+    CHECKSUM_arm64="57b7ed8af9d48542bb49ff7894448040b17bea0a48b41677d11ecaec6129768d"
     CHECKSUM=CHECKSUM_${TARGETARCH}
-    curl --fail -sL -o /tmp/jdk8.tar.gz https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u502-b07/OpenJDK8U-jdk_${!ARCHNAME}_linux_hotspot_8u502b07.tar.gz
+    curl --fail -sL -o /tmp/jdk8.tar.gz https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u504-b01/OpenJDK8U-jdk_${!ARCHNAME}_linux_hotspot_8u504b01.tar.gz
     echo "${!CHECKSUM} /tmp/jdk8.tar.gz" | sha256sum --check --status
     tar -C /opt/java --strip-components 1 -zxf /tmp/jdk8.tar.gz
     rm /tmp/jdk8.tar.gz
@@ -29,11 +29,11 @@ RUN curl --fail -sL -o /tmp/maven.tar.gz https://archive.apache.org/dist/maven/m
     tar -C /opt/maven --strip-components 1 -zxf /tmp/maven.tar.gz && \
     rm /tmp/maven.tar.gz
 
-RUN curl --fail -sL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.14.5-bin.zip && \
-    echo "6f74b601422d6d6fc4e1f9a1ab6522f642c2fdcbc15ae33ebd30ba3d7198e854 /tmp/gradle.zip" | sha256sum --check --status && \
+RUN curl --fail -sL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.14.6-bin.zip && \
+    echo "7988ed071b2a07900e2ec715fca15c6ab72bce6db433af301fa7fa7e9407bd24 /tmp/gradle.zip" | sha256sum --check --status && \
     unzip -d /opt/gradle /tmp/gradle.zip && \
-    mv /opt/gradle/gradle-8.14.5/* /opt/gradle/ && \
-    rm -rf /opt/gradle/gradle-8.14.5 && \
+    mv /opt/gradle/gradle-8.14.6/* /opt/gradle/ && \
+    rm -rf /opt/gradle/gradle-8.14.6 && \
     rm /tmp/gradle.zip
 
 ENV PATH=/opt/java/bin:/opt/gradle/bin:/opt/maven/bin:$PATH \
@@ -47,7 +47,7 @@ RUN mvn archetype:generate -DgroupId=com.mycompany.app -DartifactId=my-app \
     mvn wrapper:wrapper
 
 RUN gradle init --overwrite && \
-    gradle wrapper --gradle-version=8.14.5 --distribution-type=bin && \
+    gradle wrapper --gradle-version=8.14.6 --distribution-type=bin && \
     ./gradlew build
 
 FROM ${IMAGE_REPOSITORY}/${BASE_IMAGE_NAME}:${PACKAGE_VERSION}

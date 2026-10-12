@@ -15,10 +15,10 @@ RUN <<EOF
     ARCHNAME_amd64=x64
     ARCHNAME_arm64=aarch64
     ARCHNAME=ARCHNAME_${TARGETARCH}
-    CHECKSUM_amd64="be7668bc030d578b83d6d5ef9221d6d6729bbbca8cf94a7d52e16ac68b5a5a35"
-    CHECKSUM_arm64="d143936f473a4cb24e3b0e247d6d0775769d55ec9775c339540e753059a8d77a"
+    CHECKSUM_amd64="3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e"
+    CHECKSUM_arm64="457b57af8f9c93ec39080bb8c764f559dc8c89a6da1a39d718a400b7890d3e41"
     CHECKSUM=CHECKSUM_${TARGETARCH}
-    curl --fail -sL -o /tmp/jdk17.tar.gz https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20%2B8/OpenJDK17U-jdk_${!ARCHNAME}_linux_hotspot_17.0.20_8.tar.gz
+    curl --fail -sL -o /tmp/jdk17.tar.gz https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_${!ARCHNAME}_linux_hotspot_17.0.20.1_1.tar.gz
     echo "${!CHECKSUM} /tmp/jdk17.tar.gz" | sha256sum --check --status
     tar -C /opt/java --strip-components 1 -zxf /tmp/jdk17.tar.gz
     rm /tmp/jdk17.tar.gz
@@ -29,11 +29,11 @@ RUN curl --fail -sL -o /tmp/maven.tar.gz https://archive.apache.org/dist/maven/m
     tar -C /opt/maven --strip-components 1 -zxf /tmp/maven.tar.gz && \
     rm /tmp/maven.tar.gz
 
-RUN curl --fail -sL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.6.1-bin.zip && \
-    echo "9c0f7faeeb306cb14e4279a3e084ca6b596894089a0638e68a07c945a32c9e14 /tmp/gradle.zip" | sha256sum --check --status && \
+RUN curl --fail -sL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.8.1-bin.zip && \
+    echo "dce76f55f8e251a3a1f130eb120f30b3d271de2b76c9b0729d316b5a1b6dc01f /tmp/gradle.zip" | sha256sum --check --status && \
     unzip -d /opt/gradle /tmp/gradle.zip && \
-    mv /opt/gradle/gradle-9.6.1/* /opt/gradle/ && \
-    rm -rf /opt/gradle/gradle-9.6.1 && \
+    mv /opt/gradle/gradle-9.8.1/* /opt/gradle/ && \
+    rm -rf /opt/gradle/gradle-9.8.1 && \
     rm /tmp/gradle.zip
 
 ENV PATH=/opt/java/bin:/opt/gradle/bin:/opt/maven/bin:$PATH \
@@ -47,7 +47,7 @@ RUN mvn archetype:generate -DgroupId=com.mycompany.app -DartifactId=my-app \
     mvn wrapper:wrapper
 
 RUN gradle init --overwrite && \
-    gradle wrapper --gradle-version=9.6.1 --distribution-type=bin && \
+    gradle wrapper --gradle-version=9.8.1 --distribution-type=bin && \
     ./gradlew build
 
 FROM ${IMAGE_REPOSITORY}/${BASE_IMAGE_NAME}:${PACKAGE_VERSION}

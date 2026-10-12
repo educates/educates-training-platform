@@ -1,6 +1,6 @@
 FROM fedora:44
 
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /uvx /usr/local/bin/
 
 RUN INSTALL_PKGS=" \
         findutils \

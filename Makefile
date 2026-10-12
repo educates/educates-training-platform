@@ -26,7 +26,9 @@
 #
 # TARGET_PLATFORMS
 #   Description: Controls target platform(s) for Docker builds
-#   Default: Current platform (e.g., linux/amd64 on x86_64 systems)
+#   Default: CURRENT HOST ARCHITECTURE ONLY (e.g., linux/arm64 on Apple
+#            silicon). Multi-arch is an explicit opt-in, as cross-arch
+#            builds run under QEMU emulation and belong in CI.
 #   Note: If PUSH_IMAGES is false, TARGET_PLATFORMS is ignored.
 #   Examples:
 #     - Single platform: TARGET_PLATFORMS=linux/arm64
@@ -143,11 +145,12 @@ endif
 TARGET_PLATFORM = $(TARGET_SYSTEM)-$(TARGET_MACHINE)
 BUILDX_BUILDER = educates-multiarch-builder
 
-# Platform configuration - can be overridden by TARGET_PLATFORMS env var or make parameter
+# Image platforms: current host architecture only, unless TARGET_PLATFORMS
+# is set explicitly. Never silently multi-arch - cross-arch builds run
+# under QEMU emulation and belong in CI or an explicit opt-in.
 ifeq ($(TARGET_PLATFORMS),)
-# Default to current platform when TARGET_PLATFORMS is not set
 DOCKER_PLATFORM = linux/$(TARGET_MACHINE)
-MULTIARCH_PLATFORMS = linux/amd64,linux/arm64
+MULTIARCH_PLATFORMS = linux/$(TARGET_MACHINE)
 else
 # Use TARGET_PLATFORMS when set (allows for custom multiarch builds)
 DOCKER_PLATFORM = $(TARGET_PLATFORMS)

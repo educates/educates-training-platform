@@ -1836,11 +1836,19 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             certificates_init_container
         )
 
+        # The init container copies the whole of /etc/pki, not just
+        # /etc/pki/ca-trust, so mount it over the whole directory. The
+        # hashed CApath links in /etc/pki/tls/certs and the Java keystore
+        # link are regenerated alongside the trust store, and consumers
+        # that look up the CA via CApath only see it if those come from
+        # the same copy. Not read-only, so a workshop running as root can
+        # still import package signing keys under /etc/pki/rpm-gpg; the
+        # copied files are root-owned, so the workshop user cannot alter
+        # the trust store either way.
         deployment_pod_template_spec["containers"][0]["volumeMounts"].append(
             {
                 "name": "workshop-ca-trust",
-                "mountPath": "/etc/pki/ca-trust",
-                "readOnly": True,
+                "mountPath": "/etc/pki",
             },
         )
 
@@ -2185,7 +2193,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             downloads_init_container["volumeMounts"].append(
                 {
                     "name": "workshop-ca-trust",
-                    "mountPath": "/etc/pki/ca-trust",
+                    "mountPath": "/etc/pki",
                     "readOnly": True,
                 },
             )

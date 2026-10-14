@@ -313,6 +313,25 @@ func (r *EducatesClusterConfigReconciler) markManagedReady(obj *configv1alpha1.E
 			Name: wildcardClusterIssuer,
 		}
 	}
+	// Publish the CustomCA Secret so components can trust ingress
+	// endpoints signed by a private CA: the platform reconcilers pass
+	// this ref to the component charts, which mount it, and the
+	// session-manager hands it on to the training portals and workshop
+	// sessions it creates. Mirrors what the Inline path publishes from
+	// the user's caCertificateSecretRef. ACME issuers chain to public
+	// roots, so there is nothing to publish for them. The namespace
+	// defaults the same way checkCustomCASecret resolves it.
+	if bcm := obj.Spec.Ingress.Certificates.BundledCertManager; bcm != nil &&
+		bcm.IssuerType == configv1alpha1.IssuerTypeCustomCA && bcm.CustomCA != nil {
+		ns := bcm.CustomCA.CACertificateRef.Namespace
+		if ns == "" {
+			ns = r.OperatorNamespace
+		}
+		status.CACertificateSecretRef = &configv1alpha1.NamespacedSecretRef{
+			Namespace: ns,
+			Name:      bcm.CustomCA.CACertificateRef.Name,
+		}
+	}
 	obj.Status.Ingress = status
 
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{

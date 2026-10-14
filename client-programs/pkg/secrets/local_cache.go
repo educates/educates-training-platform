@@ -128,10 +128,40 @@ func NewTLSSecret(name string, certPEM, keyPEM []byte, ingressDomain string) *ap
 
 // NewCASecret builds the Secret for a signing CA. In the v4 CustomCA flow
 // cert-manager signs workshop certificates from this CA, so it carries both
-// tls.crt and tls.key and is structurally a kubernetes.io/tls secret —
-// identical in shape to NewTLSSecret.
+// tls.crt and tls.key and is structurally a kubernetes.io/tls secret.
+//
+// It also carries the CA certificate under ca.crt. cert-manager reads the
+// signing material from tls.crt and tls.key, but everything that only needs
+// to trust the CA (the platform component start scripts, the workshop
+// session and docker-in-docker CA injection in session-manager, the
+// training portal) reads ca.crt, the key that means "trust anchor"
+// regardless of how a Secret was built. For a self-signed CA the two
+// certificate keys hold the same bytes, which is the shape cert-manager
+// itself produces for a CA it issues from a SelfSigned issuer.
 func NewCASecret(name string, certPEM, keyPEM []byte, ingressDomain string) *apiv1.Secret {
-	return newCertSecret(name, certPEM, keyPEM, ingressDomain)
+	secret := newCertSecret(name, certPEM, keyPEM, ingressDomain)
+	secret.Data["ca.crt"] = certPEM
+	return secret
+}
+
+// EnsureCACertificateKey adds a ca.crt entry, copied from tls.crt, to a CA
+// Secret that lacks one. CA Secrets cached before ca.crt was written by
+// NewCASecret, or built by hand as kubernetes.io/tls, hold the CA only
+// under tls.crt; consumers read ca.crt. Returns true when the Secret was
+// changed. A Secret with no tls.crt is left alone.
+func EnsureCACertificateKey(secret *apiv1.Secret) bool {
+	if secret == nil || secret.Data == nil {
+		return false
+	}
+	if v, ok := secret.Data["ca.crt"]; ok && len(v) > 0 {
+		return false
+	}
+	crt, ok := secret.Data["tls.crt"]
+	if !ok || len(crt) == 0 {
+		return false
+	}
+	secret.Data["ca.crt"] = crt
+	return true
 }
 
 func newCertSecret(name string, certPEM, keyPEM []byte, ingressDomain string) *apiv1.Secret {

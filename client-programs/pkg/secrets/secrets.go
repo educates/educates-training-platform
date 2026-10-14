@@ -6,8 +6,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
+	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -166,6 +166,15 @@ func SyncLocalCachedSecretsToCluster(client *kubernetes.Clientset) error {
 			}
 
 			secretObj.ObjectMeta.Namespace = ""
+
+			// A CA Secret cached before NewCASecret wrote ca.crt holds
+			// the CA only under tls.crt. Components read ca.crt, so
+			// add it on the way into the cluster. Only CA certificates
+			// qualify: a cached wildcard TLS Secret has the same shape
+			// and must not have its leaf certificate presented as a CA.
+			if secretObj.Type == apiv1.SecretTypeTLS && IsCACertificatePEM(secretObj.Data["tls.crt"]) {
+				EnsureCACertificateKey(secretObj)
+			}
 
 			_, err = secretsClient.Get(context.TODO(), name, metav1.GetOptions{})
 

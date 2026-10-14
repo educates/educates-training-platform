@@ -530,6 +530,15 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Expect(got.Status.Ingress.ClusterIssuerRef).NotTo(BeNil())
 		Expect(got.Status.Ingress.ClusterIssuerRef.Name).To(Equal(wildcardClusterIssuer))
 
+		// status.ingress also publishes the CustomCA Secret so that the
+		// platform reconcilers hand it to the component charts, which
+		// mount it to trust ingress endpoints signed by the private CA.
+		// The fixture leaves the ref's namespace empty, so it resolves
+		// to the operator namespace.
+		Expect(got.Status.Ingress.CACertificateSecretRef).NotTo(BeNil())
+		Expect(got.Status.Ingress.CACertificateSecretRef.Namespace).To(Equal(testOperatorNamespace))
+		Expect(got.Status.Ingress.CACertificateSecretRef.Name).To(Equal("custom-ca"))
+
 		// CustomCA Secret was copied into cert-manager namespace.
 		copied := &corev1.Secret{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: certManagerNamespace, Name: customCASecretName}, copied)).To(Succeed())

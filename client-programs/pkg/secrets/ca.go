@@ -65,3 +65,19 @@ func GenerateSelfSignedCA(commonName string) (certPEM, keyPEM []byte, err error)
 
 	return certPEM, keyPEM, nil
 }
+
+// IsCACertificatePEM reports whether the first certificate in certPEM is a
+// CA certificate (basic constraints present with CA set). Used to tell a
+// cached CA Secret apart from a cached wildcard TLS Secret, since both are
+// kubernetes.io/tls Secrets carrying tls.crt and tls.key.
+func IsCACertificatePEM(certPEM []byte) bool {
+	block, _ := pem.Decode(certPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return false
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false
+	}
+	return cert.BasicConstraintsValid && cert.IsCA
+}

@@ -106,7 +106,7 @@ kind: EducatesInlineConfig
 domain: workshops.example.com
 ingressClassName: contour                      # or e.g. openshift-default
 wildcardCertificateSecret: wildcard-tls        # kubernetes.io/tls Secret for *.{domain}
-caCertificateSecret: corporate-ca              # optional, for non-public CAs
+caCertificateSecret: corporate-ca              # optional, for non-public CAs; CA under the ca.crt key
 policyEnforcement:
   clusterEngine: Kyverno                       # Kyverno | PodSecurityStandards | OpenShiftSCC | None
   workshopEngine: Kyverno                      # Kyverno | None

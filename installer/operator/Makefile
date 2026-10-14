@@ -190,6 +190,12 @@ package-local-charts: ## Package the in-repo runtime subcharts the operator embe
 		helm package "$$src" --destination "$(VENDORED_CHARTS_DIR)"; \
 	done
 
+.PHONY: clean-local-charts
+clean-local-charts: ## Remove the packaged runtime subchart tarballs (build output, not vendored).
+	@for name in $(LOCAL_SUBCHARTS); do \
+		rm -f "$(VENDORED_CHARTS_DIR)/$$name"-*.tgz; \
+	done
+
 ##@ Build
 
 .PHONY: build

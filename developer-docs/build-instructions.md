@@ -262,6 +262,14 @@ make prune-all
 
 Note that this will run `docker system prune` rather than `docker image prune`, which will also result in unused docker networks and volumes being cleaned up.
 
+If you only want to remove the files that builds leave in the source tree, run:
+
+```
+make prune-builds
+```
+
+This removes everything the build targets stage or generate but which is not tracked by git, such as the copy of the CLI source staged into the base environment image context, the packaged runtime subchart tarballs, Python virtual environments and `node_modules` directories. It is worth running before switching to an older support branch, as those files are only ignored by git on the branch which creates them and would otherwise show up as untracked files on the other branch. The `scratch/` directory is never touched.
+
 Also note that this doesn't reclaim space used by the image cache of `containerd` on the Kubernetes cluster nodes. If you are doing a lot of work on Educates, especially changes to the workshop base images and you deploy workshops using many successive versions of the images, eventually you can run out of storage space due to the `containerd` image cache. In this case there isn't really anything simple you do can except for deleting the Kubernetes cluster and starting over.
 
 Building docs.educates.dev locally

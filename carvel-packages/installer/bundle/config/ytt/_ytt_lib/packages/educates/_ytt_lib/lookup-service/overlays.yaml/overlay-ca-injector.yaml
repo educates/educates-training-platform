@@ -28,8 +28,14 @@ spec:
       #@overlay/match by="name"
       - name: lookup-service
         volumeMounts:
+        #! The init container copies the whole of /etc/pki, not just
+        #! /etc/pki/ca-trust, so mount it over the whole directory. OpenSSL's
+        #! default CApath, /etc/pki/tls/certs, holds hashed symlinks that
+        #! update-ca-trust regenerates alongside the trust store, and the
+        #! system Python used by the lookup service only sees the ingress CA
+        #! if those come from the same regenerated copy.
         - name: workshop-ca-trust
-          mountPath: /etc/pki/ca-trust
+          mountPath: /etc/pki
           readOnly: true
       volumes:
       - name: workshop-ca

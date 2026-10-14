@@ -1,12 +1,31 @@
 #!/bin/bash
 
+# Runs as root in the ca-trust-store-initialization init container of a
+# workshop session pod. The cluster ingress CA is mounted into this
+# container's /etc/pki/ca-trust/source/anchors; regenerate the trust store
+# from it and copy the whole of /etc/pki into the volume the workshop
+# container then mounts at /etc/pki.
+#
+# All of /etc/pki is copied, not just ca-trust, because update-ca-trust also
+# maintains the hashed symlinks in /etc/pki/tls/certs that OpenSSL uses as
+# its CApath, and the Java keystore under /etc/pki/java. Mounting only
+# /etc/pki/ca-trust leaves the image's copies of those stale, so anything
+# that looks up the CA via CApath (Fedora's system Python among them) does
+# not see it even though the bundle file does.
+
 set -x
 set -eo pipefail
 
-SRC=/etc/pki/ca-trust
+SRC=/etc/pki
 DST=${1-/mnt/}
 
 sh -x /usr/bin/update-ca-trust
+
+# Fedora 44 dropped the /etc/pki/tls/cert.pem symlink that OpenSSL's default
+# CAfile (and so Python's) points at. Recreate it so the default verify
+# paths find the bundle without depending on the CApath lookup.
+
+ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /etc/pki/tls/cert.pem
 
 cd $DST
 

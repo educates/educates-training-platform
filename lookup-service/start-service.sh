@@ -6,9 +6,21 @@
 # ingress CA. Rebuilt on container start only: a rotated CA Secret takes
 # effect on the next restart.
 
-INGRESS_CA=/opt/app-root/certs/ingress-ca/ca.crt
+INGRESS_CA_DIR=/opt/app-root/certs/ingress-ca
 
-if [ -f "$INGRESS_CA" ]; then
+# The CA Secret normally carries the CA under ca.crt. A kubernetes.io/tls
+# Secret holding a CA certificate and key, as produced by some tools, has it
+# under tls.crt instead, so accept that when ca.crt is absent.
+
+if [ -f "$INGRESS_CA_DIR/ca.crt" ]; then
+    INGRESS_CA="$INGRESS_CA_DIR/ca.crt"
+elif [ -f "$INGRESS_CA_DIR/tls.crt" ]; then
+    INGRESS_CA="$INGRESS_CA_DIR/tls.crt"
+else
+    INGRESS_CA=""
+fi
+
+if [ -n "$INGRESS_CA" ]; then
     cat /etc/ssl/certs/ca-certificates.crt "$INGRESS_CA" > /opt/app-root/ca-bundle.crt
 fi
 

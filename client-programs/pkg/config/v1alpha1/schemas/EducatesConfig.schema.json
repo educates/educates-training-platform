@@ -1,7 +1,7 @@
 {
   "$defs": {
     "EducatesClusterConfigSpec": {
-      "description": "EducatesClusterConfigSpec defines the desired state of\nEducatesClusterConfig.\n\nCEL invariants (structural):\n  - spec.mode is immutable; switching modes requires delete + recreate.\n  - spec.ingress.certificates.provider is immutable once set; changing\n    it requires delete + recreate. Removing spec.ingress counts as a\n    change, so the provider cannot be swapped by dropping the block\n    and adding it back. Adding spec.ingress to a resource created\n    without one sets the provider for the first time and is allowed.\n  - spec.ingress.controller.provider is immutable in the same way.\n  - spec.dns.provider is immutable, reading an absent spec.dns or\n    provider as None, its default. Adding or removing spec.dns is\n    therefore allowed only when the block's provider is None.\n  - The policyEnforcement engines and kyverno provider are immutable,\n    and so is the presence of spec.policyEnforcement and of its\n    kyverno block: the operator installs no Kyverno without that\n    block, whatever its provider's default.\n  - When mode is Inline, the Managed-mode top-level fields\n    (infrastructure, ingress, dns, policyEnforcement, imageRegistry)\n    are forbidden.\n  - When mode is Managed, spec.inline is forbidden.\n\nThe provider rules fix how each cluster service is provided for the\nlife of an install, so teardown removes exactly what the spec says\nthe operator installed.",
+      "description": "EducatesClusterConfigSpec defines the desired state of\nEducatesClusterConfig.\n\nCEL invariants (structural):\n  - spec.mode is immutable; switching modes requires delete + recreate.\n  - spec.ingress.certificates.provider is immutable once set; changing\n    it requires delete + recreate. Removing spec.ingress counts as a\n    change, so the provider cannot be swapped by dropping the block\n    and adding it back. Adding spec.ingress to a resource created\n    without one sets the provider for the first time and is allowed.\n  - spec.ingress.controller.provider is immutable in the same way.\n  - spec.dns.provider is immutable, reading an absent spec.dns or\n    provider as None, its default. Adding or removing spec.dns is\n    therefore allowed only when the block's provider is None.\n  - The policyEnforcement engines and kyverno provider are immutable\n    once set, and neither spec.policyEnforcement nor its kyverno block\n    can be removed. Either can be added to a resource created without\n    it: a Managed spec missing it fails validation and the operator\n    installs nothing, so adding it sets how policy enforcement is\n    provided for the first time, as adding spec.ingress does.\n  - When mode is Inline, the Managed-mode top-level fields\n    (infrastructure, ingress, dns, policyEnforcement, imageRegistry)\n    are forbidden.\n  - When mode is Managed, spec.inline is forbidden.\n\nThe provider rules fix how each cluster service is provided for the\nlife of an install, so teardown removes exactly what the spec says\nthe operator installed.",
       "properties": {
         "dns": {
           "description": "dns configures DNS management in Managed mode; ignored in Inline\nmode.",
@@ -780,7 +780,7 @@
               "type": "object"
             },
             "policyEnforcement": {
-              "description": "InlinePolicyEnforcement declares the policy engines already in place\nfor Inline mode. Enforced engines are identified, not installed.",
+              "description": "InlinePolicyEnforcement declares the policy engines already in place\nfor Inline mode. Enforced engines are identified, not installed; a\nKyverno engine is checked to have a Kyverno serving the policy kinds\nEducates creates.",
               "properties": {
                 "clusterPolicyEngine": {
                   "description": "ClusterPolicyEngine names the cluster-wide policy enforcement engine.",
@@ -839,7 +839,7 @@
           "type": "object"
         },
         "policyEnforcement": {
-          "description": "policyEnforcement configures the cluster and workshop policy\nengines in Managed mode; ignored in Inline mode.",
+          "description": "policyEnforcement configures the cluster and workshop policy\nengines in Managed mode, where it is required: both engines default\nto Kyverno, and setting both to None runs Educates without workshop\nsecurity. Ignored in Inline mode.",
           "properties": {
             "clusterPolicy": {
               "description": "ClusterPolicyConfig configures the cluster-wide policy engine.",
@@ -1448,7 +1448,7 @@
           "type": "object"
         },
         "workshopPolicyOverride": {
-          "description": "WorkshopPolicyOverride locally overrides\nEducatesClusterConfig.status.policyEnforcement.workshopPolicyEngine\nfor this SessionManager.",
+          "description": "WorkshopPolicyOverride locally overrides\nEducatesClusterConfig.status.policyEnforcement.workshopPolicyEngine\nfor this SessionManager. While an effective engine is Kyverno, the\noperator installs session-manager only once Kyverno serves the policy\nkinds Educates creates, reported by the KyvernoAvailable condition.",
           "properties": {
             "engine": {
               "description": "WorkshopPolicyEngine names the engine enforcing per-workshop isolation\nrules. Mirrors the same-named enum in the config API group;\nduplicated to avoid cross-group Go coupling.",

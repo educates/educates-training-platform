@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -42,6 +43,7 @@ import (
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
+	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -81,6 +83,12 @@ const (
 	// `Refused` when an explicit Enabled fails its prerequisite check.
 	conditionNodeCATrustDeployed  = "NodeCATrustDeployed"
 	conditionRemoteAccessDeployed = "RemoteAccessDeployed"
+
+	// conditionKyvernoAvailable is the third gate. Status=True with
+	// reason `KyvernoServed`, or `NotRequired` when no effective policy
+	// engine is Kyverno; Status=False with reason `KyvernoNotFound` while
+	// a Kyverno engine has no Kyverno to enforce it.
+	conditionKyvernoAvailable = "KyvernoAvailable"
 )
 
 // SessionManagerReconciler drives the SessionManager CR. Two cross-CR
@@ -104,6 +112,12 @@ type SessionManagerReconciler struct {
 	// HelmClientFor returns a Helm client scoped to the given
 	// namespace. Production: REST-config-backed. Envtest: in-memory.
 	HelmClientFor func(namespace string) (*helm.Client, error)
+
+	// KyvernoDiscovery answers whether the cluster serves the Kyverno
+	// policy kinds session-manager creates. SetupWithManager builds an
+	// uncached discovery client when it is unset; tests set it because
+	// envtest serves no Kyverno.
+	KyvernoDiscovery kyverno.GroupVersionDiscovery
 }
 
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=sessionmanagers,verbs=get;list;watch;create;update;patch;delete
@@ -193,6 +207,11 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Gate 2: SecretsManager.Ready, running the secrets-manager chart this
 	// operator embeds.
 	if proceed, result, err := r.gateOnSecretsManager(ctx, obj); !proceed {
+		return result, err
+	}
+
+	// Gate 3: Kyverno, whenever an effective policy engine is Kyverno.
+	if proceed, result, err := r.gateOnKyverno(ctx, obj, cfg); !proceed {
 		return result, err
 	}
 
@@ -526,26 +545,53 @@ func applySMIngressValues(values map[string]any, obj *platformv1alpha1.SessionMa
 	values["clusterIngress"] = clusterIngress
 }
 
-// applySMSecurityValues maps the policy engines from cluster config
-// status, with the CR's optional workshop-engine override.
+// applySMSecurityValues gives the chart the effective policy engines.
 func applySMSecurityValues(values map[string]any, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) {
-	if cfg.Status.PolicyEnforcement == nil {
-		return
+	engines := effectivePolicyEngines(obj, cfg)
+	values["clusterSecurity"] = map[string]any{
+		"policyEngine": string(engines.cluster),
 	}
-	if cfg.Status.PolicyEnforcement.ClusterPolicyEngine != "" {
-		values["clusterSecurity"] = map[string]any{
-			"policyEngine": string(cfg.Status.PolicyEnforcement.ClusterPolicyEngine),
+	values["workshopSecurity"] = map[string]any{
+		"rulesEngine": string(engines.workshop),
+	}
+}
+
+// policyEngines are the engines session-manager enforces: the cluster
+// engine for the bundled cluster-wide policies the chart installs, and
+// the workshop engine for the per-workshop policies the runtime creates.
+type policyEngines struct {
+	cluster  configv1alpha1.ClusterPolicyEngine
+	workshop platformv1alpha1.WorkshopPolicyEngine
+}
+
+// usesKyverno reports whether session-manager creates Kyverno policies.
+func (e policyEngines) usesKyverno() bool {
+	return e.cluster == configv1alpha1.ClusterPolicyEngineKyverno ||
+		e.workshop == platformv1alpha1.WorkshopPolicyEngineKyverno
+}
+
+// effectivePolicyEngines resolves the engines from the cluster config's
+// published status, the only input components read, with the workshop
+// engine replaced by this SessionManager's override when it sets one.
+// An engine the cluster config does not publish takes Kyverno, the
+// chart's default and the CRD's.
+func effectivePolicyEngines(obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) policyEngines {
+	engines := policyEngines{
+		cluster:  configv1alpha1.ClusterPolicyEngineKyverno,
+		workshop: platformv1alpha1.WorkshopPolicyEngineKyverno,
+	}
+	if pe := cfg.Status.PolicyEnforcement; pe != nil {
+		if pe.ClusterPolicyEngine != "" {
+			engines.cluster = pe.ClusterPolicyEngine
+		}
+		if pe.WorkshopPolicyEngine != "" {
+			engines.workshop = platformv1alpha1.WorkshopPolicyEngine(pe.WorkshopPolicyEngine)
 		}
 	}
-	if cfg.Status.PolicyEnforcement.WorkshopPolicyEngine != "" {
-		engine := string(cfg.Status.PolicyEnforcement.WorkshopPolicyEngine)
-		if obj.Spec.WorkshopPolicyOverride != nil && obj.Spec.WorkshopPolicyOverride.Engine != "" {
-			engine = string(obj.Spec.WorkshopPolicyOverride.Engine)
-		}
-		values["workshopSecurity"] = map[string]any{
-			"rulesEngine": engine,
-		}
+	if o := obj.Spec.WorkshopPolicyOverride; o != nil && o.Engine != "" {
+		engines.workshop = o.Engine
 	}
+	return engines
 }
 
 // applySMPackageDeliveryValues maps the delivery the cluster config
@@ -719,6 +765,36 @@ func (r *SessionManagerReconciler) gateOnSecretsManager(ctx context.Context, obj
 	return true, ctrl.Result{}, nil
 }
 
+// gateOnKyverno refuses to install while an effective policy engine is
+// Kyverno and the cluster does not serve the Kyverno policy kinds: the
+// chart's bundled cluster-wide policies would fail the install, and the
+// runtime's per-workshop policies would fail every workshop environment.
+// The cluster config checks its own engines; this gate also covers a
+// workshopPolicyOverride, which can select Kyverno on a cluster whose
+// workshop engine is None. Nothing the reconciler watches changes when
+// Kyverno is installed, so it polls.
+func (r *SessionManagerReconciler) gateOnKyverno(ctx context.Context, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) (bool, ctrl.Result, error) {
+	if !effectivePolicyEngines(obj, cfg).usesKyverno() {
+		r.markSMKyvernoAvailable(obj, metav1.ConditionTrue, "NotRequired",
+			"no effective policy engine is Kyverno")
+		return true, ctrl.Result{}, nil
+	}
+	missing, err := kyverno.MissingPolicyKinds(r.KyvernoDiscovery)
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+	if len(missing) > 0 {
+		message := kyverno.NotServedMessage(missing)
+		r.markSMKyvernoAvailable(obj, metav1.ConditionFalse, "KyvernoNotFound", message)
+		r.markSMReady(obj, metav1.ConditionFalse, "WaitingForKyverno", message)
+		r.markSMPhase(obj, platformv1alpha1.ComponentPhasePending)
+		return false, ctrl.Result{RequeueAfter: kyverno.PresencePollInterval}, r.updateSMStatusWithTransitionLog(ctx, obj)
+	}
+	r.markSMKyvernoAvailable(obj, metav1.ConditionTrue, "KyvernoServed",
+		"Kyverno serves the policy kinds session-manager creates")
+	return true, ctrl.Result{}, nil
+}
+
 // prepareInstall runs the steps that must succeed before the chart is
 // installed or upgraded, and reports whether the install may proceed.
 // When it may not, the status is already written.
@@ -841,6 +917,16 @@ func (r *SessionManagerReconciler) markSMSecretsManagerAvailable(obj *platformv1
 	})
 }
 
+func (r *SessionManagerReconciler) markSMKyvernoAvailable(obj *platformv1alpha1.SessionManager, status metav1.ConditionStatus, reason, message string) {
+	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+		Type:               conditionKyvernoAvailable,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: obj.Generation,
+	})
+}
+
 func (r *SessionManagerReconciler) markSMDeployed(obj *platformv1alpha1.SessionManager, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               conditionDeployed,
@@ -892,6 +978,13 @@ func (r *SessionManagerReconciler) updateSMStatusWithTransitionLog(ctx context.C
 //     copy. Events arrive only from the namespaces the operator's
 //     Secret cache covers.
 func (r *SessionManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.KyvernoDiscovery == nil {
+		disc, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
+		if err != nil {
+			return fmt.Errorf("build discovery client: %w", err)
+		}
+		r.KyvernoDiscovery = disc
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&platformv1alpha1.SessionManager{},
 			builder.WithPredicates(predicate.GenerationChangedPredicate{})).

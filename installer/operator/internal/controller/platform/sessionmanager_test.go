@@ -40,6 +40,7 @@ import (
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
+	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno/kyvernotest"
 	"github.com/educates/educates-training-platform/installer/operator/internal/pki"
 	"github.com/educates/educates-training-platform/installer/operator/internal/testpki"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
@@ -114,6 +115,19 @@ func updateSessionManagerSpec(mutate func(*platformv1alpha1.SessionManagerSpec))
 	})).To(Succeed())
 }
 
+// publishPolicyEnginesOnClusterConfig replaces the policy engines the
+// cluster config fixture publishes.
+func publishPolicyEnginesOnClusterConfig(cluster configv1alpha1.ClusterPolicyEngine, workshop configv1alpha1.WorkshopPolicyEngine) {
+	GinkgoHelper()
+	cc := &configv1alpha1.EducatesClusterConfig{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: configSingletonName}, cc)).To(Succeed())
+	cc.Status.PolicyEnforcement = &configv1alpha1.StatusPolicyEnforcement{
+		ClusterPolicyEngine:  cluster,
+		WorkshopPolicyEngine: workshop,
+	}
+	Expect(k8sClient.Status().Update(ctx, cc)).To(Succeed())
+}
+
 func smgrReadyStatus() metav1.ConditionStatus {
 	name := singletonName
 	got := &platformv1alpha1.SessionManager{}
@@ -145,6 +159,9 @@ var _ = Describe("SessionManager reconciler", func() {
 		mgrCancel context.CancelFunc
 		mgrDone   chan error
 		helmFac   *memoryHelmFactory
+		// kyvernoDiscovery answers the Kyverno presence check; envtest
+		// serves no Kyverno, so specs flip it to the case they test.
+		kyvernoDiscovery *kyvernotest.Discovery
 	)
 
 	BeforeEach(func() {
@@ -152,6 +169,7 @@ var _ = Describe("SessionManager reconciler", func() {
 		ensureNamespace(testOperatorNamespace)
 		ensureNamespace(testCAOverrideNamespace)
 		helmFac = newMemoryHelmFactory()
+		kyvernoDiscovery = &kyvernotest.Discovery{}
 
 		var mgrCtx context.Context
 		mgrCtx, mgrCancel = context.WithCancel(ctx)
@@ -169,6 +187,7 @@ var _ = Describe("SessionManager reconciler", func() {
 			Scheme:            mgr.GetScheme(),
 			OperatorNamespace: testOperatorNamespace,
 			HelmClientFor:     helmFac.For,
+			KyvernoDiscovery:  kyvernoDiscovery,
 		}).SetupWithManager(mgr)).To(Succeed())
 
 		mgrDone = make(chan error, 1)
@@ -246,6 +265,64 @@ var _ = Describe("SessionManager reconciler", func() {
 			},
 		}
 	}
+
+	// sessionManagerReleaseInstalled reports whether the session-manager
+	// release exists.
+	sessionManagerReleaseInstalled := func() bool {
+		hc, err := helmFac.For(platformNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = hc.Status(sessionManagerReleaseName)
+		return err == nil
+	}
+
+	// Workshop security is enforced by Kyverno: the chart installs Kyverno
+	// policies and the runtime creates them per workshop, so whenever an
+	// effective engine is Kyverno, whether the cluster's or this
+	// SessionManager's override, session-manager waits for Kyverno.
+	DescribeTable("refuses to install while an effective Kyverno engine has no Kyverno",
+		func(clusterWorkshopEngine configv1alpha1.WorkshopPolicyEngine, override *platformv1alpha1.WorkshopPolicyOverride) {
+			kyvernoDiscovery.SetServed(false)
+			makeReadyClusterConfig()
+			publishPolicyEnginesOnClusterConfig(configv1alpha1.ClusterPolicyEngineNone, clusterWorkshopEngine)
+			makeReadySecretsManager()
+			Expect(k8sClient.Create(ctx, &platformv1alpha1.SessionManager{
+				ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+				Spec:       platformv1alpha1.SessionManagerSpec{WorkshopPolicyOverride: override},
+			})).To(Succeed())
+
+			Eventually(func() string {
+				return smgrConditionReason(conditionKyvernoAvailable)
+			}, 30*time.Second, 200*time.Millisecond).Should(Equal("KyvernoNotFound"))
+			Expect(smgrConditionReason(conditionReady)).To(Equal("WaitingForKyverno"))
+			Expect(smgrReadyStatus()).To(Equal(metav1.ConditionFalse))
+			Expect(sessionManagerReleaseInstalled()).To(BeFalse())
+
+			// Nothing the reconciler watches changes when Kyverno is
+			// installed, so it polls.
+			kyvernoDiscovery.SetServed(true)
+			Eventually(sessionManagerReleaseInstalled, 45*time.Second, 200*time.Millisecond).Should(BeTrue())
+			Expect(smgrConditionReason(conditionKyvernoAvailable)).To(Equal("KyvernoServed"))
+		},
+		Entry("the cluster's workshop engine", configv1alpha1.WorkshopPolicyEngineKyverno, nil),
+		Entry("an override to Kyverno on a cluster without workshop security", configv1alpha1.WorkshopPolicyEngineNone,
+			&platformv1alpha1.WorkshopPolicyOverride{Engine: platformv1alpha1.WorkshopPolicyEngineKyverno}),
+	)
+
+	It("installs without looking for Kyverno when every effective engine is None", func() {
+		kyvernoDiscovery.SetServed(false)
+		makeReadyClusterConfig()
+		publishPolicyEnginesOnClusterConfig(configv1alpha1.ClusterPolicyEngineNone, configv1alpha1.WorkshopPolicyEngineKyverno)
+		makeReadySecretsManager()
+		Expect(k8sClient.Create(ctx, &platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec: platformv1alpha1.SessionManagerSpec{
+				WorkshopPolicyOverride: &platformv1alpha1.WorkshopPolicyOverride{Engine: platformv1alpha1.WorkshopPolicyEngineNone},
+			},
+		})).To(Succeed())
+
+		Eventually(sessionManagerReleaseInstalled, 30*time.Second, 200*time.Millisecond).Should(BeTrue())
+		Expect(smgrConditionReason(conditionKyvernoAvailable)).To(Equal("NotRequired"))
+	})
 
 	It("derives a key-free copy of a CA override in another namespace and points the chart values at it", func() {
 		makeReadyClusterConfig()

@@ -14,8 +14,11 @@ see `KyvernoAppVersion` in `installer/operator/vendored-charts/embed.go`),
 from the `pod-security-vpol` set. Both Pod Security Standards profiles are
 installed unconditionally as `ValidatingPolicy` resources when
 `clusterSecurity.policyEngine: Kyverno` — workshops don't pick a profile, so
-both must be present. Action is `Audit` (`validationActions: [Audit]`),
-inherited from upstream.
+both must be present. The upstream files carry `validationActions: [Audit]`,
+and the `kyverno-cluster-policies.yaml` chart template renders every bundled
+policy with `validationActions: [Deny]` instead, so a pod that breaks the
+profile its namespace must satisfy is rejected. Leave the files' own action as
+upstream has it, so refreshing them stays a plain copy.
 
 The upstream policies ship without a namespace scope and would match every Pod
 in the cluster, including system namespaces. The legacy `ClusterPolicy` path was
@@ -40,7 +43,8 @@ ClusterPolicy scoping:
 
 The upstream `pod-security-vpol` baseline drops the `disallow-host-ports-range`
 "Alternate" policy that the CEL set carried; it folds into `disallow-host-ports`.
-We follow that curation (these are `Audit`-only, so no enforcement change).
+We follow that curation: `disallow-host-ports` rejects every non-zero
+`hostPort`, which covers everything the range policy rejected.
 
 ## `workshop-policies/` — bundled into the educates-config Secret
 
@@ -96,7 +100,8 @@ Re-vendor whenever the bundled Kyverno chart is bumped in
 3. `helm template` the session-manager chart with
    `--set global.clusterSecurity.policyEngine=Kyverno
    --set workshopSecurity.rulesEngine=Kyverno`; confirm the cluster-policies
-   render as `ValidatingPolicy`, the `kyverno-policies.yaml` Secret key renders,
+   render as `ValidatingPolicy` with `validationActions: [Deny]`, the
+   `kyverno-policies.yaml` Secret key renders,
    and the policy *names* inside the stream are unchanged (the runtime names the
    per-env copies after them, and workshop `exclude` lists reference them).
 4. `make -C installer/operator package-local-charts` to refresh the embedded

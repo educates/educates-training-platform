@@ -52,6 +52,7 @@ import (
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
+	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno/kyvernotest"
 	"github.com/educates/educates-training-platform/installer/operator/internal/ownership"
 	"github.com/educates/educates-training-platform/installer/operator/internal/pki"
 	"github.com/educates/educates-training-platform/installer/operator/internal/testpki"
@@ -88,7 +89,52 @@ func validManagedSpec() configv1alpha1.EducatesClusterConfigSpec {
 				},
 			},
 		},
+		PolicyEnforcement: noPolicyEnforcement(),
 	}
+}
+
+// noPolicyEnforcement sets both policy engines to None, so a spec that
+// exercises the other cluster services has the operator neither install
+// Kyverno nor look for one.
+func noPolicyEnforcement() *configv1alpha1.PolicyEnforcement {
+	return &configv1alpha1.PolicyEnforcement{
+		ClusterPolicy:  configv1alpha1.ClusterPolicyConfig{Engine: configv1alpha1.ClusterPolicyEngineNone},
+		WorkshopPolicy: configv1alpha1.WorkshopPolicyConfig{Engine: configv1alpha1.WorkshopPolicyEngineNone},
+	}
+}
+
+// validationSucceededMessage returns the ValidationSucceeded condition's message,
+// or "" before the reconciler has set it.
+func validationSucceededMessage() string {
+	got := &configv1alpha1.EducatesClusterConfig{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got); err != nil {
+		return ""
+	}
+	cond := meta.FindStatusCondition(got.Status.Conditions, conditionValidationSucceeded)
+	if cond == nil {
+		return ""
+	}
+	return cond.Message
+}
+
+// policyEnforcementReadyCondition returns the PolicyEnforcementReady
+// condition, or nil before the reconciler has set it.
+func policyEnforcementReadyCondition() *metav1.Condition {
+	got := &configv1alpha1.EducatesClusterConfig{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got); err != nil {
+		return nil
+	}
+	return meta.FindStatusCondition(got.Status.Conditions, conditionPolicyEnforcementReady)
+}
+
+// expectNoReleaseInstalled asserts the operator installed no Helm release
+// for the named cluster service.
+func expectNoReleaseInstalled(helmFac *memoryHelmFactory, svc clusterServiceRelease) {
+	GinkgoHelper()
+	hc, err := helmFac.For(svc.namespace)
+	Expect(err).NotTo(HaveOccurred())
+	_, err = hc.Status(svc.releaseName)
+	Expect(err).To(MatchError(helm.ErrReleaseNotFound))
 }
 
 // clusterServiceRelease names the Helm release, and the namespace it
@@ -444,6 +490,9 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		mgrCancel context.CancelFunc
 		mgrDone   chan error
 		helmFac   *memoryHelmFactory
+		// kyvernoDiscovery answers the Kyverno presence check; envtest
+		// serves no Kyverno, so specs flip it to the case they test.
+		kyvernoDiscovery *kyvernotest.Discovery
 	)
 
 	BeforeEach(func() {
@@ -459,6 +508,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		resurrectStuckNamespace(externalDNSNamespace)
 		resurrectStuckNamespace(kyvernoNamespace)
 		helmFac = newMemoryHelmFactory()
+		kyvernoDiscovery = &kyvernotest.Discovery{}
 
 		var mgrCtx context.Context
 		mgrCtx, mgrCancel = context.WithCancel(ctx)
@@ -486,6 +536,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			Scheme:            mgr.GetScheme(),
 			OperatorNamespace: testOperatorNamespace,
 			HelmClientFor:     helmFac.For,
+			KyvernoDiscovery:  kyvernoDiscovery,
 		}).SetupWithManager(mgr)).To(Succeed())
 
 		mgrDone = make(chan error, 1)
@@ -1614,7 +1665,141 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		}, 30*time.Second, 200*time.Millisecond).Should(ContainSubstring("exactly one of iamRoleARN or credentialsSecretRef"))
 	})
 
-	It("installs Kyverno and reaches Ready when all four controllers are Available", func() {
+	// Workshop security is enforced by Kyverno, and both engines default
+	// to Kyverno, so a Managed spec must say how Kyverno is provided
+	// whenever an engine is Kyverno, and must name the engines at all.
+	// Either mistake is reported before any cluster service installs.
+	DescribeTable("rejects policy enforcement it cannot honour before installing anything",
+		func(pe *configv1alpha1.PolicyEnforcement, field, reason string) {
+			Expect(k8sClient.Create(ctx, makeCustomCASecret())).To(Succeed())
+
+			spec := validManagedSpec()
+			spec.PolicyEnforcement = pe
+			obj := &configv1alpha1.EducatesClusterConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+				Spec:       spec,
+			}
+			Expect(k8sClient.Create(ctx, obj)).To(Succeed())
+
+			Eventually(validationSucceededMessage, 30*time.Second, 200*time.Millisecond).Should(And(
+				ContainSubstring(field+":"), ContainSubstring(reason)))
+
+			got := &configv1alpha1.EducatesClusterConfig{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+			Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseDegraded))
+			expectNoReleaseInstalled(helmFac, certManagerRelease)
+			expectNoReleaseInstalled(helmFac, kyvernoRelease)
+		},
+		Entry("no spec.policyEnforcement", nil,
+			"spec.policyEnforcement", "Managed mode requires spec.policyEnforcement"),
+		Entry("a Kyverno workshop engine without the kyverno block",
+			&configv1alpha1.PolicyEnforcement{
+				ClusterPolicy:  configv1alpha1.ClusterPolicyConfig{Engine: configv1alpha1.ClusterPolicyEngineNone},
+				WorkshopPolicy: configv1alpha1.WorkshopPolicyConfig{Engine: configv1alpha1.WorkshopPolicyEngineKyverno},
+			},
+			"spec.policyEnforcement.kyverno", "required when clusterPolicy.engine or workshopPolicy.engine is Kyverno"),
+		Entry("a Kyverno cluster engine without the kyverno block",
+			&configv1alpha1.PolicyEnforcement{
+				ClusterPolicy:  configv1alpha1.ClusterPolicyConfig{Engine: configv1alpha1.ClusterPolicyEngineKyverno},
+				WorkshopPolicy: configv1alpha1.WorkshopPolicyConfig{Engine: configv1alpha1.WorkshopPolicyEngineNone},
+			},
+			"spec.policyEnforcement.kyverno", "required when clusterPolicy.engine or workshopPolicy.engine is Kyverno"),
+		Entry("the PodSecurityStandards cluster engine",
+			&configv1alpha1.PolicyEnforcement{
+				ClusterPolicy:  configv1alpha1.ClusterPolicyConfig{Engine: configv1alpha1.ClusterPolicyEnginePodSecurityStandards},
+				WorkshopPolicy: configv1alpha1.WorkshopPolicyConfig{Engine: configv1alpha1.WorkshopPolicyEngineNone},
+			},
+			"spec.policyEnforcement.clusterPolicy.engine", `engine "PodSecurityStandards" is not yet supported`),
+	)
+
+	// Components read the engines from status, never the spec, so an
+	// engine the spec sets to None must reach status for session-manager
+	// to stop enforcing Kyverno policies.
+	It("publishes the spec's policy engines in status once Ready", func() {
+		root := testpki.NewRootCA()
+		leaf := root.NewLeaf(testpki.WithDNSNames("*.educates.test"))
+		Expect(k8sClient.Create(ctx, staticWildcardSecret(leaf.ChainPEM(), leaf.KeyPEM))).To(Succeed())
+		Expect(k8sClient.Create(ctx, staticCASecret(root))).To(Succeed())
+
+		Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       staticCertificateSpec(),
+		})).To(Succeed())
+		driveStaticCertificateToReady()
+
+		got := &configv1alpha1.EducatesClusterConfig{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+		Expect(got.Status.PolicyEnforcement).To(Equal(&configv1alpha1.StatusPolicyEnforcement{
+			ClusterPolicyEngine:  configv1alpha1.ClusterPolicyEngineNone,
+			WorkshopPolicyEngine: configv1alpha1.WorkshopPolicyEngineNone,
+		}))
+		// Reported as in Inline mode, so PolicyEnforcementReady is always
+		// present once the policy engines have been dealt with.
+		Expect(policyEnforcementReadyCondition()).To(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionTrue),
+			HaveField("Reason", "NotRequired")))
+	})
+
+	It("waits for an External Kyverno to be served before reaching Ready", func() {
+		kyvernoDiscovery.SetServed(false)
+		root := testpki.NewRootCA()
+		leaf := root.NewLeaf(testpki.WithDNSNames("*.educates.test"))
+		Expect(k8sClient.Create(ctx, staticWildcardSecret(leaf.ChainPEM(), leaf.KeyPEM))).To(Succeed())
+		Expect(k8sClient.Create(ctx, staticCASecret(root))).To(Succeed())
+
+		spec := staticCertificateSpec()
+		spec.PolicyEnforcement = bundledKyvernoPolicyEnforcement()
+		spec.PolicyEnforcement.Kyverno.Provider = configv1alpha1.KyvernoProviderExternal
+		Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       spec,
+		})).To(Succeed())
+
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, &corev1.Namespace{})
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
+		markDaemonSetReady()
+
+		Eventually(policyEnforcementReadyCondition, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionFalse),
+			HaveField("Reason", "KyvernoNotFound"),
+			HaveField("Message", ContainSubstring("the API server does not serve"))))
+		// Ready carries the cause too, since only the administrator can
+		// fix it and Ready is what educates admin platform deploy shows.
+		got := &configv1alpha1.EducatesClusterConfig{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+		Expect(meta.FindStatusCondition(got.Status.Conditions, conditionReady)).To(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionFalse),
+			HaveField("Reason", "KyvernoNotFound"),
+			HaveField("Message", ContainSubstring("the API server does not serve"))))
+		Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseDegraded))
+		expectNoReleaseInstalled(helmFac, kyvernoRelease)
+
+		// The operator polls for it, since nothing it watches changes
+		// when the administrator installs Kyverno.
+		kyvernoDiscovery.SetServed(true)
+		Eventually(readyConditionStatus, 45*time.Second, 200*time.Millisecond).
+			Should(Equal(metav1.ConditionTrue))
+		Expect(policyEnforcementReadyCondition()).To(And(
+			HaveField("Status", metav1.ConditionTrue),
+			HaveField("Reason", "ExternalKyvernoReady")))
+
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+		Expect(got.Status.PolicyEnforcement).To(Equal(&configv1alpha1.StatusPolicyEnforcement{
+			ClusterPolicyEngine:  configv1alpha1.ClusterPolicyEngineKyverno,
+			WorkshopPolicyEngine: configv1alpha1.WorkshopPolicyEngineKyverno,
+		}))
+		expectNoReleaseInstalled(helmFac, kyvernoRelease)
+	})
+
+	It("installs Kyverno and reaches Ready once its controllers are Available and its policy kinds are served", func() {
+		// The controllers can be Available before Kyverno's CRDs are
+		// established; start with the policy kinds not yet served.
+		kyvernoDiscovery.SetServed(false)
 		Expect(k8sClient.Create(ctx, makeCustomCASecret())).To(Succeed())
 
 		spec := validManagedSpec()
@@ -1666,18 +1851,28 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			markDeploymentAvailable(name, kyvernoNamespace)
 		}
 
-		Eventually(readyConditionStatus, 30*time.Second, 200*time.Millisecond).
+		Eventually(policyEnforcementReadyCondition, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionFalse),
+			HaveField("Reason", "KyvernoNotFound")))
+		Expect(readyConditionStatus()).NotTo(Equal(metav1.ConditionTrue))
+
+		kyvernoDiscovery.SetServed(true)
+		Eventually(readyConditionStatus, 45*time.Second, 200*time.Millisecond).
 			Should(Equal(metav1.ConditionTrue))
 
 		got := &configv1alpha1.EducatesClusterConfig{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
 		Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseReady))
 		Expect(got.Status.BundledChartVersions).To(HaveKeyWithValue("kyverno", vendoredcharts.KyvernoChartVersion))
+		Expect(got.Status.PolicyEnforcement).To(Equal(&configv1alpha1.StatusPolicyEnforcement{
+			ClusterPolicyEngine:  configv1alpha1.ClusterPolicyEngineKyverno,
+			WorkshopPolicyEngine: configv1alpha1.WorkshopPolicyEngineKyverno,
+		}))
 
-		policyReady := meta.FindStatusCondition(got.Status.Conditions, conditionPolicyEnforcementReady)
-		Expect(policyReady).NotTo(BeNil())
-		Expect(policyReady.Status).To(Equal(metav1.ConditionTrue))
-		Expect(policyReady.Reason).To(Equal("BundledKyvernoReady"))
+		Expect(policyEnforcementReadyCondition()).To(And(
+			HaveField("Status", metav1.ConditionTrue),
+			HaveField("Reason", "BundledKyvernoReady")))
 	})
 
 	// ACME-DNS01 validator coverage. Driving an end-to-end ACME

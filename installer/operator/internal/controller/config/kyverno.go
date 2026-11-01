@@ -32,6 +32,7 @@ import (
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
+	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -79,24 +80,59 @@ var errKyvernoNotReady = errors.New("kyverno Deployments not yet Available")
 // not the special crds/ directory, so the in-memory helm test
 // fake handles them without the SkipCRDs work-around.
 //
-// When provider != BundledKyverno (or neither policy engine ==
-// Kyverno), the phase early-returns done=true.
+// Whichever provider supplies Kyverno, the phase then checks that the
+// cluster serves the Kyverno policy kinds Educates creates, and holds
+// PolicyEnforcementReady and Ready back until it does: an External
+// Kyverno is the administrator's to install, and a Bundled one's CRDs
+// may not be established yet. Nothing the operator watches changes when
+// Kyverno appears, so the phase polls.
+//
+// When neither policy engine is Kyverno, the phase returns done=true
+// without looking for Kyverno.
 func (r *EducatesClusterConfigReconciler) reconcileKyvernoPhase(ctx context.Context, obj *configv1alpha1.EducatesClusterConfig) (bool, ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-	phaseStop := func(res ctrl.Result, err error) (bool, ctrl.Result, error) {
-		return false, res, err
-	}
-
-	if !shouldInstallKyverno(obj) {
+	pe := obj.Spec.PolicyEnforcement
+	if pe == nil || !usesKyverno(pe) {
+		r.markPolicyEnforcementReadyTrue(obj, "NotRequired", "no policy engine is Kyverno")
 		return true, ctrl.Result{}, nil
 	}
 
-	if err := r.validateBundledKyverno(ctx, obj); err != nil {
-		if verr, ok := errors.AsType[*validationError](err); ok {
-			r.markValidationFailed(obj, verr)
-			return phaseStop(ctrl.Result{}, r.updateStatusWithTransitionLog(ctx, obj))
+	bundled := shouldInstallKyverno(obj)
+	if bundled {
+		if done, res, err := r.installBundledKyverno(ctx, obj); !done {
+			return false, res, err
 		}
-		return phaseStop(ctrl.Result{}, err)
+	}
+
+	missing, err := kyverno.MissingPolicyKinds(r.KyvernoDiscovery)
+	if err != nil {
+		return false, ctrl.Result{}, err
+	}
+	if len(missing) > 0 {
+		r.markKyvernoNotFound(obj, kyverno.NotServedMessage(missing))
+		phase := configv1alpha1.ClusterConfigPhaseInstalling
+		if !bundled {
+			// Only the administrator can install an External Kyverno.
+			phase = configv1alpha1.ClusterConfigPhaseDegraded
+		}
+		r.markManagedPhase(obj, phase)
+		return false, ctrl.Result{RequeueAfter: kyverno.PresencePollInterval}, r.updateStatusWithTransitionLog(ctx, obj)
+	}
+
+	if bundled {
+		r.markPolicyEnforcementReadyTrue(obj, "BundledKyvernoReady", "Bundled Kyverno is Ready")
+	} else {
+		r.markPolicyEnforcementReadyTrue(obj, "ExternalKyvernoReady", "External Kyverno serves the policy kinds Educates creates")
+	}
+	return true, ctrl.Result{}, nil
+}
+
+// installBundledKyverno installs or upgrades the bundled Kyverno release
+// and waits for its four controllers. It returns done=true once they are
+// Available.
+func (r *EducatesClusterConfigReconciler) installBundledKyverno(ctx context.Context, obj *configv1alpha1.EducatesClusterConfig) (bool, ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+	phaseStop := func(res ctrl.Result, err error) (bool, ctrl.Result, error) {
+		return false, res, err
 	}
 
 	res, err := r.reconcileKyverno(ctx, obj)
@@ -121,8 +157,6 @@ func (r *EducatesClusterConfigReconciler) reconcileKyvernoPhase(ctx context.Cont
 		}
 		return phaseStop(ctrl.Result{}, err)
 	}
-
-	r.markPolicyEnforcementReadyTrue(obj)
 	return true, ctrl.Result{}, nil
 }
 
@@ -138,18 +172,23 @@ func (r *EducatesClusterConfigReconciler) reconcileKyvernoPhase(ctx context.Cont
 //     expected; we just consume it.
 func shouldInstallKyverno(obj *configv1alpha1.EducatesClusterConfig) bool {
 	pe := obj.Spec.PolicyEnforcement
-	if pe == nil {
-		return false
-	}
-	usesKyverno := pe.ClusterPolicy.Engine == configv1alpha1.ClusterPolicyEngineKyverno ||
-		pe.WorkshopPolicy.Engine == configv1alpha1.WorkshopPolicyEngineKyverno
-	if !usesKyverno {
-		return false
-	}
-	if pe.Kyverno == nil {
+	if pe == nil || !usesKyverno(pe) || pe.Kyverno == nil {
 		return false
 	}
 	return pe.Kyverno.Provider == configv1alpha1.KyvernoProviderBundled
+}
+
+// usesKyverno reports whether either policy engine is Kyverno.
+func usesKyverno(pe *configv1alpha1.PolicyEnforcement) bool {
+	return pe.ClusterPolicy.Engine == configv1alpha1.ClusterPolicyEngineKyverno ||
+		pe.WorkshopPolicy.Engine == configv1alpha1.WorkshopPolicyEngineKyverno
+}
+
+// inlineUsesKyverno reports whether either declared Inline engine is
+// Kyverno.
+func inlineUsesKyverno(pe configv1alpha1.InlinePolicyEnforcement) bool {
+	return pe.ClusterPolicyEngine == configv1alpha1.ClusterPolicyEngineKyverno ||
+		pe.WorkshopPolicyEngine == configv1alpha1.WorkshopPolicyEngineKyverno
 }
 
 // reconcileKyverno performs the helm install/upgrade. Mirrors the
@@ -213,49 +252,6 @@ func renderKyvernoValues(obj *configv1alpha1.EducatesClusterConfig) map[string]a
 	return values
 }
 
-// validateBundledKyverno surfaces friendlier "not yet supported"
-// errors for non-Kyverno policy engines that the operator can't
-// install today. v1alpha1 supports only Kyverno; the
-// PodSecurityStandards and OpenShiftSCC engines would require
-// completely different reconcile logic and aren't in scope.
-func (r *EducatesClusterConfigReconciler) validateBundledKyverno(_ context.Context, obj *configv1alpha1.EducatesClusterConfig) error {
-	pe := obj.Spec.PolicyEnforcement
-	if pe == nil {
-		return nil
-	}
-
-	switch pe.ClusterPolicy.Engine {
-	case configv1alpha1.ClusterPolicyEngineKyverno,
-		configv1alpha1.ClusterPolicyEngineNone:
-		// supported in v1alpha1.
-	default:
-		return &validationError{
-			Field:  "spec.policyEnforcement.clusterPolicy.engine",
-			Reason: fmt.Sprintf("engine %q is not yet supported in v1alpha1 (only Kyverno or None)", pe.ClusterPolicy.Engine),
-		}
-	}
-
-	switch pe.WorkshopPolicy.Engine {
-	case configv1alpha1.WorkshopPolicyEngineKyverno,
-		configv1alpha1.WorkshopPolicyEngineNone:
-		// supported.
-	default:
-		return &validationError{
-			Field:  "spec.policyEnforcement.workshopPolicy.engine",
-			Reason: fmt.Sprintf("engine %q is not yet supported in v1alpha1 (only Kyverno or None)", pe.WorkshopPolicy.Engine),
-		}
-	}
-
-	if pe.Kyverno != nil && pe.Kyverno.Provider == configv1alpha1.KyvernoProviderExternal {
-		return &validationError{
-			Field:  "spec.policyEnforcement.kyverno.provider",
-			Reason: "External Kyverno provider is not yet supported in v1alpha1",
-		}
-	}
-
-	return nil
-}
-
 // ensureKyvernoReady gates the rest of the pipeline on the four
 // kyverno Deployments reporting Available=True. Same shape as
 // ensureCertManagerReady: a missing Deployment (404) maps to
@@ -284,9 +280,10 @@ func (r *EducatesClusterConfigReconciler) ensureKyvernoReady(ctx context.Context
 // The cleanup runs only when the spec has the operator install Kyverno.
 // Otherwise the operator installed nothing here, and a Kyverno release
 // or namespace under the same names belongs to the administrator, so it
-// must survive the teardown. The policy engines and the kyverno block
-// are immutable, so the spec seen at deletion is the one the install
-// ran with.
+// must survive the teardown. The policy engines and the kyverno provider
+// are immutable once set, and the kyverno block can only be added to a
+// spec that installed nothing without it, so the spec seen at deletion
+// is the one the install ran with.
 func (r *EducatesClusterConfigReconciler) cleanupKyverno(ctx context.Context, obj *configv1alpha1.EducatesClusterConfig) error {
 	if !shouldInstallKyverno(obj) {
 		return nil

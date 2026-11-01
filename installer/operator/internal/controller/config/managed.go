@@ -363,6 +363,14 @@ func (r *EducatesClusterConfigReconciler) markManagedReady(obj *configv1alpha1.E
 	}
 	obj.Status.Ingress = status
 
+	// validateManaged guarantees spec.policyEnforcement is set, and the
+	// Kyverno phase that a Kyverno engine needs has passed, so components
+	// enforce exactly the engines the spec names.
+	obj.Status.PolicyEnforcement = &configv1alpha1.StatusPolicyEnforcement{
+		ClusterPolicyEngine:  obj.Spec.PolicyEnforcement.ClusterPolicy.Engine,
+		WorkshopPolicyEngine: obj.Spec.PolicyEnforcement.WorkshopPolicy.Engine,
+	}
+
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               conditionReady,
 		Status:             metav1.ConditionTrue,
@@ -611,6 +619,46 @@ func (r *EducatesClusterConfigReconciler) validateManaged(ctx context.Context, o
 		}
 	}
 
+	return validateManagedPolicyEnforcement(obj.Spec.PolicyEnforcement)
+}
+
+// validateManagedPolicyEnforcement checks that the operator can honour
+// the policy engines the spec names. Workshop security is enforced by
+// Kyverno, so whenever an engine is Kyverno the spec must say how Kyverno
+// is provided. Both engines default to Kyverno, so a spec without
+// spec.policyEnforcement would need Kyverno while saying nothing about
+// it; it is rejected as a missing spec.ingress is, and workshop security
+// is turned off only by setting both engines to None.
+//
+// The cluster-wide engine is limited to Kyverno and None:
+// PodSecurityStandards and OpenShiftSCC would need their own reconcile
+// logic and are not supported in v1alpha1. The workshop engine's CRD enum
+// already allows only Kyverno and None.
+func validateManagedPolicyEnforcement(pe *configv1alpha1.PolicyEnforcement) error {
+	if pe == nil {
+		return &validationError{
+			Field:  "spec.policyEnforcement",
+			Reason: "Managed mode requires spec.policyEnforcement: both engines default to Kyverno, which needs spec.policyEnforcement.kyverno; set both engines to None to run without workshop security",
+		}
+	}
+
+	switch pe.ClusterPolicy.Engine {
+	case configv1alpha1.ClusterPolicyEngineKyverno,
+		configv1alpha1.ClusterPolicyEngineNone:
+	default:
+		return &validationError{
+			Field:  "spec.policyEnforcement.clusterPolicy.engine",
+			Reason: fmt.Sprintf("engine %q is not yet supported in v1alpha1 (only Kyverno or None)", pe.ClusterPolicy.Engine),
+		}
+	}
+
+	if usesKyverno(pe) && pe.Kyverno == nil {
+		return &validationError{
+			Field:  "spec.policyEnforcement.kyverno",
+			Reason: "required when clusterPolicy.engine or workshopPolicy.engine is Kyverno: set provider to Bundled to have the operator install Kyverno, or External for a Kyverno already in the cluster",
+		}
+	}
+
 	return nil
 }
 
@@ -847,14 +895,31 @@ func (r *EducatesClusterConfigReconciler) markPolicyEnforcementProgressing(obj *
 	})
 }
 
+// markKyvernoNotFound reports that a Kyverno engine has no Kyverno to
+// enforce it. Ready names the cause too, as a validation failure does,
+// since it is what educates admin platform deploy reports while it waits.
+func (r *EducatesClusterConfigReconciler) markKyvernoNotFound(obj *configv1alpha1.EducatesClusterConfig, message string) {
+	obj.Status.ObservedGeneration = obj.Generation
+	obj.Status.Mode = obj.Spec.Mode
+	for _, conditionType := range []string{conditionPolicyEnforcementReady, conditionReady} {
+		meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+			Type:               conditionType,
+			Status:             metav1.ConditionFalse,
+			Reason:             "KyvernoNotFound",
+			Message:            message,
+			ObservedGeneration: obj.Generation,
+		})
+	}
+}
+
 // markPolicyEnforcementReadyTrue flips PolicyEnforcementReady to
 // True. Aggregate Ready stays False until markManagedReady.
-func (r *EducatesClusterConfigReconciler) markPolicyEnforcementReadyTrue(obj *configv1alpha1.EducatesClusterConfig) {
+func (r *EducatesClusterConfigReconciler) markPolicyEnforcementReadyTrue(obj *configv1alpha1.EducatesClusterConfig, reason, message string) {
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               conditionPolicyEnforcementReady,
 		Status:             metav1.ConditionTrue,
-		Reason:             "BundledKyvernoReady",
-		Message:            "Bundled Kyverno is Ready",
+		Reason:             reason,
+		Message:            message,
 		ObservedGeneration: obj.Generation,
 	})
 }

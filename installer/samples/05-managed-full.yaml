@@ -18,8 +18,12 @@
 #   - *.credentialsSecretRef static credentials (use Workload Identity
 #     on GKE, IRSA on EKS)
 #   - dns.bundledExternalDNS.provider: Cloudflare | AzureDNS
-#   - policyEnforcement.kyverno.provider: External
 #   - policyEnforcement engines other than Kyverno/None in Managed mode
+#
+# policyEnforcement is required in Managed mode, and its kyverno block
+# whenever an engine is Kyverno. kyverno.provider External uses a Kyverno
+# already in the cluster; with either provider the operator waits for
+# Kyverno to serve the policy kinds Educates creates.
 #
 # Prerequisites: the two GCP service accounts bound via Workload
 # Identity (see 02-gke-clouddns-acme.yaml) and the pull secret named

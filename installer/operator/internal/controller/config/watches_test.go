@@ -38,6 +38,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
+	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno/kyvernotest"
 	"github.com/educates/educates-training-platform/installer/operator/internal/testpki"
 )
 
@@ -133,6 +134,8 @@ var _ = Describe("EducatesClusterConfig watches (manager-driven)", func() {
 			APIReader:         mgr.GetAPIReader(),
 			Scheme:            mgr.GetScheme(),
 			OperatorNamespace: testOperatorNamespace,
+			// envtest serves no Kyverno; validInlineSpec declares it.
+			KyvernoDiscovery: &kyvernotest.Discovery{},
 		}).SetupWithManager(mgr)).To(Succeed())
 
 		mgrDone = make(chan error, 1)

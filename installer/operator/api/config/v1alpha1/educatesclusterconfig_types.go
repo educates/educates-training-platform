@@ -711,9 +711,11 @@ type WorkshopPolicyConfig struct {
 }
 
 // KyvernoConfig groups Kyverno-engine sourcing. Required when any
-// policyEnforcement engine resolves to Kyverno. It carries no per-service
-// operational block; see OperationalBlock for why only BundledContour
-// has one.
+// policyEnforcement engine resolves to Kyverno. Whichever provider
+// supplies Kyverno, the operator checks that it serves the policy kinds
+// Educates creates before reporting PolicyEnforcementReady. It carries no
+// per-service operational block; see OperationalBlock for why only
+// BundledContour has one.
 type KyvernoConfig struct {
 	// provider defaults to Bundled.
 	// +kubebuilder:default=Bundled
@@ -794,7 +796,9 @@ type InlineIngress struct {
 }
 
 // InlinePolicyEnforcement declares the policy engines already in place
-// for Inline mode. Enforced engines are identified, not installed.
+// for Inline mode. Enforced engines are identified, not installed; a
+// Kyverno engine is checked to have a Kyverno serving the policy kinds
+// Educates creates.
 type InlinePolicyEnforcement struct {
 	// +required
 	ClusterPolicyEngine ClusterPolicyEngine `json:"clusterPolicyEngine"`
@@ -830,10 +834,12 @@ type InlineConfig struct {
 //   - spec.dns.provider is immutable, reading an absent spec.dns or
 //     provider as None, its default. Adding or removing spec.dns is
 //     therefore allowed only when the block's provider is None.
-//   - The policyEnforcement engines and kyverno provider are immutable,
-//     and so is the presence of spec.policyEnforcement and of its
-//     kyverno block: the operator installs no Kyverno without that
-//     block, whatever its provider's default.
+//   - The policyEnforcement engines and kyverno provider are immutable
+//     once set, and neither spec.policyEnforcement nor its kyverno block
+//     can be removed. Either can be added to a resource created without
+//     it: a Managed spec missing it fails validation and the operator
+//     installs nothing, so adding it sets how policy enforcement is
+//     provided for the first time, as adding spec.ingress does.
 //   - When mode is Inline, the Managed-mode top-level fields
 //     (infrastructure, ingress, dns, policyEnforcement, imageRegistry)
 //     are forbidden.
@@ -847,7 +853,7 @@ type InlineConfig struct {
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.ingress) || (has(self.ingress) && self.ingress.certificates.provider == oldSelf.ingress.certificates.provider)",message="spec.ingress.certificates.provider is immutable; delete and recreate the resource to change the certificate provider"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.ingress) || (has(self.ingress) && self.ingress.controller.provider == oldSelf.ingress.controller.provider)",message="spec.ingress.controller.provider is immutable; delete and recreate the resource to change the ingress controller provider"
 // +kubebuilder:validation:XValidation:rule="(has(self.dns) && has(self.dns.provider) ? self.dns.provider : 'None') == (has(oldSelf.dns) && has(oldSelf.dns.provider) ? oldSelf.dns.provider : 'None')",message="spec.dns.provider is immutable; delete and recreate the resource to change the DNS provider"
-// +kubebuilder:validation:XValidation:rule="has(self.policyEnforcement) == has(oldSelf.policyEnforcement) && (!has(self.policyEnforcement) || (self.policyEnforcement.clusterPolicy.engine == oldSelf.policyEnforcement.clusterPolicy.engine && self.policyEnforcement.workshopPolicy.engine == oldSelf.policyEnforcement.workshopPolicy.engine && has(self.policyEnforcement.kyverno) == has(oldSelf.policyEnforcement.kyverno) && (!has(self.policyEnforcement.kyverno) || self.policyEnforcement.kyverno.provider == oldSelf.policyEnforcement.kyverno.provider)))",message="spec.policyEnforcement engines and kyverno provider are immutable; delete and recreate the resource to change policy enforcement"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.policyEnforcement) || (has(self.policyEnforcement) && self.policyEnforcement.clusterPolicy.engine == oldSelf.policyEnforcement.clusterPolicy.engine && self.policyEnforcement.workshopPolicy.engine == oldSelf.policyEnforcement.workshopPolicy.engine && (!has(oldSelf.policyEnforcement.kyverno) || (has(self.policyEnforcement.kyverno) && self.policyEnforcement.kyverno.provider == oldSelf.policyEnforcement.kyverno.provider)))",message="spec.policyEnforcement engines and kyverno provider are immutable; delete and recreate the resource to change policy enforcement"
 // +kubebuilder:validation:XValidation:rule="self.mode != 'Inline' || (!has(self.infrastructure) && !has(self.ingress) && !has(self.dns) && !has(self.policyEnforcement) && !has(self.imageRegistry))",message="spec.{infrastructure,ingress,dns,policyEnforcement,imageRegistry} are forbidden when mode is Inline"
 // +kubebuilder:validation:XValidation:rule="self.mode != 'Managed' || !has(self.inline)",message="spec.inline is forbidden when mode is Managed"
 type EducatesClusterConfigSpec struct {
@@ -870,7 +876,9 @@ type EducatesClusterConfigSpec struct {
 	DNS *DNS `json:"dns,omitempty"`
 
 	// policyEnforcement configures the cluster and workshop policy
-	// engines in Managed mode; ignored in Inline mode.
+	// engines in Managed mode, where it is required: both engines default
+	// to Kyverno, and setting both to None runs Educates without workshop
+	// security. Ignored in Inline mode.
 	// +optional
 	PolicyEnforcement *PolicyEnforcement `json:"policyEnforcement,omitempty"`
 

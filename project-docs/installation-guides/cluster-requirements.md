@@ -95,4 +95,6 @@ In **Managed mode**, the Educates operator installs and manages cert-manager, Co
 
 In **Inline mode**, you declare the pre-existing equivalents (your IngressClass, your wildcard TLS certificate Secret, your policy engine) and the operator validates and consumes them without installing anything at cluster scope. This is the right choice for OpenShift or any cluster whose ingress and certificates are managed centrally, and is what the `EducatesInlineConfig` configuration kind uses.
 
+In either mode, whenever the cluster or workshop policy engine is Kyverno, the operator checks that Kyverno is installed before the installation becomes ready, whether it installed Kyverno itself or you did. Educates installs its security policies for Kyverno and creates further ones for each workshop, so without Kyverno those would fail rather than leave workshops unrestricted.
+
 See [installation instructions](installation-instructions) for how the two modes fit into the overall install, and [configuration settings](configuration-settings) for the configuration reference.

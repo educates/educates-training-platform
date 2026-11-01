@@ -117,7 +117,7 @@ externalTLSTermination: false                  # true when a proxy/LB terminates
 
 `domain`, `ingressClassName` and `wildcardCertificateSecret` are required. The referenced Secrets must exist in the operator's namespace before deployment. Educates components never receive the `caCertificateSecret` itself, only a copy of its `ca.crt`. To keep the Secrets in another namespace, use the `EducatesConfig` escape hatch, whose `inline.ingress.wildcardCertificateSecretRef` and `inline.ingress.caCertificateSecretRef` take an optional `namespace`. See [secure HTTP connections](secure-http-connections) for the certificate options across all scenarios.
 
-Note that with `workshopEngine: None` there is no workshop-level security policy enforcement — see the [cluster requirements](cluster-requirements) discussion before serving untrusted users.
+Note that with `workshopEngine: None` there is no workshop-level security policy enforcement. See the [cluster requirements](cluster-requirements) discussion before serving untrusted users. When either engine is `Kyverno`, the operator checks that the Kyverno you installed serves the policy kinds Educates creates, and the installation does not become ready until it does.
 
 EducatesConfig (escape hatch)
 -----------------------------
@@ -134,6 +134,13 @@ educatesClusterConfig:
   mode: Managed
   ingress:
     domain: workshops.example.com
+  policyEnforcement:        # required in Managed mode, see below
+    clusterPolicy:
+      engine: Kyverno
+    workshopPolicy:
+      engine: Kyverno
+    kyverno:
+      provider: Bundled
 secretsManager: {}
 lookupService: {}           # omit the block entirely to not deploy the component
 sessionManager: {}
@@ -165,6 +172,27 @@ educatesClusterConfig:
 ```
 
 See [secure HTTP connections](secure-http-connections) for how the operator checks and serves the certificate.
+
+In `Managed` mode, `educatesClusterConfig.policyEnforcement` is required. Workshop security is enforced by Kyverno, and both the `clusterPolicy` and the `workshopPolicy` engines default to `Kyverno`, so whenever either engine is `Kyverno` the `kyverno` block must say how Kyverno is provided: `Bundled` has the operator install it, and `External` uses a Kyverno already installed in the cluster. Setting both engines to `None` runs Educates without workshop security, which is only acceptable for trusted users (see [cluster requirements](cluster-requirements)). A spec that leaves out either block fails validation before any cluster service is installed, with the `ValidationSucceeded` condition of the `EducatesClusterConfig` naming the missing field.
+
+```yaml
+educatesClusterConfig:
+  mode: Managed
+  policyEnforcement:
+    clusterPolicy:
+      engine: Kyverno         # Kyverno | None
+    workshopPolicy:
+      engine: Kyverno         # Kyverno | None
+    kyverno:
+      provider: External      # Bundled | External
+```
+
+Whichever provider supplies Kyverno, the operator checks that the cluster serves the Kyverno policy kinds Educates creates. Until it does, the `PolicyEnforcementReady` condition of the `EducatesClusterConfig` is `False` with reason `KyvernoNotFound`, and the installation does not become ready. The `workshopPolicyOverride` of the `sessionManager` block replaces the cluster's workshop engine for the session manager. When it selects `Kyverno`, the session manager is installed only once Kyverno is served, as its `KyvernoAvailable` condition reports:
+
+```
+kubectl get sessionmanager cluster \
+  -o jsonpath='{.status.conditions[?(@.type=="KyvernoAvailable")].message}'
+```
 
 The spec blocks are validated by the cluster's CRD schemas at apply time, not by the CLI. The `EducatesConfig` JSON schema is generated from the CRDs, so editors still get full completion. For the custom resource spec reference, see the sample scenarios in [installer/samples](https://github.com/educates/educates-training-platform/tree/develop/installer/samples) and `kubectl explain educatesclusterconfig.spec` against an installed cluster.
 

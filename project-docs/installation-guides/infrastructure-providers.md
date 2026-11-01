@@ -71,7 +71,7 @@ policyEnforcement:
   workshopEngine: Kyverno
 ```
 
-Workshop-level policy enforcement still uses Kyverno, which you must install yourself in Inline mode (or set `workshopEngine: None` — only acceptable for trusted users; see [cluster requirements](cluster-requirements)).
+Workshop-level policy enforcement still uses Kyverno, which you must install yourself in Inline mode. The operator checks that it is installed, and the installation does not become ready until it is. Alternatively set `workshopEngine: None`, which is only acceptable for trusted users (see [cluster requirements](cluster-requirements)).
 
 Other Kubernetes clusters
 -------------------------

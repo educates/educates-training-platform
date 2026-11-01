@@ -1199,6 +1199,20 @@ Deprecations
 Bugs Fixed
 ----------
 
+* With Kyverno as the cluster security policy engine, the namespace of a
+  workshop environment, in which its workshop session pods run, was given no
+  ``pod-security.kubernetes.io/enforce`` label, so the default level of the
+  cluster's Pod Security admission applied to it. On a cluster whose default
+  enforce level was stricter than ``privileged``, workshop session pods which
+  needed more than that level allows were rejected, such as those with Docker
+  enabled, whose Docker daemon runs as a privileged container. The namespace
+  is now labelled ``pod-security.kubernetes.io/enforce: privileged`` with the
+  Kyverno engine, as it already was with the ``PodSecurityStandards`` engine.
+  The bundled Kyverno cluster policies do not apply to that namespace, so
+  what Kyverno enforces is unchanged. The namespaces of training portals and
+  workshop sessions are still not labelled with the Kyverno engine, so the
+  cluster's default level applies to them.
+
 * When no reserved workshop session was available and the training portal
   created a new one for a user, it reported the ``Session/Started`` analytics
   event twice. For a workshop session requested through the training portal

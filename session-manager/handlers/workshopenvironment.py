@@ -477,7 +477,13 @@ def workshop_environment_create(
         },
     }
 
-    if CLUSTER_SECURITY_POLICY_ENGINE == "pod-security-standards":
+    # Workshop session pods run in this namespace, and need privileges when
+    # Docker is enabled, so Pod Security admission must allow privileged pods
+    # here. The Kyverno engine's cluster policies don't select this namespace,
+    # but without the label a cluster's default enforce level stricter than
+    # privileged would still reject those pods.
+
+    if CLUSTER_SECURITY_POLICY_ENGINE in ("pod-security-standards", "kyverno"):
         namespace_body["metadata"]["labels"][
             "pod-security.kubernetes.io/enforce"
         ] = "privileged"

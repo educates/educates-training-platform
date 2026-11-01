@@ -24,10 +24,13 @@ the v3 ClusterPolicy scoping:
     baseline profile matches [baseline, restricted] while restricted matches
     [restricted] only.
 
-User-supplied policies are emitted verbatim — their own scope is left untouched.
-The bundled ValidatingPolicies use `validationActions: [Audit]` so violations are
-logged but workloads aren't blocked. User-supplied policies use whatever action
-they set.
+Each bundled policy is also rendered with `validationActions: [Deny]`, replacing
+the `Audit` action the upstream files carry, so a pod that breaks the profile its
+namespace must satisfy is rejected. The files keep upstream's action, so
+refreshing them stays a plain copy.
+
+User-supplied policies are emitted verbatim, with their own scope and action
+left untouched.
 */ -}}
 {{- $cs := include "session-manager.resolvedClusterSecurity" . | fromYaml -}}
 {{- if eq $cs.policyEngine "Kyverno" -}}
@@ -41,6 +44,7 @@ they set.
 {{- $mc := default dict $doc.spec.matchConstraints }}
 {{- $_ := set $mc "namespaceSelector" $selector }}
 {{- $_ := set $doc.spec "matchConstraints" $mc }}
+{{- $_ := set $doc.spec "validationActions" (list "Deny") }}
 ---
 {{ $doc | toYaml | trim }}
 {{- end }}

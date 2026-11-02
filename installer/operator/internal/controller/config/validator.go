@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
+	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno"
 )
 
 // validationError carries a field path and human-readable reason so
@@ -98,7 +99,34 @@ func (r *EducatesClusterConfigReconciler) validateInline(ctx context.Context, in
 		}
 	}
 
+	if err := r.checkInlineKyverno(inline.PolicyEnforcement); err != nil {
+		return nil, err
+	}
+
 	return out, nil
+}
+
+// checkInlineKyverno checks that a declared Kyverno engine has a Kyverno
+// to enforce it. Inline mode installs nothing, but Educates workshop
+// security creates Kyverno policies, which fail without Kyverno, so the
+// declaration is checked as the declared ingress resources are.
+func (r *EducatesClusterConfigReconciler) checkInlineKyverno(pe configv1alpha1.InlinePolicyEnforcement) error {
+	if !inlineUsesKyverno(pe) {
+		return nil
+	}
+	missing, err := kyverno.MissingPolicyKinds(r.KyvernoDiscovery)
+	if err != nil {
+		return err
+	}
+	if len(missing) > 0 {
+		return &validationError{
+			Field:           "spec.inline.policyEnforcement",
+			Reason:          kyverno.NotServedMessage(missing),
+			ConditionType:   conditionPolicyEnforcementReady,
+			ConditionReason: "KyvernoNotFound",
+		}
+	}
+	return nil
 }
 
 // resolveInlineProtocol returns the public-URL scheme to publish for

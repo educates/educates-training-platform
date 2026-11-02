@@ -300,7 +300,11 @@ var _ = Describe("EducatesClusterConfig CRD validation", func() {
 		}),
 	)
 
-	It("rejects adding spec.policyEnforcement to a resource created without one (policy immutability CEL)", func() {
+	// A Managed spec without spec.policyEnforcement, or a Kyverno engine
+	// without the kyverno block, fails validation and installs nothing, so
+	// it is fixed by adding the missing block in place, as spec.ingress is
+	// added. Once set, neither block can be removed.
+	It("accepts adding spec.policyEnforcement to a resource created without one", func() {
 		obj := &configv1alpha1.EducatesClusterConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
 			Spec: configv1alpha1.EducatesClusterConfigSpec{
@@ -310,12 +314,10 @@ var _ = Describe("EducatesClusterConfig CRD validation", func() {
 		Expect(k8sClient.Create(ctx, obj)).To(Succeed())
 
 		obj.Spec.PolicyEnforcement = bundledKyvernoPolicyEnforcement()
-		err := k8sClient.Update(ctx, obj)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("spec.policyEnforcement engines and kyverno provider are immutable"))
+		Expect(k8sClient.Update(ctx, obj)).To(Succeed())
 	})
 
-	It("rejects adding spec.policyEnforcement.kyverno to a policyEnforcement created without one (policy immutability CEL)", func() {
+	It("accepts adding spec.policyEnforcement.kyverno to a policyEnforcement created without one", func() {
 		pe := bundledKyvernoPolicyEnforcement()
 		pe.Kyverno = nil
 		obj := &configv1alpha1.EducatesClusterConfig{
@@ -328,9 +330,7 @@ var _ = Describe("EducatesClusterConfig CRD validation", func() {
 		Expect(k8sClient.Create(ctx, obj)).To(Succeed())
 
 		obj.Spec.PolicyEnforcement.Kyverno = &configv1alpha1.KyvernoConfig{Provider: configv1alpha1.KyvernoProviderBundled}
-		err := k8sClient.Update(ctx, obj)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("spec.policyEnforcement engines and kyverno provider are immutable"))
+		Expect(k8sClient.Update(ctx, obj)).To(Succeed())
 	})
 
 	It("accepts an update that keeps how policy enforcement is provided", func() {

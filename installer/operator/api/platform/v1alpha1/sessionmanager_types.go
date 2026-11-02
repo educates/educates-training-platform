@@ -86,7 +86,9 @@ type IngressOverrides struct {
 
 // WorkshopPolicyOverride locally overrides
 // EducatesClusterConfig.status.policyEnforcement.workshopPolicyEngine
-// for this SessionManager.
+// for this SessionManager. While an effective engine is Kyverno, the
+// operator installs session-manager only once Kyverno serves the policy
+// kinds Educates creates, reported by the KyvernoAvailable condition.
 type WorkshopPolicyOverride struct {
 	// +required
 	Engine WorkshopPolicyEngine `json:"engine"`

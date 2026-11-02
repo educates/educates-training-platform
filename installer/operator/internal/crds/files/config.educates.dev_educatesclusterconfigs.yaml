@@ -66,10 +66,12 @@ spec:
                 - spec.dns.provider is immutable, reading an absent spec.dns or
                   provider as None, its default. Adding or removing spec.dns is
                   therefore allowed only when the block's provider is None.
-                - The policyEnforcement engines and kyverno provider are immutable,
-                  and so is the presence of spec.policyEnforcement and of its
-                  kyverno block: the operator installs no Kyverno without that
-                  block, whatever its provider's default.
+                - The policyEnforcement engines and kyverno provider are immutable
+                  once set, and neither spec.policyEnforcement nor its kyverno block
+                  can be removed. Either can be added to a resource created without
+                  it: a Managed spec missing it fails validation and the operator
+                  installs nothing, so adding it sets how policy enforcement is
+                  provided for the first time, as adding spec.ingress does.
                 - When mode is Inline, the Managed-mode top-level fields
                   (infrastructure, ingress, dns, policyEnforcement, imageRegistry)
                   are forbidden.
@@ -942,7 +944,9 @@ spec:
                   policyEnforcement:
                     description: |-
                       InlinePolicyEnforcement declares the policy engines already in place
-                      for Inline mode. Enforced engines are identified, not installed.
+                      for Inline mode. Enforced engines are identified, not installed; a
+                      Kyverno engine is checked to have a Kyverno serving the policy kinds
+                      Educates creates.
                     properties:
                       clusterPolicyEngine:
                         description: ClusterPolicyEngine names the cluster-wide policy
@@ -1001,7 +1005,9 @@ spec:
               policyEnforcement:
                 description: |-
                   policyEnforcement configures the cluster and workshop policy
-                  engines in Managed mode; ignored in Inline mode.
+                  engines in Managed mode, where it is required: both engines default
+                  to Kyverno, and setting both to None runs Educates without workshop
+                  security. Ignored in Inline mode.
                 properties:
                   clusterPolicy:
                     description: ClusterPolicyConfig configures the cluster-wide policy
@@ -1070,12 +1076,11 @@ spec:
                 : ''None'')'
             - message: spec.policyEnforcement engines and kyverno provider are immutable;
                 delete and recreate the resource to change policy enforcement
-              rule: has(self.policyEnforcement) == has(oldSelf.policyEnforcement)
-                && (!has(self.policyEnforcement) || (self.policyEnforcement.clusterPolicy.engine
-                == oldSelf.policyEnforcement.clusterPolicy.engine && self.policyEnforcement.workshopPolicy.engine
-                == oldSelf.policyEnforcement.workshopPolicy.engine && has(self.policyEnforcement.kyverno)
-                == has(oldSelf.policyEnforcement.kyverno) && (!has(self.policyEnforcement.kyverno)
-                || self.policyEnforcement.kyverno.provider == oldSelf.policyEnforcement.kyverno.provider)))
+              rule: '!has(oldSelf.policyEnforcement) || (has(self.policyEnforcement)
+                && self.policyEnforcement.clusterPolicy.engine == oldSelf.policyEnforcement.clusterPolicy.engine
+                && self.policyEnforcement.workshopPolicy.engine == oldSelf.policyEnforcement.workshopPolicy.engine
+                && (!has(oldSelf.policyEnforcement.kyverno) || (has(self.policyEnforcement.kyverno)
+                && self.policyEnforcement.kyverno.provider == oldSelf.policyEnforcement.kyverno.provider)))'
             - message: spec.{infrastructure,ingress,dns,policyEnforcement,imageRegistry}
                 are forbidden when mode is Inline
               rule: self.mode != 'Inline' || (!has(self.infrastructure) && !has(self.ingress)

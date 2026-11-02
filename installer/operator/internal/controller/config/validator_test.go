@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
+	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno/kyvernotest"
 	"github.com/educates/educates-training-platform/installer/operator/internal/pki"
 	"github.com/educates/educates-training-platform/installer/operator/internal/testpki"
 )
@@ -79,7 +80,17 @@ func makeReconciler() *EducatesClusterConfigReconciler {
 		APIReader:         k8sClient,
 		Scheme:            k8sClient.Scheme(),
 		OperatorNamespace: testOperatorNamespace,
+		// envtest serves no Kyverno; validInlineSpec declares it.
+		KyvernoDiscovery: &kyvernotest.Discovery{},
 	}
+}
+
+// kyvernoNotInstalled returns a presence-check answer for a cluster
+// without Kyverno.
+func kyvernoNotInstalled() *kyvernotest.Discovery {
+	d := &kyvernotest.Discovery{}
+	d.SetServed(false)
+	return d
 }
 
 func validInlineSpec() configv1alpha1.EducatesClusterConfigSpec {
@@ -196,6 +207,72 @@ var _ = Describe("EducatesClusterConfig Inline-mode reconciler", func() {
 		Expect(certs).NotTo(BeNil())
 		Expect(certs.Status).To(Equal(metav1.ConditionTrue))
 		Expect(certs.Reason).To(Equal("InlineCertificatesValid"))
+	})
+
+	// Inline mode asserts what the cluster already runs, and Educates
+	// workshop security needs Kyverno itself, so a declared Kyverno
+	// engine is checked like any other declared resource.
+	It("flips to Degraded while a declared Kyverno engine has no Kyverno, and recovers once it is served", func() {
+		Expect(k8sClient.Create(ctx, makeIngressClass())).To(Succeed())
+		Expect(k8sClient.Create(ctx, makeWildcardSecret(true))).To(Succeed())
+		Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       validInlineSpec(),
+		})).To(Succeed())
+
+		r := makeReconciler()
+		kyvernoDiscovery := kyvernoNotInstalled()
+		r.KyvernoDiscovery = kyvernoDiscovery
+		reconcileTwice(r)
+
+		got := &configv1alpha1.EducatesClusterConfig{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+		Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseDegraded))
+		val := meta.FindStatusCondition(got.Status.Conditions, conditionValidationSucceeded)
+		Expect(val).NotTo(BeNil())
+		Expect(val.Status).To(Equal(metav1.ConditionFalse))
+		Expect(val.Message).To(And(
+			ContainSubstring("spec.inline.policyEnforcement:"),
+			ContainSubstring("the API server does not serve")))
+		policy := meta.FindStatusCondition(got.Status.Conditions, conditionPolicyEnforcementReady)
+		Expect(policy).NotTo(BeNil())
+		Expect(policy.Status).To(Equal(metav1.ConditionFalse))
+		Expect(policy.Reason).To(Equal("KyvernoNotFound"))
+
+		kyvernoDiscovery.SetServed(true)
+		reconcileTwice(r)
+
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+		Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseReady))
+		policy = meta.FindStatusCondition(got.Status.Conditions, conditionPolicyEnforcementReady)
+		Expect(policy).NotTo(BeNil())
+		Expect(policy.Status).To(Equal(metav1.ConditionTrue))
+	})
+
+	It("does not look for Kyverno when both declared engines are None", func() {
+		Expect(k8sClient.Create(ctx, makeIngressClass())).To(Succeed())
+		Expect(k8sClient.Create(ctx, makeWildcardSecret(true))).To(Succeed())
+		spec := validInlineSpec()
+		spec.Inline.PolicyEnforcement = configv1alpha1.InlinePolicyEnforcement{
+			ClusterPolicyEngine:  configv1alpha1.ClusterPolicyEngineNone,
+			WorkshopPolicyEngine: configv1alpha1.WorkshopPolicyEngineNone,
+		}
+		Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       spec,
+		})).To(Succeed())
+
+		r := makeReconciler()
+		r.KyvernoDiscovery = kyvernoNotInstalled()
+		reconcileTwice(r)
+
+		got := &configv1alpha1.EducatesClusterConfig{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+		Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseReady))
+		Expect(got.Status.PolicyEnforcement).To(Equal(&configv1alpha1.StatusPolicyEnforcement{
+			ClusterPolicyEngine:  configv1alpha1.ClusterPolicyEngineNone,
+			WorkshopPolicyEngine: configv1alpha1.WorkshopPolicyEngineNone,
+		}))
 	})
 
 	DescribeTable("reports an unusable wildcard certificate with the same reason as StaticCertificate",

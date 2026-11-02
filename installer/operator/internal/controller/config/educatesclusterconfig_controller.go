@@ -46,6 +46,7 @@ import (
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
+	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno"
 )
 
 // finalizerName is set on EducatesClusterConfig so the operator gets a
@@ -138,6 +139,13 @@ type EducatesClusterConfigReconciler struct {
 	// holds its own answer in apiServerVersion rather than asking every
 	// reconcile.
 	Discovery discovery.DiscoveryInterface
+
+	// KyvernoDiscovery answers whether the cluster serves the Kyverno
+	// policy kinds Educates creates, checked whenever a policy engine is
+	// Kyverno, however Kyverno is provided. SetupWithManager uses the
+	// uncached Discovery client when it is unset; tests set it because
+	// envtest serves no Kyverno.
+	KyvernoDiscovery kyverno.GroupVersionDiscovery
 
 	// apiServerVersion holds the API server version between reconciles. See
 	// apiserverversion.go for why the probe does not read it every time.
@@ -531,6 +539,19 @@ func (r *EducatesClusterConfigReconciler) markReady(obj *configv1alpha1.Educates
 		Message:            certsMessage,
 		ObservedGeneration: obj.Generation,
 	})
+	// A declared Kyverno engine without Kyverno sets PolicyEnforcementReady
+	// False; it returns to True here once Kyverno is served.
+	policyMessage := "no Kyverno engine declared"
+	if inlineUsesKyverno(obj.Spec.Inline.PolicyEnforcement) {
+		policyMessage = "Kyverno serves the policy kinds Educates creates"
+	}
+	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
+		Type:               conditionPolicyEnforcementReady,
+		Status:             metav1.ConditionTrue,
+		Reason:             "InlinePolicyEnforcementValid",
+		Message:            policyMessage,
+		ObservedGeneration: obj.Generation,
+	})
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               conditionReady,
 		Status:             metav1.ConditionTrue,
@@ -698,6 +719,9 @@ func (r *EducatesClusterConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 		return fmt.Errorf("build discovery client: %w", err)
 	}
 	r.Discovery = disc
+	if r.KyvernoDiscovery == nil {
+		r.KyvernoDiscovery = disc
+	}
 
 	return mgr.Add(&CRDWatcher{
 		Manager:    mgr,

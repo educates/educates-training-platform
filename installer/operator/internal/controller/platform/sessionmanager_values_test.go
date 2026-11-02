@@ -270,3 +270,68 @@ func TestApplySMPackageDeliveryValues(t *testing.T) {
 		})
 	}
 }
+
+// securityValues returns the policy engines a values map gives the
+// session-manager chart, "" for one it leaves unset.
+func securityValues(values map[string]any) (policyEngine, rulesEngine string) {
+	if cs, ok := values["clusterSecurity"].(map[string]any); ok {
+		policyEngine, _ = cs["policyEngine"].(string)
+	}
+	if ws, ok := values["workshopSecurity"].(map[string]any); ok {
+		rulesEngine, _ = ws["rulesEngine"].(string)
+	}
+	return policyEngine, rulesEngine
+}
+
+// TestRenderSessionManagerValues_PolicyEnginesFromClusterConfig asserts
+// that the engines the cluster config publishes reach the chart, so an
+// engine set to None stops session-manager enforcing Kyverno policies.
+func TestRenderSessionManagerValues_PolicyEnginesFromClusterConfig(t *testing.T) {
+	cfg := valuesTestClusterConfig()
+	cfg.Status.PolicyEnforcement = &configv1alpha1.StatusPolicyEnforcement{
+		ClusterPolicyEngine:  configv1alpha1.ClusterPolicyEngineNone,
+		WorkshopPolicyEngine: configv1alpha1.WorkshopPolicyEngineNone,
+	}
+
+	policy, rules := securityValues(renderSessionManagerValues(&platformv1alpha1.SessionManager{}, cfg, "educates-installer"))
+	if policy != string(configv1alpha1.ClusterPolicyEngineNone) || rules != string(platformv1alpha1.WorkshopPolicyEngineNone) {
+		t.Errorf("engines = (%q, %q), want (None, None)", policy, rules)
+	}
+}
+
+// TestRenderSessionManagerValues_WorkshopPolicyOverrideWins asserts that
+// the SessionManager's workshop engine override replaces the cluster's,
+// including when the cluster config publishes no engines.
+func TestRenderSessionManagerValues_WorkshopPolicyOverrideWins(t *testing.T) {
+	sm := &platformv1alpha1.SessionManager{Spec: platformv1alpha1.SessionManagerSpec{
+		WorkshopPolicyOverride: &platformv1alpha1.WorkshopPolicyOverride{Engine: platformv1alpha1.WorkshopPolicyEngineNone},
+	}}
+
+	published := valuesTestClusterConfig()
+	published.Status.PolicyEnforcement = &configv1alpha1.StatusPolicyEnforcement{
+		ClusterPolicyEngine:  configv1alpha1.ClusterPolicyEngineKyverno,
+		WorkshopPolicyEngine: configv1alpha1.WorkshopPolicyEngineKyverno,
+	}
+	unpublished := valuesTestClusterConfig()
+
+	for name, cfg := range map[string]*configv1alpha1.EducatesClusterConfig{
+		"engines published":    published,
+		"no engines published": unpublished,
+	} {
+		policy, rules := securityValues(renderSessionManagerValues(sm, cfg, "educates-installer"))
+		if policy != string(configv1alpha1.ClusterPolicyEngineKyverno) || rules != string(platformv1alpha1.WorkshopPolicyEngineNone) {
+			t.Errorf("%s: engines = (%q, %q), want (Kyverno, None)", name, policy, rules)
+		}
+	}
+}
+
+// TestRenderSessionManagerValues_KyvernoWhenNoEnginesPublished asserts
+// that a cluster config publishing no engines gives the chart Kyverno
+// for both, its own defaults, stated so the Kyverno presence gate and
+// the chart agree on what session-manager enforces.
+func TestRenderSessionManagerValues_KyvernoWhenNoEnginesPublished(t *testing.T) {
+	policy, rules := securityValues(renderSessionManagerValues(&platformv1alpha1.SessionManager{}, valuesTestClusterConfig(), "educates-installer"))
+	if policy != string(configv1alpha1.ClusterPolicyEngineKyverno) || rules != string(platformv1alpha1.WorkshopPolicyEngineKyverno) {
+		t.Errorf("engines = (%q, %q), want (Kyverno, Kyverno)", policy, rules)
+	}
+}

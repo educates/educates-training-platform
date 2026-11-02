@@ -39,6 +39,7 @@ import (
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
+	"github.com/educates/educates-training-platform/installer/operator/internal/ownership"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -312,6 +313,36 @@ var _ = Describe("SecretsManager reconciler", func() {
 		Expect(got.Status.DeploymentRef).NotTo(BeNil())
 		Expect(got.Status.DeploymentRef.Namespace).To(Equal(platformNamespace))
 		Expect(got.Status.DeploymentRef.Name).To(Equal(secretsManagerDeploymentName))
+	})
+
+	It("labels the existing platform namespace privileged for Pod Security admission", func() {
+		// The namespace already exists at a level that refuses
+		// node-ca-injector's privileged container and hostPath volume,
+		// as an administrator or an earlier install left it.
+		stale := &corev1.Namespace{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: platformNamespace}, stale)).To(Succeed())
+		stale.Labels = map[string]string{"pod-security.kubernetes.io/enforce": "baseline"}
+		Expect(k8sClient.Update(ctx, stale)).To(Succeed())
+
+		makeReadyClusterConfig()
+		sm := &platformv1alpha1.SecretsManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec:       platformv1alpha1.SecretsManagerSpec{},
+		}
+		Expect(k8sClient.Create(ctx, sm)).To(Succeed())
+
+		Eventually(func() map[string]string {
+			ns := &corev1.Namespace{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: platformNamespace}, ns); err != nil {
+				return nil
+			}
+			return ns.Labels
+		}, 30*time.Second, 200*time.Millisecond).Should(And(
+			HaveKeyWithValue("pod-security.kubernetes.io/enforce", "privileged"),
+			HaveKeyWithValue("pod-security.kubernetes.io/audit", "privileged"),
+			HaveKeyWithValue("pod-security.kubernetes.io/warn", "privileged"),
+			HaveKeyWithValue(ownership.ManagedByLabel, ownership.ManagedByValue),
+		))
 	})
 
 	It("upgrades the subchart's stale CRDs, so a field the old schema lacked is kept", func() {

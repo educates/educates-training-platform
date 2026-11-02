@@ -32,6 +32,7 @@ import (
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
+	"github.com/educates/educates-training-platform/installer/operator/internal/podsecurity"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -156,7 +157,12 @@ func (r *EducatesClusterConfigReconciler) reconcileContour(ctx context.Context, 
 		return helm.Result{}, fmt.Errorf("load embedded contour chart: %w", err)
 	}
 
-	if err := r.ensureNamespace(ctx, contourNamespace, owner); err != nil {
+	// Envoy binds the node's ports 80 and 443 through hostPort when its
+	// Service is ClusterIP (see renderContourValues), which even the
+	// baseline Pod Security level forbids. The namespace is labelled
+	// privileged whatever the Service type, since the type can change
+	// after install and nothing else in it needs a stricter level.
+	if err := r.ensureNamespace(ctx, contourNamespace, owner, podsecurity.PrivilegedNamespaceLabels()); err != nil {
 		return helm.Result{}, err
 	}
 

@@ -377,6 +377,26 @@ func markDaemonSetReady() {
 	Expect(k8sClient.Status().Update(ctx, ds)).To(Succeed())
 }
 
+// podSecurityLabelKeys are the namespace labels that set Pod Security
+// admission's enforce, audit and warn levels.
+var podSecurityLabelKeys = []string{
+	"pod-security.kubernetes.io/enforce",
+	"pod-security.kubernetes.io/audit",
+	"pod-security.kubernetes.io/warn",
+}
+
+// expectNoPodSecurityLabels asserts the named namespace carries no Pod
+// Security admission level, so the cluster's default level applies to
+// it.
+func expectNoPodSecurityLabels(name string) {
+	GinkgoHelper()
+	ns := &corev1.Namespace{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name}, ns)).To(Succeed())
+	for _, key := range podSecurityLabelKeys {
+		Expect(ns.Labels).NotTo(HaveKey(key))
+	}
+}
+
 // resurrectStuckNamespace force-finalizes a namespace that's been
 // left in Terminating state by a previous spec. envtest runs no
 // namespace controller, so a Delete on a namespace with kubernetes
@@ -1237,6 +1257,56 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Expect(copied.Data).To(HaveKey("tls.key"))
 	})
 
+	It("labels the contour namespace privileged for Pod Security admission and leaves cert-manager's to the cluster default", func() {
+		// The namespace already exists at a level that refuses Envoy's
+		// hostPort, as an administrator or an earlier install left it.
+		ensureNamespace(contourNamespace)
+		stale := &corev1.Namespace{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, stale)).To(Succeed())
+		for _, key := range podSecurityLabelKeys {
+			delete(stale.Labels, key)
+		}
+		if stale.Labels == nil {
+			stale.Labels = map[string]string{}
+		}
+		stale.Labels["pod-security.kubernetes.io/enforce"] = "baseline"
+		Expect(k8sClient.Update(ctx, stale)).To(Succeed())
+
+		Expect(k8sClient.Create(ctx, makeCustomCASecret())).To(Succeed())
+		obj := &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       validManagedSpec(),
+		}
+		Expect(k8sClient.Create(ctx, obj)).To(Succeed())
+
+		// Drive cert-manager to Ready so the Contour phase runs.
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Name: certManagerNamespace}, &corev1.Namespace{})
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+		for _, name := range certManagerDeployments {
+			markDeploymentAvailable(name, certManagerNamespace)
+		}
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Namespace: testOperatorNamespace, Name: wildcardCertificate}, &cmv1.Certificate{})
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+		markCertificateReady()
+
+		Eventually(func() map[string]string {
+			ns := &corev1.Namespace{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, ns); err != nil {
+				return nil
+			}
+			return ns.Labels
+		}, 30*time.Second, 200*time.Millisecond).Should(And(
+			HaveKeyWithValue("pod-security.kubernetes.io/enforce", "privileged"),
+			HaveKeyWithValue("pod-security.kubernetes.io/audit", "privileged"),
+			HaveKeyWithValue("pod-security.kubernetes.io/warn", "privileged"),
+			HaveKeyWithValue(ownership.ManagedByLabel, ownership.ManagedByValue),
+		))
+
+		expectNoPodSecurityLabels(certManagerNamespace)
+	})
+
 	It("tears down installed resources in reverse order on delete", func() {
 		Expect(k8sClient.Create(ctx, makeCustomCASecret())).To(Succeed())
 
@@ -1593,6 +1663,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
 		Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseReady))
 		Expect(got.Status.BundledChartVersions).To(HaveKeyWithValue("external-dns", vendoredcharts.ExternalDNSChartVersion))
+		expectNoPodSecurityLabels(externalDNSNamespace)
 
 		// DNSReady condition flipped True with the BundledExternalDNS
 		// reason.
@@ -1865,6 +1936,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
 		Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseReady))
 		Expect(got.Status.BundledChartVersions).To(HaveKeyWithValue("kyverno", vendoredcharts.KyvernoChartVersion))
+		expectNoPodSecurityLabels(kyvernoNamespace)
 		Expect(got.Status.PolicyEnforcement).To(Equal(&configv1alpha1.StatusPolicyEnforcement{
 			ClusterPolicyEngine:  configv1alpha1.ClusterPolicyEngineKyverno,
 			WorkshopPolicyEngine: configv1alpha1.WorkshopPolicyEngineKyverno,

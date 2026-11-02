@@ -406,7 +406,7 @@ func (r *EducatesClusterConfigReconciler) reconcileCertManager(ctx context.Conte
 		return helm.Result{}, fmt.Errorf("load embedded cert-manager chart: %w", err)
 	}
 
-	if err := r.ensureNamespace(ctx, certManagerNamespace, owner); err != nil {
+	if err := r.ensureNamespace(ctx, certManagerNamespace, owner, nil); err != nil {
 		return helm.Result{}, err
 	}
 

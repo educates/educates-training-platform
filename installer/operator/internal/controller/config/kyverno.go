@@ -199,7 +199,7 @@ func (r *EducatesClusterConfigReconciler) reconcileKyverno(ctx context.Context, 
 		return helm.Result{}, fmt.Errorf("load embedded kyverno chart: %w", err)
 	}
 
-	if err := r.ensureNamespace(ctx, kyvernoNamespace, owner); err != nil {
+	if err := r.ensureNamespace(ctx, kyvernoNamespace, owner, nil); err != nil {
 		return helm.Result{}, err
 	}
 

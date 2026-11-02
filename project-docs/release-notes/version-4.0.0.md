@@ -1213,6 +1213,23 @@ Bugs Fixed
   workshop sessions are still not labelled with the Kyverno engine, so the
   cluster's default level applies to them.
 
+* On a cluster whose Pod Security admission enforces a default level stricter
+  than ``privileged`` on namespaces without their own label, as Talos does
+  with ``baseline``, pods Educates installs which need more than ``baseline``
+  allows were rejected. These were the Envoy pods of the bundled Contour when
+  they bind the node's ports 80 and 443 through ``hostPort``, and the
+  ``node-ca-injector`` pods, which run a privileged container that mounts a
+  directory of the node. The operator now labels the ``contour`` and
+  ``educates`` namespaces with ``pod-security.kubernetes.io/enforce``,
+  ``pod-security.kubernetes.io/audit`` and ``pod-security.kubernetes.io/warn``
+  set to ``privileged``, whatever the cluster security policy engine, and
+  sets those labels again the next time it reconciles the installation if
+  they have been removed or changed. The ``cert-manager``, ``kyverno`` and
+  ``external-dns`` namespaces are left unlabelled, since the pods installed
+  there meet the ``restricted`` level. The operator's own pod now sets the
+  ``RuntimeDefault`` seccomp profile, so it also meets the ``restricted``
+  level and its namespace needs no label.
+
 * When no reserved workshop session was available and the training portal
   created a new one for a user, it reported the ``Session/Started`` analytics
   event twice. For a workshop session requested through the training portal

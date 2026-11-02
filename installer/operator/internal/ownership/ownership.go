@@ -23,6 +23,10 @@ limitations under the License.
 // lists the operator's footprint.
 package ownership
 
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
 const (
 	// FieldManager is the server-side apply field manager the operator
 	// asserts ownership under.
@@ -33,3 +37,25 @@ const (
 	ManagedByLabel = "app.kubernetes.io/managed-by"
 	ManagedByValue = "educates-installer"
 )
+
+// RestoreLabels sets each of labels on obj, adding missing keys and
+// restoring changed values, and leaves obj's other labels alone. It
+// reports whether it changed obj, so the caller patches only then.
+func RestoreLabels(obj metav1.Object, labels map[string]string) bool {
+	current := obj.GetLabels()
+	changed := false
+	for k, v := range labels {
+		if existing, ok := current[k]; ok && existing == v {
+			continue
+		}
+		if current == nil {
+			current = map[string]string{}
+		}
+		current[k] = v
+		changed = true
+	}
+	if changed {
+		obj.SetLabels(current)
+	}
+	return changed
+}

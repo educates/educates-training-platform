@@ -146,8 +146,9 @@ check its `go.mod` before moving either.
 
 - For a supported range of 1.34 to 1.37, use `k8s.io/* v0.37.x`
 - Packages: `k8s.io/api`, `k8s.io/apimachinery`, `k8s.io/cli-runtime`,
-  `k8s.io/client-go`, `k8s.io/kubectl`, and `k8s.io/apiextensions-apiserver`
-  in the operator
+  `k8s.io/client-go` and `k8s.io/kubectl`, plus
+  `k8s.io/apiextensions-apiserver` and `k8s.io/pod-security-admission` in the
+  operator
 - Also update `sigs.k8s.io/controller-runtime` to the release built against
   that Kubernetes minor
 

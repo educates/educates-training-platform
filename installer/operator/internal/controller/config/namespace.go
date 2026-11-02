@@ -19,6 +19,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,18 +33,22 @@ import (
 )
 
 // ensureNamespace creates the named namespace if absent and reconciles
-// the operator-owned labels on it. Owner reference is set to the
-// EducatesClusterConfig singleton (cluster-scoped → cluster-scoped is
-// permitted), so `kubectl delete educatesclusterconfig cluster`
-// cascades to the namespace even if the operator's finalizer drain
-// path doesn't complete.
+// the operator-owned labels on it: the managed-by label, plus
+// podSecurityLabels, the Pod Security admission level its workloads
+// need, or nil to leave the namespace at the cluster's default level.
+// Owner reference is set to the EducatesClusterConfig singleton
+// (cluster-scoped → cluster-scoped is permitted), so `kubectl delete
+// educatesclusterconfig cluster` cascades to the namespace even if the
+// operator's finalizer drain path doesn't complete.
 //
-// Idempotent: on subsequent calls, missing labels are added via
-// controller-runtime patch; values already in place are left alone.
-func (r *EducatesClusterConfigReconciler) ensureNamespace(ctx context.Context, name string, owner *configv1alpha1.EducatesClusterConfig) error {
+// Idempotent: on subsequent calls, missing operator-owned labels are
+// added and changed ones restored via controller-runtime patch; labels
+// the operator doesn't own are left alone.
+func (r *EducatesClusterConfigReconciler) ensureNamespace(ctx context.Context, name string, owner *configv1alpha1.EducatesClusterConfig, podSecurityLabels map[string]string) error {
 	desiredLabels := map[string]string{
 		ownership.ManagedByLabel: ownership.ManagedByValue,
 	}
+	maps.Copy(desiredLabels, podSecurityLabels)
 
 	ns := &corev1.Namespace{}
 	err := r.Get(ctx, types.NamespacedName{Name: name}, ns)
@@ -66,20 +71,8 @@ func (r *EducatesClusterConfigReconciler) ensureNamespace(ctx context.Context, n
 		return fmt.Errorf("get Namespace %q: %w", name, err)
 	}
 
-	// Reconcile labels: add any missing keys but don't fight a human who
-	// has set additional labels on the namespace for their own reasons.
 	patch := client.MergeFrom(ns.DeepCopy())
-	updated := false
-	if ns.Labels == nil {
-		ns.Labels = map[string]string{}
-	}
-	for k, v := range desiredLabels {
-		if existing, ok := ns.Labels[k]; !ok || existing != v {
-			ns.Labels[k] = v
-			updated = true
-		}
-	}
-	if !updated {
+	if !ownership.RestoreLabels(ns, desiredLabels) {
 		return nil
 	}
 	if err := r.Patch(ctx, ns, patch); err != nil {

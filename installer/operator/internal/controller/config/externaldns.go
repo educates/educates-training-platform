@@ -145,7 +145,7 @@ func (r *EducatesClusterConfigReconciler) reconcileExternalDNS(ctx context.Conte
 		return helm.Result{}, fmt.Errorf("load embedded external-dns chart: %w", err)
 	}
 
-	if err := r.ensureNamespace(ctx, externalDNSNamespace, owner); err != nil {
+	if err := r.ensureNamespace(ctx, externalDNSNamespace, owner, nil); err != nil {
 		return helm.Result{}, err
 	}
 

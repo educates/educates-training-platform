@@ -301,7 +301,10 @@ var _ = Describe("SessionManager reconciler", func() {
 			// installed, so it polls.
 			kyvernoDiscovery.SetServed(true)
 			Eventually(sessionManagerReleaseInstalled, 45*time.Second, 200*time.Millisecond).Should(BeTrue())
-			Expect(smgrConditionReason(conditionKyvernoAvailable)).To(Equal("KyvernoServed"))
+			// The release is installed before the reconcile writes status.
+			Eventually(func() string {
+				return smgrConditionReason(conditionKyvernoAvailable)
+			}, 10*time.Second, 200*time.Millisecond).Should(Equal("KyvernoServed"))
 		},
 		Entry("the cluster's workshop engine", configv1alpha1.WorkshopPolicyEngineKyverno, nil),
 		Entry("an override to Kyverno on a cluster without workshop security", configv1alpha1.WorkshopPolicyEngineNone,
@@ -321,7 +324,10 @@ var _ = Describe("SessionManager reconciler", func() {
 		})).To(Succeed())
 
 		Eventually(sessionManagerReleaseInstalled, 30*time.Second, 200*time.Millisecond).Should(BeTrue())
-		Expect(smgrConditionReason(conditionKyvernoAvailable)).To(Equal("NotRequired"))
+		// The release is installed before the reconcile writes status.
+		Eventually(func() string {
+			return smgrConditionReason(conditionKyvernoAvailable)
+		}, 10*time.Second, 200*time.Millisecond).Should(Equal("NotRequired"))
 	})
 
 	It("derives a key-free copy of a CA override in another namespace and points the chart values at it", func() {
@@ -477,7 +483,10 @@ var _ = Describe("SessionManager reconciler", func() {
 			_, err := hc.Status(sessionManagerReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		Expect(smgrConditionReason(conditionSecretsManagerAvailable)).To(Equal("SecretsManagerReady"))
+		// The release is installed before the reconcile writes status.
+		Eventually(func() string {
+			return smgrConditionReason(conditionSecretsManagerAvailable)
+		}, 10*time.Second, 200*time.Millisecond).Should(Equal("SecretsManagerReady"))
 	})
 
 	It("installs the chart and reaches Ready when both gates pass + Deployment Available", func() {

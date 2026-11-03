@@ -339,7 +339,7 @@ func TestSessionManagerChart_ImagePullerDerivesThePullPolicyFromTheTag(t *testin
 		{"localhost:5001/x:latest", corev1.PullAlways},
 		{"localhost:5001/x" + digest, corev1.PullIfNotPresent},
 	}
-	var entries []platformv1alpha1.PrePulledImage
+	entries := make([]platformv1alpha1.PrePulledImage, 0, len(cases))
 	for _, c := range cases {
 		entries = append(entries, platformv1alpha1.PrePulledImage{Image: c.image})
 	}

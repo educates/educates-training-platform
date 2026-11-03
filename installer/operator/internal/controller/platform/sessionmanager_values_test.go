@@ -98,7 +98,6 @@ func TestApplySMImageValues_RoutesSpecialOverrides(t *testing.T) {
 			Images: &platformv1alpha1.Images{
 				Overrides: []platformv1alpha1.ImageOverride{
 					{Name: "session-manager", Image: "localhost:5001/educates-session-manager:latest"},
-					{Name: "pause-container", Image: "localhost:5001/educates-pause-container:latest"},
 					{Name: "node-ca-injector", Image: "localhost:5001/educates-node-ca-injector:latest"},
 					{Name: "training-portal", Image: "localhost:5001/educates-training-portal:latest"},
 				},
@@ -116,15 +115,6 @@ func TestApplySMImageValues_RoutesSpecialOverrides(t *testing.T) {
 		t.Errorf("values.image = %v", image)
 	}
 
-	prePuller, ok := values["imagePrePuller"].(map[string]any)
-	if !ok {
-		t.Fatal("pause-container override did not land on values.imagePrePuller")
-	}
-	pause, ok := prePuller["pauseImage"].(map[string]any)
-	if !ok || pause["repository"] != "localhost:5001/educates-pause-container" || pause["tag"] != tagLatest {
-		t.Errorf("imagePrePuller.pauseImage = %v", prePuller["pauseImage"])
-	}
-
 	entries, ok := values["imageVersions"].([]any)
 	if !ok || len(entries) != 1 {
 		t.Fatalf("imageVersions should contain exactly the training-portal entry, got %v", values["imageVersions"])
@@ -132,32 +122,6 @@ func TestApplySMImageValues_RoutesSpecialOverrides(t *testing.T) {
 	entry := entries[0].(map[string]any)
 	if entry["name"] != "training-portal" {
 		t.Errorf("imageVersions[0] = %v", entry)
-	}
-}
-
-func TestRenderSessionManagerValues_PrePullerComposition(t *testing.T) {
-	enabled := true
-	obj := &platformv1alpha1.SessionManager{
-		Spec: platformv1alpha1.SessionManagerSpec{
-			ImagePrePuller: &platformv1alpha1.ImagePrePuller{Enabled: enabled},
-			Images: &platformv1alpha1.Images{
-				Overrides: []platformv1alpha1.ImageOverride{
-					{Name: "pause-container", Image: "localhost:5001/educates-pause-container:latest"},
-				},
-			},
-		},
-	}
-	values := renderSessionManagerValues(obj, valuesTestClusterConfig(), "educates-installer")
-
-	prePuller, ok := values["imagePrePuller"].(map[string]any)
-	if !ok {
-		t.Fatal("imagePrePuller missing")
-	}
-	if prePuller["enabled"] != true {
-		t.Errorf("imagePrePuller.enabled = %v, want true (clobbered by pauseImage writer?)", prePuller["enabled"])
-	}
-	if _, ok := prePuller["pauseImage"].(map[string]any); !ok {
-		t.Errorf("imagePrePuller.pauseImage = %v, want map (clobbered by enabled writer?)", prePuller["pauseImage"])
 	}
 }
 

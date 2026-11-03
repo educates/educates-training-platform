@@ -1153,10 +1153,10 @@
           "properties": {
             "overrides": {
               "items": {
-                "description": "ImageOverride entries replace one chart-default image by short name.\nMirrors the v3 imageVersions shape: any image the chart's default\ninventory exposes by name can be overridden here (e.g.,\n\"training-portal\", \"base-environment\", \"jdk17-environment\"). Three\nnames are special-cased by the reconciler because they live outside\nthat inventory: \"session-manager\" (the chart-pod image),\n\"pause-container\" (the pre-puller pause image) and\n\"node-ca-injector\" (its own subchart) — they route to the dedicated\nchart values that control those images.",
+                "description": "ImageOverride entries replace one chart-default image by short name.\nMirrors the v3 imageVersions shape: any image the chart's default\ninventory exposes by name can be overridden here (e.g.,\n\"training-portal\", \"base-environment\", \"jdk17-environment\"). Three\nnames are special-cased by the reconciler because they live outside\nthat inventory: \"session-manager\" (the chart-pod image),\n\"image-puller\" (the image pre-puller's own helper image) and\n\"node-ca-injector\" (its own subchart) — they route to the dedicated\nchart values that control those images.",
                 "properties": {
                   "image": {
-                    "description": "image is the full reference including tag. Digest-pinned\nreferences are not supported for the special-cased names\n(\"session-manager\", \"pause-container\", \"node-ca-injector\"),\nwhose chart values are repository+tag shaped.",
+                    "description": "image is the full reference including tag. Digest-pinned\nreferences are not supported for the special-cased names\n(\"session-manager\", \"image-puller\", \"node-ca-injector\"),\nwhose chart values are repository+tag shaped.",
                     "type": "string"
                   },
                   "name": {

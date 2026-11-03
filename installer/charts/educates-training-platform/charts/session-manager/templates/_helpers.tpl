@@ -41,8 +41,8 @@ content placeholder resolution.
 
 {{/*
 Resolve the effective imageRegistry for chart-rendered refs (chart pod
-image, pause image, Educates-published entries in the imageVersions
-helper). Layered resolution:
+image, image pre-puller helper image, Educates-published entries in the
+imageVersions helper). Layered resolution:
   1. `.development.imageRegistry` (subchart-local) and
      `.global.development.imageRegistry` (umbrella global), deep-merged
      with global winning.
@@ -79,9 +79,10 @@ Compose the registry+namespace prefix from the resolved imageRegistry.
 Two forms:
   host + namespace -> "{host}/{namespace}"
   host alone       -> "{host}"
-Used as the default prefix for the chart-pod image, the pause image, and the
-Educates-published entries in the `imageVersions` helper. A user that points
-imageRegistry at a fork or a local registry redirects all three at once.
+Used as the default prefix for the chart-pod image, the image pre-puller's
+helper image, and the Educates-published entries in the `imageVersions`
+helper. A user that points imageRegistry at a fork or a local registry
+redirects all three at once.
 */}}
 {{- define "session-manager.imageRegistryPrefix" -}}
 {{- $ir := include "session-manager.resolvedImageRegistry" . | fromYaml -}}
@@ -162,23 +163,28 @@ training-portal plus a prePullImages list defaulting to
 {{- end -}}
 {{- end -}}
 
-{{- define "session-manager.pause.image.repository" -}}
-{{- if .Values.imagePrePuller.pauseImage.repository -}}
-{{ .Values.imagePrePuller.pauseImage.repository }}
+{{/*
+The image of the image pre-puller's own helper, image-puller, which the
+image-puller DaemonSet runs in place of anything from the images it
+pulls.
+*/}}
+{{- define "session-manager.imagePuller.image.repository" -}}
+{{- if .Values.imagePrePuller.image.repository -}}
+{{ .Values.imagePrePuller.image.repository }}
 {{- else -}}
-{{ include "session-manager.imageRegistryPrefix" . }}/educates-pause-container
+{{ include "session-manager.imageRegistryPrefix" . }}/educates-image-puller
 {{- end -}}
 {{- end -}}
 
-{{- define "session-manager.pause.image.tag" -}}
-{{- default .Chart.AppVersion .Values.imagePrePuller.pauseImage.tag -}}
+{{- define "session-manager.imagePuller.image.tag" -}}
+{{- default .Chart.AppVersion .Values.imagePrePuller.image.tag -}}
 {{- end -}}
 
-{{- define "session-manager.pause.image.pullPolicy" -}}
-{{- if .Values.imagePrePuller.pauseImage.pullPolicy -}}
-{{ .Values.imagePrePuller.pauseImage.pullPolicy }}
+{{- define "session-manager.imagePuller.image.pullPolicy" -}}
+{{- if .Values.imagePrePuller.image.pullPolicy -}}
+{{ .Values.imagePrePuller.image.pullPolicy }}
 {{- else -}}
-{{- $tag := include "session-manager.pause.image.tag" . -}}
+{{- $tag := include "session-manager.imagePuller.image.tag" . -}}
 {{- if or (eq $tag "latest") (eq $tag "main") (eq $tag "master") (eq $tag "develop") -}}
 Always
 {{- else -}}

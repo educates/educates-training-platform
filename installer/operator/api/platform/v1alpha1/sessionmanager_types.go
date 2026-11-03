@@ -100,7 +100,7 @@ type WorkshopPolicyOverride struct {
 // "training-portal", "base-environment", "jdk17-environment"). Three
 // names are special-cased by the reconciler because they live outside
 // that inventory: "session-manager" (the chart-pod image),
-// "pause-container" (the pre-puller pause image) and
+// "image-puller" (the image pre-puller's own helper image) and
 // "node-ca-injector" (its own subchart) — they route to the dedicated
 // chart values that control those images.
 type ImageOverride struct {
@@ -111,7 +111,7 @@ type ImageOverride struct {
 
 	// image is the full reference including tag. Digest-pinned
 	// references are not supported for the special-cased names
-	// ("session-manager", "pause-container", "node-ca-injector"),
+	// ("session-manager", "image-puller", "node-ca-injector"),
 	// whose chart values are repository+tag shaped.
 	// +required
 	Image string `json:"image"`

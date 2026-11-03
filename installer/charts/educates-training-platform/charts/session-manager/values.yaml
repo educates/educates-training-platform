@@ -320,16 +320,19 @@ websiteStyling:
 # Image pre-puller DaemonSet
 # =============================================================================
 
-# When enabled, runs an init-container per image in `images` (each running
-# `/bin/true`) so the kubelet pre-pulls and caches them on every node ahead of
-# time, plus a long-lived pause container to keep the DS alive. Useful for
-# clusters where workshop session start time is dominated by image pull.
+# When enabled, runs a DaemonSet with an init container per pre-pulled image,
+# so the kubelet pulls and caches each image on every node ahead of time.
+# Useful for clusters where workshop session start time is dominated by image
+# pull. Nothing from a pulled image runs: each of those init containers runs
+# the image-puller helper, which a first init container copies into a shared
+# volume, and the helper is also the long-running container that keeps the
+# DaemonSet's pods in place.
 imagePrePuller:
   enabled: false
-  # Pause image used as the long-lived "keepalive" container in the DaemonSet.
-  # Empty `repository` derives `{imageRegistry.host}/{imageRegistry.namespace}/educates-pause-container`.
+  # The image-puller helper image.
+  # Empty `repository` derives `{imageRegistry.host}/{imageRegistry.namespace}/educates-image-puller`.
   # Empty `tag` falls through to `Chart.AppVersion`.
-  pauseImage:
+  image:
     repository: ""
     tag: ""
     pullPolicy: ""

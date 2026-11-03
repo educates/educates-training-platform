@@ -381,8 +381,8 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "enabled":    { "type": "boolean" },
-          "pauseImage": { "$ref": "#/definitions/imageRef" },
+          "enabled": { "type": "boolean" },
+          "image":   { "$ref": "#/definitions/imageRef" },
           "images": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }

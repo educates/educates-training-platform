@@ -1,4 +1,16 @@
 {{- if .Values.imagePrePuller.enabled }}
+{{- /*
+The pod runs nothing from the images it pulls. A first init container
+copies the image-puller helper into a shared emptyDir volume, every
+pulled image is an init container that runs the helper's exit role from
+that volume, and the long-running container is the helper's wait role.
+An image without a shell or /bin/true, such as a distroless or scratch
+image, is then pulled like any other, and never stops the init
+containers after it.
+*/}}
+{{- $helperImage := printf "%s:%s" (include "session-manager.imagePuller.image.repository" .) (include "session-manager.imagePuller.image.tag" .) }}
+{{- $helperPullPolicy := include "session-manager.imagePuller.image.pullPolicy" . }}
+{{- $helperDir := "/opt/image-puller" }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -25,19 +37,35 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
-      {{- with include "session-manager.prePullImages" . | fromYamlArray }}
+      volumes:
+        - name: image-puller
+          emptyDir: {}
       initContainers:
-        {{- range $i, $image := . }}
+        - name: copy-image-puller
+          image: {{ $helperImage | quote }}
+          imagePullPolicy: {{ $helperPullPolicy }}
+          command: ["/image-puller", "copy", {{ $helperDir | quote }}]
+          volumeMounts:
+            - name: image-puller
+              mountPath: {{ $helperDir }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+        {{- range $i, $image := include "session-manager.prePullImages" . | fromYamlArray }}
         - name: prepull-{{ $i }}
           image: {{ $image | quote }}
           imagePullPolicy: {{ include "session-manager.derivedPullPolicy" $image }}
-          command: ["/bin/true"]
+          command: [{{ printf "%s/image-puller" $helperDir | quote }}, "exit"]
+          volumeMounts:
+            - name: image-puller
+              mountPath: {{ $helperDir }}
         {{- end }}
-      {{- end }}
       containers:
-        - name: pause
-          image: "{{ include "session-manager.pause.image.repository" . }}:{{ include "session-manager.pause.image.tag" . }}"
-          imagePullPolicy: {{ include "session-manager.pause.image.pullPolicy" . }}
+        - name: image-puller
+          image: {{ $helperImage | quote }}
+          imagePullPolicy: {{ $helperPullPolicy }}
+          command: ["/image-puller", "wait"]
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

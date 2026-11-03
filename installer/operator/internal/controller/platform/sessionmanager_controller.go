@@ -453,9 +453,9 @@ func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionMana
 	// imageVersions — per-image overrides from CR spec. Three names
 	// are not part of the chart's imageVersions inventory and are
 	// routed to the dedicated chart values that actually control
-	// them: the session-manager chart-pod image (`image`), the pause
-	// container (`imagePrePuller.pauseImage`), and node-ca-injector
-	// (its own subchart's `image`, handled in
+	// them: the session-manager chart-pod image (`image`), the image
+	// pre-puller's helper image-puller (`imagePrePuller.image`), and
+	// node-ca-injector (its own subchart's `image`, handled in
 	// renderNodeCAInjectorValues). Everything else flows through the
 	// inventory and merges by name on the chart side.
 	if obj.Spec.Images != nil && len(obj.Spec.Images.Overrides) > 0 {
@@ -468,9 +468,9 @@ func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionMana
 					"repository": repo,
 					"tag":        tag,
 				}
-			case "pause-container":
+			case "image-puller":
 				repo, tag := splitImageRef(o.Image)
-				imagePrePullerValues(values)["pauseImage"] = map[string]any{
+				imagePrePullerValues(values)["image"] = map[string]any{
 					"repository": repo,
 					"tag":        tag,
 				}
@@ -491,7 +491,7 @@ func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionMana
 }
 
 // imagePrePullerValues returns the imagePrePuller map inside values,
-// creating it when absent, so the pause-image override router and the
+// creating it when absent, so the image-puller override router and the
 // enabled-toggle writer compose instead of clobbering each other.
 func imagePrePullerValues(values map[string]any) map[string]any {
 	if m, ok := values["imagePrePuller"].(map[string]any); ok {

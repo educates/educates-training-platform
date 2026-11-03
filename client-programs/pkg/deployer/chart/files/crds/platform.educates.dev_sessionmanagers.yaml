@@ -90,14 +90,61 @@ spec:
                 type: string
               imagePrePuller:
                 description: |-
-                  ImagePrePuller configures the optional DaemonSet that pre-pulls workshop
-                  images onto every node ahead of time, so session startup isn't blocked on
-                  image pulls.
+                  ImagePrePuller configures the optional DaemonSet that pre-pulls images
+                  onto every node ahead of time, so the first workshop session on a node
+                  does not wait for the images it runs to be pulled. The images are pulled
+                  in order: the default images when included, then each entry of images
+                  as listed, an image already in the list being pulled once.
                 properties:
                   enabled:
                     default: false
+                    description: |-
+                      enabled switches the image pre-puller on. It is the only switch:
+                      while it is off nothing is pulled, whatever the other fields say.
+                    type: boolean
+                  images:
+                    description: |-
+                      images lists further images to pull, after the default images and
+                      in the order listed.
+                    items:
+                      description: |-
+                        PrePulledImage is one image the image pre-puller pulls, given by
+                        exactly one of name and image.
+                      properties:
+                        image:
+                          description: image is a full image reference, pulled exactly
+                            as written.
+                          minLength: 1
+                          type: string
+                        name:
+                          description: |-
+                            name is an image's short name in the Educates image inventory, such
+                            as "jdk21-environment". It resolves to the reference the
+                            installation runs, with spec.images.overrides and the image registry
+                            prefix applied. A name the inventory does not hold fails the
+                            install, which the Ready condition reports with reason
+                            InstallFailed.
+                          minLength: 1
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: each imagePrePuller.images entry must set exactly
+                          one of name and image
+                        rule: has(self.name) != has(self.image)
+                    type: array
+                  includeDefaultImages:
+                    default: true
+                    description: |-
+                      includeDefaultImages pulls the default images, the training portal
+                      and the workshop base environment, ahead of the entries in images.
                     type: boolean
                 type: object
+                x-kubernetes-validations:
+                - message: imagePrePuller with enabled true and includeDefaultImages
+                    false must list at least one entry in images
+                  rule: '!has(self.enabled) || !self.enabled || !has(self.includeDefaultImages)
+                    || self.includeDefaultImages || (has(self.images) && size(self.images)
+                    > 0)'
               images:
                 description: |-
                   Images groups image-related overrides. Registry prefix and pull

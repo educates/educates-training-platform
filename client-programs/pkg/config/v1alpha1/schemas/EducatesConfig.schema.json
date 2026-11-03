@@ -1139,10 +1139,36 @@
           "type": "string"
         },
         "imagePrePuller": {
-          "description": "ImagePrePuller configures the optional DaemonSet that pre-pulls workshop\nimages onto every node ahead of time, so session startup isn't blocked on\nimage pulls.",
+          "description": "ImagePrePuller configures the optional DaemonSet that pre-pulls images\nonto every node ahead of time, so the first workshop session on a node\ndoes not wait for the images it runs to be pulled. The images are pulled\nin order: the default images when included, then each entry of images\nas listed, an image already in the list being pulled once.",
           "properties": {
             "enabled": {
               "default": false,
+              "description": "enabled switches the image pre-puller on. It is the only switch:\nwhile it is off nothing is pulled, whatever the other fields say.",
+              "type": "boolean"
+            },
+            "images": {
+              "description": "images lists further images to pull, after the default images and\nin the order listed.",
+              "items": {
+                "description": "PrePulledImage is one image the image pre-puller pulls, given by\nexactly one of name and image.",
+                "properties": {
+                  "image": {
+                    "description": "image is a full image reference, pulled exactly as written.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "name is an image's short name in the Educates image inventory, such\nas \"jdk21-environment\". It resolves to the reference the\ninstallation runs, with spec.images.overrides and the image registry\nprefix applied. A name the inventory does not hold fails the\ninstall, which the Ready condition reports with reason\nInstallFailed.",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "includeDefaultImages": {
+              "default": true,
+              "description": "includeDefaultImages pulls the default images, the training portal\nand the workshop base environment, ahead of the entries in images.",
               "type": "boolean"
             }
           },

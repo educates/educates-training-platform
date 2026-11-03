@@ -233,13 +233,49 @@ type SessionNetwork struct {
 	BlockedCIDRs []string `json:"blockedCidrs,omitempty"`
 }
 
-// ImagePrePuller configures the optional DaemonSet that pre-pulls workshop
-// images onto every node ahead of time, so session startup isn't blocked on
-// image pulls.
+// ImagePrePuller configures the optional DaemonSet that pre-pulls images
+// onto every node ahead of time, so the first workshop session on a node
+// does not wait for the images it runs to be pulled. The images are pulled
+// in order: the default images when included, then each entry of images
+// as listed, an image already in the list being pulled once.
+// +kubebuilder:validation:XValidation:rule="!has(self.enabled) || !self.enabled || !has(self.includeDefaultImages) || self.includeDefaultImages || (has(self.images) && size(self.images) > 0)",message="imagePrePuller with enabled true and includeDefaultImages false must list at least one entry in images"
 type ImagePrePuller struct {
+	// enabled switches the image pre-puller on. It is the only switch:
+	// while it is off nothing is pulled, whatever the other fields say.
 	// +kubebuilder:default=false
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
+
+	// includeDefaultImages pulls the default images, the training portal
+	// and the workshop base environment, ahead of the entries in images.
+	// +kubebuilder:default=true
+	// +optional
+	IncludeDefaultImages *bool `json:"includeDefaultImages,omitempty"`
+
+	// images lists further images to pull, after the default images and
+	// in the order listed.
+	// +optional
+	Images []PrePulledImage `json:"images,omitempty"`
+}
+
+// PrePulledImage is one image the image pre-puller pulls, given by
+// exactly one of name and image.
+// +kubebuilder:validation:XValidation:rule="has(self.name) != has(self.image)",message="each imagePrePuller.images entry must set exactly one of name and image"
+type PrePulledImage struct {
+	// name is an image's short name in the Educates image inventory, such
+	// as "jdk21-environment". It resolves to the reference the
+	// installation runs, with spec.images.overrides and the image registry
+	// prefix applied. A name the inventory does not hold fails the
+	// install, which the Ready condition reports with reason
+	// InstallFailed.
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// image is a full image reference, pulled exactly as written.
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	Image string `json:"image,omitempty"`
 }
 
 // ComponentMode is a tri-state toggle for optional SessionManager

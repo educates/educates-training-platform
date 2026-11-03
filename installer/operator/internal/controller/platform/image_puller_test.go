@@ -35,19 +35,31 @@ import (
 // the in-memory Helm client, and the tests look at the image-puller
 // DaemonSet's pod.
 
-// renderImagePullerPod renders the session-manager chart for obj and
-// returns the image-puller DaemonSet's pod spec.
-func renderImagePullerPod(t *testing.T, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) corev1.PodSpec {
+// renderImagePullerDaemonSet renders the session-manager chart for obj
+// and returns the image-puller DaemonSet, or nil when the chart renders
+// none.
+func renderImagePullerDaemonSet(t *testing.T, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) *renderedWorkload {
 	t.Helper()
 
 	values := renderSessionManagerValues(obj, cfg, testOperatorNamespace)
 	for _, w := range renderWorkloads(t, vendoredcharts.SessionManager, values) {
 		if w.Kind == "DaemonSet" && w.Metadata.Name == "image-puller" {
-			return w.Spec.Template.Spec
+			return &w
 		}
 	}
-	t.Fatal("no image-puller DaemonSet in the rendered session-manager chart")
-	return corev1.PodSpec{}
+	return nil
+}
+
+// renderImagePullerPod renders the session-manager chart for obj and
+// returns the image-puller DaemonSet's pod spec.
+func renderImagePullerPod(t *testing.T, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) corev1.PodSpec {
+	t.Helper()
+
+	w := renderImagePullerDaemonSet(t, obj, cfg)
+	if w == nil {
+		t.Fatal("no image-puller DaemonSet in the rendered session-manager chart")
+	}
+	return w.Spec.Template.Spec
 }
 
 // sessionManagerAppVersion is the application version of the embedded
@@ -408,10 +420,8 @@ func TestSessionManagerChart_ImagePullerSwitchedOffKeepsItsList(t *testing.T) {
 	)
 	obj.Spec.ImagePrePuller.Enabled = false
 
-	// renderWorkloads fails the test when the install fails.
-	for _, w := range renderWorkloads(t, vendoredcharts.SessionManager, renderSessionManagerValues(obj, valuesTestClusterConfig(), testOperatorNamespace)) {
-		if w.Kind == "DaemonSet" && w.Metadata.Name == "image-puller" {
-			t.Fatal("the image-puller DaemonSet is rendered while the pre-puller is off")
-		}
+	// The render fails the test when the install fails.
+	if w := renderImagePullerDaemonSet(t, obj, valuesTestClusterConfig()); w != nil {
+		t.Fatal("the image-puller DaemonSet is rendered while the pre-puller is off")
 	}
 }

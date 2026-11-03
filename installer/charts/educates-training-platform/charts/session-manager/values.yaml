@@ -106,7 +106,7 @@ packageDelivery:
 # leave the entire `development:` block empty:
 #
 #   - Chart-rendered + runtime-spawned Educates image refs (chart pod,
-#     pause container, training-portal, base-environment, etc.) are
+#     image-puller, training-portal, base-environment, etc.) are
 #     composed from Chart.yaml annotations
 #     (`educates.dev/image-registry-host` / `-namespace`), which the chart's
 #     publish workflow updates per fork at release time.
@@ -118,9 +118,10 @@ packageDelivery:
 #
 # When set, `development.imageRegistry` has TWO simultaneous effects:
 #
-#   1. Replaces the Chart.yaml annotation defaults. Chart pod, pause
-#      image, and the Educates-published entries in the `imageVersions`
-#      helper resolve against `{host}/{namespace}` instead.
+#   1. Replaces the Chart.yaml annotation defaults. Chart pod,
+#      image-puller helper image, and the Educates-published entries in
+#      the `imageVersions` helper resolve against `{host}/{namespace}`
+#      instead.
 #   2. Emits the same `{host}/{namespace}` into the runtime config so
 #      workshop sessions get `IMAGE_REPOSITORY={host}/{namespace}`.
 #      Workshops authored against `$(image_repository)/<name>` placeholders

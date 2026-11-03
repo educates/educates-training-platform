@@ -84,7 +84,7 @@ endif
 # =============================================================================
 
 CORE_IMAGES = session-manager training-portal base-environment \
-  docker-registry pause-container secrets-manager tunnel-manager \
+  docker-registry image-puller secrets-manager tunnel-manager \
   image-cache assets-server lookup-service node-ca-injector
 
 WORKSHOP_IMAGES = jdk8-environment jdk11-environment jdk17-environment \

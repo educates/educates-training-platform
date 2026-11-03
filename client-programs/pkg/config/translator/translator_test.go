@@ -602,10 +602,13 @@ func TestTranslateLocal_DevCLIDefaults_EndToEnd(t *testing.T) {
 		m := o.(map[string]interface{})
 		found[m["name"].(string)] = m["image"].(string)
 	}
-	for _, name := range []string{"session-manager", "training-portal", "base-environment", "pause-container", "node-ca-injector"} {
+	for _, name := range []string{"session-manager", "training-portal", "base-environment", "image-puller", "node-ca-injector"} {
 		if found[name] != "localhost:5001/educates-"+name+":latest" {
 			t.Errorf("SessionManager override %s = %q", name, found[name])
 		}
+	}
+	if image, present := found["pause-container"]; present {
+		t.Errorf("SessionManager overrides hold pause-container = %q, an image Educates no longer builds", image)
 	}
 	if _, present := found["secrets-manager"]; present {
 		t.Error("secrets-manager leaked into SessionManager overrides instead of routing to its CR")

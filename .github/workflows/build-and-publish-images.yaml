@@ -65,7 +65,7 @@ jobs:
       matrix:
         include:
           - image: docker-registry
-          - image: pause-container
+          - image: image-puller
           - image: session-manager
           - image: training-portal
           - image: secrets-manager

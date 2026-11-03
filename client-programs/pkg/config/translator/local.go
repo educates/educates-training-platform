@@ -160,7 +160,7 @@ func localSecretsManagerSpec(cfg *v1alpha1.EducatesLocalConfig) map[string]inter
 	if cfg.Operator.LogLevel != "" {
 		spec["logLevel"] = cfg.Operator.LogLevel
 	}
-	if ref := componentImageRef(cfg.ImageVersions, "secrets-manager"); ref != nil {
+	if ref := componentImageRef(cfg.ImageVersions, v1alpha1.SecretsManagerImageName); ref != nil {
 		spec["image"] = ref
 	}
 	return spec
@@ -178,7 +178,7 @@ func localLookupServiceSpec(cfg *v1alpha1.EducatesLocalConfig) map[string]interf
 	if cfg.Operator.LogLevel != "" {
 		spec["logLevel"] = cfg.Operator.LogLevel
 	}
-	if ref := componentImageRef(cfg.ImageVersions, "lookup-service"); ref != nil {
+	if ref := componentImageRef(cfg.ImageVersions, v1alpha1.LookupServiceImageName); ref != nil {
 		spec["image"] = ref
 	}
 	return spec

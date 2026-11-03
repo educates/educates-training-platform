@@ -311,7 +311,7 @@ func translateV3ImagePuller(v3 map[string]interface{}, imageVersions []v1alpha1.
 func translateV3PrePullImages(prePullImages []interface{}, imageVersions []v1alpha1.ImageVersion, out *v1alpha1.ImagePrePullerConfig) []string {
 	inInventory := map[string]bool{}
 	for _, iv := range imageVersions {
-		if !imageVersionsOutsideInventory[iv.Name] {
+		if reachesImageInventory(iv) {
 			inInventory[iv.Name] = true
 		}
 	}
@@ -376,18 +376,24 @@ var v3OnlyImageNames = map[string]bool{
 	"pause-container":         true,
 }
 
-// imageVersionsOutsideInventory are the imageVersions names whose
-// override sets an image of its own instead of adding the name to the
-// session-manager chart's image inventory: the CLI passes secrets-manager
-// and lookup-service to their own custom resources, and the operator
-// routes session-manager, node-ca-injector and image-puller to dedicated
-// chart values. Any other override name lands in the inventory.
-var imageVersionsOutsideInventory = map[string]bool{
-	"secrets-manager":  true,
-	"lookup-service":   true,
+// operatorRoutedImageNames are the image override names the operator
+// routes to dedicated chart values instead of the session-manager chart's
+// image inventory: session-manager to that chart's own image, image-puller
+// to its imagePrePuller.image, and node-ca-injector to the node-ca-injector
+// chart's image (applySMImageValues and renderNodeCAInjectorValues in
+// installer/operator/internal/controller/platform).
+var operatorRoutedImageNames = map[string]bool{
 	"session-manager":  true,
 	"node-ca-injector": true,
 	"image-puller":     true,
+}
+
+// reachesImageInventory reports whether an imageVersions entry adds its
+// name to the session-manager chart's image inventory: any entry but one
+// the CLI routes to a component custom resource of its own, or one whose
+// name the operator routes to a dedicated chart value.
+func reachesImageInventory(iv v1alpha1.ImageVersion) bool {
+	return !iv.RoutesToComponentResource() && !operatorRoutedImageNames[iv.Name]
 }
 
 // strV3Path walks v3raw by string keys and returns the leaf as string,

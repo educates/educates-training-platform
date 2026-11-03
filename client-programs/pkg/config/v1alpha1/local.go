@@ -117,6 +117,23 @@ type ImageVersion struct {
 	Image string `yaml:"image"`
 }
 
+// The imageVersions names the CLI routes to a component custom resource
+// of their own. An entry with one of these names sets the spec.image of
+// that resource, the SecretsManager or the LookupService, and is left
+// out of the SessionManager's spec.images.overrides, since neither
+// component's image is in the session-manager chart's image inventory.
+const (
+	SecretsManagerImageName = "secrets-manager"
+	LookupServiceImageName  = "lookup-service"
+)
+
+// RoutesToComponentResource reports whether the CLI routes the entry to
+// a component custom resource of its own instead of the SessionManager:
+// whether its name is SecretsManagerImageName or LookupServiceImageName.
+func (iv ImageVersion) RoutesToComponentResource() bool {
+	return iv.Name == SecretsManagerImageName || iv.Name == LookupServiceImageName
+}
+
 // ImagePrePullerConfig is the image pre-puller block every narrow kind
 // shares. It takes the fields of SessionManager.spec.imagePrePuller, with
 // the same meaning, and the translators pass it on as written. Unlike the

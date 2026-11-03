@@ -97,7 +97,7 @@ func scenarioSecretsManagerSpec(logLevel string, ivs []v1alpha1.ImageVersion) ma
 	if logLevel != "" {
 		spec["logLevel"] = logLevel
 	}
-	if ref := componentImageRef(ivs, "secrets-manager"); ref != nil {
+	if ref := componentImageRef(ivs, v1alpha1.SecretsManagerImageName); ref != nil {
 		spec["image"] = ref
 	}
 	return spec
@@ -113,7 +113,7 @@ func scenarioLookupServiceSpec(logLevel string, ivs []v1alpha1.ImageVersion) map
 	if logLevel != "" {
 		spec["logLevel"] = logLevel
 	}
-	if ref := componentImageRef(ivs, "lookup-service"); ref != nil {
+	if ref := componentImageRef(ivs, v1alpha1.LookupServiceImageName); ref != nil {
 		spec["image"] = ref
 	}
 	return spec

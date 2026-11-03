@@ -145,7 +145,7 @@ func setNodeByPath(root *yaml.Node, segs []string, value interface{}) error {
 			walked := strings.Join(segs[:i+1], ".")
 			if b, err := strconv.ParseBool(v.Value); err == nil && walked == "imagePrePuller" && v.ShortTag() == "!!bool" {
 				return fmt.Errorf("path %q: the file's imagePrePuller %s ('educates local config edit' opens the file)",
-					strings.Join(segs, "."), config.ImagePrePullerBooleanForm(b))
+					strings.Join(segs, "."), config.ImagePrePullerBooleanFormMessage(b))
 			}
 			return fmt.Errorf("path %q: segment %q is not a map", strings.Join(segs, "."), walked)
 		}

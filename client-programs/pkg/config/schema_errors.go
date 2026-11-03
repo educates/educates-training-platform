@@ -35,7 +35,7 @@ func SchemaErrorLines(errs []gojsonschema.ResultError) []string {
 		b, isBool := e.Value().(bool)
 		switch {
 		case isBool && e.Field() == "imagePrePuller" && e.Type() == "invalid_type":
-			lines = append(lines, "imagePrePuller: "+ImagePrePullerBooleanForm(b))
+			lines = append(lines, "imagePrePuller: "+ImagePrePullerBooleanFormMessage(b))
 		case notExactlyOne[e.Field()] && e.Type() == "number_one_of":
 			lines = append(lines, e.Field()+": must set exactly one of name and image")
 		case notExactlyOne[e.Field()] && e.Type() == "required":
@@ -54,9 +54,9 @@ func SchemaErrorLines(errs []gojsonschema.ResultError) []string {
 	return lines
 }
 
-// ImagePrePullerBooleanForm describes an imagePrePuller given as a
-// boolean, a form the narrow kinds no longer take, and names the object
-// form to write in its place.
-func ImagePrePullerBooleanForm(value bool) string {
+// ImagePrePullerBooleanFormMessage returns the message for an
+// imagePrePuller given as a boolean, a form the narrow kinds no longer
+// take: it names the object form to write in its place.
+func ImagePrePullerBooleanFormMessage(value bool) string {
 	return fmt.Sprintf("takes an object, not a boolean; set imagePrePuller.enabled instead, writing \"imagePrePuller: {enabled: %t}\" in place of \"imagePrePuller: %t\"", value, value)
 }

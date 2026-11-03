@@ -446,7 +446,8 @@ New Features
   it was, and the ``SessionManager`` reports ``Ready`` as ``False`` with
   reason ``InstallFailed`` and a message naming the entry. ``enabled`` remains
   the only switch: while it is ``false`` nothing is pulled, and the list can
-  stay in place.
+  stay in place. See [pre-pulling workshop
+  images](pre-pulling-workshop-images).
 
 Features Changed
 ----------------
@@ -871,7 +872,7 @@ Features Changed
   ``educates local cluster create``: an alpha cluster received the CA's
   private key, and still holds it in the old CA secret.
 
-* The ``imageCache`` configuration setting has been renamed to
+* The version 3 ``imagePuller`` configuration setting is replaced by
   ``imagePrePuller``, and in the CLI configuration kinds
   (``EducatesLocalConfig``, ``EducatesGKEConfig``, ``EducatesEKSConfig`` and
   ``EducatesInlineConfig``) it is now an object, with the same ``enabled``,
@@ -882,16 +883,18 @@ Features Changed
   pre-pull the training portal and workshop base environment images onto
   every node ahead of time unless ``imagePrePuller.enabled`` is set to
   ``false``, which ``educates local config set imagePrePuller.enabled false``
-  does for the local configuration. Installs applied directly from custom
-  resources or the Helm chart keep the default of disabled. The CLI rejects,
-  when it loads the configuration, an ``images`` entry giving both or neither
-  of ``name`` and ``image``, and ``includeDefaultImages`` set to ``false``
-  with no ``images`` while ``enabled`` is ``true`` or left unset. The boolean
-  form is no longer accepted: a configuration holding ``imagePrePuller: true``
-  or ``imagePrePuller: false`` fails to load with an error naming the object
+  does for the local configuration. A ``SessionManager`` custom resource
+  applied directly, ``EducatesConfig``, which passes the custom resource on as
+  written, and the runtime Helm chart installed without the operator keep the
+  default of disabled. The CLI rejects, when it loads the configuration, an
+  ``images`` entry giving both or neither of ``name`` and ``image``, and
+  ``includeDefaultImages`` set to ``false`` with no ``images`` while
+  ``enabled`` is ``true`` or left unset. The boolean form is no longer
+  accepted: a configuration holding ``imagePrePuller: true`` or
+  ``imagePrePuller: false`` fails to load with an error naming the object
   form. Write ``imagePrePuller: {enabled: false}`` in place of
   ``imagePrePuller: false``, and drop ``imagePrePuller: true``, which is the
-  default.
+  default. See [pre-pulling workshop images](pre-pulling-workshop-images).
 
 * The CLI's first-run migration of a version 3 ``values.yaml`` carries
   ``imagePuller`` over to ``imagePrePuller``, so the pre-puller keeps its
@@ -909,7 +912,8 @@ Features Changed
   ``pause-container`` is dropped too. The migration's notice lists the
   ``imagePrePuller`` fields it set and each entry it dropped. A version 3
   file without ``imagePuller`` leaves ``imagePrePuller`` unset, so the
-  defaults apply.
+  defaults apply. See [laptop installs migrate
+  automatically](laptop-installs-migrate-automatically).
 
 * The image pre-puller no longer runs anything from the images it pulls.
   Each pulled image used to run its own ``/bin/true``, so an image without
@@ -926,7 +930,8 @@ Features Changed
   a ``repository:tag`` reference. An override named ``pause-container`` no
   longer has any effect. In the session-manager Helm chart, the
   ``imagePrePuller.pauseImage`` value is replaced by ``imagePrePuller.image``,
-  with the same ``repository``, ``tag`` and ``pullPolicy`` fields.
+  with the same ``repository``, ``tag`` and ``pullPolicy`` fields. See
+  [pre-pulling workshop images](pre-pulling-workshop-images).
 
 * In the session-manager Helm chart, the ``imagePrePuller`` values take the
   same fields, with the same meaning, as the ``imagePrePuller`` block of the
@@ -943,7 +948,8 @@ Features Changed
   ``includeDefaultImages`` set to ``false`` with no ``images`` while
   ``enabled`` is ``true``. A ``name`` the inventory does not hold fails the
   install or upgrade with a message naming the entry, but only while
-  ``enabled`` is ``true``.
+  ``enabled`` is ``true``. See [pre-pulling workshop
+  images](pre-pulling-workshop-images).
 
 * The browser JavaScript bundle for the workshop gateway application in the
   workshop base environment image is now generated using esbuild instead of

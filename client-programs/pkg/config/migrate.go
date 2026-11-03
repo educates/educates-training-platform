@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 
@@ -31,10 +32,12 @@ import (
 // transparent — the user runs the same command they would have on v3,
 // it just works on v4 going forward.
 //
-// Prints a one-line notice on stderr-style output so the user knows
-// the migration happened (the design calls for "silent" in the sense
-// of "no prompt", not "invisible").
-func MaybeMigrateV3(dataHome string) error {
+// Writes a notice to w so the user knows the migration happened (the
+// design calls for "silent" in the sense of "no prompt", not
+// "invisible"): a line naming the files, then a line for each setting
+// the migration carried over in a changed form or dropped. Production
+// callers pass os.Stderr.
+func MaybeMigrateV3(dataHome string, w io.Writer) error {
 	v3Path := filepath.Join(dataHome, "values.yaml")
 	v4Path := LocalConfigPath(dataHome)
 	backupPath := filepath.Join(dataHome, "values.yaml.v3-backup")
@@ -79,7 +82,7 @@ The original %s file is left untouched; you can keep it as a
 reference while re-declaring.`, v3Path, provider, v3Path)
 	}
 
-	cfg := translateV3ToV4(v3raw)
+	cfg, notes := translateV3ToV4(v3raw)
 	out, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("marshal v4 config: %w", err)
@@ -95,8 +98,11 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 		return fmt.Errorf("rename %s → %s: %w", v3Path, backupPath, err)
 	}
 
-	fmt.Fprintf(os.Stderr, "migrated %s → %s; original saved as %s\n",
+	fmt.Fprintf(w, "migrated %s → %s; original saved as %s\n",
 		v3Path, v4Path, backupPath)
+	for _, note := range notes {
+		fmt.Fprintln(w, note)
+	}
 
 	// A v3 cache holds the CA certificate as an Opaque Secret with only
 	// ca.crt, which is a valid CA trust Secret, so it is kept as it is.
@@ -104,7 +110,7 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 	// certificate it is that certificate's CA trust, and otherwise a root
 	// CA is still needed.
 	if domain := strV3Path(v3raw, "clusterIngress", "domain"); domain != "" {
-		noteIfV3CACachePresent(os.Stderr, filepath.Join(dataHome, "secrets"), domain)
+		noteIfV3CACachePresent(w, filepath.Join(dataHome, "secrets"), domain)
 	}
 	return nil
 }
@@ -167,8 +173,11 @@ v3 certificate:
 
 // translateV3ToV4 builds the v4 EducatesLocalConfig from a v3 values map
 // parsed as map[string]interface{}. Missing fields stay zero — the v4
-// schema defaults pick up the rest at load time.
-func translateV3ToV4(v3 map[string]interface{}) *v1alpha1.EducatesLocalConfig {
+// schema defaults pick up the rest at load time. It also returns the
+// lines of the migration notice that say what it carried over in a
+// changed form or dropped.
+func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, []string) {
+	var notes []string
 	cfg := &v1alpha1.EducatesLocalConfig{
 		TypeMeta: v1alpha1.TypeMeta{
 			APIVersion: v1alpha1.APIVersion,
@@ -230,6 +239,9 @@ func translateV3ToV4(v3 map[string]interface{}) *v1alpha1.EducatesLocalConfig {
 		})
 	}
 
+	// imagePuller
+	notes = append(notes, translateV3ImagePuller(v3, &cfg.ImagePrePuller)...)
+
 	// websiteStyling (narrow subset only)
 	cfg.WebsiteStyling.DefaultTheme = strV3Path(v3, "websiteStyling", "defaultTheme")
 	for _, m := range listV3Path(v3, "websiteStyling", "themeDataRefs") {
@@ -247,7 +259,81 @@ func translateV3ToV4(v3 map[string]interface{}) *v1alpha1.EducatesLocalConfig {
 		}
 	}
 
-	return cfg
+	return cfg, notes
+}
+
+// translateV3ImagePuller fills the image pre-puller block from a v3
+// imagePuller block, so the pre-puller keeps the v3 switch and pulls the
+// same images. v3 pulled the training portal and then each prePullImages
+// name, prePullImages defaulting to base-environment. A list holding
+// base-environment, or no list, is the v4 default images plus the other
+// names; any other list drops the default images and names the training
+// portal itself. A v3 file without the block leaves the pre-puller unset.
+// It returns the notice lines saying what it carried over.
+func translateV3ImagePuller(v3 map[string]interface{}, out *v1alpha1.ImagePrePullerConfig) []string {
+	imagePuller := asMap(v3["imagePuller"])
+	if imagePuller == nil {
+		return nil
+	}
+	if enabled, isBool := imagePuller["enabled"].(bool); isBool {
+		out.Enabled = &enabled
+	}
+
+	// Only a missing list means the v3 default; an empty one pulled the
+	// training portal alone.
+	if prePullImages, isList := imagePuller["prePullImages"].([]interface{}); isList {
+		translateV3PrePullImages(prePullImages, out)
+	}
+
+	return []string{carriedImagePullerNote(*out)}
+}
+
+// translateV3PrePullImages fills the images of the pre-puller block from
+// a v3 prePullImages list.
+func translateV3PrePullImages(prePullImages []interface{}, out *v1alpha1.ImagePrePullerConfig) {
+	var names []string
+	keepDefaults := false
+	for _, item := range prePullImages {
+		name, _ := item.(string)
+		switch {
+		case name == "":
+		case name == "base-environment":
+			keepDefaults = true
+		default:
+			names = append(names, name)
+		}
+	}
+	if !keepDefaults {
+		f := false
+		out.IncludeDefaultImages = &f
+		names = append([]string{"training-portal"}, names...)
+	}
+	for _, name := range names {
+		out.Images = append(out.Images, v1alpha1.PrePulledImage{Name: name})
+	}
+}
+
+// carriedImagePullerNote is the notice line listing the fields of the
+// pre-puller block the migration set.
+func carriedImagePullerNote(c v1alpha1.ImagePrePullerConfig) string {
+	var fields []string
+	if c.Enabled != nil {
+		fields = append(fields, fmt.Sprintf("enabled: %t", *c.Enabled))
+	}
+	if c.IncludeDefaultImages != nil {
+		fields = append(fields, fmt.Sprintf("includeDefaultImages: %t", *c.IncludeDefaultImages))
+	}
+	if len(c.Images) > 0 {
+		names := make([]string, 0, len(c.Images))
+		for _, e := range c.Images {
+			names = append(names, e.Name)
+		}
+		fields = append(fields, "images: "+strings.Join(names, ", "))
+	}
+	if len(fields) == 0 {
+		return "carried imagePuller over: it matches the imagePrePuller defaults, so imagePrePuller is left unset"
+	}
+	return "carried imagePuller over to imagePrePuller: " + strings.Join(fields, ", ")
 }
 
 // strV3Path walks v3raw by string keys and returns the leaf as string,

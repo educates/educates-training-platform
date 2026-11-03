@@ -60,7 +60,7 @@ func EnsureLocalConfigFile(dataHome string) error {
 	if _, err := os.Stat(configPath); err == nil {
 		return nil
 	}
-	if err := MaybeMigrateV3(dataHome); err != nil {
+	if err := MaybeMigrateV3(dataHome, os.Stderr); err != nil {
 		return err
 	}
 	if _, err := os.Stat(configPath); err == nil {
@@ -86,7 +86,7 @@ func EnsureOrInitLocalConfigFile(dataHome string) (created bool, err error) {
 	if _, err := os.Stat(configPath); err == nil {
 		return false, nil
 	}
-	if err := MaybeMigrateV3(dataHome); err != nil {
+	if err := MaybeMigrateV3(dataHome, os.Stderr); err != nil {
 		return false, err
 	}
 	if _, err := os.Stat(configPath); err == nil {

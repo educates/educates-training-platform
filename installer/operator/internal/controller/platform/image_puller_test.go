@@ -326,6 +326,41 @@ func TestSessionManagerChart_ImagePullerPullsImageReferencesAsWritten(t *testing
 	}
 }
 
+// The pull policy of a pulled image comes from its tag, which is never
+// the port of a registry host.
+func TestSessionManagerChart_ImagePullerDerivesThePullPolicyFromTheTag(t *testing.T) {
+	const digest = "@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	cases := []struct {
+		image  string
+		policy corev1.PullPolicy
+	}{
+		{"localhost:5001/x", corev1.PullAlways},
+		{"localhost:5001/x:1.0", corev1.PullIfNotPresent},
+		{"localhost:5001/x:latest", corev1.PullAlways},
+		{"localhost:5001/x" + digest, corev1.PullIfNotPresent},
+	}
+	var entries []platformv1alpha1.PrePulledImage
+	for _, c := range cases {
+		entries = append(entries, platformv1alpha1.PrePulledImage{Image: c.image})
+	}
+
+	pod := renderImagePullerPod(t, prePuller(new(false), entries...), valuesTestClusterConfig())
+
+	if len(pod.InitContainers) != len(cases)+1 {
+		t.Fatalf("pod has %d init containers, want the copy init container and %d pulled images",
+			len(pod.InitContainers), len(cases))
+	}
+	for i, c := range pod.InitContainers[1:] {
+		if c.Image != cases[i].image {
+			t.Errorf("init container %q image = %q, want %q", c.Name, c.Image, cases[i].image)
+			continue
+		}
+		if c.ImagePullPolicy != cases[i].policy {
+			t.Errorf("pull policy of %q = %q, want %q", c.Image, c.ImagePullPolicy, cases[i].policy)
+		}
+	}
+}
+
 func TestSessionManagerChart_ImagePullerPullsEachImageOnce(t *testing.T) {
 	version := sessionManagerAppVersion(t)
 	jdk := "registry.example.com/mirror/educates-jdk21-environment:" + version

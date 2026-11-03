@@ -211,20 +211,26 @@ IfNotPresent
 
 {{/*
 Auto-derive imagePullPolicy for an arbitrary fully-qualified image ref
-passed in as a string.
+passed in as a string: IfNotPresent for a digest reference; otherwise
+Always for no tag or a tag of latest, main, master or develop, and
+IfNotPresent for any other tag. The tag is read from the last path
+segment only, so the port of a registry host (localhost:5001/x) is
+never taken for it.
 */}}
 {{- define "session-manager.derivedPullPolicy" -}}
-{{- $parts := splitList ":" . -}}
-{{- $tag := "" -}}
-{{- if eq (len $parts) 1 -}}
-  {{- $tag = "" -}}
+{{- if contains "@" . -}}
+IfNotPresent
 {{- else -}}
+{{- $parts := splitList ":" (last (splitList "/" .)) -}}
+{{- $tag := "" -}}
+{{- if gt (len $parts) 1 -}}
   {{- $tag = last $parts -}}
 {{- end -}}
 {{- if or (eq $tag "") (eq $tag "latest") (eq $tag "main") (eq $tag "master") (eq $tag "develop") -}}
 Always
 {{- else -}}
 IfNotPresent
+{{- end -}}
 {{- end -}}
 {{- end -}}
 

@@ -17,13 +17,16 @@ limitations under the License.
 package platform
 
 import (
+	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
+	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -195,6 +198,220 @@ func TestSessionManagerChart_ImagePullerOverrideReachesTheHelperImage(t *testing
 	for _, c := range append(pod.InitContainers, pod.Containers...) {
 		if c.Image == pauseOverride {
 			t.Errorf("container %q runs the pause-container override %q", c.Name, pauseOverride)
+		}
+	}
+}
+
+// pulledImages returns the images the image-puller pod pulls, in order:
+// every init container after the one that copies the helper.
+func pulledImages(pod corev1.PodSpec) []string {
+	var images []string
+	if len(pod.InitContainers) > 1 {
+		for _, c := range pod.InitContainers[1:] {
+			images = append(images, c.Image)
+		}
+	}
+	return images
+}
+
+// prePuller is a SessionManager with the image pre-puller enabled,
+// pulling entries, with the default images included unless
+// includeDefaults says otherwise.
+func prePuller(includeDefaults *bool, entries ...platformv1alpha1.PrePulledImage) *platformv1alpha1.SessionManager {
+	return &platformv1alpha1.SessionManager{
+		Spec: platformv1alpha1.SessionManagerSpec{
+			ImagePrePuller: &platformv1alpha1.ImagePrePuller{
+				Enabled:              true,
+				IncludeDefaultImages: includeDefaults,
+				Images:               entries,
+			},
+		},
+	}
+}
+
+func TestSessionManagerChart_ImagePullerPullsNamedImagesAfterTheDefaults(t *testing.T) {
+	version := sessionManagerAppVersion(t)
+	obj := prePuller(nil,
+		platformv1alpha1.PrePulledImage{Name: "jdk21-environment"},
+		platformv1alpha1.PrePulledImage{Name: "vcluster-internal-contour"},
+	)
+
+	got := pulledImages(renderImagePullerPod(t, obj, relocatedClusterConfig()))
+
+	want := []string{
+		"registry.example.com/mirror/educates-training-portal:" + version,
+		"registry.example.com/mirror/educates-base-environment:" + version,
+		"registry.example.com/mirror/educates-jdk21-environment:" + version,
+		// An upstream pin, which the registry prefix does not relocate.
+		"ghcr.io/projectcontour/contour:v1.30.2",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("pulled images = %q, want %q", got, want)
+	}
+}
+
+func TestSessionManagerChart_ImagePullerDropsTheDefaultImages(t *testing.T) {
+	version := sessionManagerAppVersion(t)
+	obj := prePuller(new(false), platformv1alpha1.PrePulledImage{Name: "jdk21-environment"})
+
+	got := pulledImages(renderImagePullerPod(t, obj, relocatedClusterConfig()))
+
+	want := []string{"registry.example.com/mirror/educates-jdk21-environment:" + version}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("pulled images = %q, want %q", got, want)
+	}
+}
+
+func TestSessionManagerChart_ImagePullerResolvesNamesThroughTheImageOverrides(t *testing.T) {
+	const (
+		portalOverride = "mirror.example.com/portal:pinned"
+		jdkOverride    = "mirror.example.com/jdk21:pinned"
+		customImage    = "mirror.example.com/workshops/custom-base:1.0"
+	)
+	version := sessionManagerAppVersion(t)
+	obj := prePuller(nil,
+		platformv1alpha1.PrePulledImage{Name: "jdk21-environment"},
+		// A name only the overrides hold.
+		platformv1alpha1.PrePulledImage{Name: "custom-base"},
+	)
+	obj.Spec.Images = &platformv1alpha1.Images{
+		Overrides: []platformv1alpha1.ImageOverride{
+			{Name: "training-portal", Image: portalOverride},
+			{Name: "jdk21-environment", Image: jdkOverride},
+			{Name: "custom-base", Image: customImage},
+		},
+	}
+
+	got := pulledImages(renderImagePullerPod(t, obj, relocatedClusterConfig()))
+
+	want := []string{
+		portalOverride,
+		"registry.example.com/mirror/educates-base-environment:" + version,
+		jdkOverride,
+		customImage,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("pulled images = %q, want %q", got, want)
+	}
+}
+
+func TestSessionManagerChart_ImagePullerPullsImageReferencesAsWritten(t *testing.T) {
+	const (
+		// Already under the registry prefix, which must not be added again.
+		mirrored = "registry.example.com/mirror/workshops/custom-base:1.0"
+		upstream = "quay.io/example/tool@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	)
+	obj := prePuller(new(false),
+		platformv1alpha1.PrePulledImage{Image: mirrored},
+		platformv1alpha1.PrePulledImage{Image: upstream},
+	)
+
+	got := pulledImages(renderImagePullerPod(t, obj, relocatedClusterConfig()))
+
+	want := []string{mirrored, upstream}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("pulled images = %q, want %q", got, want)
+	}
+}
+
+func TestSessionManagerChart_ImagePullerPullsEachImageOnce(t *testing.T) {
+	version := sessionManagerAppVersion(t)
+	jdk := "registry.example.com/mirror/educates-jdk21-environment:" + version
+	obj := prePuller(nil,
+		platformv1alpha1.PrePulledImage{Name: "jdk21-environment"},
+		// A default listed again, by name.
+		platformv1alpha1.PrePulledImage{Name: "base-environment"},
+		// The same name twice.
+		platformv1alpha1.PrePulledImage{Name: "jdk21-environment"},
+		// A reference a name already resolved to.
+		platformv1alpha1.PrePulledImage{Image: jdk},
+		platformv1alpha1.PrePulledImage{Name: "conda-environment"},
+	)
+
+	got := pulledImages(renderImagePullerPod(t, obj, relocatedClusterConfig()))
+
+	want := []string{
+		"registry.example.com/mirror/educates-training-portal:" + version,
+		"registry.example.com/mirror/educates-base-environment:" + version,
+		jdk,
+		"registry.example.com/mirror/educates-conda-environment:" + version,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("pulled images = %q, want %q", got, want)
+	}
+}
+
+// installSessionManagerChart installs the session-manager chart for obj
+// into a memory-backed Helm store and returns the install's error.
+func installSessionManagerChart(t *testing.T, obj *platformv1alpha1.SessionManager) error {
+	t.Helper()
+
+	chrt, err := vendoredcharts.SessionManager()
+	if err != nil {
+		t.Fatalf("load session-manager chart: %v", err)
+	}
+	hc, err := helm.NewMemoryClient(platformNamespace)
+	if err != nil {
+		t.Fatalf("NewMemoryClient: %v", err)
+	}
+	values := renderSessionManagerValues(obj, valuesTestClusterConfig(), testOperatorNamespace)
+	_, err = hc.Install(context.Background(), chrt.Metadata.Name, chrt, values)
+	return err
+}
+
+func TestSessionManagerChart_ImagePullerFailsOnANameTheInventoryLacks(t *testing.T) {
+	obj := prePuller(nil,
+		platformv1alpha1.PrePulledImage{Name: "jdk21-environment"},
+		platformv1alpha1.PrePulledImage{Name: "jdk22-environment"},
+	)
+
+	err := installSessionManagerChart(t, obj)
+
+	if err == nil {
+		t.Fatal("install succeeded, want it to fail on the unknown name")
+	}
+	for _, want := range []string{"imagePrePuller.images[1]", `"jdk22-environment"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("install error %q does not contain %q", err, want)
+		}
+	}
+}
+
+// The chart's values schema rejects what the SessionManager CRD rejects,
+// for installs of the chart without the operator.
+func TestSessionManagerChart_ImagePullerRejectsWhatTheCRDRejects(t *testing.T) {
+	for name, obj := range map[string]*platformv1alpha1.SessionManager{
+		"an entry with both name and image": prePuller(nil,
+			platformv1alpha1.PrePulledImage{Name: "jdk21-environment", Image: "registry.example.com/jdk21:1.0"}),
+		"an entry with neither name nor image": prePuller(nil, platformv1alpha1.PrePulledImage{}),
+		"nothing to pull":                      prePuller(new(false)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := installSessionManagerChart(t, obj)
+
+			if err == nil {
+				t.Fatal("install succeeded, want the values schema to reject it")
+			}
+			if !strings.Contains(err.Error(), "imagePrePuller") {
+				t.Errorf("install error %q does not name imagePrePuller", err)
+			}
+		})
+	}
+}
+
+func TestSessionManagerChart_ImagePullerSwitchedOffKeepsItsList(t *testing.T) {
+	obj := prePuller(new(false),
+		platformv1alpha1.PrePulledImage{Name: "jdk21-environment"},
+		// Not checked while the pre-puller is off.
+		platformv1alpha1.PrePulledImage{Name: "jdk22-environment"},
+		platformv1alpha1.PrePulledImage{Image: "registry.example.com/workshops/custom-base:1.0"},
+	)
+	obj.Spec.ImagePrePuller.Enabled = false
+
+	// renderWorkloads fails the test when the install fails.
+	for _, w := range renderWorkloads(t, vendoredcharts.SessionManager, renderSessionManagerValues(obj, valuesTestClusterConfig(), testOperatorNamespace)) {
+		if w.Kind == "DaemonSet" && w.Metadata.Name == "image-puller" {
+			t.Fatal("the image-puller DaemonSet is rendered while the pre-puller is off")
 		}
 	}
 }

@@ -366,8 +366,8 @@ func (r *SessionManagerReconciler) installOrUpgradeSM(ctx context.Context, obj *
 //
 // Scoped to fields the v1alpha1 CRD exposes today. The richer surface
 // the subchart accepts (themes content, image-cache wiring, registry
-// mirrors, default access credentials, image puller daemonset) is
-// captured as follow-ups so the gaps don't get lost.
+// mirrors, default access credentials) is captured as follow-ups so the
+// gaps don't get lost.
 //
 // Stable across `helm upgrade`: the session-manager chart's own
 // `resolvedTrainingPortal` helper (see installer/charts/.../charts/
@@ -385,14 +385,8 @@ func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *confi
 	applySMAnalyticsValues(values, obj)
 	applySMStylingValues(values, obj)
 
-	// imagePrePuller — toggle only. When enabled with no explicit
-	// image list, the chart derives the v3-equivalent default
-	// (training-portal + base-environment) from its imageVersions
-	// inventory, so relocation and per-name overrides are honoured.
-	// Per-image control stays a chart-level concern; the CRD exposes
-	// just the switch.
 	if obj.Spec.ImagePrePuller != nil {
-		imagePrePullerValues(values)["enabled"] = obj.Spec.ImagePrePuller.Enabled
+		applySMImagePrePullerValues(imagePrePullerValues(values), obj.Spec.ImagePrePuller)
 	}
 
 	// DefaultAccessCredentials and RegistryMirrors are reserved in the
@@ -490,9 +484,35 @@ func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionMana
 	}
 }
 
+// applySMImagePrePullerValues maps the image pre-puller's fields onto the
+// chart's imagePrePuller block unchanged. Entries keep their short names:
+// the chart resolves them through its image inventory, and fails the
+// render on a name it does not hold (ADR 0008), so the operator never
+// computes an image reference.
+func applySMImagePrePullerValues(prePuller map[string]any, spec *platformv1alpha1.ImagePrePuller) {
+	prePuller["enabled"] = spec.Enabled
+	if spec.IncludeDefaultImages != nil {
+		prePuller["includeDefaultImages"] = *spec.IncludeDefaultImages
+	}
+	if len(spec.Images) > 0 {
+		entries := make([]any, 0, len(spec.Images))
+		for _, e := range spec.Images {
+			entry := map[string]any{}
+			if e.Name != "" {
+				entry["name"] = e.Name
+			}
+			if e.Image != "" {
+				entry["image"] = e.Image
+			}
+			entries = append(entries, entry)
+		}
+		prePuller["images"] = entries
+	}
+}
+
 // imagePrePullerValues returns the imagePrePuller map inside values,
-// creating it when absent, so the image-puller override router and the
-// enabled-toggle writer compose instead of clobbering each other.
+// creating it when absent, so the image-puller override router and
+// applySMImagePrePullerValues compose instead of clobbering each other.
 func imagePrePullerValues(values map[string]any) map[string]any {
 	if m, ok := values["imagePrePuller"].(map[string]any); ok {
 		return m

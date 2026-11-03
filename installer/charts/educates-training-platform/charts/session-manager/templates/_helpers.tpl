@@ -140,27 +140,43 @@ uses the same mount path.
 
 {{/*
 Image references the image-puller DaemonSet pre-pulls, as a YAML array.
-An explicit imagePrePuller.images wins verbatim. When empty, default to
-the v3-equivalent set — training-portal + base-environment — resolved
-through the imageVersions inventory so registry relocation
-(development.imageRegistry) and per-name imageVersions overrides are
-honoured. Mirrors v3's image-puller DaemonSet, which always pre-pulled
-training-portal plus a prePullImages list defaulting to
-["base-environment"].
+The default images, training-portal and base-environment, come first
+when imagePrePuller.includeDefaultImages is on, then each
+imagePrePuller.images entry as listed. A `name` entry, like the
+defaults, resolves through the merged imageVersions inventory, so
+registry relocation (development.imageRegistry) and per-name
+imageVersions overrides apply; a name the inventory does not hold fails
+the render, naming the entry. An `image` entry is taken as written. A
+reference already in the list is dropped, keeping the first.
+
+Only the DaemonSet, rendered while imagePrePuller.enabled is on, calls
+this helper, so a list kept while the pre-puller is off is not checked.
 */}}
 {{- define "session-manager.prePullImages" -}}
-{{- if .Values.imagePrePuller.images -}}
-{{ toYaml .Values.imagePrePuller.images }}
+{{- $inventory := dict -}}
+{{- range include "session-manager.imageVersions" . | fromYamlArray -}}
+{{- $_ := set $inventory .name .image -}}
+{{- end -}}
+{{- $resolved := list -}}
+{{- if .Values.imagePrePuller.includeDefaultImages -}}
+{{- $resolved = list (index $inventory "training-portal") (index $inventory "base-environment") -}}
+{{- end -}}
+{{- range $i, $entry := default list .Values.imagePrePuller.images -}}
+{{- if $entry.image -}}
+{{- $resolved = append $resolved $entry.image -}}
+{{- else if hasKey $inventory $entry.name -}}
+{{- $resolved = append $resolved (index $inventory $entry.name) -}}
 {{- else -}}
-{{- $inventory := include "session-manager.imageVersions" . | fromYamlArray -}}
-{{- $defaults := list -}}
-{{- range $inventory -}}
-{{- if or (eq .name "training-portal") (eq .name "base-environment") -}}
-{{- $defaults = append $defaults .image -}}
+{{- fail (printf "imagePrePuller.images[%d]: the image inventory holds no image named %q; give a name the inventory holds, or a full reference as image" $i $entry.name) -}}
 {{- end -}}
 {{- end -}}
-{{ toYaml $defaults }}
+{{- $images := list -}}
+{{- range $resolved -}}
+{{- if not (has . $images) -}}
+{{- $images = append $images . -}}
 {{- end -}}
+{{- end -}}
+{{ toYaml $images }}
 {{- end -}}
 
 {{/*

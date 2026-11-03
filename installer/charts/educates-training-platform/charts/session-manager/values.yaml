@@ -328,8 +328,30 @@ websiteStyling:
 # the image-puller helper, which a first init container copies into a shared
 # volume, and the helper is also the long-running container that keeps the
 # DaemonSet's pods in place.
+#
+# Images are pulled in order: the default images when included, then each
+# entry of `images` as listed. An image already in the list is pulled once.
+# Each image's pull policy derives from its tag: `Always` for `latest`,
+# `main`, `master` and `develop`, `IfNotPresent` for any other.
 imagePrePuller:
+  # The only switch: while it is off nothing is pulled, whatever the other
+  # fields say, so a list can stay in place.
   enabled: false
+  # Pull the default images, training-portal and base-environment, ahead of
+  # the entries in `images`. With this off and `enabled` on, `images` must
+  # list at least one entry.
+  includeDefaultImages: true
+  # Further images to pull. Each entry sets exactly one of:
+  #   - `name`: an image's short name in the `imageVersions` inventory, such
+  #     as `jdk21-environment`. It resolves through the merged inventory, so
+  #     registry relocation and per-name overrides apply, including override
+  #     names the default inventory lacks. A name the inventory does not hold
+  #     fails the render.
+  #   - `image`: a full image reference, pulled exactly as written and never
+  #     relocated.
+  images: []
+    # - name: jdk21-environment
+    # - image: registry.example.com/workshops/custom-base:1.0
   # The image-puller helper image.
   # Empty `repository` derives `{imageRegistry.host}/{imageRegistry.namespace}/educates-image-puller`.
   # Empty `tag` falls through to `Chart.AppVersion`.
@@ -337,13 +359,6 @@ imagePrePuller:
     repository: ""
     tag: ""
     pullPolicy: ""
-  # Full image references to pre-pull. Empty defaults to the v3-equivalent
-  # set -- training-portal + base-environment -- resolved through the
-  # imageVersions inventory, so registry relocation and per-name overrides
-  # are honoured. A non-empty list replaces the default verbatim (fully
-  # qualified refs only; short names are not resolved here).
-  images: []
-    # - ghcr.io/educates/training-portal:4.0.0-alpha.1
 
 # =============================================================================
 # Secret propagation

@@ -395,6 +395,38 @@ func TestLoad_ImagePrePullerBooleanForm_NamesObjectForm(t *testing.T) {
 	}
 }
 
+// An imagePrePuller.images entry giving both or neither of name and image
+// fails to load, the error naming the entry and the rule it breaks.
+func TestLoad_ImagePrePullerEntryNotExactlyOne_Rejected(t *testing.T) {
+	cases := []struct {
+		name  string
+		entry string
+	}{
+		{"both", "{name: jdk21-environment, image: ghcr.io/example/custom:1.0}"},
+		{"neither", "{}"},
+	}
+	for _, fixture := range narrowKindFixtures {
+		for _, tc := range cases {
+			t.Run(fixture+"/"+tc.name, func(t *testing.T) {
+				extra := "imagePrePuller:\n  images:\n    - name: base-environment\n    - " + tc.entry + "\n"
+				_, err := LoadBytes(withYAML(t, fixture, extra), fixture)
+				if err == nil {
+					t.Fatal("LoadBytes: expected error, got nil")
+				}
+				want := "imagePrePuller.images.1: must set exactly one of name and image"
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+				for _, noise := range []string{"oneOf", "is required"} {
+					if strings.Contains(err.Error(), noise) {
+						t.Errorf("error %q still carries the schema's own report %q", err, noise)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestLoad_MissingFile(t *testing.T) {
 	_, err := Load(filepath.Join("testdata", "does-not-exist.yaml"))
 	if err == nil {

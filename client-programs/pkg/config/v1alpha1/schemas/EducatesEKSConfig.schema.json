@@ -73,7 +73,11 @@
             "properties": {
               "name":  { "type": "string", "minLength": 1, "description": "An image's short name in the Educates image inventory, such as jdk21-environment. It resolves to the image the installation runs, imageVersions overrides included, and follows the installed version on upgrade. A name the inventory does not hold fails the deploy." },
               "image": { "type": "string", "minLength": 1, "description": "A full image reference, pulled exactly as written." }
-            }
+            },
+            "oneOf": [
+              { "required": ["name"] },
+              { "required": ["image"] }
+            ]
           }
         }
       }

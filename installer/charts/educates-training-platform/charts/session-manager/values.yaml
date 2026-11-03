@@ -331,8 +331,9 @@ websiteStyling:
 #
 # Images are pulled in order: the default images when included, then each
 # entry of `images` as listed. An image already in the list is pulled once.
-# Each image's pull policy derives from its tag: `Always` for `latest`,
-# `main`, `master` and `develop`, `IfNotPresent` for any other.
+# Each image's pull policy derives from its tag: `Always` for no tag or a
+# tag of `latest`, `main`, `master` or `develop`, `IfNotPresent` for any
+# other tag or a digest.
 imagePrePuller:
   # The only switch: while it is off nothing is pulled, whatever the other
   # fields say, so a list can stay in place.

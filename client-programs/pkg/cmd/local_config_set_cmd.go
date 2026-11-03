@@ -27,6 +27,9 @@ var localConfigSetExample = `
 
   # Set a boolean field:
   educates local config set lookupService false
+
+  # Switch the image pre-puller off:
+  educates local config set imagePrePuller.enabled false
 `
 
 func (p *ProjectInfo) NewLocalConfigSetCmd() *cobra.Command {
@@ -139,7 +142,12 @@ func setNodeByPath(root *yaml.Node, segs []string, value interface{}) error {
 			continue
 		}
 		if v.Kind != yaml.MappingNode {
-			return fmt.Errorf("path %q: segment %q is not a map", strings.Join(segs, "."), strings.Join(segs[:i+1], "."))
+			walked := strings.Join(segs[:i+1], ".")
+			if b, err := strconv.ParseBool(v.Value); err == nil && walked == "imagePrePuller" && v.ShortTag() == "!!bool" {
+				return fmt.Errorf("path %q: the file's imagePrePuller %s ('educates local config edit' opens the file)",
+					strings.Join(segs, "."), config.ImagePrePullerBooleanForm(b))
+			}
+			return fmt.Errorf("path %q: segment %q is not a map", strings.Join(segs, "."), walked)
 		}
 		cur = v
 	}
@@ -226,8 +234,8 @@ func validateAgainstLocalSchema(root map[string]interface{}, source, attemptedPa
 	}
 
 	var msgs []string
-	for _, e := range result.Errors() {
-		msgs = append(msgs, fmt.Sprintf("  - %s: %s", e.Field(), e.Description()))
+	for _, line := range config.SchemaErrorLines(result.Errors()) {
+		msgs = append(msgs, "  - "+line)
 	}
 	return fmt.Errorf(`set %q rejected by schema validation. %s would become invalid:
 %s`, attemptedPath, source, strings.Join(msgs, "\n"))

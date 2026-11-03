@@ -10,11 +10,11 @@ import (
 // prePulledImageEntry matches the field of an imagePrePuller.images entry.
 var prePulledImageEntry = regexp.MustCompile(`^imagePrePuller\.images\.\d+$`)
 
-// schemaErrorLines renders the schema validation errors one line each, as
-// "<field>: <description>". An error the narrow kinds' schemas can only
-// report in gojsonschema's generic terms is rewritten to say what to
-// write instead.
-func schemaErrorLines(errs []gojsonschema.ResultError) []string {
+// SchemaErrorLines renders the errors of validating a configuration
+// against its kind's schema one line each, as "<field>: <description>". An
+// error the narrow kinds' schemas can only report in gojsonschema's
+// generic terms is rewritten to say what to write instead.
+func SchemaErrorLines(errs []gojsonschema.ResultError) []string {
 	// The imagePrePuller.images entries giving both or neither of name
 	// and image, which fail the entry schema's oneOf; and whether the
 	// pre-puller is switched on with nothing to pull, which fails the

@@ -32,9 +32,8 @@ import (
 // transparent — the user runs the same command they would have on v3,
 // it just works on v4 going forward.
 //
-// Writes a notice to w so the user knows the migration happened (the
-// design calls for "silent" in the sense of "no prompt", not
-// "invisible"): a line naming the files, then a line for each setting
+// The migration never prompts, but it is not invisible: it writes a
+// notice to w, a line naming the files, then a line for each setting
 // the migration carried over in a changed form or dropped. Production
 // callers pass os.Stderr.
 func MaybeMigrateV3(dataHome string, w io.Writer) error {

@@ -364,10 +364,10 @@ func (r *SessionManagerReconciler) installOrUpgradeSM(ctx context.Context, obj *
 // status into the session-manager subchart's values shape.
 // operatorNamespace locates the key-free copy of a CA override.
 //
-// Scoped to fields the v1alpha1 CRD exposes today. The richer surface
-// the subchart accepts (themes content, image-cache wiring, registry
-// mirrors, default access credentials) is captured as follow-ups so the
-// gaps don't get lost.
+// Maps only the fields the v1alpha1 CRD exposes. A chart value no CRD
+// field maps to, such as the inline website styling content, the
+// training portal credentials or the Docker daemon's proxy cache, keeps
+// the chart's default.
 //
 // Stable across `helm upgrade`: the session-manager chart's own
 // `resolvedTrainingPortal` helper (see installer/charts/.../charts/

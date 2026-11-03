@@ -64,19 +64,67 @@ Common v3 values map to v4 fields as follows:
 | clusterSecurity / policy engines        | policyEnforcement.clusterEngine / workshopEngine (Inline)  |
 | imageRegistry (mirror)                  | imageRegistry.prefix (Inline / EducatesClusterConfig)      |
 | imageVersions                           | imageVersions (same shape)                                 |
+| imagePuller.enabled                     | imagePrePuller.enabled                                     |
+| imagePuller.prePullImages               | imagePrePuller.images and includeDefaultImages, see below  |
 | lookupService.enabled                   | lookupService (boolean toggle)                             |
 ```
 
+Version 3 pre-pulled the training portal image and then each name in
+``imagePuller.prePullImages``, which defaulted to ``base-environment``. Version
+4 pre-pulls its default images, the training portal and the workshop base
+environment, and then each entry of ``imagePrePuller.images``, an image's short
+``name`` or a full ``image`` reference. To pre-pull the same images as before:
+
+* When ``prePullImages`` includes ``base-environment``, or is not set, keep the
+  default images and add each of its other names as a ``name`` entry.
+* Otherwise, an empty list included, set ``includeDefaultImages`` to ``false``
+  and list ``training-portal`` followed by its names as ``name`` entries.
+
+The version 4 image inventory does not hold the names
+``loftsh-kubernetes-v1.31``, ``loftsh-kubernetes-v1.32``, ``session-manager``,
+``secrets-manager``, ``lookup-service``, ``node-ca-injector`` and
+``pause-container``, and a ``name`` entry the inventory does not hold fails the
+installation of the session manager. Leave these names out, or give the image's
+full reference as an ``image`` entry. A ``loftsh-kubernetes-v1.31`` or
+``loftsh-kubernetes-v1.32`` name that your ``imageVersions`` defines still
+resolves, since an image override adds its name to the inventory. Drop an
+``imageVersions`` entry named ``pause-container``: the pre-puller no longer
+runs a pause container, and its own helper image is overridden by the name
+``image-puller``. See [pre-pulling workshop images](pre-pulling-workshop-images)
+for the ``imagePrePuller`` fields.
+
 Anything not expressible in a narrow kind is reachable through `EducatesConfig`, which carries the four custom resource specs verbatim. Keep your v3 `values.yaml` open beside the [configuration settings](configuration-settings) reference while re-declaring; the JSON schemas give completion and validation in your editor as you go.
 
+(laptop-installs-migrate-automatically)=
 Laptop installs migrate automatically
 -------------------------------------
 
 For local kind-cluster users, the v4 CLI migrates your configuration on first use. When a v4 command needs the local config (`educates local cluster create`, `educates admin platform deploy --local-config`, ...) and finds a v3 `values.yaml` in the CLI data home with `clusterInfrastructure.provider` empty or `kind`, it:
 
-* translates it to a v4 `config.yaml` (`EducatesLocalConfig`) — carrying over the ingress domain, kind cluster settings (listen address, API server, subnets, volume mounts, registry mirrors), local DNS resolver settings, image version overrides, website styling references, and image pull secret propagation;
+* translates it to a v4 `config.yaml` (`EducatesLocalConfig`), carrying over
+  the ingress domain, kind cluster settings (listen address, API server,
+  subnets, volume mounts, registry mirrors), local DNS resolver settings, image
+  version overrides, image pre-puller settings, website styling references,
+  and image pull secret propagation;
 * renames the original to `values.yaml.v3-backup`; and
-* prints a one-line notice of what it did. No prompt, no flag — you run the same command you would have run on v3.
+* prints a notice naming both files, followed by a line for each setting it
+  carried over in a changed form or dropped. There is no prompt and no flag:
+  you run the same command you would have run on v3.
+
+The image pre-puller settings are carried over as the mapping above describes,
+so the pre-puller keeps its switch and pulls the same images. The migration
+drops the ``prePullImages`` names the version 4 image inventory does not hold,
+keeping a ``loftsh-kubernetes-v1.31`` or ``loftsh-kubernetes-v1.32`` name only
+when your ``imageVersions`` defines it, and drops an ``imageVersions`` entry
+named ``pause-container``. A version 3 file without ``imagePuller`` leaves
+``imagePrePuller`` unset, so the pre-puller is on with its default images. The
+notice says what was carried over and what was dropped, with lines such as:
+
+```
+dropped imageVersions entry pause-container: the image pre-puller now runs its own image-puller helper, which a pause container image cannot replace
+carried imagePuller over to imagePrePuller: enabled: true, images: jdk17-environment
+dropped imagePuller.prePullImages names the v4 image inventory does not hold: session-manager; to pull one, add its full reference to imagePrePuller.images as an image entry
+```
 
 If the v3 file's provider is anything other than kind or empty, the CLI refuses with instructions instead: cloud and BYO configurations carry intent the CLI cannot infer (DNS, ACME, identity wiring), so they must be re-declared against a v4 kind as described above. The `values.yaml` is left untouched for reference.
 

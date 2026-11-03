@@ -14,7 +14,7 @@ Upgrade the Go version to `$ARGUMENTS` (e.g. `1.24`) across all files in the pro
 Check the current Go version before making changes:
 
 ```bash
-grep -rn "^go 1\." go.work client-programs/go.mod installer/operator/go.mod node-ca-injector/go.mod assets-server/go.mod
+grep -rn "^go 1\." go.work client-programs/go.mod installer/operator/go.mod node-ca-injector/go.mod assets-server/go.mod image-puller/go.mod
 ```
 
 ## Step 2: Update All Files
@@ -29,6 +29,7 @@ You must update **all** of the following. Do not skip any.
 - **`installer/operator/go.mod`** — update the `go 1.xx` line (the kubebuilder operator)
 - **`node-ca-injector/go.mod`** — update the `go 1.xx` line
 - **`assets-server/go.mod`** — update the `go 1.xx` line (Docker-only module, not in `go.work`)
+- **`image-puller/go.mod`** — update the `go 1.xx` line (Docker-only module, not in `go.work`)
 
 Discover every module so none is missed (the platform modules are at the
 repo root; ignore any `go.mod` under `workshop-samples/`, which is sample
@@ -50,6 +51,7 @@ or remove the `--platform=$BUILDPLATFORM` prefix** as part of a version bump.
 - **`installer/operator/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
 - **`node-ca-injector/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
 - **`assets-server/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
+- **`image-puller/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
 - **`workshop-images/base-environment/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx as builder-image`
 
 Search for any other Dockerfile referencing golang:
@@ -75,7 +77,7 @@ prefix to a stage that builds with a plain `go build` (no `GOOS`/`GOARCH`)
 produces a wrong-architecture binary** — so the prefix and the `GOOS/GOARCH`
 build must always go together.
 
-All five Go Dockerfiles above currently cross-compile and carry the prefix. If
+All six Go Dockerfiles above currently cross-compile and carry the prefix. If
 you ever add a new Go build stage, give it the full three-part set (or no
 `--platform` at all) — never the prefix alone.
 
@@ -124,7 +126,7 @@ Run in order, fix any failures before proceeding:
 1. Sync dependencies in every module (run `go mod tidy` in each):
 
 ```bash
-for m in client-programs installer/operator node-ca-injector assets-server; do
+for m in client-programs installer/operator node-ca-injector assets-server image-puller; do
   (cd "$m" && go mod tidy)
 done
 ```
@@ -147,8 +149,8 @@ make -C installer/operator test
 ## Step 4: Post-Verification Checklist
 
 - [ ] `go.work` updated
-- [ ] All four platform `go.mod` files updated (`client-programs`, `installer/operator`, `node-ca-injector`, `assets-server`)
-- [ ] All five Dockerfiles with `FROM ...golang:` updated, `--platform=$BUILDPLATFORM` prefix preserved where present
+- [ ] All five platform `go.mod` files updated (`client-programs`, `installer/operator`, `node-ca-injector`, `assets-server`, `image-puller`)
+- [ ] All six Dockerfiles with `FROM ...golang:` updated, `--platform=$BUILDPLATFORM` prefix preserved where present
 - [ ] Every `ENV GOTOOLCHAIN=go1.<old>` pin in Dockerfiles moved to the new version
 - [ ] CI: no stray hardcoded `go-version:`/`golang:1.` literal left (versions come from `go-version-file: <module>/go.mod`)
 - [ ] `go mod tidy` ran cleanly in all modules

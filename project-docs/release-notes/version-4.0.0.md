@@ -872,13 +872,26 @@ Features Changed
   private key, and still holds it in the old CA secret.
 
 * The ``imageCache`` configuration setting has been renamed to
-  ``imagePrePuller``. It is now enabled by default in the CLI configuration
-  kinds (``EducatesLocalConfig``, ``EducatesGKEConfig``,
-  ``EducatesEKSConfig`` and ``EducatesInlineConfig``), so installs created
-  with the CLI pre-pull workshop images onto every node ahead of time
-  unless ``imagePrePuller`` is set to ``false``. Installs applied directly
-  from custom resources or the Helm chart keep the chart default of
-  disabled.
+  ``imagePrePuller``, and in the CLI configuration kinds
+  (``EducatesLocalConfig``, ``EducatesGKEConfig``, ``EducatesEKSConfig`` and
+  ``EducatesInlineConfig``) it is now an object, with the same ``enabled``,
+  ``includeDefaultImages`` and ``images`` fields, and the same meaning, as the
+  ``imagePrePuller`` block of the ``SessionManager`` custom resource. The CLI
+  passes the block to the ``SessionManager`` as written. The pre-puller is
+  enabled by default in these kinds, so installs created with the CLI
+  pre-pull the training portal and workshop base environment images onto
+  every node ahead of time unless ``imagePrePuller.enabled`` is set to
+  ``false``, which ``educates local config set imagePrePuller.enabled false``
+  does for the local configuration. Installs applied directly from custom
+  resources or the Helm chart keep the default of disabled. The CLI rejects,
+  when it loads the configuration, an ``images`` entry giving both or neither
+  of ``name`` and ``image``, and ``includeDefaultImages`` set to ``false``
+  with no ``images`` while ``enabled`` is ``true`` or left unset. The boolean
+  form is no longer accepted: a configuration holding ``imagePrePuller: true``
+  or ``imagePrePuller: false`` fails to load with an error naming the object
+  form. Write ``imagePrePuller: {enabled: false}`` in place of
+  ``imagePrePuller: false``, and drop ``imagePrePuller: true``, which is the
+  default.
 
 * The image pre-puller no longer runs anything from the images it pulls.
   Each pulled image used to run its own ``/bin/true``, so an image without

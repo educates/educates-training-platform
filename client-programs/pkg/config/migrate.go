@@ -230,11 +230,18 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		}
 	}
 
-	// imageVersions
+	// imageVersions. The image pre-puller no longer runs a pause
+	// container, and a pause container image cannot play the roles of
+	// the image-puller helper that replaced it, so its override goes.
 	for _, m := range listV3Path(v3, "imageVersions") {
 		entry := asMap(m)
+		name := strMap(entry, "name")
+		if name == "pause-container" {
+			notes = append(notes, "dropped imageVersions entry pause-container: the image pre-puller now runs its own image-puller helper, which a pause container image cannot replace")
+			continue
+		}
 		cfg.ImageVersions = append(cfg.ImageVersions, v1alpha1.ImageVersion{
-			Name:  strMap(entry, "name"),
+			Name:  name,
 			Image: strMap(entry, "image"),
 		})
 	}

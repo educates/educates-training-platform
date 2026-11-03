@@ -458,6 +458,24 @@ imagePuller:
 	}
 }
 
+func TestMaybeMigrateV3_PauseContainerOverride_IsDroppedAndNoted(t *testing.T) {
+	cfg, _, notice := migrateV3Values(t, `imageVersions:
+  - name: pause-container
+    image: registry.example.com/educates-pause-container:3.8.1
+  - name: base-environment
+    image: registry.example.com/educates-base-environment:3.8.1
+`)
+
+	want := []v1alpha1.ImageVersion{{Name: "base-environment", Image: "registry.example.com/educates-base-environment:3.8.1"}}
+	if !reflect.DeepEqual(cfg.ImageVersions, want) {
+		t.Errorf("ImageVersions = %v, want %v", cfg.ImageVersions, want)
+	}
+	wantLine := "dropped imageVersions entry pause-container: the image pre-puller now runs its own image-puller helper, which a pause container image cannot replace\n"
+	if !strings.Contains(notice, wantLine) {
+		t.Errorf("notice missing %q in:\n%s", wantLine, notice)
+	}
+}
+
 func TestMaybeMigrateV3_ImagePuller_NoticeSaysWhatWasCarriedOver(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

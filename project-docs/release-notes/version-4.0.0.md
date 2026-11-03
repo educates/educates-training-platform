@@ -893,6 +893,24 @@ Features Changed
   ``imagePrePuller: false``, and drop ``imagePrePuller: true``, which is the
   default.
 
+* The CLI's first-run migration of a version 3 ``values.yaml`` carries
+  ``imagePuller`` over to ``imagePrePuller``, so the pre-puller keeps its
+  switch and pulls the same images. ``imagePuller.enabled`` becomes
+  ``imagePrePuller.enabled``. A ``prePullImages`` list that includes
+  ``base-environment``, or no list, keeps the default images and adds each
+  of its other names as a ``name`` entry of ``imagePrePuller.images``. Any
+  other list, an empty one included, sets ``includeDefaultImages`` to
+  ``false`` and lists ``training-portal`` followed by its names, the images
+  version 3 pulled. A ``prePullImages`` name the version 4 image inventory
+  does not hold is dropped: ``session-manager``, ``secrets-manager``,
+  ``lookup-service``, ``node-ca-injector`` and ``pause-container`` always,
+  and ``loftsh-kubernetes-v1.31`` and ``loftsh-kubernetes-v1.32`` unless
+  ``imageVersions`` defines them. An ``imageVersions`` entry named
+  ``pause-container`` is dropped too. The migration's notice lists the
+  ``imagePrePuller`` fields it set and each entry it dropped. A version 3
+  file without ``imagePuller`` leaves ``imagePrePuller`` unset, so the
+  defaults apply.
+
 * The image pre-puller no longer runs anything from the images it pulls.
   Each pulled image used to run its own ``/bin/true``, so an image without
   one, such as a distroless or ``scratch`` image, failed to start and stopped

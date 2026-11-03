@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -354,6 +355,43 @@ func TestLoad_Errors(t *testing.T) {
 				t.Errorf("error %q does not contain %q", err.Error(), tc.contains)
 			}
 		})
+	}
+}
+
+// narrowKindFixtures are a minimal valid file of each narrow kind, to which
+// a test appends the fields it exercises.
+var narrowKindFixtures = []string{"local-empty.yaml", "gke-minimal.yaml", "eks-minimal.yaml", "inline-minimal.yaml"}
+
+// withYAML returns the fixture's contents with extra appended.
+func withYAML(t *testing.T, fixture, extra string) []byte {
+	t.Helper()
+	base, err := os.ReadFile(filepath.Join("testdata", fixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return append(append(base, '\n'), extra...)
+}
+
+// A file holding the boolean form of imagePrePuller fails to load with an
+// error naming the object form to write in its place.
+func TestLoad_ImagePrePullerBooleanForm_NamesObjectForm(t *testing.T) {
+	for _, fixture := range narrowKindFixtures {
+		for _, value := range []string{"true", "false"} {
+			t.Run(fixture+"/"+value, func(t *testing.T) {
+				_, err := LoadBytes(withYAML(t, fixture, "imagePrePuller: "+value+"\n"), fixture)
+				if err == nil {
+					t.Fatal("LoadBytes: expected error, got nil")
+				}
+				for _, want := range []string{"imagePrePuller.enabled", "imagePrePuller: {enabled: " + value + "}"} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("error %q does not contain %q", err, want)
+					}
+				}
+				if strings.Contains(err.Error(), "Invalid type") {
+					t.Errorf("error %q still reports only the type mismatch", err)
+				}
+			})
+		}
 	}
 }
 

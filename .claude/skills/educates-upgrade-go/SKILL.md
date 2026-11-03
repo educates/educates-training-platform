@@ -23,13 +23,13 @@ You must update **all** of the following. Do not skip any.
 
 ### Go Module Files
 
-- **`go.work`** — update the `go 1.xx` directive. The workspace covers
+- **`go.work`**: update the `go 1.xx` directive. The workspace covers
   `client-programs/`, `installer/operator/`, and `node-ca-injector/`.
-- **`client-programs/go.mod`** — update the `go 1.xx` line
-- **`installer/operator/go.mod`** — update the `go 1.xx` line (the kubebuilder operator)
-- **`node-ca-injector/go.mod`** — update the `go 1.xx` line
-- **`assets-server/go.mod`** — update the `go 1.xx` line (Docker-only module, not in `go.work`)
-- **`image-puller/go.mod`** — update the `go 1.xx` line (Docker-only module, not in `go.work`)
+- **`client-programs/go.mod`**: update the `go 1.xx` line
+- **`installer/operator/go.mod`**: update the `go 1.xx` line (the kubebuilder operator)
+- **`node-ca-injector/go.mod`**: update the `go 1.xx` line
+- **`assets-server/go.mod`**: update the `go 1.xx` line (Docker-only module, not in `go.work`)
+- **`image-puller/go.mod`**: update the `go 1.xx` line (Docker-only module, not in `go.work`)
 
 Discover every module so none is missed (the platform modules are at the
 repo root; ignore any `go.mod` under `workshop-samples/`, which is sample
@@ -47,12 +47,12 @@ Use the plain `golang:1.xx` image tag — do not switch to Alpine, Buster, Trixi
 or other derivative tags. Only the `golang:1.xx` version changes — **do not add
 or remove the `--platform=$BUILDPLATFORM` prefix** as part of a version bump.
 
-- **`client-programs/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
-- **`installer/operator/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
-- **`node-ca-injector/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
-- **`assets-server/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
-- **`image-puller/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
-- **`workshop-images/base-environment/Dockerfile`** — `FROM --platform=$BUILDPLATFORM golang:1.xx as builder-image`
+- **`client-programs/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
+- **`installer/operator/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
+- **`node-ca-injector/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
+- **`assets-server/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
+- **`image-puller/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
+- **`workshop-images/base-environment/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx as builder-image`
 
 Search for any other Dockerfile referencing golang:
 

@@ -101,7 +101,7 @@ Laptop installs migrate automatically
 
 For local kind-cluster users, the v4 CLI migrates your configuration on first use. When a v4 command needs the local config (`educates local cluster create`, `educates admin platform deploy --local-config`, ...) and finds a v3 `values.yaml` in the CLI data home with `clusterInfrastructure.provider` empty or `kind`, it:
 
-* translates it to a v4 `config.yaml` (`EducatesLocalConfig`), carrying over
+* translates it to a v4 ``config.yaml`` (``EducatesLocalConfig``), carrying over
   the ingress domain, kind cluster settings (listen address, API server,
   subnets, volume mounts, registry mirrors), local DNS resolver settings, image
   version overrides, image pre-puller settings, website styling references,

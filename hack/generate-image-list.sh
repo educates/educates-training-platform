@@ -61,9 +61,10 @@ REGISTRY_PREFIX="$REGISTRY_HOST/$REGISTRY_NAMESPACE"
 
 # Educates-built platform images that are NOT part of the session-manager
 # imageVersions inventory (the operator, the other components, and the
-# image pre-puller's helper). The inventory-resident Educates images —
-# training-portal, docker-registry, base-environment, jdk*, conda, ... —
-# come from the chart render below and are deduplicated against this list.
+# image pre-puller's helper). The inventory-resident Educates images,
+# such as training-portal, docker-registry, base-environment, jdk* and
+# conda, come from the chart render below and are deduplicated against
+# this list.
 PLATFORM_IMAGES="
 image-puller
 session-manager

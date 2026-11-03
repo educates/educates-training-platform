@@ -427,6 +427,49 @@ func TestLoad_ImagePrePullerEntryNotExactlyOne_Rejected(t *testing.T) {
 	}
 }
 
+// An imagePrePuller switched on, explicitly or by the kinds' default, with
+// includeDefaultImages false and no images fails to load. Switched off, or
+// with something to pull, the same fields load.
+func TestLoad_ImagePrePullerNothingToPull_Rejected(t *testing.T) {
+	cases := []struct {
+		name     string
+		block    string
+		rejected bool
+	}{
+		{"enabled by default", "{includeDefaultImages: false}", true},
+		{"enabled", "{enabled: true, includeDefaultImages: false}", true},
+		{"empty images", "{enabled: true, includeDefaultImages: false, images: []}", true},
+		{"switched off", "{enabled: false, includeDefaultImages: false}", false},
+		{"empty block", "{}", false},
+		{"an image listed", "{includeDefaultImages: false, images: [{name: jdk21-environment}]}", false},
+	}
+	for _, fixture := range narrowKindFixtures {
+		for _, tc := range cases {
+			t.Run(fixture+"/"+tc.name, func(t *testing.T) {
+				_, err := LoadBytes(withYAML(t, fixture, "imagePrePuller: "+tc.block+"\n"), fixture)
+				if !tc.rejected {
+					if err != nil {
+						t.Fatalf("LoadBytes: %v", err)
+					}
+					return
+				}
+				if err == nil {
+					t.Fatal("LoadBytes: expected error, got nil")
+				}
+				want := "imagePrePuller: with enabled true, its default, and includeDefaultImages false, images must list at least one entry"
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+				for _, noise := range []string{`"then"`, "is required", "at least 1 items"} {
+					if strings.Contains(err.Error(), noise) {
+						t.Errorf("error %q still carries the schema's own report %q", err, noise)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestLoad_MissingFile(t *testing.T) {
 	_, err := Load(filepath.Join("testdata", "does-not-exist.yaml"))
 	if err == nil {

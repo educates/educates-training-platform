@@ -78,6 +78,17 @@
             ]
           }
         }
+      },
+      "if": {
+        "properties": {
+          "enabled":              { "const": true },
+          "includeDefaultImages": { "const": false }
+        },
+        "required": ["includeDefaultImages"]
+      },
+      "then": {
+        "properties": { "images": { "minItems": 1 } },
+        "required": ["images"]
       }
     },
 

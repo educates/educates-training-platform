@@ -247,7 +247,7 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 	}
 
 	// imagePuller
-	notes = append(notes, translateV3ImagePuller(v3, &cfg.ImagePrePuller)...)
+	notes = append(notes, translateV3ImagePuller(v3, cfg.ImageVersions, &cfg.ImagePrePuller)...)
 
 	// websiteStyling (narrow subset only)
 	cfg.WebsiteStyling.DefaultTheme = strV3Path(v3, "websiteStyling", "defaultTheme")
@@ -276,8 +276,13 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 // base-environment, or no list, is the v4 default images plus the other
 // names; any other list drops the default images and names the training
 // portal itself. A v3 file without the block leaves the pre-puller unset.
-// It returns the notice lines saying what it carried over.
-func translateV3ImagePuller(v3 map[string]interface{}, out *v1alpha1.ImagePrePullerConfig) []string {
+//
+// v3 resolved any name, where v4 fails the deploy on a name its image
+// inventory does not hold, so a name of v3OnlyImageNames is dropped,
+// unless imageVersions, already migrated, defines it under a name that
+// reaches the inventory. It returns the notice lines saying what it
+// carried over and what it dropped.
+func translateV3ImagePuller(v3 map[string]interface{}, imageVersions []v1alpha1.ImageVersion, out *v1alpha1.ImagePrePullerConfig) []string {
 	imagePuller := asMap(v3["imagePuller"])
 	if imagePuller == nil {
 		return nil
@@ -288,17 +293,29 @@ func translateV3ImagePuller(v3 map[string]interface{}, out *v1alpha1.ImagePrePul
 
 	// Only a missing list means the v3 default; an empty one pulled the
 	// training portal alone.
+	var dropped []string
 	if prePullImages, isList := imagePuller["prePullImages"].([]interface{}); isList {
-		translateV3PrePullImages(prePullImages, out)
+		dropped = translateV3PrePullImages(prePullImages, imageVersions, out)
 	}
 
-	return []string{carriedImagePullerNote(*out)}
+	notes := []string{carriedImagePullerNote(*out)}
+	if len(dropped) > 0 {
+		notes = append(notes, fmt.Sprintf("dropped imagePuller.prePullImages names the v4 image inventory does not hold: %s; to pull one, add its full reference to imagePrePuller.images as an image entry",
+			strings.Join(dropped, ", ")))
+	}
+	return notes
 }
 
 // translateV3PrePullImages fills the images of the pre-puller block from
-// a v3 prePullImages list.
-func translateV3PrePullImages(prePullImages []interface{}, out *v1alpha1.ImagePrePullerConfig) {
-	var names []string
+// a v3 prePullImages list and returns the names it dropped.
+func translateV3PrePullImages(prePullImages []interface{}, imageVersions []v1alpha1.ImageVersion, out *v1alpha1.ImagePrePullerConfig) []string {
+	inInventory := map[string]bool{}
+	for _, iv := range imageVersions {
+		if !imageVersionsOutsideInventory[iv.Name] {
+			inInventory[iv.Name] = true
+		}
+	}
+	var names, dropped []string
 	keepDefaults := false
 	for _, item := range prePullImages {
 		name, _ := item.(string)
@@ -306,6 +323,8 @@ func translateV3PrePullImages(prePullImages []interface{}, out *v1alpha1.ImagePr
 		case name == "":
 		case name == "base-environment":
 			keepDefaults = true
+		case v3OnlyImageNames[name] && !inInventory[name]:
+			dropped = append(dropped, name)
 		default:
 			names = append(names, name)
 		}
@@ -318,6 +337,7 @@ func translateV3PrePullImages(prePullImages []interface{}, out *v1alpha1.ImagePr
 	for _, name := range names {
 		out.Images = append(out.Images, v1alpha1.PrePulledImage{Name: name})
 	}
+	return dropped
 }
 
 // carriedImagePullerNote is the notice line listing the fields of the
@@ -341,6 +361,33 @@ func carriedImagePullerNote(c v1alpha1.ImagePrePullerConfig) string {
 		return "carried imagePuller over: it matches the imagePrePuller defaults, so imagePrePuller is left unset"
 	}
 	return "carried imagePuller over to imagePrePuller: " + strings.Join(fields, ", ")
+}
+
+// v3OnlyImageNames are the names of the v3 image inventory that the v4
+// image inventory does not hold. The v3 inventory no longer changes, so
+// the list is fixed.
+var v3OnlyImageNames = map[string]bool{
+	"loftsh-kubernetes-v1.31": true,
+	"loftsh-kubernetes-v1.32": true,
+	"session-manager":         true,
+	"secrets-manager":         true,
+	"lookup-service":          true,
+	"node-ca-injector":        true,
+	"pause-container":         true,
+}
+
+// imageVersionsOutsideInventory are the imageVersions names whose
+// override sets an image of its own instead of adding the name to the
+// session-manager chart's image inventory: the CLI passes secrets-manager
+// and lookup-service to their own custom resources, and the operator
+// routes session-manager, node-ca-injector and image-puller to dedicated
+// chart values. Any other override name lands in the inventory.
+var imageVersionsOutsideInventory = map[string]bool{
+	"secrets-manager":  true,
+	"lookup-service":   true,
+	"session-manager":  true,
+	"node-ca-injector": true,
+	"image-puller":     true,
 }
 
 // strV3Path walks v3raw by string keys and returns the leaf as string,

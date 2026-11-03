@@ -476,6 +476,83 @@ func TestMaybeMigrateV3_PauseContainerOverride_IsDroppedAndNoted(t *testing.T) {
 	}
 }
 
+func TestMaybeMigrateV3_PrePullNamesMissingFromV4Inventory_AreDroppedAndNoted(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		values   string
+		want     v1alpha1.ImagePrePullerConfig
+		wantLine string
+	}{
+		{
+			name: "default images kept",
+			values: `imagePuller:
+  prePullImages:
+    - base-environment
+    - loftsh-kubernetes-v1.31
+    - jdk21-environment
+    - session-manager
+`,
+			want: v1alpha1.ImagePrePullerConfig{
+				Enabled: boolPtr(true),
+				Images:  []v1alpha1.PrePulledImage{{Name: "jdk21-environment"}},
+			},
+			wantLine: "dropped imagePuller.prePullImages names the v4 image inventory does not hold: loftsh-kubernetes-v1.31, session-manager; to pull one, add its full reference to imagePrePuller.images as an image entry\n",
+		},
+		{
+			name: "every name dropped with the default images",
+			values: `imagePuller:
+  prePullImages:
+    - secrets-manager
+    - pause-container
+`,
+			want: v1alpha1.ImagePrePullerConfig{
+				Enabled:              boolPtr(true),
+				IncludeDefaultImages: boolPtr(false),
+				Images:               []v1alpha1.PrePulledImage{{Name: "training-portal"}},
+			},
+			wantLine: "dropped imagePuller.prePullImages names the v4 image inventory does not hold: secrets-manager, pause-container; to pull one, add its full reference to imagePrePuller.images as an image entry\n",
+		},
+		{
+			// An override adds its name to the inventory unless it sets
+			// an image of its own: the CLI passes lookup-service to its own
+			// custom resource, the operator routes node-ca-injector to a
+			// chart value of its own, and the pause-container override is
+			// dropped.
+			name: "names defined in imageVersions",
+			values: `imageVersions:
+  - name: loftsh-kubernetes-v1.32
+    image: ghcr.io/loft-sh/kubernetes:v1.32.1
+  - name: lookup-service
+    image: registry.example.com/educates-lookup-service:3.8.1
+  - name: node-ca-injector
+    image: registry.example.com/educates-node-ca-injector:3.8.1
+  - name: pause-container
+    image: registry.example.com/educates-pause-container:3.8.1
+imagePuller:
+  prePullImages:
+    - base-environment
+    - loftsh-kubernetes-v1.32
+    - lookup-service
+    - node-ca-injector
+    - pause-container
+`,
+			want: v1alpha1.ImagePrePullerConfig{
+				Enabled: boolPtr(true),
+				Images:  []v1alpha1.PrePulledImage{{Name: "loftsh-kubernetes-v1.32"}},
+			},
+			wantLine: "dropped imagePuller.prePullImages names the v4 image inventory does not hold: lookup-service, node-ca-injector, pause-container; to pull one, add its full reference to imagePrePuller.images as an image entry\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, _, notice := migrateV3Values(t, tc.values)
+			assertPrePuller(t, cfg, tc.want)
+			if !strings.Contains(notice, tc.wantLine) {
+				t.Errorf("notice missing %q in:\n%s", tc.wantLine, notice)
+			}
+		})
+	}
+}
+
 func TestMaybeMigrateV3_ImagePuller_NoticeSaysWhatWasCarriedOver(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

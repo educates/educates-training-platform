@@ -216,9 +216,9 @@ New Features
 
 * ``imageVersions`` entries in the CLI configuration now reach every
   platform image: entries named ``secrets-manager`` and ``lookup-service``
-  are routed to those components' own custom resources, and the
-  ``session-manager``, ``pause-container`` and ``node-ca-injector`` names —
-  previously ignored — now override the images they refer to. For
+  are routed to those components' own custom resources, and entries named
+  ``session-manager``, ``image-puller`` and ``node-ca-injector`` override
+  the images they refer to. For
   contributors, a developer-built CLI (one whose embedded version is not a
   release version) automatically targets its compiled-in image registry for
   all platform images, so building Educates from source and deploying the
@@ -858,6 +858,23 @@ Features Changed
   unless ``imagePrePuller`` is set to ``false``. Installs applied directly
   from custom resources or the Helm chart keep the chart default of
   disabled.
+
+* The image pre-puller no longer runs anything from the images it pulls.
+  Each pulled image used to run its own ``/bin/true``, so an image without
+  one, such as a distroless or ``scratch`` image, failed to start and stopped
+  every image after it from being pulled. The pre-puller now has a small
+  helper of its own, ``image-puller``, which a first init container copies
+  into a shared volume and every pulled image runs from there, and which is
+  also the long-running container in place of the pause container. The
+  ``educates-pause-container`` image is no longer built or published, and is
+  replaced by ``educates-image-puller``, which the release image list
+  includes for mirroring. An image override named ``image-puller``, in
+  ``imageVersions`` in the CLI configuration or in
+  ``SessionManager.spec.images.overrides``, sets the helper image and takes
+  a ``repository:tag`` reference. An override named ``pause-container`` no
+  longer has any effect. In the session-manager Helm chart, the
+  ``imagePrePuller.pauseImage`` value is replaced by ``imagePrePuller.image``,
+  with the same ``repository``, ``tag`` and ``pullPolicy`` fields.
 
 * The browser JavaScript bundle for the workshop gateway application in the
   workshop base environment image is now generated using esbuild instead of

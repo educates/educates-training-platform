@@ -77,7 +77,18 @@ acme:
   # server defaults to the Let's Encrypt production endpoint
 ```
 
-`gcp.project`, `domain` and `acme.email` are required. The component toggles (`lookupService`, `clusterAdmin`, ...) and `operator` block from `EducatesLocalConfig` are available here too. When TLS for the ingress domain is terminated outside the cluster (a cloud load balancer or proxy forwarding plain HTTP inward), set `externalTLSTermination: true` so generated portal and workshop URLs use `https` — see [secure HTTP connections](secure-http-connections). The scenario's other architecture choices are locked — to deviate, use `EducatesConfig`.
+``gcp.project``, ``domain`` and ``acme.email`` are required. The settings of
+``EducatesLocalConfig`` that are not about the local cluster are available here
+too: the ``lookupService`` and ``clusterAdmin`` component toggles, the
+``imagePrePuller`` block, which turns the image pre-puller on by default (see
+[pre-pulling workshop images](pre-pulling-workshop-images)),
+``websiteStyling``, ``secretPropagation``, ``imageVersions`` and the
+``operator`` block. When TLS for the ingress domain is terminated outside the
+cluster, by a cloud load balancer or a proxy forwarding plain HTTP inward, set
+``externalTLSTermination: true`` so generated portal and workshop URLs use
+``https``, as [secure HTTP connections](secure-http-connections) explains. The
+scenario's other architecture choices are locked: to deviate, use
+``EducatesConfig``.
 
 See [infrastructure providers](infrastructure-providers) for the Google Cloud IAM and DNS zone prerequisites.
 
@@ -100,7 +111,12 @@ acme:
   email: admin@example.com
 ```
 
-`aws.accountId`, `aws.region`, `aws.route53HostedZoneId`, `domain` and `acme.email` are required. As with the GKE kind, `externalTLSTermination: true` asserts `https` URLs when TLS is terminated at an external load balancer.
+``aws.accountId``, ``aws.region``, ``aws.route53HostedZoneId``, ``domain`` and
+``acme.email`` are required. As with the GKE kind, the settings of
+``EducatesLocalConfig`` that are not about the local cluster are available
+here too, the ``imagePrePuller`` block among them (see [pre-pulling workshop
+images](pre-pulling-workshop-images)), and ``externalTLSTermination: true``
+asserts ``https`` URLs when TLS is terminated at an external load balancer.
 
 (defining-configuration-for-ingress)=
 EducatesInlineConfig
@@ -124,6 +140,13 @@ externalTLSTermination: false                  # true when a proxy/LB terminates
 ```
 
 `domain`, `ingressClassName` and `wildcardCertificateSecret` are required. The referenced Secrets must exist in the operator's namespace before deployment. Educates components never receive the `caCertificateSecret` itself, only a copy of its `ca.crt`. To keep the Secrets in another namespace, use the `EducatesConfig` escape hatch, whose `inline.ingress.wildcardCertificateSecretRef` and `inline.ingress.caCertificateSecretRef` take an optional `namespace`. See [secure HTTP connections](secure-http-connections) for the certificate options across all scenarios.
+
+As with the GKE kind, the settings of ``EducatesLocalConfig`` that are not
+about the local cluster are available here too: the ``lookupService`` and
+``clusterAdmin`` component toggles, the ``imagePrePuller`` block, which turns
+the image pre-puller on by default (see [pre-pulling workshop
+images](pre-pulling-workshop-images)), ``websiteStyling``,
+``secretPropagation``, ``imageVersions`` and the ``operator`` block.
 
 Note that with `workshopEngine: None` there is no workshop-level security policy enforcement. See the [cluster requirements](cluster-requirements) discussion before serving untrusted users. When either engine is `Kyverno`, the operator checks that the Kyverno you installed serves the policy kinds Educates creates, and the installation does not become ready until it does.
 
@@ -393,10 +416,24 @@ imageVersions:
 ```
 
 An override whose name the inventory does not hold adds that name to it, so
-the name can then be pre-pulled. The names of the platform's own component
-images, such as ``session-manager`` and ``image-puller``, are the exception:
-an override of one of them sets that component's image, and the name is never
-in the inventory.
+the name can then be pre-pulled. The names of some of the platform's own
+component images are the exception: an override with one of them sets that
+component's image instead, and the name is not added to the inventory. Which
+names those are depends on where the override is given:
+
+* In the ``imageVersions`` of the configuration kinds: ``secrets-manager`` and
+  ``lookup-service``, which the CLI sets on the ``SecretsManager`` and
+  ``LookupService`` custom resources, and ``session-manager``,
+  ``image-puller`` and ``node-ca-injector``.
+* In the ``spec.images.overrides`` of a ``SessionManager``, and so in
+  ``sessionManager.images.overrides`` in ``EducatesConfig``:
+  ``session-manager``, ``image-puller`` and ``node-ca-injector``. The images
+  of the secrets manager and the lookup service are set by the ``spec.image``
+  of their own custom resources.
+* In the ``session-manager.imageVersions`` value of the runtime chart
+  installed without the operator: none. Every entry is added to the
+  inventory, and each component's image is a chart value of its own, such as
+  ``session-manager.imagePrePuller.image`` for the pre-puller's helper.
 
 An ``image`` is used exactly as written: no override or registry prefix applies
 to it, and it stays the same when you upgrade Educates. Use it for an image the

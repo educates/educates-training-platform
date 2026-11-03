@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -27,8 +28,11 @@ func TestLoad_EmptyLocalConfig_AppliesDefaults(t *testing.T) {
 	if local.LookupService == nil || *local.LookupService != true {
 		t.Errorf("LookupService = %v, want true", local.LookupService)
 	}
-	if local.ImagePrePuller == nil || *local.ImagePrePuller != true {
-		t.Errorf("ImagePrePuller = %v, want true", local.ImagePrePuller)
+	if local.ImagePrePuller.Enabled == nil || *local.ImagePrePuller.Enabled != true {
+		t.Errorf("ImagePrePuller.Enabled = %v, want true", local.ImagePrePuller.Enabled)
+	}
+	if local.ImagePrePuller.IncludeDefaultImages != nil {
+		t.Errorf("ImagePrePuller.IncludeDefaultImages = %v, want unset", *local.ImagePrePuller.IncludeDefaultImages)
 	}
 	if got, want := local.Operator.LogLevel, "info"; got != want {
 		t.Errorf("Operator.LogLevel = %q, want %q", got, want)
@@ -68,6 +72,25 @@ func TestLoad_FullLocalConfig_RoundTripsAllFields(t *testing.T) {
 	}
 	if got, want := local.WebsiteStyling.DefaultTheme, "my-theme-data"; got != want {
 		t.Errorf("WebsiteStyling.DefaultTheme = %q, want %q", got, want)
+	}
+	assertImagePrePuller(t, local.ImagePrePuller, false, false, []v1alpha1.PrePulledImage{
+		{Name: "jdk21-environment"},
+		{Image: "ghcr.io/educates/example:1.0"},
+	})
+}
+
+// assertImagePrePuller checks an imagePrePuller block whose enabled and
+// includeDefaultImages are both set.
+func assertImagePrePuller(t *testing.T, got v1alpha1.ImagePrePullerConfig, enabled, includeDefaultImages bool, images []v1alpha1.PrePulledImage) {
+	t.Helper()
+	if got.Enabled == nil || *got.Enabled != enabled {
+		t.Errorf("ImagePrePuller.Enabled = %v, want %v", got.Enabled, enabled)
+	}
+	if got.IncludeDefaultImages == nil || *got.IncludeDefaultImages != includeDefaultImages {
+		t.Errorf("ImagePrePuller.IncludeDefaultImages = %v, want %v", got.IncludeDefaultImages, includeDefaultImages)
+	}
+	if !reflect.DeepEqual(got.Images, images) {
+		t.Errorf("ImagePrePuller.Images = %+v, want %+v", got.Images, images)
 	}
 }
 
@@ -139,16 +162,17 @@ func TestLoad_FullGKEConfig_RoundTripsAllFields(t *testing.T) {
 		t.Errorf("ExternalTLSTermination = false, want true")
 	}
 	// Explicit toggles must override the kind defaults
-	// (clusterAdmin=false, lookupService=true, imagePrePuller=true).
+	// (clusterAdmin=false, lookupService=true, imagePrePuller.enabled=true).
 	if gke.ClusterAdmin == nil || *gke.ClusterAdmin != true {
 		t.Errorf("ClusterAdmin = %v, want true (explicit override)", gke.ClusterAdmin)
 	}
 	if gke.LookupService == nil || *gke.LookupService != false {
 		t.Errorf("LookupService = %v, want false (explicit override)", gke.LookupService)
 	}
-	if gke.ImagePrePuller == nil || *gke.ImagePrePuller != true {
-		t.Errorf("ImagePrePuller = %v, want true (explicit override)", gke.ImagePrePuller)
-	}
+	assertImagePrePuller(t, gke.ImagePrePuller, false, false, []v1alpha1.PrePulledImage{
+		{Name: "jdk21-environment"},
+		{Image: "ghcr.io/example/custom-environment:1.0"},
+	})
 	if got, want := gke.WebsiteStyling.DefaultTheme, "my-theme-data"; got != want {
 		t.Errorf("WebsiteStyling.DefaultTheme = %q, want %q", got, want)
 	}
@@ -220,9 +244,10 @@ func TestLoad_FullEKSConfig_RoundTripsAllFields(t *testing.T) {
 	if eks.LookupService == nil || *eks.LookupService != false {
 		t.Errorf("LookupService = %v, want false (explicit override)", eks.LookupService)
 	}
-	if eks.ImagePrePuller == nil || *eks.ImagePrePuller != true {
-		t.Errorf("ImagePrePuller = %v, want true (explicit override)", eks.ImagePrePuller)
-	}
+	assertImagePrePuller(t, eks.ImagePrePuller, false, false, []v1alpha1.PrePulledImage{
+		{Name: "jdk21-environment"},
+		{Image: "ghcr.io/example/custom-environment:1.0"},
+	})
 	if got, want := eks.WebsiteStyling.DefaultTheme, "my-theme-data"; got != want {
 		t.Errorf("WebsiteStyling.DefaultTheme = %q, want %q", got, want)
 	}
@@ -287,9 +312,10 @@ func TestLoad_FullInlineConfig_RoundTripsAllFields(t *testing.T) {
 	if inline.LookupService == nil || *inline.LookupService != false {
 		t.Errorf("LookupService = %v, want false (explicit override)", inline.LookupService)
 	}
-	if inline.ImagePrePuller == nil || *inline.ImagePrePuller != true {
-		t.Errorf("ImagePrePuller = %v, want true (explicit override)", inline.ImagePrePuller)
-	}
+	assertImagePrePuller(t, inline.ImagePrePuller, false, false, []v1alpha1.PrePulledImage{
+		{Name: "jdk21-environment"},
+		{Image: "ghcr.io/example/custom-environment:1.0"},
+	})
 	if got, want := inline.WebsiteStyling.DefaultTheme, "my-theme-data"; got != want {
 		t.Errorf("WebsiteStyling.DefaultTheme = %q, want %q", got, want)
 	}

@@ -62,7 +62,7 @@ type EducatesInlineConfig struct {
 	// Top-level toggles shared with EducatesLocalConfig.
 	ClusterAdmin      *bool                        `yaml:"clusterAdmin,omitempty"`
 	LookupService     *bool                        `yaml:"lookupService,omitempty"`
-	ImagePrePuller    *bool                        `yaml:"imagePrePuller,omitempty"`
+	ImagePrePuller    ImagePrePullerConfig         `yaml:"imagePrePuller,omitempty"`
 	WebsiteStyling    LocalWebsiteStylingConfig    `yaml:"websiteStyling,omitempty"`
 	SecretPropagation LocalSecretPropagationConfig `yaml:"secretPropagation,omitempty"`
 	ImageVersions     []ImageVersion               `yaml:"imageVersions,omitempty"`
@@ -93,10 +93,7 @@ func (c *EducatesInlineConfig) WithDefaults() *EducatesInlineConfig {
 		t := true
 		c.LookupService = &t
 	}
-	if c.ImagePrePuller == nil {
-		t := true
-		c.ImagePrePuller = &t
-	}
+	c.ImagePrePuller.WithDefaults()
 	if c.Operator.LogLevel == "" {
 		c.Operator.LogLevel = "info"
 	}

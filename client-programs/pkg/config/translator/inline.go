@@ -122,9 +122,7 @@ func inlineSessionManagerSpec(cfg *v1alpha1.EducatesInlineConfig) map[string]int
 	if len(cfg.WebsiteStyling.ThemeDataRefs) > 0 {
 		spec["themes"] = themesFromDataRefs(cfg.WebsiteStyling.ThemeDataRefs)
 	}
-	if cfg.ImagePrePuller != nil {
-		spec["imagePrePuller"] = map[string]interface{}{"enabled": *cfg.ImagePrePuller}
-	}
+	applyImagePrePuller(spec, cfg.ImagePrePuller)
 	applySessionManagerImageOverrides(spec, cfg.ImageVersions)
 	return spec
 }

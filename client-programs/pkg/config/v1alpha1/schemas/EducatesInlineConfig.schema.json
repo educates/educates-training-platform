@@ -63,7 +63,28 @@
 
     "clusterAdmin":   { "type": "boolean", "default": false, "description": "Grant workshop sessions cluster-admin access. Disabled by default." },
     "lookupService":  { "type": "boolean", "default": true, "description": "Deploy the lookup service used for service discovery across training portals. Enabled by default." },
-    "imagePrePuller": { "type": "boolean", "default": true, "description": "Pre-pull workshop images onto every node ahead of time so session startup is not blocked on image pulls. Enabled by default." },
+    "imagePrePuller": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The image pre-puller, a DaemonSet that pulls images onto every node ahead of time, so the first workshop session on a node does not wait for the images it runs. It pulls the default images, the training portal and the workshop base environment, unless includeDefaultImages is false, then each entry of images as listed, an image already in the list being pulled once. Enabled by default.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true, "description": "Switches the image pre-puller on. It is the only switch: while it is off nothing is pulled, whatever the other fields say, so a list of images can stay in place. Enabled by default." },
+        "includeDefaultImages": { "type": "boolean", "default": true, "description": "Pulls the default images, the training portal and the workshop base environment, ahead of the entries in images. When false while enabled is true, images must list at least one entry." },
+        "images": {
+          "type": "array",
+          "description": "Further images to pull, after the default images and in the order listed. Each entry gives exactly one of name and image.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "One image to pull, given by exactly one of name and image.",
+            "properties": {
+              "name":  { "type": "string", "minLength": 1, "description": "An image's short name in the Educates image inventory, such as jdk21-environment. It resolves to the image the installation runs, imageVersions overrides and the imageRegistry prefix included, and follows the installed version on upgrade. A name the inventory does not hold fails the deploy." },
+              "image": { "type": "string", "minLength": 1, "description": "A full image reference, pulled exactly as written, without the imageRegistry prefix." }
+            }
+          }
+        }
+      }
+    },
 
     "websiteStyling": {
       "type": "object",

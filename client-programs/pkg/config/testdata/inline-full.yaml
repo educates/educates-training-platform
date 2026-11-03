@@ -20,7 +20,12 @@ externalTLSTermination: true
 
 clusterAdmin: true
 lookupService: false
-imagePrePuller: true
+imagePrePuller:
+  enabled: false
+  includeDefaultImages: false
+  images:
+    - name: jdk21-environment
+    - image: ghcr.io/example/custom-environment:1.0
 
 websiteStyling:
   defaultTheme: my-theme-data

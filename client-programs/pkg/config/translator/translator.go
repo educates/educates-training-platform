@@ -205,6 +205,37 @@ func applySessionManagerImageOverrides(spec map[string]interface{}, ivs []v1alph
 	}
 }
 
+// applyImagePrePuller sets spec.imagePrePuller from a kind's
+// imagePrePuller block as written: each field the block sets, and only
+// those, so the custom resource's defaults apply to the rest. A block
+// setting nothing leaves spec.imagePrePuller out.
+func applyImagePrePuller(spec map[string]interface{}, ipp v1alpha1.ImagePrePullerConfig) {
+	out := map[string]interface{}{}
+	if ipp.Enabled != nil {
+		out["enabled"] = *ipp.Enabled
+	}
+	if ipp.IncludeDefaultImages != nil {
+		out["includeDefaultImages"] = *ipp.IncludeDefaultImages
+	}
+	if len(ipp.Images) > 0 {
+		images := make([]interface{}, 0, len(ipp.Images))
+		for _, img := range ipp.Images {
+			entry := map[string]interface{}{}
+			if img.Name != "" {
+				entry["name"] = img.Name
+			}
+			if img.Image != "" {
+				entry["image"] = img.Image
+			}
+			images = append(images, entry)
+		}
+		out["images"] = images
+	}
+	if len(out) > 0 {
+		spec["imagePrePuller"] = out
+	}
+}
+
 const (
 	apiVersionConfig   = "config.educates.dev/v1alpha1"
 	apiVersionPlatform = "platform.educates.dev/v1alpha1"

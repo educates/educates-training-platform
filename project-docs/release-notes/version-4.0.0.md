@@ -427,6 +427,27 @@ New Features
   ``workshop/config.yaml`` defines no pathways, fails with an error listing
   the pathways that are defined.
 
+* The image pre-puller can now pull images beyond its default images, the
+  training portal and the workshop base environment. The ``imagePrePuller``
+  block of the ``SessionManager`` custom resource gains
+  ``includeDefaultImages``, which defaults to ``true`` and drops the default
+  images when set to ``false``, and ``images``, a list of further images to
+  pull. Each entry gives either a ``name``, the short name of an image in the
+  Educates image inventory such as ``jdk21-environment``, or an ``image``, a
+  full image reference. A ``name`` resolves to the reference the installation
+  runs, with ``spec.images.overrides`` and the image registry prefix applied,
+  so an Educates image follows the installed version on upgrade. An ``image``
+  is pulled exactly as written. Images are pulled in order, the default images
+  first and then each entry as listed, and an image already in the list is
+  pulled once. An entry giving both or neither of ``name`` and ``image``, and
+  a pre-puller with ``enabled`` set to ``true``, ``includeDefaultImages`` set
+  to ``false`` and no ``images``, are rejected when the resource is applied. A
+  ``name`` the inventory does not hold leaves the session-manager release as
+  it was, and the ``SessionManager`` reports ``Ready`` as ``False`` with
+  reason ``InstallFailed`` and a message naming the entry. ``enabled`` remains
+  the only switch: while it is ``false`` nothing is pulled, and the list can
+  stay in place.
+
 Features Changed
 ----------------
 
@@ -875,6 +896,23 @@ Features Changed
   longer has any effect. In the session-manager Helm chart, the
   ``imagePrePuller.pauseImage`` value is replaced by ``imagePrePuller.image``,
   with the same ``repository``, ``tag`` and ``pullPolicy`` fields.
+
+* In the session-manager Helm chart, the ``imagePrePuller`` values take the
+  same fields, with the same meaning, as the ``imagePrePuller`` block of the
+  ``SessionManager`` custom resource. The ``imagePrePuller.images`` value no
+  longer takes full image references that replace the default images: each
+  entry gives either a ``name``, resolved through the chart's image inventory
+  including the ``imageVersions`` overrides, or an ``image``, a full reference
+  pulled as written, and the entries are pulled after the default images. A
+  new ``imagePrePuller.includeDefaultImages`` value, ``true`` by default,
+  drops the default images when set to ``false``. To keep a list written for
+  the old value, write each reference as an ``image`` entry and set
+  ``includeDefaultImages`` to ``false``. The chart's values schema rejects an
+  entry giving both or neither of ``name`` and ``image``, and
+  ``includeDefaultImages`` set to ``false`` with no ``images`` while
+  ``enabled`` is ``true``. A ``name`` the inventory does not hold fails the
+  install or upgrade with a message naming the entry, but only while
+  ``enabled`` is ``true``.
 
 * The browser JavaScript bundle for the workshop gateway application in the
   workshop base environment image is now generated using esbuild instead of

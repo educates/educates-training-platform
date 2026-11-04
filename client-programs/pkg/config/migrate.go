@@ -15,11 +15,11 @@ import (
 // MaybeMigrateV3 attempts to translate a v3 values.yaml in dataHome
 // into a v4 config.yaml in the same dir. Returns nil in three cases:
 //
-//   1. dataHome has no values.yaml — nothing to migrate (first-time user).
-//   2. dataHome has config.yaml — already migrated (or never had v3).
-//   3. dataHome has values.yaml + provider ∈ {"", "kind"} — migration
-//      ran successfully (config.yaml written, values.yaml renamed to
-//      values.yaml.v3-backup).
+//  1. dataHome has no values.yaml — nothing to migrate (first-time user).
+//  2. dataHome has config.yaml — already migrated (or never had v3).
+//  3. dataHome has values.yaml + provider ∈ {"", "kind"} — migration
+//     ran successfully (config.yaml written, values.yaml renamed to
+//     values.yaml.v3-backup).
 //
 // Returns a user-actionable error when values.yaml is present without
 // config.yaml AND the provider is anything else (gke, eks, openshift,

@@ -340,10 +340,10 @@ func TestLoad_Errors(t *testing.T) {
 		file     string
 		contains string
 	}{
-		{"unknown-field",   "local-unknown-field.yaml",  "bogusField"},
-		{"bad-enum",        "local-bad-loglevel.yaml",   "logLevel"},
-		{"wrong-apiVersion","wrong-apiversion.yaml",     "unsupported apiVersion"},
-		{"unknown-kind",    "unknown-kind.yaml",         "unknown kind"},
+		{"unknown-field", "local-unknown-field.yaml", "bogusField"},
+		{"bad-enum", "local-bad-loglevel.yaml", "logLevel"},
+		{"wrong-apiVersion", "wrong-apiversion.yaml", "unsupported apiVersion"},
+		{"unknown-kind", "unknown-kind.yaml", "unknown kind"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

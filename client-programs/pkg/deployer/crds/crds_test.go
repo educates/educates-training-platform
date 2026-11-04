@@ -82,4 +82,3 @@ kind: B
 		t.Errorf("second doc missing 'kind: B'")
 	}
 }
-

@@ -144,4 +144,3 @@ func (c *Client) status(name string) (*release.Release, error) {
 	}
 	return r, nil
 }
-

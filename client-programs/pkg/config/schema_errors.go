@@ -55,12 +55,14 @@ func (c companionError) field(trigger string) string {
 var schemaErrorRules = []schemaErrorRule{
 	{
 		// An imagePrePuller given as a boolean, a form the narrow kinds
-		// no longer take.
+		// no longer take: the line names the object form to write in its
+		// place.
 		field:     regexp.MustCompile(`^imagePrePuller$`),
 		errorType: "invalid_type",
 		when:      valueIsBool,
 		line: func(e gojsonschema.ResultError) string {
-			return "imagePrePuller: " + ImagePrePullerBooleanFormMessage(e.Value().(bool))
+			b := e.Value().(bool)
+			return fmt.Sprintf("imagePrePuller: takes an object, not a boolean; set imagePrePuller.enabled instead, writing \"imagePrePuller: {enabled: %t}\" in place of \"imagePrePuller: %t\"", b, b)
 		},
 	},
 	{
@@ -186,11 +188,4 @@ func SchemaErrorLines(errs []gojsonschema.ResultError) []string {
 		lines = append(lines, fmt.Sprintf("%s: %s", e.Field(), e.Description()))
 	}
 	return lines
-}
-
-// ImagePrePullerBooleanFormMessage returns the message for an
-// imagePrePuller given as a boolean, a form the narrow kinds no longer
-// take: it names the object form to write in its place.
-func ImagePrePullerBooleanFormMessage(value bool) string {
-	return fmt.Sprintf("takes an object, not a boolean; set imagePrePuller.enabled instead, writing \"imagePrePuller: {enabled: %t}\" in place of \"imagePrePuller: %t\"", value, value)
 }

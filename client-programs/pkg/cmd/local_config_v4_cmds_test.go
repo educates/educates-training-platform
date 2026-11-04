@@ -237,6 +237,57 @@ func TestLocalConfigSet_ImagePrePullerNothingToPull_Rejected(t *testing.T) {
 	}
 }
 
+// set meets a scalar where its path needs a map. A file that validates as
+// it stands reports the segment; a file that does not reports its schema
+// errors and the command that opens it.
+func TestLocalConfigSet_ScalarOnPath_Rejected(t *testing.T) {
+	cases := []struct {
+		name    string
+		fileHas string
+		path    string
+		want    []string
+		noise   []string
+	}{
+		{
+			name:    "file validates",
+			fileHas: "lookupService: false\n",
+			path:    "lookupService.enabled",
+			want:    []string{`path "lookupService.enabled": segment "lookupService" is not a map`},
+		},
+		{
+			name:    "file fails validation",
+			fileHas: "lookupService: false\nimagePrePuller: true\n",
+			path:    "lookupService.enabled",
+			want: []string{
+				`path "lookupService.enabled"`,
+				"'educates local config edit' opens the file",
+				`  - imagePrePuller: takes an object, not a boolean; set imagePrePuller.enabled instead, writing "imagePrePuller: {enabled: true}" in place of "imagePrePuller: true"`,
+			},
+			noise: []string{"Invalid type"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dataHome := stageInitConfig(t)
+			appendToConfig(t, dataHome, tc.fileHas)
+			err := runLocalConfigSet(io.Discard, tc.path, "true")
+			if err == nil {
+				t.Fatal("expected an error, got nil")
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+			for _, noise := range tc.noise {
+				if strings.Contains(err.Error(), noise) {
+					t.Errorf("error %q reports %q", err, noise)
+				}
+			}
+		})
+	}
+}
+
 // appendToConfig appends text to the staged config.yaml.
 func appendToConfig(t *testing.T, dataHome, text string) {
 	t.Helper()

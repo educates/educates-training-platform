@@ -84,6 +84,46 @@ var schemaErrorRules = []schemaErrorRule{
 			{errorType: "array_min_items", child: "images"},
 		},
 	},
+	{
+		// The GKE and EKS kinds require acme unless
+		// externalTLSTermination is true, through an if/then in a root
+		// allOf.
+		field:     regexp.MustCompile(`^\(root\)$`),
+		errorType: "required",
+		when:      requiresProperty("acme"),
+		line:      constLine("acme: required unless externalTLSTermination is true; it holds the ACME issuer settings for the wildcard certificate"),
+		drops: []companionError{
+			{errorType: "condition_then"},
+			{errorType: "number_all_of"},
+		},
+	},
+	{
+		// The Inline kind requires wildcardCertificateSecret the same
+		// way.
+		field:     regexp.MustCompile(`^\(root\)$`),
+		errorType: "required",
+		when:      requiresProperty("wildcardCertificateSecret"),
+		line:      constLine("wildcardCertificateSecret: required unless externalTLSTermination is true; it names the kubernetes.io/tls Secret in the operator namespace holding the wildcard certificate"),
+		drops: []companionError{
+			{errorType: "condition_then"},
+			{errorType: "number_all_of"},
+		},
+	},
+}
+
+// requiresProperty returns a predicate matching a required error for the
+// named property.
+func requiresProperty(name string) func(gojsonschema.ResultError) bool {
+	return func(e gojsonschema.ResultError) bool {
+		return e.Details()["property"] == name
+	}
+}
+
+// constLine returns a line writer that writes line as it stands.
+func constLine(line string) func(gojsonschema.ResultError) string {
+	return func(gojsonschema.ResultError) string {
+		return line
+	}
 }
 
 // valueIsBool reports whether the error's value is a boolean.

@@ -4,8 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
@@ -467,6 +470,101 @@ func TestLoad_ImagePrePullerNothingToPull_Rejected(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// withoutFields returns the fixture's contents with the named top-level
+// fields left out.
+func withoutFields(t *testing.T, fixture string, fields ...string) []byte {
+	t.Helper()
+	base, err := os.ReadFile(filepath.Join("testdata", fixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc yaml.MapSlice
+	if err := yaml.Unmarshal(base, &doc); err != nil {
+		t.Fatal(err)
+	}
+	var kept yaml.MapSlice
+	for _, item := range doc {
+		if !slices.Contains(fields, item.Key.(string)) {
+			kept = append(kept, item)
+		}
+	}
+	out, err := yaml.Marshal(kept)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// A file of a kind whose certificate source is required unless
+// externalTLSTermination is true fails to load without it, with one line
+// naming the source and the rule in place of the schema's own reports.
+func TestLoad_CertificateSourceMissing_NamesRule(t *testing.T) {
+	cases := []struct {
+		fixture string
+		source  string
+		want    string
+	}{
+		{"gke-minimal.yaml", "acme", "acme: required unless externalTLSTermination is true; it holds the ACME issuer settings for the wildcard certificate"},
+		{"eks-minimal.yaml", "acme", "acme: required unless externalTLSTermination is true; it holds the ACME issuer settings for the wildcard certificate"},
+		{"inline-minimal.yaml", "wildcardCertificateSecret", "wildcardCertificateSecret: required unless externalTLSTermination is true; it names the kubernetes.io/tls Secret in the operator namespace holding the wildcard certificate"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.fixture, func(t *testing.T) {
+			_, err := LoadBytes(withoutFields(t, tc.fixture, tc.source), tc.fixture)
+			if err == nil {
+				t.Fatal("LoadBytes: expected error, got nil")
+			}
+			want := tc.fixture + ": schema validation failed:\n  - " + tc.want
+			if err.Error() != want {
+				t.Errorf("error = %q, want %q", err, want)
+			}
+		})
+	}
+}
+
+// A file missing acme and failing for another reason as well reports both,
+// the acme line in place of the schema's own reports for it.
+func TestLoad_ACMEMissingWithAnotherError_ReportsBoth(t *testing.T) {
+	_, err := LoadBytes(withoutFields(t, "gke-minimal.yaml", "acme", "domain"), "gke-minimal.yaml")
+	if err == nil {
+		t.Fatal("LoadBytes: expected error, got nil")
+	}
+	for _, want := range []string{
+		"  - acme: required unless externalTLSTermination is true; it holds the ACME issuer settings for the wildcard certificate",
+		"  - (root): domain is required",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+	for _, noise := range []string{`"then"`, "allOf", "acme is required"} {
+		if strings.Contains(err.Error(), noise) {
+			t.Errorf("error %q still carries the schema's own report %q", err, noise)
+		}
+	}
+}
+
+// A file asserting externalTLSTermination loads without the certificate
+// source its kind otherwise requires.
+func TestLoad_ExternalTLSTerminationWithoutCertificateSource_Loads(t *testing.T) {
+	cases := []struct {
+		fixture string
+		source  string
+	}{
+		{"gke-minimal.yaml", "acme"},
+		{"eks-minimal.yaml", "acme"},
+		{"inline-minimal.yaml", "wildcardCertificateSecret"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.fixture, func(t *testing.T) {
+			data := append(withoutFields(t, tc.fixture, tc.source), "externalTLSTermination: true\n"...)
+			if _, err := LoadBytes(data, tc.fixture); err != nil {
+				t.Fatalf("LoadBytes: %v", err)
+			}
+		})
 	}
 }
 

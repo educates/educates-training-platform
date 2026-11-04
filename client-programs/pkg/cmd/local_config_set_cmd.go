@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -27,6 +28,9 @@ var localConfigSetExample = `
 
   # Set a boolean field:
   educates local config set lookupService false
+
+  # Switch the image pre-puller off:
+  educates local config set imagePrePuller.enabled false
 `
 
 func (p *ProjectInfo) NewLocalConfigSetCmd() *cobra.Command {
@@ -77,6 +81,19 @@ func runLocalConfigSet(w io.Writer, path, rawValue string) error {
 	root := rootMappingNode(&doc)
 
 	if err := setNodeByPath(root, strings.Split(path, "."), coerce(rawValue)); err != nil {
+		// A scalar where the path needs a map is often a value the
+		// schema rejects, so a file that does not validate as it stands
+		// reports its schema errors instead.
+		if errors.As(err, new(*notAMapError)) {
+			lines, verr := fileSchemaErrorLines(data)
+			if verr != nil {
+				return fmt.Errorf("%s: schema validation: %w", cfgPath, verr)
+			}
+			if len(lines) > 0 {
+				return fmt.Errorf("path %q: %s does not validate as it stands ('educates local config edit' opens the file):\n%s",
+					path, cfgPath, indentLines(lines))
+			}
+		}
 		return err
 	}
 
@@ -139,7 +156,7 @@ func setNodeByPath(root *yaml.Node, segs []string, value interface{}) error {
 			continue
 		}
 		if v.Kind != yaml.MappingNode {
-			return fmt.Errorf("path %q: segment %q is not a map", strings.Join(segs, "."), strings.Join(segs[:i+1], "."))
+			return &notAMapError{path: strings.Join(segs, "."), segment: strings.Join(segs[:i+1], ".")}
 		}
 		cur = v
 	}
@@ -155,6 +172,16 @@ func setNodeByPath(root *yaml.Node, segs []string, value interface{}) error {
 		cur.Content = append(cur.Content, scalarNode("!!str", leaf), scalarNode(tag, sval))
 	}
 	return nil
+}
+
+// notAMapError reports a path segment whose value is not a map although
+// the path goes on below it.
+type notAMapError struct {
+	path, segment string
+}
+
+func (e *notAMapError) Error() string {
+	return fmt.Sprintf("path %q: segment %q is not a map", e.path, e.segment)
 }
 
 // mappingValue returns the value node paired with key in a mapping node,
@@ -210,6 +237,35 @@ func coerce(raw string) interface{} {
 // constraint (e.g. setting `mode` would always fail since the schema
 // rejects mode at the top level).
 func validateAgainstLocalSchema(root map[string]interface{}, source, attemptedPath string) error {
+	lines, err := localSchemaErrorLines(root)
+	if err != nil {
+		return fmt.Errorf("%s: schema validation: %w", source, err)
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return fmt.Errorf(`set %q rejected by schema validation. %s would become invalid:
+%s`, attemptedPath, source, indentLines(lines))
+}
+
+// fileSchemaErrorLines validates the file's contents, as they stand,
+// against the embedded EducatesLocalConfig schema and returns its errors
+// one line each, or none when it validates.
+func fileSchemaErrorLines(data []byte) ([]string, error) {
+	var root map[string]interface{}
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return nil, err
+	}
+	if root == nil {
+		root = map[string]interface{}{}
+	}
+	return localSchemaErrorLines(root)
+}
+
+// localSchemaErrorLines validates root against the embedded
+// EducatesLocalConfig schema and returns its errors one line each, or none
+// when it validates.
+func localSchemaErrorLines(root map[string]interface{}) ([]string, error) {
 	// gojsonschema needs JSON-compatible types; yaml.v2 returns
 	// map[interface{}]interface{} for objects, which json.Marshal
 	// rejects. Normalise.
@@ -219,18 +275,18 @@ func validateAgainstLocalSchema(root map[string]interface{}, source, attemptedPa
 	docLoader := gojsonschema.NewGoLoader(normalised)
 	result, err := gojsonschema.Validate(loader, docLoader)
 	if err != nil {
-		return fmt.Errorf("%s: schema validation: %w", source, err)
+		return nil, err
 	}
-	if result.Valid() {
-		return nil
-	}
+	return config.SchemaErrorLines(result.Errors()), nil
+}
 
-	var msgs []string
-	for _, e := range result.Errors() {
-		msgs = append(msgs, fmt.Sprintf("  - %s: %s", e.Field(), e.Description()))
+// indentLines writes lines as an indented list, one item a line.
+func indentLines(lines []string) string {
+	items := make([]string, len(lines))
+	for i, line := range lines {
+		items[i] = "  - " + line
 	}
-	return fmt.Errorf(`set %q rejected by schema validation. %s would become invalid:
-%s`, attemptedPath, source, strings.Join(msgs, "\n"))
+	return strings.Join(items, "\n")
 }
 
 // normaliseForJSON converts yaml.v2's map[interface{}]interface{} to

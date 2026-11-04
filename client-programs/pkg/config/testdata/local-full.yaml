@@ -31,7 +31,12 @@ ingress:
 
 clusterAdmin: false
 lookupService: false
-imagePrePuller: true
+imagePrePuller:
+  enabled: false
+  includeDefaultImages: false
+  images:
+    - name: jdk21-environment
+    - image: ghcr.io/educates/example:1.0
 
 websiteStyling:
   defaultTheme: my-theme-data

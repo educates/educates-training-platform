@@ -216,9 +216,9 @@ New Features
 
 * ``imageVersions`` entries in the CLI configuration now reach every
   platform image: entries named ``secrets-manager`` and ``lookup-service``
-  are routed to those components' own custom resources, and the
-  ``session-manager``, ``pause-container`` and ``node-ca-injector`` names —
-  previously ignored — now override the images they refer to. For
+  are routed to those components' own custom resources, and entries named
+  ``session-manager``, ``image-puller`` and ``node-ca-injector`` override
+  the images they refer to. For
   contributors, a developer-built CLI (one whose embedded version is not a
   release version) automatically targets its compiled-in image registry for
   all platform images, so building Educates from source and deploying the
@@ -426,6 +426,28 @@ New Features
   A name which ``pathways.paths`` does not define, or any name when
   ``workshop/config.yaml`` defines no pathways, fails with an error listing
   the pathways that are defined.
+
+* The image pre-puller can now pull images beyond its default images, the
+  training portal and the workshop base environment. The ``imagePrePuller``
+  block of the ``SessionManager`` custom resource gains
+  ``includeDefaultImages``, which defaults to ``true`` and drops the default
+  images when set to ``false``, and ``images``, a list of further images to
+  pull. Each entry gives either a ``name``, the short name of an image in the
+  Educates image inventory such as ``jdk21-environment``, or an ``image``, a
+  full image reference. A ``name`` resolves to the reference the installation
+  runs, with ``spec.images.overrides`` and the image registry prefix applied,
+  so an Educates image follows the installed version on upgrade. An ``image``
+  is pulled exactly as written. Images are pulled in order, the default images
+  first and then each entry as listed, and an image already in the list is
+  pulled once. An entry giving both or neither of ``name`` and ``image``, and
+  a pre-puller with ``enabled`` set to ``true``, ``includeDefaultImages`` set
+  to ``false`` and no ``images``, are rejected when the resource is applied. A
+  ``name`` the inventory does not hold leaves the session-manager release as
+  it was, and the ``SessionManager`` reports ``Ready`` as ``False`` with
+  reason ``InstallFailed`` and a message naming the entry. ``enabled`` remains
+  the only switch: while it is ``false`` nothing is pulled, and the list can
+  stay in place. See [pre-pulling workshop
+  images](pre-pulling-workshop-images).
 
 Features Changed
 ----------------
@@ -850,14 +872,84 @@ Features Changed
   ``educates local cluster create``: an alpha cluster received the CA's
   private key, and still holds it in the old CA secret.
 
-* The ``imageCache`` configuration setting has been renamed to
-  ``imagePrePuller``. It is now enabled by default in the CLI configuration
-  kinds (``EducatesLocalConfig``, ``EducatesGKEConfig``,
-  ``EducatesEKSConfig`` and ``EducatesInlineConfig``), so installs created
-  with the CLI pre-pull workshop images onto every node ahead of time
-  unless ``imagePrePuller`` is set to ``false``. Installs applied directly
-  from custom resources or the Helm chart keep the chart default of
-  disabled.
+* The version 3 ``imagePuller`` configuration setting is replaced by
+  ``imagePrePuller``, and in the CLI configuration kinds
+  (``EducatesLocalConfig``, ``EducatesGKEConfig``, ``EducatesEKSConfig`` and
+  ``EducatesInlineConfig``) it is now an object, with the same ``enabled``,
+  ``includeDefaultImages`` and ``images`` fields, and the same meaning, as the
+  ``imagePrePuller`` block of the ``SessionManager`` custom resource. The CLI
+  passes the block to the ``SessionManager`` as written. The pre-puller is
+  enabled by default in these kinds, so installs created with the CLI
+  pre-pull the training portal and workshop base environment images onto
+  every node ahead of time unless ``imagePrePuller.enabled`` is set to
+  ``false``, which ``educates local config set imagePrePuller.enabled false``
+  does for the local configuration. A ``SessionManager`` custom resource
+  applied directly, ``EducatesConfig``, which passes the custom resource on as
+  written, and the runtime Helm chart installed without the operator keep the
+  default of disabled. The CLI rejects, when it loads the configuration, an
+  ``images`` entry giving both or neither of ``name`` and ``image``, and
+  ``includeDefaultImages`` set to ``false`` with no ``images`` while
+  ``enabled`` is ``true`` or left unset. The boolean form is no longer
+  accepted: a configuration holding ``imagePrePuller: true`` or
+  ``imagePrePuller: false`` fails to load with an error naming the object
+  form. Write ``imagePrePuller: {enabled: false}`` in place of
+  ``imagePrePuller: false``, and drop ``imagePrePuller: true``, which is the
+  default. See [pre-pulling workshop images](pre-pulling-workshop-images).
+
+* The CLI's first-run migration of a version 3 ``values.yaml`` carries
+  ``imagePuller`` over to ``imagePrePuller``, so the pre-puller keeps its
+  switch and pulls the same images. ``imagePuller.enabled`` becomes
+  ``imagePrePuller.enabled``. A ``prePullImages`` list that includes
+  ``base-environment``, or no list, keeps the default images and adds each
+  of its other names as a ``name`` entry of ``imagePrePuller.images``. Any
+  other list, an empty one included, sets ``includeDefaultImages`` to
+  ``false`` and lists ``training-portal`` followed by its names, the images
+  version 3 pulled. A ``prePullImages`` name the version 4 image inventory
+  does not hold is dropped: ``session-manager``, ``secrets-manager``,
+  ``lookup-service``, ``node-ca-injector`` and ``pause-container`` always,
+  and ``loftsh-kubernetes-v1.31`` and ``loftsh-kubernetes-v1.32`` unless
+  ``imageVersions`` defines them. An ``imageVersions`` entry named
+  ``pause-container`` is dropped too. The migration's notice lists the
+  ``imagePrePuller`` fields it set and each entry it dropped. A version 3
+  file without ``imagePuller`` leaves ``imagePrePuller`` unset, so the
+  defaults apply. See [laptop installs migrate
+  automatically](laptop-installs-migrate-automatically).
+
+* The image pre-puller no longer runs anything from the images it pulls.
+  Each pulled image used to run its own ``/bin/true``, so an image without
+  one, such as a distroless or ``scratch`` image, failed to start and stopped
+  every image after it from being pulled. The pre-puller now has a small
+  helper of its own, ``image-puller``, which a first init container copies
+  into a shared volume and every pulled image runs from there, and which is
+  also the long-running container in place of the pause container. The
+  ``educates-pause-container`` image is no longer built or published, and is
+  replaced by ``educates-image-puller``, which the release image list
+  includes for mirroring. An image override named ``image-puller``, in
+  ``imageVersions`` in the CLI configuration or in
+  ``SessionManager.spec.images.overrides``, sets the helper image and takes
+  a ``repository:tag`` reference. An override named ``pause-container`` no
+  longer has any effect. In the session-manager Helm chart, the
+  ``imagePrePuller.pauseImage`` value is replaced by ``imagePrePuller.image``,
+  with the same ``repository``, ``tag`` and ``pullPolicy`` fields. See
+  [pre-pulling workshop images](pre-pulling-workshop-images).
+
+* In the session-manager Helm chart, the ``imagePrePuller`` values take the
+  same fields, with the same meaning, as the ``imagePrePuller`` block of the
+  ``SessionManager`` custom resource. The ``imagePrePuller.images`` value no
+  longer takes full image references that replace the default images: each
+  entry gives either a ``name``, resolved through the chart's image inventory
+  including the ``imageVersions`` overrides, or an ``image``, a full reference
+  pulled as written, and the entries are pulled after the default images. A
+  new ``imagePrePuller.includeDefaultImages`` value, ``true`` by default,
+  drops the default images when set to ``false``. To keep a list written for
+  the old value, write each reference as an ``image`` entry and set
+  ``includeDefaultImages`` to ``false``. The chart's values schema rejects an
+  entry giving both or neither of ``name`` and ``image``, and
+  ``includeDefaultImages`` set to ``false`` with no ``images`` while
+  ``enabled`` is ``true``. A ``name`` the inventory does not hold fails the
+  install or upgrade with a message naming the entry, but only while
+  ``enabled`` is ``true``. See [pre-pulling workshop
+  images](pre-pulling-workshop-images).
 
 * The browser JavaScript bundle for the workshop gateway application in the
   workshop base environment image is now generated using esbuild instead of

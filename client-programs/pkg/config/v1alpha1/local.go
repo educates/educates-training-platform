@@ -17,7 +17,7 @@ type EducatesLocalConfig struct {
 	Ingress           LocalIngressConfig           `yaml:"ingress,omitempty"`
 	ClusterAdmin      *bool                        `yaml:"clusterAdmin,omitempty"`
 	LookupService     *bool                        `yaml:"lookupService,omitempty"`
-	ImagePrePuller    *bool                        `yaml:"imagePrePuller,omitempty"`
+	ImagePrePuller    ImagePrePullerConfig         `yaml:"imagePrePuller,omitempty"`
 	WebsiteStyling    LocalWebsiteStylingConfig    `yaml:"websiteStyling,omitempty"`
 	SecretPropagation LocalSecretPropagationConfig `yaml:"secretPropagation,omitempty"`
 	ImageVersions     []ImageVersion               `yaml:"imageVersions,omitempty"`
@@ -117,6 +117,52 @@ type ImageVersion struct {
 	Image string `yaml:"image"`
 }
 
+// The imageVersions names the CLI routes to a component custom resource
+// of their own. An entry with one of these names sets the spec.image of
+// that resource, the SecretsManager or the LookupService, and is left
+// out of the SessionManager's spec.images.overrides, since neither
+// component's image is in the session-manager chart's image inventory.
+const (
+	SecretsManagerImageName = "secrets-manager"
+	LookupServiceImageName  = "lookup-service"
+)
+
+// RoutesToComponentResource reports whether the CLI routes the entry to
+// a component custom resource of its own instead of the SessionManager:
+// whether its name is SecretsManagerImageName or LookupServiceImageName.
+func (iv ImageVersion) RoutesToComponentResource() bool {
+	return iv.Name == SecretsManagerImageName || iv.Name == LookupServiceImageName
+}
+
+// ImagePrePullerConfig is the image pre-puller block every narrow kind
+// shares. It takes the fields of SessionManager.spec.imagePrePuller, with
+// the same meaning, and the translators pass it on as written. Unlike the
+// custom resource, the kinds default Enabled to true; a nil
+// IncludeDefaultImages is left to the custom resource's default of true.
+type ImagePrePullerConfig struct {
+	Enabled              *bool            `yaml:"enabled,omitempty"`
+	IncludeDefaultImages *bool            `yaml:"includeDefaultImages,omitempty"`
+	Images               []PrePulledImage `yaml:"images,omitempty"`
+}
+
+// PrePulledImage is one image the pre-puller pulls, given by exactly one
+// of Name, a short name in the Educates image inventory, and Image, a full
+// image reference pulled as written.
+type PrePulledImage struct {
+	Name  string `yaml:"name,omitempty"`
+	Image string `yaml:"image,omitempty"`
+}
+
+// WithDefaults switches the pre-puller on when the block leaves Enabled
+// unset.
+func (c *ImagePrePullerConfig) WithDefaults() *ImagePrePullerConfig {
+	if c.Enabled == nil {
+		t := true
+		c.Enabled = &t
+	}
+	return c
+}
+
 type LocalOperatorConfig struct {
 	Image            OperatorImage `yaml:"image,omitempty"`
 	ImagePullSecrets []string      `yaml:"imagePullSecrets,omitempty"`
@@ -157,10 +203,7 @@ func (c *EducatesLocalConfig) WithDefaults() *EducatesLocalConfig {
 		t := true
 		c.LookupService = &t
 	}
-	if c.ImagePrePuller == nil {
-		t := true
-		c.ImagePrePuller = &t
-	}
+	c.ImagePrePuller.WithDefaults()
 	if c.Operator.LogLevel == "" {
 		c.Operator.LogLevel = "info"
 	}
@@ -189,7 +232,7 @@ var LocalDevImageNames = []string{
 	"training-portal",
 	"base-environment",
 	"docker-registry",
-	"pause-container",
+	"image-puller",
 	"secrets-manager",
 	"tunnel-manager",
 	"image-cache",

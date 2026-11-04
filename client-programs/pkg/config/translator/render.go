@@ -10,10 +10,10 @@ import (
 
 // RenderCRs serialises the four (or three) platform CRs in Output as a
 // single multi-document YAML stream, in deploy order:
-//   1. EducatesClusterConfig
-//   2. SecretsManager
-//   3. LookupService (omitted when nil)
-//   4. SessionManager
+//  1. EducatesClusterConfig
+//  2. SecretsManager
+//  3. LookupService (omitted when nil)
+//  4. SessionManager
 //
 // The order matches the controller dependency chain: ECC must be Ready
 // before SecretsManager reconciles; SecretsManager must be Ready before

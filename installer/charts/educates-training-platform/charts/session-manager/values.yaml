@@ -106,7 +106,7 @@ packageDelivery:
 # leave the entire `development:` block empty:
 #
 #   - Chart-rendered + runtime-spawned Educates image refs (chart pod,
-#     pause container, training-portal, base-environment, etc.) are
+#     image-puller, training-portal, base-environment, etc.) are
 #     composed from Chart.yaml annotations
 #     (`educates.dev/image-registry-host` / `-namespace`), which the chart's
 #     publish workflow updates per fork at release time.
@@ -118,9 +118,10 @@ packageDelivery:
 #
 # When set, `development.imageRegistry` has TWO simultaneous effects:
 #
-#   1. Replaces the Chart.yaml annotation defaults. Chart pod, pause
-#      image, and the Educates-published entries in the `imageVersions`
-#      helper resolve against `{host}/{namespace}` instead.
+#   1. Replaces the Chart.yaml annotation defaults. Chart pod,
+#      image-puller helper image, and the Educates-published entries in
+#      the `imageVersions` helper resolve against `{host}/{namespace}`
+#      instead.
 #   2. Emits the same `{host}/{namespace}` into the runtime config so
 #      workshop sessions get `IMAGE_REPOSITORY={host}/{namespace}`.
 #      Workshops authored against `$(image_repository)/<name>` placeholders
@@ -320,26 +321,45 @@ websiteStyling:
 # Image pre-puller DaemonSet
 # =============================================================================
 
-# When enabled, runs an init-container per image in `images` (each running
-# `/bin/true`) so the kubelet pre-pulls and caches them on every node ahead of
-# time, plus a long-lived pause container to keep the DS alive. Useful for
-# clusters where workshop session start time is dominated by image pull.
+# When enabled, runs a DaemonSet with an init container per pre-pulled image,
+# so the kubelet pulls and caches each image on every node ahead of time.
+# Useful for clusters where workshop session start time is dominated by image
+# pull. Nothing from a pulled image runs: each of those init containers runs
+# the image-puller helper, which a first init container copies into a shared
+# volume, and the helper is also the long-running container that keeps the
+# DaemonSet's pods in place.
+#
+# Images are pulled in order: the default images when included, then each
+# entry of `images` as listed. An image already in the list is pulled once.
+# Each image's pull policy derives from its tag: `Always` for no tag or a
+# tag of `latest`, `main`, `master` or `develop`, `IfNotPresent` for any
+# other tag or a digest.
 imagePrePuller:
+  # The only switch: while it is off nothing is pulled, whatever the other
+  # fields say, so a list can stay in place.
   enabled: false
-  # Pause image used as the long-lived "keepalive" container in the DaemonSet.
-  # Empty `repository` derives `{imageRegistry.host}/{imageRegistry.namespace}/educates-pause-container`.
+  # Pull the default images, training-portal and base-environment, ahead of
+  # the entries in `images`. With this off and `enabled` on, `images` must
+  # list at least one entry.
+  includeDefaultImages: true
+  # Further images to pull. Each entry sets exactly one of:
+  #   - `name`: an image's short name in the `imageVersions` inventory, such
+  #     as `jdk21-environment`. It resolves through the merged inventory, so
+  #     registry relocation and per-name overrides apply, including override
+  #     names the default inventory lacks. A name the inventory does not hold
+  #     fails the render.
+  #   - `image`: a full image reference, pulled exactly as written and never
+  #     relocated.
+  images: []
+    # - name: jdk21-environment
+    # - image: registry.example.com/workshops/custom-base:1.0
+  # The image-puller helper image.
+  # Empty `repository` derives `{imageRegistry.host}/{imageRegistry.namespace}/educates-image-puller`.
   # Empty `tag` falls through to `Chart.AppVersion`.
-  pauseImage:
+  image:
     repository: ""
     tag: ""
     pullPolicy: ""
-  # Full image references to pre-pull. Empty defaults to the v3-equivalent
-  # set -- training-portal + base-environment -- resolved through the
-  # imageVersions inventory, so registry relocation and per-name overrides
-  # are honoured. A non-empty list replaces the default verbatim (fully
-  # qualified refs only; short names are not resolved here).
-  images: []
-    # - ghcr.io/educates/training-portal:4.0.0-alpha.1
 
 # =============================================================================
 # Secret propagation

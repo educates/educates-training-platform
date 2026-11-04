@@ -15,8 +15,8 @@ import (
 	"io/fs"
 	"strings"
 
-	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"helm.sh/helm/v4/pkg/chart/loader/archive"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
 	helmloader "helm.sh/helm/v4/pkg/chart/v2/loader"
 )
 

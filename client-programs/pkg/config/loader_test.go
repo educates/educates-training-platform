@@ -1,9 +1,14 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
@@ -27,8 +32,11 @@ func TestLoad_EmptyLocalConfig_AppliesDefaults(t *testing.T) {
 	if local.LookupService == nil || *local.LookupService != true {
 		t.Errorf("LookupService = %v, want true", local.LookupService)
 	}
-	if local.ImagePrePuller == nil || *local.ImagePrePuller != true {
-		t.Errorf("ImagePrePuller = %v, want true", local.ImagePrePuller)
+	if local.ImagePrePuller.Enabled == nil || *local.ImagePrePuller.Enabled != true {
+		t.Errorf("ImagePrePuller.Enabled = %v, want true", local.ImagePrePuller.Enabled)
+	}
+	if local.ImagePrePuller.IncludeDefaultImages != nil {
+		t.Errorf("ImagePrePuller.IncludeDefaultImages = %v, want unset", *local.ImagePrePuller.IncludeDefaultImages)
 	}
 	if got, want := local.Operator.LogLevel, "info"; got != want {
 		t.Errorf("Operator.LogLevel = %q, want %q", got, want)
@@ -68,6 +76,25 @@ func TestLoad_FullLocalConfig_RoundTripsAllFields(t *testing.T) {
 	}
 	if got, want := local.WebsiteStyling.DefaultTheme, "my-theme-data"; got != want {
 		t.Errorf("WebsiteStyling.DefaultTheme = %q, want %q", got, want)
+	}
+	assertImagePrePuller(t, local.ImagePrePuller, false, false, []v1alpha1.PrePulledImage{
+		{Name: "jdk21-environment"},
+		{Image: "ghcr.io/educates/example:1.0"},
+	})
+}
+
+// assertImagePrePuller checks an imagePrePuller block whose enabled and
+// includeDefaultImages are both set.
+func assertImagePrePuller(t *testing.T, got v1alpha1.ImagePrePullerConfig, enabled, includeDefaultImages bool, images []v1alpha1.PrePulledImage) {
+	t.Helper()
+	if got.Enabled == nil || *got.Enabled != enabled {
+		t.Errorf("ImagePrePuller.Enabled = %v, want %v", got.Enabled, enabled)
+	}
+	if got.IncludeDefaultImages == nil || *got.IncludeDefaultImages != includeDefaultImages {
+		t.Errorf("ImagePrePuller.IncludeDefaultImages = %v, want %v", got.IncludeDefaultImages, includeDefaultImages)
+	}
+	if !reflect.DeepEqual(got.Images, images) {
+		t.Errorf("ImagePrePuller.Images = %+v, want %+v", got.Images, images)
 	}
 }
 
@@ -139,16 +166,17 @@ func TestLoad_FullGKEConfig_RoundTripsAllFields(t *testing.T) {
 		t.Errorf("ExternalTLSTermination = false, want true")
 	}
 	// Explicit toggles must override the kind defaults
-	// (clusterAdmin=false, lookupService=true, imagePrePuller=true).
+	// (clusterAdmin=false, lookupService=true, imagePrePuller.enabled=true).
 	if gke.ClusterAdmin == nil || *gke.ClusterAdmin != true {
 		t.Errorf("ClusterAdmin = %v, want true (explicit override)", gke.ClusterAdmin)
 	}
 	if gke.LookupService == nil || *gke.LookupService != false {
 		t.Errorf("LookupService = %v, want false (explicit override)", gke.LookupService)
 	}
-	if gke.ImagePrePuller == nil || *gke.ImagePrePuller != true {
-		t.Errorf("ImagePrePuller = %v, want true (explicit override)", gke.ImagePrePuller)
-	}
+	assertImagePrePuller(t, gke.ImagePrePuller, false, false, []v1alpha1.PrePulledImage{
+		{Name: "jdk21-environment"},
+		{Image: "ghcr.io/example/custom-environment:1.0"},
+	})
 	if got, want := gke.WebsiteStyling.DefaultTheme, "my-theme-data"; got != want {
 		t.Errorf("WebsiteStyling.DefaultTheme = %q, want %q", got, want)
 	}
@@ -220,9 +248,10 @@ func TestLoad_FullEKSConfig_RoundTripsAllFields(t *testing.T) {
 	if eks.LookupService == nil || *eks.LookupService != false {
 		t.Errorf("LookupService = %v, want false (explicit override)", eks.LookupService)
 	}
-	if eks.ImagePrePuller == nil || *eks.ImagePrePuller != true {
-		t.Errorf("ImagePrePuller = %v, want true (explicit override)", eks.ImagePrePuller)
-	}
+	assertImagePrePuller(t, eks.ImagePrePuller, false, false, []v1alpha1.PrePulledImage{
+		{Name: "jdk21-environment"},
+		{Image: "ghcr.io/example/custom-environment:1.0"},
+	})
 	if got, want := eks.WebsiteStyling.DefaultTheme, "my-theme-data"; got != want {
 		t.Errorf("WebsiteStyling.DefaultTheme = %q, want %q", got, want)
 	}
@@ -287,9 +316,10 @@ func TestLoad_FullInlineConfig_RoundTripsAllFields(t *testing.T) {
 	if inline.LookupService == nil || *inline.LookupService != false {
 		t.Errorf("LookupService = %v, want false (explicit override)", inline.LookupService)
 	}
-	if inline.ImagePrePuller == nil || *inline.ImagePrePuller != true {
-		t.Errorf("ImagePrePuller = %v, want true (explicit override)", inline.ImagePrePuller)
-	}
+	assertImagePrePuller(t, inline.ImagePrePuller, false, false, []v1alpha1.PrePulledImage{
+		{Name: "jdk21-environment"},
+		{Image: "ghcr.io/example/custom-environment:1.0"},
+	})
 	if got, want := inline.WebsiteStyling.DefaultTheme, "my-theme-data"; got != want {
 		t.Errorf("WebsiteStyling.DefaultTheme = %q, want %q", got, want)
 	}
@@ -313,10 +343,10 @@ func TestLoad_Errors(t *testing.T) {
 		file     string
 		contains string
 	}{
-		{"unknown-field",   "local-unknown-field.yaml",  "bogusField"},
-		{"bad-enum",        "local-bad-loglevel.yaml",   "logLevel"},
-		{"wrong-apiVersion","wrong-apiversion.yaml",     "unsupported apiVersion"},
-		{"unknown-kind",    "unknown-kind.yaml",         "unknown kind"},
+		{"unknown-field", "local-unknown-field.yaml", "bogusField"},
+		{"bad-enum", "local-bad-loglevel.yaml", "logLevel"},
+		{"wrong-apiVersion", "wrong-apiversion.yaml", "unsupported apiVersion"},
+		{"unknown-kind", "unknown-kind.yaml", "unknown kind"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -326,6 +356,213 @@ func TestLoad_Errors(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.contains) {
 				t.Errorf("error %q does not contain %q", err.Error(), tc.contains)
+			}
+		})
+	}
+}
+
+// narrowKindFixtures are a minimal valid file of each narrow kind, to which
+// a test appends the fields it exercises.
+var narrowKindFixtures = []string{"local-empty.yaml", "gke-minimal.yaml", "eks-minimal.yaml", "inline-minimal.yaml"}
+
+// withYAML returns the fixture's contents with extra appended.
+func withYAML(t *testing.T, fixture, extra string) []byte {
+	t.Helper()
+	base, err := os.ReadFile(filepath.Join("testdata", fixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return append(append(base, '\n'), extra...)
+}
+
+// A file holding the boolean form of imagePrePuller fails to load with an
+// error naming the object form to write in its place.
+func TestLoad_ImagePrePullerBooleanForm_NamesObjectForm(t *testing.T) {
+	for _, fixture := range narrowKindFixtures {
+		for _, value := range []string{"true", "false"} {
+			t.Run(fixture+"/"+value, func(t *testing.T) {
+				_, err := LoadBytes(withYAML(t, fixture, "imagePrePuller: "+value+"\n"), fixture)
+				if err == nil {
+					t.Fatal("LoadBytes: expected error, got nil")
+				}
+				for _, want := range []string{"imagePrePuller.enabled", "imagePrePuller: {enabled: " + value + "}"} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("error %q does not contain %q", err, want)
+					}
+				}
+				if strings.Contains(err.Error(), "Invalid type") {
+					t.Errorf("error %q still reports only the type mismatch", err)
+				}
+			})
+		}
+	}
+}
+
+// An imagePrePuller.images entry giving both or neither of name and image
+// fails to load, the error naming the entry and the rule it breaks.
+func TestLoad_ImagePrePullerEntryNotExactlyOne_Rejected(t *testing.T) {
+	cases := []struct {
+		name  string
+		entry string
+	}{
+		{"both", "{name: jdk21-environment, image: ghcr.io/example/custom:1.0}"},
+		{"neither", "{}"},
+	}
+	for _, fixture := range narrowKindFixtures {
+		for _, tc := range cases {
+			t.Run(fixture+"/"+tc.name, func(t *testing.T) {
+				extra := "imagePrePuller:\n  images:\n    - name: base-environment\n    - " + tc.entry + "\n"
+				_, err := LoadBytes(withYAML(t, fixture, extra), fixture)
+				if err == nil {
+					t.Fatal("LoadBytes: expected error, got nil")
+				}
+				want := "imagePrePuller.images.1: must set exactly one of name and image"
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+				for _, noise := range []string{"oneOf", "is required"} {
+					if strings.Contains(err.Error(), noise) {
+						t.Errorf("error %q still carries the schema's own report %q", err, noise)
+					}
+				}
+			})
+		}
+	}
+}
+
+// An imagePrePuller switched on, explicitly or by the kinds' default, with
+// includeDefaultImages false and no images fails to load. Switched off, or
+// with something to pull, the same fields load.
+func TestLoad_ImagePrePullerNothingToPull_Rejected(t *testing.T) {
+	cases := []struct {
+		name     string
+		block    string
+		rejected bool
+	}{
+		{"enabled by default", "{includeDefaultImages: false}", true},
+		{"enabled", "{enabled: true, includeDefaultImages: false}", true},
+		{"empty images", "{enabled: true, includeDefaultImages: false, images: []}", true},
+		{"switched off", "{enabled: false, includeDefaultImages: false}", false},
+		{"empty block", "{}", false},
+		{"an image listed", "{includeDefaultImages: false, images: [{name: jdk21-environment}]}", false},
+	}
+	for _, fixture := range narrowKindFixtures {
+		for _, tc := range cases {
+			t.Run(fixture+"/"+tc.name, func(t *testing.T) {
+				_, err := LoadBytes(withYAML(t, fixture, "imagePrePuller: "+tc.block+"\n"), fixture)
+				if !tc.rejected {
+					if err != nil {
+						t.Fatalf("LoadBytes: %v", err)
+					}
+					return
+				}
+				if err == nil {
+					t.Fatal("LoadBytes: expected error, got nil")
+				}
+				want := "imagePrePuller: with enabled true, its default, and includeDefaultImages false, images must list at least one entry"
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+				for _, noise := range []string{`"then"`, "is required", "at least 1 items"} {
+					if strings.Contains(err.Error(), noise) {
+						t.Errorf("error %q still carries the schema's own report %q", err, noise)
+					}
+				}
+			})
+		}
+	}
+}
+
+// withoutFields returns the fixture's contents with the named top-level
+// fields left out.
+func withoutFields(t *testing.T, fixture string, fields ...string) []byte {
+	t.Helper()
+	base, err := os.ReadFile(filepath.Join("testdata", fixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc yaml.MapSlice
+	if err := yaml.Unmarshal(base, &doc); err != nil {
+		t.Fatal(err)
+	}
+	var kept yaml.MapSlice
+	for _, item := range doc {
+		if !slices.Contains(fields, item.Key.(string)) {
+			kept = append(kept, item)
+		}
+	}
+	out, err := yaml.Marshal(kept)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// A file of a kind whose certificate source is required unless
+// externalTLSTermination is true fails to load without it, with one line
+// naming the source and the rule in place of the schema's own reports.
+func TestLoad_CertificateSourceMissing_NamesRule(t *testing.T) {
+	cases := []struct {
+		fixture string
+		source  string
+		want    string
+	}{
+		{"gke-minimal.yaml", "acme", "acme: required unless externalTLSTermination is true; it holds the ACME issuer settings for the wildcard certificate"},
+		{"eks-minimal.yaml", "acme", "acme: required unless externalTLSTermination is true; it holds the ACME issuer settings for the wildcard certificate"},
+		{"inline-minimal.yaml", "wildcardCertificateSecret", "wildcardCertificateSecret: required unless externalTLSTermination is true; it names the kubernetes.io/tls Secret in the operator namespace holding the wildcard certificate"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.fixture, func(t *testing.T) {
+			_, err := LoadBytes(withoutFields(t, tc.fixture, tc.source), tc.fixture)
+			if err == nil {
+				t.Fatal("LoadBytes: expected error, got nil")
+			}
+			want := tc.fixture + ": schema validation failed:\n  - " + tc.want
+			if err.Error() != want {
+				t.Errorf("error = %q, want %q", err, want)
+			}
+		})
+	}
+}
+
+// A file missing acme and failing for another reason as well reports both,
+// the acme line in place of the schema's own reports for it.
+func TestLoad_ACMEMissingWithAnotherError_ReportsBoth(t *testing.T) {
+	_, err := LoadBytes(withoutFields(t, "gke-minimal.yaml", "acme", "domain"), "gke-minimal.yaml")
+	if err == nil {
+		t.Fatal("LoadBytes: expected error, got nil")
+	}
+	for _, want := range []string{
+		"  - acme: required unless externalTLSTermination is true; it holds the ACME issuer settings for the wildcard certificate",
+		"  - (root): domain is required",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+	for _, noise := range []string{`"then"`, "allOf", "acme is required"} {
+		if strings.Contains(err.Error(), noise) {
+			t.Errorf("error %q still carries the schema's own report %q", err, noise)
+		}
+	}
+}
+
+// A file asserting externalTLSTermination loads without the certificate
+// source its kind otherwise requires.
+func TestLoad_ExternalTLSTerminationWithoutCertificateSource_Loads(t *testing.T) {
+	cases := []struct {
+		fixture string
+		source  string
+	}{
+		{"gke-minimal.yaml", "acme"},
+		{"eks-minimal.yaml", "acme"},
+		{"inline-minimal.yaml", "wildcardCertificateSecret"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.fixture, func(t *testing.T) {
+			data := append(withoutFields(t, tc.fixture, tc.source), "externalTLSTermination: true\n"...)
+			if _, err := LoadBytes(data, tc.fixture); err != nil {
+				t.Fatalf("LoadBytes: %v", err)
 			}
 		})
 	}

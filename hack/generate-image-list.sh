@@ -9,7 +9,7 @@
 # digest-pinned list"):
 #
 #   - the Educates platform images at the released version (operator,
-#     runtime components, pause-container, docker-registry, ...);
+#     runtime components, image-puller, docker-registry, ...);
 #   - the full session-manager image inventory (the `imageVersions`
 #     helper): the workshop base, the JDK and conda workshop
 #     environments, and the optional runtime images for the vcluster
@@ -61,11 +61,12 @@ REGISTRY_PREFIX="$REGISTRY_HOST/$REGISTRY_NAMESPACE"
 
 # Educates-built platform images that are NOT part of the session-manager
 # imageVersions inventory (the operator, the other components, and the
-# pause image). The inventory-resident Educates images — training-portal,
-# docker-registry, base-environment, jdk*, conda, ... — come from the
-# chart render below and are deduplicated against this list.
+# image pre-puller's helper). The inventory-resident Educates images,
+# such as training-portal, docker-registry, base-environment, jdk* and
+# conda, come from the chart render below and are deduplicated against
+# this list.
 PLATFORM_IMAGES="
-pause-container
+image-puller
 session-manager
 secrets-manager
 lookup-service

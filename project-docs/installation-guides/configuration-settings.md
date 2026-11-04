@@ -35,6 +35,8 @@ cluster:
   listenAddress: 127.0.0.1
 lookupService: true                  # default true
 clusterAdmin: true                   # default true
+imagePrePuller:
+  enabled: true                      # default true
 operator:
   logLevel: info
 ```
@@ -45,6 +47,12 @@ Key fields (all optional — an `apiVersion` + `kind` stub is a valid config):
 * `cluster.*` — kind cluster shape: `listenAddress`, API server overrides, pod/service subnets, host volume mounts, registry pull-through mirrors.
 * `resolver.*` — local DNS resolver settings (macOS `*.educates.test` style resolution).
 * `clusterAdmin`, `lookupService` — component toggles (both default `true`).
+* ``imagePrePuller``: the image pre-puller, which pulls the training portal
+  and workshop base environment images, and any further images you list, onto
+  every node ahead of time. It is on by default, as in the
+  ``EducatesGKEConfig``, ``EducatesEKSConfig`` and ``EducatesInlineConfig``
+  kinds, which take the same block. See
+  [pre-pulling workshop images](pre-pulling-workshop-images).
 * `secretPropagation.imagePullSecretNames` — locally cached pull secrets to propagate into the cluster.
 * `imageVersions` — per-image reference overrides.
 * `operator.image.*`, `operator.imagePullSecrets`, `operator.logLevel` — operator deployment settings. Image repository and tag default from the CLI binary's own version, so they normally stay unset.
@@ -69,7 +77,18 @@ acme:
   # server defaults to the Let's Encrypt production endpoint
 ```
 
-`gcp.project`, `domain` and `acme.email` are required. The component toggles (`lookupService`, `clusterAdmin`, ...) and `operator` block from `EducatesLocalConfig` are available here too. When TLS for the ingress domain is terminated outside the cluster (a cloud load balancer or proxy forwarding plain HTTP inward), set `externalTLSTermination: true` so generated portal and workshop URLs use `https` — see [secure HTTP connections](secure-http-connections). The scenario's other architecture choices are locked — to deviate, use `EducatesConfig`.
+``gcp.project``, ``domain`` and ``acme.email`` are required. The settings of
+``EducatesLocalConfig`` that are not about the local cluster are available here
+too: the ``lookupService`` and ``clusterAdmin`` component toggles, the
+``imagePrePuller`` block, which turns the image pre-puller on by default (see
+[pre-pulling workshop images](pre-pulling-workshop-images)),
+``websiteStyling``, ``secretPropagation``, ``imageVersions`` and the
+``operator`` block. When TLS for the ingress domain is terminated outside the
+cluster, by a cloud load balancer or a proxy forwarding plain HTTP inward, set
+``externalTLSTermination: true`` so generated portal and workshop URLs use
+``https``, as [secure HTTP connections](secure-http-connections) explains. The
+scenario's other architecture choices are locked: to deviate, use
+``EducatesConfig``.
 
 See [infrastructure providers](infrastructure-providers) for the Google Cloud IAM and DNS zone prerequisites.
 
@@ -92,7 +111,12 @@ acme:
   email: admin@example.com
 ```
 
-`aws.accountId`, `aws.region`, `aws.route53HostedZoneId`, `domain` and `acme.email` are required. As with the GKE kind, `externalTLSTermination: true` asserts `https` URLs when TLS is terminated at an external load balancer.
+``aws.accountId``, ``aws.region``, ``aws.route53HostedZoneId``, ``domain`` and
+``acme.email`` are required. As with the GKE kind, the settings of
+``EducatesLocalConfig`` that are not about the local cluster are available
+here too, the ``imagePrePuller`` block among them (see [pre-pulling workshop
+images](pre-pulling-workshop-images)), and ``externalTLSTermination: true``
+asserts ``https`` URLs when TLS is terminated at an external load balancer.
 
 (defining-configuration-for-ingress)=
 EducatesInlineConfig
@@ -116,6 +140,13 @@ externalTLSTermination: false                  # true when a proxy/LB terminates
 ```
 
 `domain`, `ingressClassName` and `wildcardCertificateSecret` are required. The referenced Secrets must exist in the operator's namespace before deployment. Educates components never receive the `caCertificateSecret` itself, only a copy of its `ca.crt`. To keep the Secrets in another namespace, use the `EducatesConfig` escape hatch, whose `inline.ingress.wildcardCertificateSecretRef` and `inline.ingress.caCertificateSecretRef` take an optional `namespace`. See [secure HTTP connections](secure-http-connections) for the certificate options across all scenarios.
+
+As with the GKE kind, the settings of ``EducatesLocalConfig`` that are not
+about the local cluster are available here too: the ``lookupService`` and
+``clusterAdmin`` component toggles, the ``imagePrePuller`` block, which turns
+the image pre-puller on by default (see [pre-pulling workshop
+images](pre-pulling-workshop-images)), ``websiteStyling``,
+``secretPropagation``, ``imageVersions`` and the ``operator`` block.
 
 Note that with `workshopEngine: None` there is no workshop-level security policy enforcement. See the [cluster requirements](cluster-requirements) discussion before serving untrusted users. When either engine is `Kyverno`, the operator checks that the Kyverno you installed serves the policy kinds Educates creates, and the installation does not become ready until it does.
 
@@ -250,10 +281,268 @@ Runtime behavior settings live on the `SessionManager` custom resource spec, rea
 * `network` — packet size (MTU) and blocked CIDR ranges for workshop sessions.
 * `images` — per-image overrides for runtime-spawned images.
 * `themes`/`defaultTheme` — Secret-sourced workshop themes.
-* `imagePrePuller` — pre-pull key images on cluster nodes.
+* ``imagePrePuller``: the image pre-puller, which pulls the training portal
+  and workshop base environment images, and any further images you list, onto
+  every node ahead of time. It is off unless ``enabled`` is ``true``. See
+  [pre-pulling workshop images](pre-pulling-workshop-images).
 * `nodeCATrust`, `remoteAccess`: node-level CA trust injection and cross-cluster CLI access. With `nodeCATrust.mode` at its default, `Auto`, the node CA injector is installed whenever the cluster publishes a CA, which includes every Managed mode install with a custom CA, every `StaticCertificate` install that names a CA trust Secret, and every Inline mode install that names a CA Secret, and also whenever `ingressOverrides.caCertificateSecretRef` is set. Nodes trust the CA the session manager uses: the override's `educates-session-manager-ingress-ca` when one is set, otherwise the cluster's `educates-ingress-ca`. With `Enabled`, the `SessionManager` reports `Ready` as `False` only when neither the cluster nor an override provides a CA. Set it to `Disabled` to keep the privileged node CA injector DaemonSet off.
 
 Use `kubectl explain sessionmanager.spec` for the full schema. A few spec blocks (`defaultAccessCredentials`, `registryMirrors`, and ConfigMap/URL-sourced themes) are reserved in the CRD but rejected as not yet supported in this release.
+
+(pre-pulling-workshop-images)=
+Pre-pulling workshop images
+---------------------------
+
+The first workshop session to start on a node waits for that node to pull the
+images the session runs, and workshop environment images are large. The image
+pre-puller removes that wait by pulling images onto every node ahead of time.
+It runs as the ``image-puller`` DaemonSet in the ``educates`` namespace,
+installed together with the session manager. By default it pulls two images,
+at the version installed: the training portal and the workshop base
+environment. You can add further images, by name or by full reference, and
+drop the default ones.
+
+The DaemonSet sets no tolerations, so it skips nodes that carry a taint, such
+as control plane nodes or a tainted workshop node pool. Image pull secrets
+configured for the installation are not copied into the ``educates``
+namespace, so an image from a registry that requires credentials is pulled
+only on nodes that hold credentials for that registry themselves.
+
+### Turning the pre-puller on and off
+
+Whether the pre-puller runs by default depends on how Educates is installed:
+
+* The ``EducatesLocalConfig``, ``EducatesGKEConfig``, ``EducatesEKSConfig``
+  and ``EducatesInlineConfig`` configuration kinds turn it on, by defaulting
+  ``imagePrePuller.enabled`` to ``true``.
+* A ``SessionManager`` custom resource you apply yourself leaves it off unless
+  ``spec.imagePrePuller.enabled`` is ``true``. ``EducatesConfig`` passes the
+  custom resource on as written, so it also leaves the pre-puller off unless
+  its ``sessionManager`` block sets ``imagePrePuller.enabled`` to ``true``.
+* The runtime chart installed without the operator, as
+  [Helm-based installation](helm-based-installation) describes, leaves it off
+  unless ``session-manager.imagePrePuller.enabled`` is ``true``.
+
+To turn the pre-puller off in one of the four configuration kinds, set
+``enabled`` to ``false``:
+
+```yaml
+imagePrePuller:
+  enabled: false
+```
+
+For the local configuration, the same change is a single command:
+
+```
+educates local config set imagePrePuller.enabled false
+```
+
+In ``EducatesConfig``, the pre-puller is turned on in the ``sessionManager``
+block:
+
+```yaml
+sessionManager:
+  imagePrePuller:
+    enabled: true
+```
+
+``enabled`` is the only switch. While it is ``false`` nothing is pulled,
+whatever the other fields say, so a list of images can stay in place for when
+you turn the pre-puller on again.
+
+In the configuration kinds, ``imagePrePuller`` is an object. A file that gives
+it as a boolean, such as ``imagePrePuller: false``, fails to load with an error
+that names the field to set instead:
+
+```
+imagePrePuller: takes an object, not a boolean; set imagePrePuller.enabled instead, writing "imagePrePuller: {enabled: false}" in place of "imagePrePuller: false"
+```
+
+A change takes effect when the configuration is applied again: by re-running
+``educates admin platform deploy`` with ``--config`` and the changed file, or
+with ``--local-config`` for the local configuration, or by re-applying the
+``SessionManager`` custom resource. Turning the pre-puller off removes the
+DaemonSet, but the images it pulled stay on the nodes until the kubelet's image
+garbage collection removes them. To see whether the pre-puller is running, and
+on how many nodes:
+
+```
+kubectl get daemonset image-puller -n educates
+```
+
+### Choosing the images to pre-pull
+
+The ``images`` field lists further images to pull. Each entry gives exactly
+one of ``name``, an image's short name in the session manager's image
+inventory, and ``image``, a full image reference:
+
+```yaml
+imagePrePuller:
+  images:
+    - name: jdk21-environment
+    - image: registry.example.com/workshops/custom-base:1.0
+```
+
+This is the block of the four configuration kinds. In a ``SessionManager``
+custom resource it is ``spec.imagePrePuller``, in ``EducatesConfig`` it is
+``sessionManager.imagePrePuller``, and in the runtime chart installed without
+the operator it is ``session-manager.imagePrePuller``. The fields, and what
+they mean, are the same in each.
+
+A ``name`` resolves to the same image reference the installation itself runs
+for that name, so the installation's image overrides and registry prefix apply
+to it, and it follows the installed version when you upgrade Educates. The
+inventory holds the training portal (``training-portal``), the workshop base
+environment (``base-environment``), the JDK and conda workshop environments
+(``jdk8-environment``, ``jdk11-environment``, ``jdk17-environment``,
+``jdk21-environment`` and ``conda-environment``), and the images the vcluster
+workshop application uses, such as ``loftsh-vcluster``, a
+``loftsh-kubernetes-v1.<minor>`` image for each Kubernetes version it supports,
+``vcluster-internal-contour`` and ``vcluster-internal-envoy``.
+
+An image override changes what the installation runs and what the pre-puller
+pulls together, the default images included. Overrides are the
+``imageVersions`` entries of the configuration kinds, the
+``spec.images.overrides`` entries of a ``SessionManager``
+(``sessionManager.images.overrides`` in ``EducatesConfig``), and the
+``session-manager.imageVersions`` value of the runtime chart. For example, to
+use a custom workshop base environment image, and so pre-pull it in place of
+the default one:
+
+```yaml
+imageVersions:
+  - name: base-environment
+    image: registry.example.com/workshops/custom-base-environment:1.0
+```
+
+An override whose name the inventory does not hold adds that name to it, so
+the name can then be pre-pulled. The names of some of the platform's own
+component images are the exception: an override with one of them sets that
+component's image instead, and the name is not added to the inventory. Which
+names those are depends on where the override is given:
+
+* In the ``imageVersions`` of the configuration kinds: ``secrets-manager`` and
+  ``lookup-service``, which the CLI sets on the ``SecretsManager`` and
+  ``LookupService`` custom resources, and ``session-manager``,
+  ``image-puller`` and ``node-ca-injector``.
+* In the ``spec.images.overrides`` of a ``SessionManager``, and so in
+  ``sessionManager.images.overrides`` in ``EducatesConfig``:
+  ``session-manager``, ``image-puller`` and ``node-ca-injector``. The images
+  of the secrets manager and the lookup service are set by the ``spec.image``
+  of their own custom resources.
+* In the ``session-manager.imageVersions`` value of the runtime chart
+  installed without the operator: none. Every entry is added to the
+  inventory, and each component's image is a chart value of its own, such as
+  ``session-manager.imagePrePuller.image`` for the pre-puller's helper.
+
+An ``image`` is used exactly as written: no override or registry prefix applies
+to it, and it stays the same when you upgrade Educates. Use it for an image the
+inventory does not hold, such as a custom workshop image. On an air-gapped or
+mirrored installation, give a reference that already points at your mirror.
+
+The pre-puller pulls the default images first, then each entry in the order
+listed, and an image already in the list, such as an entry that names a
+default image, is pulled once. Pulling the base environment first means the
+JDK and conda environments, which are built on it, then download only their own
+layers.
+
+To pull only the images you list, set ``includeDefaultImages`` to ``false``:
+
+```yaml
+imagePrePuller:
+  includeDefaultImages: false
+  images:
+    - name: jdk21-environment
+```
+
+Each image's pull policy follows from its tag. An image tagged ``latest``,
+``main``, ``master`` or ``develop``, or given with no tag, which pulls
+``latest``, is pulled with ``Always``, so the registry is checked for a newer
+image each time the pre-puller's pod starts on a node. An image with any other
+tag, or pinned by digest, is pulled with ``IfNotPresent``, so a node that
+already holds it does not pull it again.
+
+### Mistakes in the image list
+
+Two mistakes are rejected before anything is installed. An entry that gives
+both ``name`` and ``image``, or neither, is rejected with:
+
+```
+each imagePrePuller.images entry must set exactly one of name and image
+```
+
+A pre-puller with ``enabled`` set to ``true`` and ``includeDefaultImages`` set
+to ``false`` that lists no ``images``, which would pull nothing, is rejected
+with:
+
+```
+imagePrePuller with enabled true and includeDefaultImages false must list at least one entry in images
+```
+
+These are the messages of the ``SessionManager`` custom resource, reported
+when the resource is applied. The CLI reports the same mistakes when it loads
+one of the four configuration kinds, before it deploys anything, with lines
+such as:
+
+```
+imagePrePuller.images.0: must set exactly one of name and image
+imagePrePuller: with enabled true, its default, and includeDefaultImages false, images must list at least one entry
+```
+
+For ``EducatesConfig``, which the CLI does not check this way, they are
+reported when the ``SessionManager`` is applied. The values schema of the
+runtime chart rejects them when the chart is installed or upgraded.
+
+A ``name`` the inventory does not hold is found when the session manager is
+installed, and only while the pre-puller is enabled. The session manager's
+installation stays as it was, and the ``SessionManager`` reports ``Ready`` as
+``False``, with reason ``InstallFailed`` and a message that includes the
+error of the session manager's chart naming the entry, for example:
+
+```
+imagePrePuller.images[0]: the image inventory holds no image named "jdk22-environment"; give a name the inventory holds, or a full reference as image
+```
+
+To read the message:
+
+```
+kubectl get sessionmanager cluster \
+  -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
+```
+
+With the runtime chart installed without the operator, the same message fails
+the ``helm install`` or ``helm upgrade``.
+
+### The pre-puller's own image
+
+The pre-puller runs nothing from the images it pulls. Its pod runs a small
+helper of its own, ``image-puller``. A first init container copies the helper
+into a volume the pod shares, every pulled image is an init container that runs
+the helper from that volume and exits, and the helper keeps the pod running
+once every image has been pulled. An image without a shell or ``/bin/true``,
+such as a distroless or ``scratch`` image, is therefore pre-pulled like any
+other.
+
+The helper's image, ``educates-image-puller``, is pulled on every node the
+pre-puller runs on, in addition to the images it pre-pulls. It is in the image
+list published with every release for air-gapped installations, together with
+every image of the session manager's image inventory. See
+[air-gapped installation](airgapped-installation) for mirroring them.
+
+To use another helper image, for example a copy in your own registry, add an
+image override named ``image-puller``: an ``imageVersions`` entry in the
+configuration kinds, or a ``spec.images.overrides`` entry in a
+``SessionManager``. It takes a ``repository:tag`` reference, not a digest:
+
+```yaml
+imageVersions:
+  - name: image-puller
+    image: registry.example.com/educates/educates-image-puller:X.Y.Z
+```
+
+In the runtime chart installed without the operator, the helper's image is the
+``session-manager.imagePrePuller.image`` value, with ``repository``, ``tag``
+and ``pullPolicy`` fields.
 
 Updating settings
 -----------------

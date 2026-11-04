@@ -2,10 +2,14 @@ package config
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
 const v3KindValues = `
@@ -49,7 +53,7 @@ clusterSecurity:
 
 func TestMaybeMigrateV3_NoState_Noop(t *testing.T) {
 	dataHome := t.TempDir()
-	if err := MaybeMigrateV3(dataHome); err != nil {
+	if err := MaybeMigrateV3(dataHome, io.Discard); err != nil {
 		t.Fatalf("MaybeMigrateV3: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dataHome, "config.yaml")); err == nil {
@@ -62,7 +66,7 @@ func TestMaybeMigrateV3_ConfigYAMLPresent_Noop(t *testing.T) {
 	must(t, os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte("existing"), 0o644))
 	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte(v3KindValues), 0o644))
 
-	if err := MaybeMigrateV3(dataHome); err != nil {
+	if err := MaybeMigrateV3(dataHome, io.Discard); err != nil {
 		t.Fatalf("MaybeMigrateV3: %v", err)
 	}
 
@@ -79,7 +83,7 @@ func TestMaybeMigrateV3_KindProvider_Migrates(t *testing.T) {
 	dataHome := t.TempDir()
 	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte(v3KindValues), 0o644))
 
-	if err := MaybeMigrateV3(dataHome); err != nil {
+	if err := MaybeMigrateV3(dataHome, io.Discard); err != nil {
 		t.Fatalf("MaybeMigrateV3: %v", err)
 	}
 
@@ -131,7 +135,7 @@ func TestMaybeMigrateV3_EmptyProvider_Migrates(t *testing.T) {
 	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"),
 		[]byte("clusterIngress:\n  domain: workshop.test\n"), 0o644))
 
-	if err := MaybeMigrateV3(dataHome); err != nil {
+	if err := MaybeMigrateV3(dataHome, io.Discard); err != nil {
 		t.Fatalf("MaybeMigrateV3: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dataHome, "config.yaml")); err != nil {
@@ -144,7 +148,7 @@ func TestMaybeMigrateV3_GKEProvider_Refuses(t *testing.T) {
 	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"),
 		[]byte("clusterInfrastructure:\n  provider: gke\n"), 0o644))
 
-	err := MaybeMigrateV3(dataHome)
+	err := MaybeMigrateV3(dataHome, io.Discard)
 	if err == nil {
 		t.Fatal("expected refuse-with-clear-error for gke provider")
 	}
@@ -316,6 +320,319 @@ func TestEnsureOrInitLocalConfigFile_NonKindV3_ErrorsNoDefault(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(dataHome, "config.yaml")); statErr == nil {
 		t.Error("a default config.yaml must not be written over an unmigratable v3 install")
 	}
+}
+
+// migrateV3Values migrates a version 3 values.yaml holding values in a
+// temporary data home and loads the result. It returns the loaded
+// configuration, the written file and the migration's notice.
+func migrateV3Values(t *testing.T, values string) (*v1alpha1.EducatesLocalConfig, string, string) {
+	t.Helper()
+	dataHome := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte(values), 0o644))
+
+	var notice bytes.Buffer
+	if err := MaybeMigrateV3(dataHome, &notice); err != nil {
+		t.Fatalf("MaybeMigrateV3: %v", err)
+	}
+	cfgPath := filepath.Join(dataHome, "config.yaml")
+	written := string(readFile(t, cfgPath))
+	cfg, err := LoadLocal(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadLocal on migrated file: %v\n%s", err, written)
+	}
+	return cfg, written, notice.String()
+}
+
+func TestMaybeMigrateV3_NoImagePuller_LeavesImagePrePullerUnset(t *testing.T) {
+	cfg, written, notice := migrateV3Values(t, v3KindValues)
+
+	if strings.Contains(written, "imagePrePuller") {
+		t.Errorf("migrated file sets imagePrePuller, want it left to the defaults:\n%s", written)
+	}
+	if cfg.ImagePrePuller.Enabled == nil || !*cfg.ImagePrePuller.Enabled {
+		t.Errorf("ImagePrePuller.Enabled = %v, want the default true", cfg.ImagePrePuller.Enabled)
+	}
+	if strings.Contains(notice, "imagePuller") {
+		t.Errorf("notice mentions imagePuller for a file without one:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_ImagePullerDisabled_CarriesEnabled(t *testing.T) {
+	cfg, _, _ := migrateV3Values(t, "imagePuller:\n  enabled: false\n")
+
+	assertPrePuller(t, cfg, v1alpha1.ImagePrePullerConfig{Enabled: boolPtr(false)})
+}
+
+func TestMaybeMigrateV3_PrePullImagesWithBaseEnvironment_KeepsDefaultsAndAddsNames(t *testing.T) {
+	cfg, written, _ := migrateV3Values(t, `imagePuller:
+  prePullImages:
+    - jdk21-environment
+    - base-environment
+    - docker-in-docker
+`)
+
+	assertPrePuller(t, cfg, v1alpha1.ImagePrePullerConfig{
+		Enabled: boolPtr(true),
+		Images: []v1alpha1.PrePulledImage{
+			{Name: "jdk21-environment"},
+			{Name: "docker-in-docker"},
+		},
+	})
+	if strings.Contains(written, "includeDefaultImages") {
+		t.Errorf("migrated file sets includeDefaultImages, want the default kept:\n%s", written)
+	}
+}
+
+func TestMaybeMigrateV3_PrePullImagesUnset_KeepsDefaultsOnly(t *testing.T) {
+	cfg, _, _ := migrateV3Values(t, "imagePuller:\n  enabled: true\n")
+
+	assertPrePuller(t, cfg, v1alpha1.ImagePrePullerConfig{Enabled: boolPtr(true)})
+}
+
+func TestMaybeMigrateV3_PrePullImagesWithoutBaseEnvironment_ReproducesTheV3Set(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		values string
+		want   v1alpha1.ImagePrePullerConfig
+	}{
+		{
+			name: "names",
+			values: `imagePuller:
+  prePullImages:
+    - jdk21-environment
+    - docker-in-docker
+`,
+			want: v1alpha1.ImagePrePullerConfig{
+				Enabled:              boolPtr(true),
+				IncludeDefaultImages: boolPtr(false),
+				Images: []v1alpha1.PrePulledImage{
+					{Name: "training-portal"},
+					{Name: "jdk21-environment"},
+					{Name: "docker-in-docker"},
+				},
+			},
+		},
+		{
+			name:   "empty list",
+			values: "imagePuller:\n  prePullImages: []\n",
+			want: v1alpha1.ImagePrePullerConfig{
+				Enabled:              boolPtr(true),
+				IncludeDefaultImages: boolPtr(false),
+				Images:               []v1alpha1.PrePulledImage{{Name: "training-portal"}},
+			},
+		},
+		{
+			name:   "empty list while disabled",
+			values: "imagePuller:\n  enabled: false\n  prePullImages: []\n",
+			want: v1alpha1.ImagePrePullerConfig{
+				Enabled:              boolPtr(false),
+				IncludeDefaultImages: boolPtr(false),
+				Images:               []v1alpha1.PrePulledImage{{Name: "training-portal"}},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, _, _ := migrateV3Values(t, tc.values)
+			assertPrePuller(t, cfg, tc.want)
+		})
+	}
+}
+
+func TestMaybeMigrateV3_CustomPrePullName_KeepsItsImageVersionsEntry(t *testing.T) {
+	cfg, _, _ := migrateV3Values(t, `imageVersions:
+  - name: my-tools
+    image: ghcr.io/example/my-tools:1.0
+imagePuller:
+  prePullImages:
+    - base-environment
+    - my-tools
+`)
+
+	assertPrePuller(t, cfg, v1alpha1.ImagePrePullerConfig{
+		Enabled: boolPtr(true),
+		Images:  []v1alpha1.PrePulledImage{{Name: "my-tools"}},
+	})
+	want := []v1alpha1.ImageVersion{{Name: "my-tools", Image: "ghcr.io/example/my-tools:1.0"}}
+	if !reflect.DeepEqual(cfg.ImageVersions, want) {
+		t.Errorf("ImageVersions = %v, want %v", cfg.ImageVersions, want)
+	}
+}
+
+func TestMaybeMigrateV3_PauseContainerOverride_IsDroppedAndNoted(t *testing.T) {
+	cfg, _, notice := migrateV3Values(t, `imageVersions:
+  - name: pause-container
+    image: registry.example.com/educates-pause-container:3.8.1
+  - name: base-environment
+    image: registry.example.com/educates-base-environment:3.8.1
+`)
+
+	want := []v1alpha1.ImageVersion{{Name: "base-environment", Image: "registry.example.com/educates-base-environment:3.8.1"}}
+	if !reflect.DeepEqual(cfg.ImageVersions, want) {
+		t.Errorf("ImageVersions = %v, want %v", cfg.ImageVersions, want)
+	}
+	wantLine := "dropped imageVersions entry pause-container: the image pre-puller now runs its own image-puller helper, which a pause container image cannot replace\n"
+	if !strings.Contains(notice, wantLine) {
+		t.Errorf("notice missing %q in:\n%s", wantLine, notice)
+	}
+}
+
+func TestMaybeMigrateV3_PrePullNamesMissingFromV4Inventory_AreDroppedAndNoted(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		values   string
+		want     v1alpha1.ImagePrePullerConfig
+		wantLine string
+	}{
+		{
+			name: "default images kept",
+			values: `imagePuller:
+  prePullImages:
+    - base-environment
+    - loftsh-kubernetes-v1.31
+    - jdk21-environment
+    - session-manager
+`,
+			want: v1alpha1.ImagePrePullerConfig{
+				Enabled: boolPtr(true),
+				Images:  []v1alpha1.PrePulledImage{{Name: "jdk21-environment"}},
+			},
+			wantLine: "dropped imagePuller.prePullImages names the v4 image inventory does not hold: loftsh-kubernetes-v1.31, session-manager; to pull one, add its full reference to imagePrePuller.images as an image entry\n",
+		},
+		{
+			name: "every name dropped with the default images",
+			values: `imagePuller:
+  prePullImages:
+    - secrets-manager
+    - pause-container
+`,
+			want: v1alpha1.ImagePrePullerConfig{
+				Enabled:              boolPtr(true),
+				IncludeDefaultImages: boolPtr(false),
+				Images:               []v1alpha1.PrePulledImage{{Name: "training-portal"}},
+			},
+			wantLine: "dropped imagePuller.prePullImages names the v4 image inventory does not hold: secrets-manager, pause-container; to pull one, add its full reference to imagePrePuller.images as an image entry\n",
+		},
+		{
+			// An override adds its name to the inventory unless it sets
+			// an image of its own: the CLI passes lookup-service to its own
+			// custom resource, the operator routes node-ca-injector to a
+			// chart value of its own, and the pause-container override is
+			// dropped.
+			name: "names defined in imageVersions",
+			values: `imageVersions:
+  - name: loftsh-kubernetes-v1.32
+    image: ghcr.io/loft-sh/kubernetes:v1.32.1
+  - name: lookup-service
+    image: registry.example.com/educates-lookup-service:3.8.1
+  - name: node-ca-injector
+    image: registry.example.com/educates-node-ca-injector:3.8.1
+  - name: pause-container
+    image: registry.example.com/educates-pause-container:3.8.1
+imagePuller:
+  prePullImages:
+    - base-environment
+    - loftsh-kubernetes-v1.32
+    - lookup-service
+    - node-ca-injector
+    - pause-container
+`,
+			want: v1alpha1.ImagePrePullerConfig{
+				Enabled: boolPtr(true),
+				Images:  []v1alpha1.PrePulledImage{{Name: "loftsh-kubernetes-v1.32"}},
+			},
+			wantLine: "dropped imagePuller.prePullImages names the v4 image inventory does not hold: lookup-service, node-ca-injector, pause-container; to pull one, add its full reference to imagePrePuller.images as an image entry\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, _, notice := migrateV3Values(t, tc.values)
+			assertPrePuller(t, cfg, tc.want)
+			if !strings.Contains(notice, tc.wantLine) {
+				t.Errorf("notice missing %q in:\n%s", tc.wantLine, notice)
+			}
+		})
+	}
+}
+
+func TestMaybeMigrateV3_ImagePuller_NoticeSaysWhatWasCarriedOver(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		values   string
+		wantLine string
+	}{
+		{
+			name:     "switch",
+			values:   "imagePuller:\n  enabled: false\n",
+			wantLine: "carried imagePuller over to imagePrePuller: enabled: false\n",
+		},
+		{
+			name: "default images kept",
+			values: `imagePuller:
+  enabled: true
+  prePullImages:
+    - base-environment
+    - jdk21-environment
+    - docker-in-docker
+`,
+			wantLine: "carried imagePuller over to imagePrePuller: enabled: true, images: jdk21-environment, docker-in-docker\n",
+		},
+		{
+			name: "default images dropped",
+			values: `imagePuller:
+  prePullImages:
+    - jdk21-environment
+`,
+			wantLine: "carried imagePuller over to imagePrePuller: includeDefaultImages: false, images: training-portal, jdk21-environment\n",
+		},
+		{
+			name: "same as the defaults",
+			values: `imagePuller:
+  prePullImages:
+    - base-environment
+`,
+			wantLine: "carried imagePuller over: it matches the imagePrePuller defaults, so imagePrePuller is left unset\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, notice := migrateV3Values(t, tc.values)
+			if !strings.Contains(notice, tc.wantLine) {
+				t.Errorf("notice missing %q in:\n%s", tc.wantLine, notice)
+			}
+		})
+	}
+}
+
+// assertPrePuller compares the loaded pre-puller block with want.
+func assertPrePuller(t *testing.T, cfg *v1alpha1.EducatesLocalConfig, want v1alpha1.ImagePrePullerConfig) {
+	t.Helper()
+	if !reflect.DeepEqual(cfg.ImagePrePuller, want) {
+		t.Errorf("ImagePrePuller = %s, want %s", describePrePuller(cfg.ImagePrePuller), describePrePuller(want))
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+// describePrePuller renders a pre-puller block for failure messages.
+func describePrePuller(c v1alpha1.ImagePrePullerConfig) string {
+	flag := func(p *bool) string {
+		if p == nil {
+			return "unset"
+		}
+		if *p {
+			return "true"
+		}
+		return "false"
+	}
+	entries := make([]string, 0, len(c.Images))
+	for _, e := range c.Images {
+		if e.Name != "" {
+			entries = append(entries, "name "+e.Name)
+		} else {
+			entries = append(entries, "image "+e.Image)
+		}
+	}
+	return "{enabled: " + flag(c.Enabled) +
+		", includeDefaultImages: " + flag(c.IncludeDefaultImages) +
+		", images: [" + strings.Join(entries, ", ") + "]}"
 }
 
 func must(t *testing.T, err error) {

@@ -84,7 +84,7 @@ endif
 # =============================================================================
 
 CORE_IMAGES = session-manager training-portal base-environment \
-  docker-registry pause-container secrets-manager tunnel-manager \
+  docker-registry image-puller secrets-manager tunnel-manager \
   image-cache assets-server lookup-service node-ca-injector
 
 WORKSHOP_IMAGES = jdk8-environment jdk11-environment jdk17-environment \
@@ -260,7 +260,7 @@ ci-operator: package-local-charts ## CI parity for the operator (installer-opera
 	cd installer/operator && go build ./...
 	$(MAKE) -C installer/operator manifests
 	$(MAKE) generate-installer-rbac
-	@git diff --exit-code -- installer/charts/educates-installer/crds installer/charts/educates-installer/templates/rbac \
+	@git diff --exit-code -- installer/charts/educates-installer/crds installer/charts/educates-installer/templates/rbac installer/operator/internal/crds/files \
 		|| { echo "ERROR: generated CRDs/RBAC drifted. Run 'make -C installer/operator manifests && make generate-installer-rbac' and commit."; exit 1; }
 	$(MAKE) -C installer/operator generate
 	@git diff --exit-code -- installer/operator/api \

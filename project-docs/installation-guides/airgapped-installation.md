@@ -6,9 +6,20 @@ Educates can be installed on clusters without internet access, or against an int
 What a release provides
 -----------------------
 
-Each GitHub release attaches `educates-images-<version>.txt`: one fully qualified, digest-pinned image reference per line, covering everything the platform needs — the Educates platform images at the released version (including the operator and the workshop `base-environment` image) and the upstream cluster-service images (cert-manager, Contour, external-dns, Kyverno) the operator installs in Managed mode.
+Each GitHub release attaches ``educates-images-<version>.txt``: one fully
+qualified, digest-pinned image reference per line, covering everything an
+installation can need. It holds the Educates platform images at the released
+version, including the operator and the image pre-puller's helper
+``educates-image-puller``; every image of the session manager's image
+inventory, which includes the workshop base environment, the JDK and conda
+workshop environments and the images the vcluster workshop application uses;
+and the upstream cluster-service images (cert-manager, Contour, external-dns,
+Kyverno) the operator installs in Managed mode.
 
-Workshop environment images beyond `base-environment` (the JDK and conda environments) are not in the list as they add many gigabytes; append the ones you need, at the same version, before mirroring.
+The list is complete on purpose, although most installations use only some of
+these images and the JDK and conda environments add several gigabytes each.
+When mirroring, delete the entries you do not use rather than guessing which
+ones might be missing.
 
 The Helm charts are attached to the release as tarballs (`educates-installer-<version>.tgz`, `educates-training-platform-<version>.tgz`) for transport, alongside the CLI binaries.
 

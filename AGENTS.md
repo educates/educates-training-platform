@@ -246,8 +246,10 @@ The installer has three layers:
 ### Go workspace
 
 `go.work` covers `client-programs/` and `node-ca-injector/`. Other Go
-services (`assets-server/`, `tunnel-manager/`) have their own `go.mod` and
-are built only via Docker.
+services (`assets-server/`, `image-puller/`, `tunnel-manager/`) have their
+own `go.mod` and are built only via Docker. CI runs no tests outside the
+workspace, so `image-puller/`'s Dockerfile runs its tests in the build
+stage.
 
 ### The four CRDs
 

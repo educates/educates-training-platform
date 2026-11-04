@@ -592,6 +592,41 @@ var _ = Describe("SessionManager reconciler", func() {
 		Expect(prePuller["enabled"]).To(BeTrue())
 	})
 
+	It("reports an image pre-puller name the chart's inventory lacks as InstallFailed", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+
+		smgr := &platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec: platformv1alpha1.SessionManagerSpec{
+				ImagePrePuller: &platformv1alpha1.ImagePrePuller{
+					Enabled: true,
+					Images: []platformv1alpha1.PrePulledImage{
+						{Name: "jdk22-environment"},
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, smgr)).To(Succeed())
+
+		Eventually(func() string {
+			return smgrConditionReason(conditionReady)
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal("InstallFailed"))
+
+		got := &platformv1alpha1.SessionManager{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, got)).To(Succeed())
+		cond := meta.FindStatusCondition(got.Status.Conditions, conditionReady)
+		Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(cond.Message).To(ContainSubstring("imagePrePuller.images[0]"))
+		Expect(cond.Message).To(ContainSubstring(`"jdk22-environment"`))
+
+		// The failed render stores no release.
+		hc, err := helmFac.For(platformNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		_, statusErr := hc.Status(sessionManagerReleaseName)
+		Expect(statusErr).To(MatchError(helm.ErrReleaseNotFound))
+	})
+
 	It("threads the ingressOverrides protocol assertion into chart values", func() {
 		makeReadyClusterConfig()
 		makeReadySecretsManager()

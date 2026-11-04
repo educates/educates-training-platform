@@ -153,8 +153,8 @@ func validateAgainstSchema(jsonData, schemaBytes []byte, source string) error {
 		return nil
 	}
 	var msgs []string
-	for _, e := range result.Errors() {
-		msgs = append(msgs, fmt.Sprintf("  - %s: %s", e.Field(), e.Description()))
+	for _, line := range SchemaErrorLines(result.Errors()) {
+		msgs = append(msgs, "  - "+line)
 	}
 	return fmt.Errorf("%s: schema validation failed:\n%s", source, strings.Join(msgs, "\n"))
 }

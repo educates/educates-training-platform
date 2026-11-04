@@ -33,9 +33,9 @@ const (
 // key is the camelCase top-level field in EducatesConfig; $defs name is the
 // JSON schema definition handle.
 var crdSources = []struct {
-	file     string
-	envKey   string
-	defName  string
+	file    string
+	envKey  string
+	defName string
 }{
 	{"config.educates.dev_educatesclusterconfigs.yaml", "educatesClusterConfig", "EducatesClusterConfigSpec"},
 	{"platform.educates.dev_secretsmanagers.yaml", "secretsManager", "SecretsManagerSpec"},

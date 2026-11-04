@@ -28,9 +28,9 @@ import (
 // (ingress.protocol http).
 //
 // Static field defaults (clusterAdmin true, lookupService true,
-// imagePrePuller false, operator.logLevel info, cluster.listenAddress
-// 127.0.0.1) have already been applied by EducatesLocalConfig.WithDefaults()
-// at load time.
+// imagePrePuller.enabled true, operator.logLevel info,
+// cluster.listenAddress 127.0.0.1) have already been applied by
+// EducatesLocalConfig.WithDefaults() at load time.
 //
 // Environment-dependent defaults are NOT applied here:
 //   - ingress.domain stays empty unless the caller set it (host-IP nip.io
@@ -160,7 +160,7 @@ func localSecretsManagerSpec(cfg *v1alpha1.EducatesLocalConfig) map[string]inter
 	if cfg.Operator.LogLevel != "" {
 		spec["logLevel"] = cfg.Operator.LogLevel
 	}
-	if ref := componentImageRef(cfg.ImageVersions, "secrets-manager"); ref != nil {
+	if ref := componentImageRef(cfg.ImageVersions, v1alpha1.SecretsManagerImageName); ref != nil {
 		spec["image"] = ref
 	}
 	return spec
@@ -178,7 +178,7 @@ func localLookupServiceSpec(cfg *v1alpha1.EducatesLocalConfig) map[string]interf
 	if cfg.Operator.LogLevel != "" {
 		spec["logLevel"] = cfg.Operator.LogLevel
 	}
-	if ref := componentImageRef(cfg.ImageVersions, "lookup-service"); ref != nil {
+	if ref := componentImageRef(cfg.ImageVersions, v1alpha1.LookupServiceImageName); ref != nil {
 		spec["image"] = ref
 	}
 	return spec
@@ -219,11 +219,7 @@ func localSessionManagerSpec(cfg *v1alpha1.EducatesLocalConfig) map[string]inter
 	if len(cfg.WebsiteStyling.ThemeDataRefs) > 0 {
 		spec["themes"] = themesFromDataRefs(cfg.WebsiteStyling.ThemeDataRefs)
 	}
-	if cfg.ImagePrePuller != nil {
-		spec["imagePrePuller"] = map[string]interface{}{
-			"enabled": *cfg.ImagePrePuller,
-		}
-	}
+	applyImagePrePuller(spec, cfg.ImagePrePuller)
 	applySessionManagerImageOverrides(spec, cfg.ImageVersions)
 	return spec
 }

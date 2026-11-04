@@ -97,7 +97,7 @@ func scenarioSecretsManagerSpec(logLevel string, ivs []v1alpha1.ImageVersion) ma
 	if logLevel != "" {
 		spec["logLevel"] = logLevel
 	}
-	if ref := componentImageRef(ivs, "secrets-manager"); ref != nil {
+	if ref := componentImageRef(ivs, v1alpha1.SecretsManagerImageName); ref != nil {
 		spec["image"] = ref
 	}
 	return spec
@@ -113,7 +113,7 @@ func scenarioLookupServiceSpec(logLevel string, ivs []v1alpha1.ImageVersion) map
 	if logLevel != "" {
 		spec["logLevel"] = logLevel
 	}
-	if ref := componentImageRef(ivs, "lookup-service"); ref != nil {
+	if ref := componentImageRef(ivs, v1alpha1.LookupServiceImageName); ref != nil {
 		spec["image"] = ref
 	}
 	return spec
@@ -127,7 +127,7 @@ func scenarioLookupServiceSpec(logLevel string, ivs []v1alpha1.ImageVersion) map
 // protocol (published in status and consumed by every component), not by
 // a SessionManager override, so external TLS termination needs nothing
 // here.
-func scenarioSessionManagerSpec(logLevel string, ws v1alpha1.LocalWebsiteStylingConfig, ipp *bool, imageVersions []v1alpha1.ImageVersion) map[string]interface{} {
+func scenarioSessionManagerSpec(logLevel string, ws v1alpha1.LocalWebsiteStylingConfig, ipp v1alpha1.ImagePrePullerConfig, imageVersions []v1alpha1.ImageVersion) map[string]interface{} {
 	spec := map[string]interface{}{}
 	if logLevel != "" {
 		spec["logLevel"] = logLevel
@@ -138,9 +138,7 @@ func scenarioSessionManagerSpec(logLevel string, ws v1alpha1.LocalWebsiteStyling
 	if len(ws.ThemeDataRefs) > 0 {
 		spec["themes"] = themesFromDataRefs(ws.ThemeDataRefs)
 	}
-	if ipp != nil {
-		spec["imagePrePuller"] = map[string]interface{}{"enabled": *ipp}
-	}
+	applyImagePrePuller(spec, ipp)
 	applySessionManagerImageOverrides(spec, imageVersions)
 	return spec
 }

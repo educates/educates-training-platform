@@ -175,10 +175,10 @@ func splitImageRef(ref string) (repository, tag string) {
 
 // componentImageRef returns the ImageRef-shaped {repository, tag} map
 // for the named imageVersions entry, or nil when absent. Used to route
-// the "secrets-manager" and "lookup-service" entries onto their own
-// CRs' spec.image — those two components are not part of the
-// SessionManager chart's image inventory, so an overrides entry there
-// would be silently ignored.
+// the entries named v1alpha1.SecretsManagerImageName and
+// v1alpha1.LookupServiceImageName onto their own CRs' spec.image: those
+// two components are not part of the SessionManager chart's image
+// inventory, so an overrides entry there would be silently ignored.
 func componentImageRef(ivs []v1alpha1.ImageVersion, name string) map[string]interface{} {
 	for _, iv := range ivs {
 		if iv.Name == name {
@@ -195,13 +195,44 @@ func componentImageRef(ivs []v1alpha1.ImageVersion, name string) map[string]inte
 func applySessionManagerImageOverrides(spec map[string]interface{}, ivs []v1alpha1.ImageVersion) {
 	overrides := make([]interface{}, 0, len(ivs))
 	for _, iv := range ivs {
-		if iv.Name == "secrets-manager" || iv.Name == "lookup-service" {
+		if iv.RoutesToComponentResource() {
 			continue
 		}
 		overrides = append(overrides, map[string]interface{}{"name": iv.Name, "image": iv.Image})
 	}
 	if len(overrides) > 0 {
 		spec["images"] = map[string]interface{}{"overrides": overrides}
+	}
+}
+
+// applyImagePrePuller sets spec.imagePrePuller from a kind's
+// imagePrePuller block as written: each field the block sets, and only
+// those, so the custom resource's defaults apply to the rest. A block
+// setting nothing leaves spec.imagePrePuller out.
+func applyImagePrePuller(spec map[string]interface{}, ipp v1alpha1.ImagePrePullerConfig) {
+	out := map[string]interface{}{}
+	if ipp.Enabled != nil {
+		out["enabled"] = *ipp.Enabled
+	}
+	if ipp.IncludeDefaultImages != nil {
+		out["includeDefaultImages"] = *ipp.IncludeDefaultImages
+	}
+	if len(ipp.Images) > 0 {
+		images := make([]interface{}, 0, len(ipp.Images))
+		for _, img := range ipp.Images {
+			entry := map[string]interface{}{}
+			if img.Name != "" {
+				entry["name"] = img.Name
+			}
+			if img.Image != "" {
+				entry["image"] = img.Image
+			}
+			images = append(images, entry)
+		}
+		out["images"] = images
+	}
+	if len(out) > 0 {
+		spec["imagePrePuller"] = out
 	}
 }
 

@@ -1139,10 +1139,36 @@
           "type": "string"
         },
         "imagePrePuller": {
-          "description": "ImagePrePuller configures the optional DaemonSet that pre-pulls workshop\nimages onto every node ahead of time, so session startup isn't blocked on\nimage pulls.",
+          "description": "ImagePrePuller configures the optional DaemonSet that pre-pulls images\nonto every node ahead of time, so the first workshop session on a node\ndoes not wait for the images it runs to be pulled. The images are pulled\nin order: the default images when included, then each entry of images\nas listed, an image already in the list being pulled once.",
           "properties": {
             "enabled": {
               "default": false,
+              "description": "enabled switches the image pre-puller on. It is the only switch:\nwhile it is off nothing is pulled, whatever the other fields say.",
+              "type": "boolean"
+            },
+            "images": {
+              "description": "images lists further images to pull, after the default images and\nin the order listed.",
+              "items": {
+                "description": "PrePulledImage is one image the image pre-puller pulls, given by\nexactly one of name and image.",
+                "properties": {
+                  "image": {
+                    "description": "image is a full image reference, pulled exactly as written.",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "name is an image's short name in the Educates image inventory, such\nas \"jdk21-environment\". It resolves to the reference the\ninstallation runs, with spec.images.overrides and the image registry\nprefix applied. A name the inventory does not hold fails the\ninstall, which the Ready condition reports with reason\nInstallFailed.",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "includeDefaultImages": {
+              "default": true,
+              "description": "includeDefaultImages pulls the default images, the training portal\nand the workshop base environment, ahead of the entries in images.",
               "type": "boolean"
             }
           },
@@ -1153,10 +1179,10 @@
           "properties": {
             "overrides": {
               "items": {
-                "description": "ImageOverride entries replace one chart-default image by short name.\nMirrors the v3 imageVersions shape: any image the chart's default\ninventory exposes by name can be overridden here (e.g.,\n\"training-portal\", \"base-environment\", \"jdk17-environment\"). Three\nnames are special-cased by the reconciler because they live outside\nthat inventory: \"session-manager\" (the chart-pod image),\n\"pause-container\" (the pre-puller pause image) and\n\"node-ca-injector\" (its own subchart) — they route to the dedicated\nchart values that control those images.",
+                "description": "ImageOverride entries replace one chart-default image by short name.\nMirrors the v3 imageVersions shape: any image the chart's default\ninventory exposes by name can be overridden here (e.g.,\n\"training-portal\", \"base-environment\", \"jdk17-environment\"). Three\nnames are special-cased by the reconciler because they live outside\nthat inventory: \"session-manager\" (the chart-pod image),\n\"image-puller\" (the image pre-puller's own helper image) and\n\"node-ca-injector\" (its own subchart) — they route to the dedicated\nchart values that control those images.",
                 "properties": {
                   "image": {
-                    "description": "image is the full reference including tag. Digest-pinned\nreferences are not supported for the special-cased names\n(\"session-manager\", \"pause-container\", \"node-ca-injector\"),\nwhose chart values are repository+tag shaped.",
+                    "description": "image is the full reference including tag. Digest-pinned\nreferences are not supported for the special-cased names\n(\"session-manager\", \"image-puller\", \"node-ca-injector\"),\nwhose chart values are repository+tag shaped.",
                     "type": "string"
                   },
                   "name": {

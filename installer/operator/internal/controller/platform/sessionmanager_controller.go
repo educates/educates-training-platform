@@ -364,10 +364,10 @@ func (r *SessionManagerReconciler) installOrUpgradeSM(ctx context.Context, obj *
 // status into the session-manager subchart's values shape.
 // operatorNamespace locates the key-free copy of a CA override.
 //
-// Scoped to fields the v1alpha1 CRD exposes today. The richer surface
-// the subchart accepts (themes content, image-cache wiring, registry
-// mirrors, default access credentials, image puller daemonset) is
-// captured as follow-ups so the gaps don't get lost.
+// Maps only the fields the v1alpha1 CRD exposes. A chart value no CRD
+// field maps to, such as the inline website styling content, the
+// training portal credentials or the Docker daemon's proxy cache, keeps
+// the chart's default.
 //
 // Stable across `helm upgrade`: the session-manager chart's own
 // `resolvedTrainingPortal` helper (see installer/charts/.../charts/
@@ -385,20 +385,13 @@ func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *confi
 	applySMAnalyticsValues(values, obj)
 	applySMStylingValues(values, obj)
 
-	// imagePrePuller — toggle only. When enabled with no explicit
-	// image list, the chart derives the v3-equivalent default
-	// (training-portal + base-environment) from its imageVersions
-	// inventory, so relocation and per-name overrides are honoured.
-	// Per-image control stays a chart-level concern; the CRD exposes
-	// just the switch.
 	if obj.Spec.ImagePrePuller != nil {
-		imagePrePullerValues(values)["enabled"] = obj.Spec.ImagePrePuller.Enabled
+		applySMImagePrePullerValues(imagePrePullerValues(values), obj.Spec.ImagePrePuller)
 	}
 
 	// DefaultAccessCredentials and RegistryMirrors are reserved in the
 	// CRD; validateSessionManagerSpec rejects them as "not yet
-	// supported in v1alpha1" until the chart grows their values. See
-	// follow-ups.
+	// supported in v1alpha1", since the chart has no values for them.
 
 	// logLevel doesn't have a typed top-level chart value; the runtime
 	// reads it from the rendered operator-config Secret. Route through
@@ -453,9 +446,9 @@ func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionMana
 	// imageVersions — per-image overrides from CR spec. Three names
 	// are not part of the chart's imageVersions inventory and are
 	// routed to the dedicated chart values that actually control
-	// them: the session-manager chart-pod image (`image`), the pause
-	// container (`imagePrePuller.pauseImage`), and node-ca-injector
-	// (its own subchart's `image`, handled in
+	// them: the session-manager chart-pod image (`image`), the image
+	// pre-puller's helper image-puller (`imagePrePuller.image`), and
+	// node-ca-injector (its own subchart's `image`, handled in
 	// renderNodeCAInjectorValues). Everything else flows through the
 	// inventory and merges by name on the chart side.
 	if obj.Spec.Images != nil && len(obj.Spec.Images.Overrides) > 0 {
@@ -468,9 +461,9 @@ func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionMana
 					"repository": repo,
 					"tag":        tag,
 				}
-			case "pause-container":
+			case "image-puller":
 				repo, tag := splitImageRef(o.Image)
-				imagePrePullerValues(values)["pauseImage"] = map[string]any{
+				imagePrePullerValues(values)["image"] = map[string]any{
 					"repository": repo,
 					"tag":        tag,
 				}
@@ -490,9 +483,35 @@ func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionMana
 	}
 }
 
+// applySMImagePrePullerValues maps the image pre-puller's fields onto the
+// chart's imagePrePuller block unchanged. Entries keep their short names:
+// the chart resolves them through its image inventory, and fails the
+// render on a name it does not hold (ADR 0008), so the operator never
+// computes an image reference.
+func applySMImagePrePullerValues(prePuller map[string]any, spec *platformv1alpha1.ImagePrePuller) {
+	prePuller["enabled"] = spec.Enabled
+	if spec.IncludeDefaultImages != nil {
+		prePuller["includeDefaultImages"] = *spec.IncludeDefaultImages
+	}
+	if len(spec.Images) > 0 {
+		entries := make([]any, 0, len(spec.Images))
+		for _, e := range spec.Images {
+			entry := map[string]any{}
+			if e.Name != "" {
+				entry["name"] = e.Name
+			}
+			if e.Image != "" {
+				entry["image"] = e.Image
+			}
+			entries = append(entries, entry)
+		}
+		prePuller["images"] = entries
+	}
+}
+
 // imagePrePullerValues returns the imagePrePuller map inside values,
-// creating it when absent, so the pause-image override router and the
-// enabled-toggle writer compose instead of clobbering each other.
+// creating it when absent, so the image-puller override router and
+// applySMImagePrePullerValues compose instead of clobbering each other.
 func imagePrePullerValues(values map[string]any) map[string]any {
 	if m, ok := values["imagePrePuller"].(map[string]any); ok {
 		return m

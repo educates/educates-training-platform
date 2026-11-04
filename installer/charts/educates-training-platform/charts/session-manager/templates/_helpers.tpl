@@ -41,8 +41,8 @@ content placeholder resolution.
 
 {{/*
 Resolve the effective imageRegistry for chart-rendered refs (chart pod
-image, pause image, Educates-published entries in the imageVersions
-helper). Layered resolution:
+image, image pre-puller helper image, Educates-published entries in the
+imageVersions helper). Layered resolution:
   1. `.development.imageRegistry` (subchart-local) and
      `.global.development.imageRegistry` (umbrella global), deep-merged
      with global winning.
@@ -79,9 +79,10 @@ Compose the registry+namespace prefix from the resolved imageRegistry.
 Two forms:
   host + namespace -> "{host}/{namespace}"
   host alone       -> "{host}"
-Used as the default prefix for the chart-pod image, the pause image, and the
-Educates-published entries in the `imageVersions` helper. A user that points
-imageRegistry at a fork or a local registry redirects all three at once.
+Used as the default prefix for the chart-pod image, the image pre-puller's
+helper image, and the Educates-published entries in the `imageVersions`
+helper. A user that points imageRegistry at a fork or a local registry
+redirects all three at once.
 */}}
 {{- define "session-manager.imageRegistryPrefix" -}}
 {{- $ir := include "session-manager.resolvedImageRegistry" . | fromYaml -}}
@@ -139,46 +140,67 @@ uses the same mount path.
 
 {{/*
 Image references the image-puller DaemonSet pre-pulls, as a YAML array.
-An explicit imagePrePuller.images wins verbatim. When empty, default to
-the v3-equivalent set — training-portal + base-environment — resolved
-through the imageVersions inventory so registry relocation
-(development.imageRegistry) and per-name imageVersions overrides are
-honoured. Mirrors v3's image-puller DaemonSet, which always pre-pulled
-training-portal plus a prePullImages list defaulting to
-["base-environment"].
+The default images, training-portal and base-environment, come first
+when imagePrePuller.includeDefaultImages is on, then each
+imagePrePuller.images entry as listed. A `name` entry, like the
+defaults, resolves through the merged imageVersions inventory, so
+registry relocation (development.imageRegistry) and per-name
+imageVersions overrides apply; a name the inventory does not hold fails
+the render, naming the entry. An `image` entry is taken as written. A
+reference already in the list is dropped, keeping the first.
+
+Only the DaemonSet, rendered while imagePrePuller.enabled is on, calls
+this helper, so a list kept while the pre-puller is off is not checked.
 */}}
 {{- define "session-manager.prePullImages" -}}
-{{- if .Values.imagePrePuller.images -}}
-{{ toYaml .Values.imagePrePuller.images }}
+{{- $inventory := dict -}}
+{{- range include "session-manager.imageVersions" . | fromYamlArray -}}
+{{- $_ := set $inventory .name .image -}}
+{{- end -}}
+{{- $resolved := list -}}
+{{- if .Values.imagePrePuller.includeDefaultImages -}}
+{{- $resolved = list (index $inventory "training-portal") (index $inventory "base-environment") -}}
+{{- end -}}
+{{- range $i, $entry := default list .Values.imagePrePuller.images -}}
+{{- if $entry.image -}}
+{{- $resolved = append $resolved $entry.image -}}
+{{- else if hasKey $inventory $entry.name -}}
+{{- $resolved = append $resolved (index $inventory $entry.name) -}}
 {{- else -}}
-{{- $inventory := include "session-manager.imageVersions" . | fromYamlArray -}}
-{{- $defaults := list -}}
-{{- range $inventory -}}
-{{- if or (eq .name "training-portal") (eq .name "base-environment") -}}
-{{- $defaults = append $defaults .image -}}
+{{- fail (printf "imagePrePuller.images[%d]: the image inventory holds no image named %q; give a name the inventory holds, or a full reference as image" $i $entry.name) -}}
 {{- end -}}
 {{- end -}}
-{{ toYaml $defaults }}
+{{- $images := list -}}
+{{- range $resolved -}}
+{{- if not (has . $images) -}}
+{{- $images = append $images . -}}
+{{- end -}}
+{{- end -}}
+{{ toYaml $images }}
+{{- end -}}
+
+{{/*
+The image of the image pre-puller's own helper, image-puller, which the
+image-puller DaemonSet runs in place of anything from the images it
+pulls.
+*/}}
+{{- define "session-manager.imagePuller.image.repository" -}}
+{{- if .Values.imagePrePuller.image.repository -}}
+{{ .Values.imagePrePuller.image.repository }}
+{{- else -}}
+{{ include "session-manager.imageRegistryPrefix" . }}/educates-image-puller
 {{- end -}}
 {{- end -}}
 
-{{- define "session-manager.pause.image.repository" -}}
-{{- if .Values.imagePrePuller.pauseImage.repository -}}
-{{ .Values.imagePrePuller.pauseImage.repository }}
-{{- else -}}
-{{ include "session-manager.imageRegistryPrefix" . }}/educates-pause-container
-{{- end -}}
+{{- define "session-manager.imagePuller.image.tag" -}}
+{{- default .Chart.AppVersion .Values.imagePrePuller.image.tag -}}
 {{- end -}}
 
-{{- define "session-manager.pause.image.tag" -}}
-{{- default .Chart.AppVersion .Values.imagePrePuller.pauseImage.tag -}}
-{{- end -}}
-
-{{- define "session-manager.pause.image.pullPolicy" -}}
-{{- if .Values.imagePrePuller.pauseImage.pullPolicy -}}
-{{ .Values.imagePrePuller.pauseImage.pullPolicy }}
+{{- define "session-manager.imagePuller.image.pullPolicy" -}}
+{{- if .Values.imagePrePuller.image.pullPolicy -}}
+{{ .Values.imagePrePuller.image.pullPolicy }}
 {{- else -}}
-{{- $tag := include "session-manager.pause.image.tag" . -}}
+{{- $tag := include "session-manager.imagePuller.image.tag" . -}}
 {{- if or (eq $tag "latest") (eq $tag "main") (eq $tag "master") (eq $tag "develop") -}}
 Always
 {{- else -}}
@@ -189,20 +211,26 @@ IfNotPresent
 
 {{/*
 Auto-derive imagePullPolicy for an arbitrary fully-qualified image ref
-passed in as a string.
+passed in as a string: IfNotPresent for a digest reference; otherwise
+Always for no tag or a tag of latest, main, master or develop, and
+IfNotPresent for any other tag. The tag is read from the last path
+segment only, so the port of a registry host (localhost:5001/x) is
+never taken for it.
 */}}
 {{- define "session-manager.derivedPullPolicy" -}}
-{{- $parts := splitList ":" . -}}
-{{- $tag := "" -}}
-{{- if eq (len $parts) 1 -}}
-  {{- $tag = "" -}}
+{{- if contains "@" . -}}
+IfNotPresent
 {{- else -}}
+{{- $parts := splitList ":" (last (splitList "/" .)) -}}
+{{- $tag := "" -}}
+{{- if gt (len $parts) 1 -}}
   {{- $tag = last $parts -}}
 {{- end -}}
 {{- if or (eq $tag "") (eq $tag "latest") (eq $tag "main") (eq $tag "master") (eq $tag "develop") -}}
 Always
 {{- else -}}
 IfNotPresent
+{{- end -}}
 {{- end -}}
 {{- end -}}
 

@@ -378,15 +378,49 @@
       },
 
       "imagePrePuller": {
+        "description": "The image pre-puller DaemonSet. With enabled and includeDefaultImages false, images must list at least one entry.",
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "enabled":    { "type": "boolean" },
-          "pauseImage": { "$ref": "#/definitions/imageRef" },
+          "enabled": {
+            "description": "The only switch: while it is off nothing is pulled, whatever the other fields say.",
+            "type": "boolean"
+          },
+          "includeDefaultImages": {
+            "description": "Pull the default images, training-portal and base-environment, ahead of the entries in images.",
+            "type": "boolean"
+          },
+          "image": { "$ref": "#/definitions/imageRef" },
           "images": {
+            "description": "Further images to pull, after the default images and in the order listed. An image already in the list is pulled once.",
             "type": "array",
-            "items": { "type": "string", "minLength": 1 }
+            "items": {
+              "description": "Exactly one of name, an image's short name in the imageVersions inventory, and image, a full image reference pulled as written.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name":  { "type": "string", "minLength": 1 },
+                "image": { "type": "string", "minLength": 1 }
+              },
+              "oneOf": [
+                { "required": ["name"] },
+                { "required": ["image"] }
+              ]
+            }
           }
+        },
+        "if": {
+          "properties": {
+            "enabled":              { "const": true },
+            "includeDefaultImages": { "const": false }
+          },
+          "required": ["enabled", "includeDefaultImages"]
+        },
+        "then": {
+          "properties": {
+            "images": { "minItems": 1 }
+          },
+          "required": ["images"]
         }
       },
 

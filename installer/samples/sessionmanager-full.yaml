@@ -105,10 +105,25 @@ spec:
       - "169.254.169.254/32"
       - "fd00:ec2::254/128"
 
-  # Pre-pull workshop images on every node. Toggle only — the image
-  # list is chart-derived (training-portal + base-environment).
+  # Pre-pull images on every node, so the first workshop session on a
+  # node does not wait for them. Pulled in order: the default images
+  # (training-portal and base-environment) when included, then each
+  # entry as listed; an image already in the list is pulled once.
   imagePrePuller:
+    # The only switch (default false). While it is off nothing is
+    # pulled, and the list below can stay in place.
     enabled: true
+    # Default true. With false and enabled true, images must list at
+    # least one entry.
+    includeDefaultImages: true
+    images:
+      # A short name from the image inventory: resolved by the
+      # session-manager chart, so images.overrides above and the
+      # registry prefix apply. A name the inventory does not hold is
+      # reported as Ready=False with reason InstallFailed.
+      - name: jdk21-environment
+      # A full reference, pulled exactly as written.
+      - image: registry.internal.example.com/workshops/custom-base:1.0
 
   # debug | info | warn | error (default info)
   logLevel: debug

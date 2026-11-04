@@ -31,3 +31,4 @@ Records
 * [0005 - Local CA roots stay on the laptop; clusters receive per-domain intermediates](0005-local-ca-roots-stay-on-the-laptop.md)
 * [0006 - How each cluster service is provided is fixed for the life of an install](0006-cluster-service-providers-are-fixed-for-the-life-of-an-install.md)
 * [0007 - Image digests are reproducible within one Go release](0007-image-digests-are-reproducible-within-one-go-release.md)
+* [0008 - Image names are resolved by the session-manager chart's inventory, never by the operator](0008-image-names-are-resolved-by-the-session-manager-chart.md)

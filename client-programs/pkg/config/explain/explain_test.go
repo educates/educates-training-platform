@@ -112,6 +112,53 @@ func TestExplain_ScenarioKinds_Documented(t *testing.T) {
 	}
 }
 
+// Every narrow kind explains the imagePrePuller block's fields, down to
+// the fields of an images entry.
+func TestExplain_ImagePrePuller_DescribesBlock(t *testing.T) {
+	kinds := map[string][]byte{
+		"local":  schemas.EducatesLocalConfig,
+		"gke":    schemas.EducatesGKEConfig,
+		"eks":    schemas.EducatesEKSConfig,
+		"inline": schemas.EducatesInlineConfig,
+	}
+	for name, schema := range kinds {
+		t.Run(name, func(t *testing.T) {
+			out, err := Explain(schema, "imagePrePuller")
+			if err != nil {
+				t.Fatalf("Explain: %v", err)
+			}
+			for _, want := range []string{
+				"FIELD:    imagePrePuller <Object>",
+				"enabled <boolean>",
+				"includeDefaultImages <boolean>",
+				"images <[]Object>",
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("imagePrePuller explain missing %q:\n%s", want, out)
+				}
+			}
+
+			out, err = Explain(schema, "imagePrePuller.images")
+			if err != nil {
+				t.Fatalf("Explain: %v", err)
+			}
+			for _, want := range []string{"name <string>", "image <string>", "exactly one of name and image"} {
+				if !strings.Contains(out, want) {
+					t.Errorf("imagePrePuller.images explain missing %q:\n%s", want, out)
+				}
+			}
+
+			out, err = Explain(schema, "imagePrePuller.enabled")
+			if err != nil {
+				t.Fatalf("Explain: %v", err)
+			}
+			if !strings.Contains(out, "DEFAULT:  true") {
+				t.Errorf("imagePrePuller.enabled should show its default of true:\n%s", out)
+			}
+		})
+	}
+}
+
 // The escape-hatch schema is CRD-derived and uses $ref/$defs; exercise
 // that the walker resolves refs and surfaces the rich descriptions.
 func TestExplain_EscapeHatch_ResolvesRefs(t *testing.T) {

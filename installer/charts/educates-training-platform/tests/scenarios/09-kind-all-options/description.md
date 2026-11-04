@@ -29,7 +29,9 @@ that the optional subcharts coexist on a single kind cluster.
 - **Subchart coexistence** — lookup-service (with its Ingress at
   `lookup.${DOMAIN}`), remote-access, node-ca-injector, and the
   image-puller DaemonSet all deploy alongside session-manager and
-  secrets-manager in one release.
+  secrets-manager in one release. The image-puller DaemonSet rolls out
+  only once every listed image is pulled: the defaults, an inventory
+  name and a full reference, neither of the last two having `/bin/true`.
 - **Typed-values serialisation** — `post-deploy.sh` reads the live
   `educates-config` Secret and asserts every populated block landed:
   sessionCookies, clusterNetwork.blockCIDRs, dockerDaemon (MTU +

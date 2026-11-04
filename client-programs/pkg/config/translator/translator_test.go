@@ -1,7 +1,9 @@
 package translator
 
 import (
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -81,7 +83,8 @@ func TestTranslateLocal_EmptyConfig_AppliesInvariants(t *testing.T) {
 	}
 
 	// Defaults from WithDefaults flow through: LookupService=true → present;
-	// imagePrePuller=true → SessionManager has imagePrePuller.enabled: true;
+	// imagePrePuller.enabled=true → SessionManager has imagePrePuller
+	// enabled, includeDefaultImages left to the CRD default;
 	// logLevel=info → on every spec.
 	if out.LookupService == nil {
 		t.Error("LookupService = nil, want present (default lookupService=true)")
@@ -90,9 +93,59 @@ func TestTranslateLocal_EmptyConfig_AppliesInvariants(t *testing.T) {
 	if got, want := sm["logLevel"], "info"; got != want {
 		t.Errorf("SessionManager logLevel = %v, want %v", got, want)
 	}
-	ipp := sm["imagePrePuller"].(map[string]interface{})
-	if got, want := ipp["enabled"], true; got != want {
-		t.Errorf("imagePrePuller.enabled = %v, want %v", got, want)
+	if got, want := sm["imagePrePuller"], map[string]interface{}{"enabled": true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("imagePrePuller = %#v, want %#v", got, want)
+	}
+}
+
+// In every narrow kind the imagePrePuller block reaches the
+// SessionManager as written, with enabled defaulted to true when the file
+// leaves it unset.
+func TestTranslate_ImagePrePuller_ReachesSessionManagerAsWritten(t *testing.T) {
+	block := `
+imagePrePuller:
+  includeDefaultImages: false
+  images:
+    - name: jdk21-environment
+    - image: ghcr.io/example/custom-environment:1.0
+`
+	cases := []struct {
+		name  string
+		extra string
+		want  map[string]interface{}
+	}{
+		{"unset", "", map[string]interface{}{"enabled": true}},
+		{"written", block, map[string]interface{}{
+			"enabled":              true,
+			"includeDefaultImages": false,
+			"images": []interface{}{
+				map[string]interface{}{"name": "jdk21-environment"},
+				map[string]interface{}{"image": "ghcr.io/example/custom-environment:1.0"},
+			},
+		}},
+		{"switched off", "\nimagePrePuller:\n  enabled: false\n", map[string]interface{}{"enabled": false}},
+	}
+	for _, fixture := range []string{"local-empty.yaml", "gke-minimal.yaml", "eks-minimal.yaml", "inline-minimal.yaml"} {
+		base, err := os.ReadFile(filepath.Join("..", "testdata", fixture))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range cases {
+			t.Run(fixture+"/"+tc.name, func(t *testing.T) {
+				cfg, err := config.LoadBytes(append(append([]byte{}, base...), tc.extra...), fixture)
+				if err != nil {
+					t.Fatalf("LoadBytes: %v", err)
+				}
+				out, err := Translate(cfg, testOpts())
+				if err != nil {
+					t.Fatalf("Translate: %v", err)
+				}
+				sm := out.SessionManager["spec"].(map[string]interface{})
+				if got := sm["imagePrePuller"]; !reflect.DeepEqual(got, tc.want) {
+					t.Errorf("imagePrePuller = %#v, want %#v", got, tc.want)
+				}
+			})
+		}
 	}
 }
 
@@ -417,9 +470,17 @@ func TestTranslateLocal_FullConfig_SessionManagerFields(t *testing.T) {
 		t.Errorf("theme.name = %v, want backing Secret name %v", got, want)
 	}
 
-	ipp := sm["imagePrePuller"].(map[string]interface{})
-	if got, want := ipp["enabled"], true; got != want {
-		t.Errorf("imagePrePuller.enabled = %v, want true", got)
+	// Switched off with its list kept in place.
+	wantIPP := map[string]interface{}{
+		"enabled":              false,
+		"includeDefaultImages": false,
+		"images": []interface{}{
+			map[string]interface{}{"name": "jdk21-environment"},
+			map[string]interface{}{"image": "ghcr.io/educates/example:1.0"},
+		},
+	}
+	if got := sm["imagePrePuller"]; !reflect.DeepEqual(got, wantIPP) {
+		t.Errorf("imagePrePuller = %#v, want %#v", got, wantIPP)
 	}
 
 	images := sm["images"].(map[string]interface{})
@@ -602,10 +663,13 @@ func TestTranslateLocal_DevCLIDefaults_EndToEnd(t *testing.T) {
 		m := o.(map[string]interface{})
 		found[m["name"].(string)] = m["image"].(string)
 	}
-	for _, name := range []string{"session-manager", "training-portal", "base-environment", "pause-container", "node-ca-injector"} {
+	for _, name := range []string{"session-manager", "training-portal", "base-environment", "image-puller", "node-ca-injector"} {
 		if found[name] != "localhost:5001/educates-"+name+":latest" {
 			t.Errorf("SessionManager override %s = %q", name, found[name])
 		}
+	}
+	if image, present := found["pause-container"]; present {
+		t.Errorf("SessionManager overrides hold pause-container = %q, an image Educates no longer builds", image)
 	}
 	if _, present := found["secrets-manager"]; present {
 		t.Error("secrets-manager leaked into SessionManager overrides instead of routing to its CR")

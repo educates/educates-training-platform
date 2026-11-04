@@ -86,7 +86,7 @@ func inlineSecretsManagerSpec(cfg *v1alpha1.EducatesInlineConfig) map[string]int
 	if cfg.Operator.LogLevel != "" {
 		spec["logLevel"] = cfg.Operator.LogLevel
 	}
-	if ref := componentImageRef(cfg.ImageVersions, "secrets-manager"); ref != nil {
+	if ref := componentImageRef(cfg.ImageVersions, v1alpha1.SecretsManagerImageName); ref != nil {
 		spec["image"] = ref
 	}
 	return spec
@@ -99,7 +99,7 @@ func inlineLookupServiceSpec(cfg *v1alpha1.EducatesInlineConfig) map[string]inte
 	if cfg.Operator.LogLevel != "" {
 		spec["logLevel"] = cfg.Operator.LogLevel
 	}
-	if ref := componentImageRef(cfg.ImageVersions, "lookup-service"); ref != nil {
+	if ref := componentImageRef(cfg.ImageVersions, v1alpha1.LookupServiceImageName); ref != nil {
 		spec["image"] = ref
 	}
 	return spec
@@ -122,9 +122,7 @@ func inlineSessionManagerSpec(cfg *v1alpha1.EducatesInlineConfig) map[string]int
 	if len(cfg.WebsiteStyling.ThemeDataRefs) > 0 {
 		spec["themes"] = themesFromDataRefs(cfg.WebsiteStyling.ThemeDataRefs)
 	}
-	if cfg.ImagePrePuller != nil {
-		spec["imagePrePuller"] = map[string]interface{}{"enabled": *cfg.ImagePrePuller}
-	}
+	applyImagePrePuller(spec, cfg.ImagePrePuller)
 	applySessionManagerImageOverrides(spec, cfg.ImageVersions)
 	return spec
 }

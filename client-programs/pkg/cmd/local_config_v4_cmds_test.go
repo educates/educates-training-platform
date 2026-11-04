@@ -172,6 +172,135 @@ func TestLocalConfigSet_UnknownField_Errors(t *testing.T) {
 	}
 }
 
+func TestLocalConfigSet_ImagePrePullerEnabled_RoundTrips(t *testing.T) {
+	stageInitConfig(t)
+	if err := runLocalConfigSet(io.Discard, "imagePrePuller.enabled", "false"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	var b bytes.Buffer
+	if err := runLocalConfigGet(&b, "imagePrePuller.enabled"); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got := strings.TrimSpace(b.String()); got != "false" {
+		t.Errorf("imagePrePuller.enabled get = %q, want %q", got, "false")
+	}
+}
+
+// set reports the boolean form of imagePrePuller, whether the file
+// already holds it or the set would write it, by naming the object form.
+func TestLocalConfigSet_ImagePrePullerBooleanForm_NamesObjectForm(t *testing.T) {
+	cases := []struct {
+		name     string
+		fileHas  string
+		path     string
+		value    string
+		wantForm string
+	}{
+		{"file holds the boolean", "imagePrePuller: true\n", "imagePrePuller.enabled", "false", "imagePrePuller: {enabled: true}"},
+		{"set writes the boolean", "", "imagePrePuller", "false", "imagePrePuller: {enabled: false}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dataHome := stageInitConfig(t)
+			if tc.fileHas != "" {
+				appendToConfig(t, dataHome, tc.fileHas)
+			}
+			err := runLocalConfigSet(io.Discard, tc.path, tc.value)
+			if err == nil {
+				t.Fatal("expected an error, got nil")
+			}
+			for _, want := range []string{"imagePrePuller.enabled", tc.wantForm} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+			for _, noise := range []string{"is not a map", "Invalid type"} {
+				if strings.Contains(err.Error(), noise) {
+					t.Errorf("error %q reports only %q", err, noise)
+				}
+			}
+		})
+	}
+}
+
+// set validates the whole file with the readable message of the rule the
+// change breaks.
+func TestLocalConfigSet_ImagePrePullerNothingToPull_Rejected(t *testing.T) {
+	stageInitConfig(t)
+	err := runLocalConfigSet(io.Discard, "imagePrePuller.includeDefaultImages", "false")
+	if err == nil {
+		t.Fatal("expected schema rejection, got nil")
+	}
+	want := "imagePrePuller: with enabled true, its default, and includeDefaultImages false, images must list at least one entry"
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not contain %q", err, want)
+	}
+}
+
+// set meets a scalar where its path needs a map. A file that validates as
+// it stands reports the segment; a file that does not reports its schema
+// errors and the command that opens it.
+func TestLocalConfigSet_ScalarOnPath_Rejected(t *testing.T) {
+	cases := []struct {
+		name    string
+		fileHas string
+		path    string
+		want    []string
+		noise   []string
+	}{
+		{
+			name:    "file validates",
+			fileHas: "lookupService: false\n",
+			path:    "lookupService.enabled",
+			want:    []string{`path "lookupService.enabled": segment "lookupService" is not a map`},
+		},
+		{
+			name:    "file fails validation",
+			fileHas: "lookupService: false\nimagePrePuller: true\n",
+			path:    "lookupService.enabled",
+			want: []string{
+				`path "lookupService.enabled"`,
+				"'educates local config edit' opens the file",
+				`  - imagePrePuller: takes an object, not a boolean; set imagePrePuller.enabled instead, writing "imagePrePuller: {enabled: true}" in place of "imagePrePuller: true"`,
+			},
+			noise: []string{"Invalid type"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dataHome := stageInitConfig(t)
+			appendToConfig(t, dataHome, tc.fileHas)
+			err := runLocalConfigSet(io.Discard, tc.path, "true")
+			if err == nil {
+				t.Fatal("expected an error, got nil")
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+			for _, noise := range tc.noise {
+				if strings.Contains(err.Error(), noise) {
+					t.Errorf("error %q reports %q", err, noise)
+				}
+			}
+		})
+	}
+}
+
+// appendToConfig appends text to the staged config.yaml.
+func appendToConfig(t *testing.T, dataHome, text string) {
+	t.Helper()
+	f, err := os.OpenFile(filepath.Join(dataHome, "config.yaml"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(text); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLocalConfigGet_MissingPath_Errors(t *testing.T) {
 	stageInitConfig(t)
 	err := runLocalConfigGet(io.Discard, "ingress.domain")

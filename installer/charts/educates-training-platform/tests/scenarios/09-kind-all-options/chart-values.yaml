@@ -30,7 +30,7 @@
 #   - session-manager extras left default or documented as out of scope
 #     in description.md: `clusterRuntime.class`, `clusterStorage.class`
 #     / `clusterStorage.user`, `dockerDaemon.proxyCache.{username,
-#     password}`, `imagePrePuller.{pauseImage,images}`, and the
+#     password}`, `imagePrePuller.image`, and the
 #     remaining `websiteStyling.inline.*` blocks (workshopDashboard,
 #     workshopInstructions, workshopStarted, workshopFinished).
 #
@@ -211,11 +211,18 @@ session-manager:
     frameAncestors:
       - https://embed.example.com
 
+  # The default images (training-portal + base-environment), which the
+  # test workshop needs anyway, then each entry as listed. Neither entry
+  # has /bin/true, so the DaemonSet rolling out shows the image-puller
+  # helper pulling images it cannot run.
   imagePrePuller:
     enabled: true
-    # images empty → chart derives the v3-equivalent default
-    # (training-portal + base-environment), which the test workshop
-    # needs anyway.
+    includeDefaultImages: true
+    images:
+      # Resolved through the image inventory.
+      - name: vcluster-internal-contour
+      # Pulled exactly as written.
+      - image: registry.k8s.io/pause:3.10.2
 
   secretPropagation:
     imagePullSecretNames:

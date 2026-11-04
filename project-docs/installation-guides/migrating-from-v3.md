@@ -112,11 +112,17 @@ For local kind-cluster users, the v4 CLI migrates your configuration on first us
   you run the same command you would have run on v3.
 
 The image pre-puller settings are carried over as the mapping above describes,
-so the pre-puller keeps its switch and pulls the same images. The migration
-drops the ``prePullImages`` names the version 4 image inventory does not hold,
-keeping a ``loftsh-kubernetes-v1.31`` or ``loftsh-kubernetes-v1.32`` name only
-when your ``imageVersions`` defines it, and drops an ``imageVersions`` entry
-named ``pause-container``. A version 3 file without ``imagePuller`` leaves
+so the pre-puller keeps its switch and its list of names. The migration drops
+the seven version 3 names listed above that the version 4 image inventory does
+not hold, keeping a ``loftsh-kubernetes-v1.31`` or ``loftsh-kubernetes-v1.32``
+name only when your ``imageVersions`` defines it, and drops an
+``imageVersions`` entry named ``pause-container``. Version 3 also pulled a name
+its inventory did not hold, as ``<registry>/educates-<name>:<version>``. The
+migration carries such a name over as a ``name`` entry, and since the version
+4 inventory does not hold it either, the first deployment fails, the
+``SessionManager`` reporting ``InstallFailed`` with a message naming the entry.
+Replace that entry with the image's full reference as an ``image`` entry, or
+remove it. A version 3 file without ``imagePuller`` leaves
 ``imagePrePuller`` unset, so the pre-puller is on with its default images. The
 notice says what was carried over and what was dropped, with lines such as:
 

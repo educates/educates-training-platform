@@ -391,8 +391,7 @@ func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *confi
 
 	// DefaultAccessCredentials and RegistryMirrors are reserved in the
 	// CRD; validateSessionManagerSpec rejects them as "not yet
-	// supported in v1alpha1" until the chart grows their values. See
-	// follow-ups.
+	// supported in v1alpha1", since the chart has no values for them.
 
 	// logLevel doesn't have a typed top-level chart value; the runtime
 	// reads it from the rendered operator-config Secret. Route through

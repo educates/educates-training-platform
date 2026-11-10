@@ -1590,6 +1590,18 @@ Bugs Fixed
   revision each time. An upgrade now always replaces the release's values
   with the ones the operator computes.
 
+* Helm releases the operator installed or upgraded at the same time could
+  fail with an error naming a resource under the wrong API group, such as
+  ``customresourcedefinitions.rbac.authorization.k8s.io ... is forbidden``,
+  which left the release failed and its custom resource ``Degraded`` with
+  the reason ``ReleaseFailed``. This could happen whenever several releases
+  changed together, such as a change to the ``EducatesClusterConfig`` and to
+  a platform resource made at once. The Helm clients the operator creates
+  shared one Kubernetes client configuration, which Helm modifies for each
+  resource kind it handles; each Helm operation now works on a copy of its
+  own. A release already left failed this way is retried once its values or
+  chart version change.
+
 * When the workshop image already had a ``workshop`` directory in the home
   directory, workshop content downloaded using ``spec.workshop.files`` was
   copied into the home directory rather than into ``/opt/workshop``, but only

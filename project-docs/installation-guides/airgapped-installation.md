@@ -26,18 +26,91 @@ The Helm charts are attached to the release as tarballs (`educates-installer-<ve
 Mirroring the images
 --------------------
 
-Mirror the listed images into your internal registry **preserving their repository paths** — Educates resolves images by composing a registry prefix with the original path, so the layout must survive the copy. Any name-preserving tool works; with `skopeo` on a connected machine:
+Mirror the listed images into your internal registry under a prefix of your
+choosing, keeping each image's upstream repository path, without its
+registry host, under the prefix. Educates composes every image reference
+from the prefix and that path, so the layout must survive the copy. Under
+the prefix `registry.internal/educates`,
+`ghcr.io/educates/educates-session-manager:X.Y.Z` becomes
+`registry.internal/educates/educates/educates-session-manager:X.Y.Z` and
+`quay.io/jetstack/cert-manager-controller:vA.B.C` becomes
+`registry.internal/educates/jetstack/cert-manager-controller:vA.B.C`.
+
+Each line of the list names an image by both tag and digest,
+`<repository>:<tag>@sha256:<digest>`, a form `skopeo` does not accept, so the
+loops below copy each image by its digest and push it under its tag. On a
+connected machine, copy the images into a directory:
 
 ```shell
 mkdir mirror
 while read -r ref; do
-  skopeo copy --all "docker://${ref}" "dir:mirror/$(echo "${ref%@*}" | tr '/:' '__')"
+  name="${ref%@*}"
+  skopeo copy --all --preserve-digests "docker://${name%:*}@${ref#*@}" \
+    "dir:mirror/$(echo "${name}" | tr '/:' '__')"
 done < educates-images-X.Y.Z.txt
 ```
 
-Carry the directory (and the chart tarballs and CLI binary) across the air gap, then push into the internal registry, keeping each image's original repository path under your chosen prefix — for example `ghcr.io/educates/educates-session-manager:X.Y.Z` becomes `registry.internal/educates/educates/educates-session-manager:X.Y.Z` and `quay.io/jetstack/cert-manager-controller:vA.B.C` becomes `registry.internal/educates/jetstack/cert-manager-controller:vA.B.C`.
+Carry the directory, the image list, the chart tarballs and the CLI binary
+across the air gap, then push each image to its path under the prefix:
 
-For online-but-mirrored environments (the cluster can reach an internal registry that proxies or mirrors the upstream ones), `skopeo sync` or a registry pull-through cache achieves the same layout without the tarball hop.
+```shell
+PREFIX=registry.internal/educates
+while read -r ref; do
+  name="${ref%@*}"
+  skopeo copy --all --preserve-digests "dir:mirror/$(echo "${name}" | tr '/:' '__')" \
+    "docker://${PREFIX}/${name#*/}"
+done < educates-images-X.Y.Z.txt
+```
+
+A machine that reaches both the upstream registries and the internal one can
+skip the directory and copy each image straight to its destination:
+
+```shell
+PREFIX=registry.internal/educates
+while read -r ref; do
+  name="${ref%@*}"
+  skopeo copy --all --preserve-digests "docker://${name%:*}@${ref#*@}" \
+    "docker://${PREFIX}/${name#*/}"
+done < educates-images-X.Y.Z.txt
+```
+
+`skopeo sync` does not produce the layout on its own: it keeps only the last path element of each
+image, or with `--scoped` its whole reference, registry host included, so it
+takes one run for each upstream namespace with that namespace added to the
+destination.
+
+The internal registry must accept repository names several levels deep, such
+as `educates/educates/educates-session-manager` under the prefix. CNCF
+Distribution, Zot, Harbor (inside a project), Red Hat Quay (inside an
+organization), Amazon ECR, Azure Container Registry, Google Artifact Registry,
+Sonatype Nexus and JFrog Artifactory accept them. Docker Hub does not, since
+its repository names cannot contain a slash. GitLab allows two levels below a
+project, exactly what the layout needs, so the project itself must be the
+prefix. Some registries need the destination to exist before the first push:
+a Harbor project, a Quay organization, an Artifact Registry, Nexus or
+Artifactory repository, and in Amazon ECR each repository, unless a
+repository creation template creates them on push.
+
+A pull-through cache can stand in for the copy only when it serves the
+images of every upstream registry the list names, `ghcr.io`, `quay.io`,
+`docker.io`, `reg.kyverno.io` and `registry.k8s.io`, under the one prefix and
+at their upstream paths. Most caches front one upstream registry under a path
+of their own, so they cannot: the proxy mode of CNCF Distribution mirrors a
+single upstream, a Harbor proxy cache project fronts one registry endpoint
+and keeps the upstream path under the project, and each Amazon ECR pull
+through cache rule maps one upstream registry to its own repository prefix.
+Zot's sync extension can map each upstream to its destination under one
+prefix, and so can the cache rules of Azure Container Registry's artifact
+cache, one for each upstream namespace, except for `reg.kyverno.io`, which
+it does not offer as an upstream. Repositories that group several proxies behind one path, such as a
+Nexus group, an Artifactory virtual repository or an Artifact Registry virtual
+repository, look an image up in each upstream in turn, so a path that exists
+on more than one upstream resolves to whichever is tried first.
+
+Node-level registry mirrors, such as containerd's `hosts.toml` or CRI-O's
+`registries.conf`, are an alternative to the prefix: they let the nodes pull
+the images by their original references from the internal registry, one
+upstream registry at a time, and no prefix is set.
 
 Pointing the installation at the mirror
 ---------------------------------------
@@ -59,6 +132,6 @@ helm install educates-installer educates-installer-X.Y.Z.tgz \
 kubectl apply -f educates-cluster-config.yaml   # spec.imageRegistry.prefix: registry.internal/educates
 ```
 
-If the mirror requires authentication, create the pull secret in the operator namespace and reference it via `imagePullSecrets` in the operator chart, so that the operator pod can pull its own image. The operator does not distribute registry credentials to the cluster services and Educates runtime components it installs, so the cluster's nodes must be able to pull those images from the mirror themselves, for example through node-level registry credentials or a pull-through cache that needs no authentication.
+If the mirror requires authentication, create the pull secret in the operator namespace and reference it via `imagePullSecrets` in the operator chart, so that the operator pod can pull its own image. The operator does not distribute registry credentials to the cluster services and Educates runtime components it installs, so the cluster's nodes must be able to pull those images from the mirror themselves, for example through node-level registry credentials or a mirror that allows anonymous pulls.
 
 Workshop content images are a separate concern from the platform: workshops published with `educates publish-workshop` are self-contained OCI artifacts that can be relocated with `imgpkg copy`, as covered in the workshop content documentation.

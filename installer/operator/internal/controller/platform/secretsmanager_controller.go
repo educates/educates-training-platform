@@ -341,30 +341,23 @@ func (r *SecretsManagerReconciler) installOrUpgrade(ctx context.Context, obj *pl
 	if err != nil {
 		return helm.Result{}, fmt.Errorf("build helm client: %w", err)
 	}
-	return convergeRelease(ctx, r.Client, hc, secretsManagerReleaseName, chrt, renderSecretsManagerValues(obj, cfg))
+	return convergeRelease(ctx, r.Client, hc, secretsManagerReleaseName, chrt,
+		renderSecretsManagerValues(obj, cfg, chartImageNamespace(chrt)))
 }
 
 // renderSecretsManagerValues maps SecretsManager spec + the cluster
 // config status into the secrets-manager subchart's values shape. The
 // subchart's values.yaml is the contract — keep this aligned with
 // `installer/charts/educates-training-platform/charts/secrets-manager/values.yaml`.
-func renderSecretsManagerValues(obj *platformv1alpha1.SecretsManager, cfg *configv1alpha1.EducatesClusterConfig) map[string]any {
+// imageNamespace is the chart's own image registry namespace, kept
+// under the cluster config's image registry prefix.
+func renderSecretsManagerValues(obj *platformv1alpha1.SecretsManager, cfg *configv1alpha1.EducatesClusterConfig, imageNamespace string) map[string]any {
 	values := map[string]any{
 		"logLevel": defaultLogLevel(obj.Spec.LogLevel),
 	}
 
-	// development.imageRegistry — only emit when the cluster config
-	// resolves a prefix. v3 stored prefix as `host/namespace`; we
-	// split on the first slash to populate the subchart's two-field
-	// shape.
-	if cfg.Status.ImageRegistry != nil && cfg.Status.ImageRegistry.Prefix != "" {
-		host, ns := splitImageRegistryPrefix(cfg.Status.ImageRegistry.Prefix)
-		values["development"] = map[string]any{
-			"imageRegistry": map[string]any{
-				"host":      host,
-				"namespace": ns,
-			},
-		}
+	if dev := developmentImageRegistryValues(cfg, imageNamespace); dev != nil {
+		values["development"] = dev
 	}
 
 	// image overrides from SecretsManager spec. Empty fields stay
@@ -400,16 +393,6 @@ func renderSecretsManagerValues(obj *platformv1alpha1.SecretsManager, cfg *confi
 		}
 	}
 	return values
-}
-
-// splitImageRegistryPrefix divides "host/namespace" into its two
-// halves. Anything missing falls back to empty strings; the chart
-// handles empty-as-derive.
-func splitImageRegistryPrefix(prefix string) (host, namespace string) {
-	if h, ns, ok := strings.Cut(prefix, "/"); ok {
-		return h, ns
-	}
-	return prefix, ""
 }
 
 // splitImageRef splits a full image reference into repository and tag

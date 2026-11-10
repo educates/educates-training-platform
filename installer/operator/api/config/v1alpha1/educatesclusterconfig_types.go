@@ -737,13 +737,24 @@ type PolicyEnforcement struct {
 	Kyverno *KyvernoConfig `json:"kyverno,omitempty"`
 }
 
-// ImageRegistry configures registry rewriting and pull credentials.
-// Applies to all bundled charts in Managed mode and to the runtime in
-// both modes.
+// ImageRegistry relocates the images the operator installs under a
+// registry prefix, and names pull credentials for them. In Managed mode
+// it applies to the cluster services and the Educates components, in
+// Inline mode to the Educates components.
 type ImageRegistry struct {
-	// prefix rewrites every bundled image reference to live under this
-	// prefix, e.g., "internal-registry.corp.local/educates". Pre-relocated
-	// bundles (via helm dt wrap/unwrap) do not need this set.
+	// prefix moves each image to its upstream repository path, without
+	// the upstream registry host, under this prefix: the layout a
+	// name-preserving mirror of the release image list holds. With
+	// "registry.internal/educates",
+	// ghcr.io/educates/educates-session-manager is pulled from
+	// registry.internal/educates/educates/educates-session-manager and
+	// quay.io/jetstack/cert-manager-controller from
+	// registry.internal/educates/jetstack/cert-manager-controller. That
+	// covers the Educates images the session manager creates training
+	// portals and workshop sessions from; the upstream images its image
+	// inventory pins, such as docker-in-docker and the vcluster images,
+	// keep their references and are relocated through imageVersions
+	// overrides instead.
 	// +optional
 	Prefix string `json:"prefix,omitempty"`
 
@@ -816,6 +827,8 @@ type InlineConfig struct {
 	// +required
 	PolicyEnforcement InlinePolicyEnforcement `json:"policyEnforcement"`
 
+	// imageRegistry relocates the images of the Educates components the
+	// operator installs, as spec.imageRegistry does in Managed mode.
 	// +optional
 	ImageRegistry *ImageRegistry `json:"imageRegistry,omitempty"`
 }
@@ -882,9 +895,9 @@ type EducatesClusterConfigSpec struct {
 	// +optional
 	PolicyEnforcement *PolicyEnforcement `json:"policyEnforcement,omitempty"`
 
-	// imageRegistry rewrites bundled chart image refs and supplies pull
-	// credentials. Applies in Managed mode (Inline mode has its own
-	// equivalent under spec.inline.imageRegistry).
+	// imageRegistry relocates the images of the cluster services and
+	// Educates components the operator installs in Managed mode. Inline
+	// mode has its own equivalent under spec.inline.imageRegistry.
 	// +optional
 	ImageRegistry *ImageRegistry `json:"imageRegistry,omitempty"`
 
@@ -1029,9 +1042,10 @@ type EducatesClusterConfigStatus struct {
 	// +optional
 	PolicyEnforcement *StatusPolicyEnforcement `json:"policyEnforcement,omitempty"`
 
-	// imageRegistry publishes the rewriting prefix and pull secrets, if
-	// configured. Always populated when reconciliation succeeds; an
-	// empty prefix and empty pullSecrets means no rewriting is in effect.
+	// imageRegistry publishes the image registry prefix and pull secrets
+	// of spec.imageRegistry in Managed mode, or spec.inline.imageRegistry
+	// in Inline mode. Always populated when reconciliation succeeds; an
+	// empty prefix and empty pullSecrets means no relocation is in effect.
 	// +optional
 	ImageRegistry *ImageRegistry `json:"imageRegistry,omitempty"`
 

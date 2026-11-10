@@ -44,8 +44,10 @@ Pointing the installation at the mirror
 
 Two settings re-root image resolution onto the mirror:
 
-* **`EducatesClusterConfig.spec.imageRegistry.prefix`** — rewrites the images of everything the operator installs (cluster services in Managed mode and the Educates runtime components). Reachable via the `educatesClusterConfig` block of an `EducatesConfig` configuration file, or `imageRegistry.prefix` in `EducatesInlineConfig`.
-* **The operator chart's `development.imageRegistry`** value (`{host, namespace}`) — rewrites the operator pod's own image when installing the chart directly with Helm. When deploying via the CLI, set `operator.image.repository` in the configuration file instead.
+* **The image registry prefix of `EducatesClusterConfig`**, `spec.imageRegistry.prefix` in Managed mode and `spec.inline.imageRegistry.prefix` in Inline mode, moves the images of everything the operator installs: the cluster services in Managed mode, and the Educates runtime components in both modes, including the images the session manager creates training portals and workshop sessions from. Each image keeps its upstream repository path, without the upstream registry host, under the prefix, which is the layout the mirroring steps above produce. With the prefix `registry.internal/educates`, `ghcr.io/educates/educates-session-manager:X.Y.Z` is pulled from `registry.internal/educates/educates/educates-session-manager:X.Y.Z`. From the CLI, set it in the `educatesClusterConfig` block of an `EducatesConfig` configuration file, or as `imageRegistry.prefix` in `EducatesInlineConfig`.
+* **The operator chart's `development.imageRegistry`** value (`{host, namespace}`) moves the operator pod's own image when installing the chart directly with Helm. When deploying via the CLI, set `operator.image.repository` in the configuration file instead.
+
+The prefix does not move the upstream images the session manager's image inventory pins for the vcluster workshop application and for Docker support in workshop sessions, such as `ghcr.io/loft-sh/vcluster-oss` and `docker`. Point those at the mirror with `imageVersions` overrides of the matching names. With a prefix set, the `$(image_repository)` data variable in workshop definitions resolves by default to where the Educates images are, `registry.internal/educates/educates` in the example above.
 
 For a Helm-driven install from the transported chart tarball:
 

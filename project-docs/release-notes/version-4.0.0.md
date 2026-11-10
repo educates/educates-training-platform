@@ -1560,6 +1560,28 @@ Bugs Fixed
   ready. It now returns to ``True`` once the spec and the secrets it
   references pass validation.
 
+* In ``Managed`` mode, ``spec.imageRegistry.prefix`` of the
+  ``EducatesClusterConfig`` moved the images of the cluster services but not
+  those of the Educates runtime components, which take the prefix from
+  ``status.imageRegistry``, a field the operator published only in ``Inline``
+  mode. The secrets manager, lookup service, session manager and node CA
+  injector, and the training portals and workshop sessions the session
+  manager creates, kept pulling from ``ghcr.io``. ``Managed`` mode now
+  publishes the field too. In both modes, a prefix with a path also replaced
+  the ``educates`` namespace of the Educates images rather than keeping it:
+  with ``registry.internal/educates`` the session manager was pulled from
+  ``registry.internal/educates/educates-session-manager``, while a mirror of
+  the release image list holds it at
+  ``registry.internal/educates/educates/educates-session-manager``. Every
+  Educates image now keeps its upstream repository path under the prefix, as
+  the cluster-service images do, and the ``$(image_repository)`` data
+  variable of workshop definitions resolves by default to
+  ``<prefix>/educates``. A mirror laid out for the old behavior, with the
+  images at ``<prefix>/educates-<name>``, is still reached when the prefix
+  ends in ``/educates``, by removing that last segment from the prefix.
+  Any other such mirror needs the images copied into the layout the
+  air-gapped installation guide describes.
+
 * When the workshop image already had a ``workshop`` directory in the home
   directory, workshop content downloaded using ``spec.workshop.files`` was
   copied into the home directory rather than into ``/opt/workshop``, but only

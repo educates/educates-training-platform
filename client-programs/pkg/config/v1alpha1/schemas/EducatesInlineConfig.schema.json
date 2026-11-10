@@ -30,10 +30,10 @@
     "imageRegistry": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Rewrite workshop image references to live behind an in-cluster or mirror registry, and supply pull credentials for it.",
+      "description": "Relocate the images of the Educates components under a mirror registry prefix, and name pull Secrets for it.",
       "properties": {
-        "prefix":      { "type": "string", "description": "Registry prefix that workshop image references are rewritten to live under." },
-        "pullSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of image pull Secrets for the rewritten registry." }
+        "prefix":      { "type": "string", "description": "Registry prefix under which each Educates image keeps its upstream repository path, without the upstream registry host: with registry.internal/educates, ghcr.io/educates/educates-session-manager is pulled from registry.internal/educates/educates/educates-session-manager." },
+        "pullSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of image pull Secrets for the mirror registry." }
       }
     },
 

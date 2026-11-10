@@ -269,8 +269,8 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		conditionNodeCATrustDeployed,
 		nodeCAInjectorReleaseName,
 		vendoredcharts.NodeCAInjector,
-		func(sm *platformv1alpha1.SessionManager, cc *configv1alpha1.EducatesClusterConfig) map[string]any {
-			return renderNodeCAInjectorValues(sm, cc, r.OperatorNamespace)
+		func(sm *platformv1alpha1.SessionManager, cc *configv1alpha1.EducatesClusterConfig, imageNamespace string) map[string]any {
+			return renderNodeCAInjectorValues(sm, cc, r.OperatorNamespace, imageNamespace)
 		},
 		cfg, nctIntent, nctReason, nctMessage,
 	)
@@ -357,7 +357,8 @@ func (r *SessionManagerReconciler) installOrUpgradeSM(ctx context.Context, obj *
 	if err != nil {
 		return helm.Result{}, fmt.Errorf("build helm client: %w", err)
 	}
-	return convergeRelease(ctx, r.Client, hc, sessionManagerReleaseName, chrt, renderSessionManagerValues(obj, cfg, r.OperatorNamespace))
+	return convergeRelease(ctx, r.Client, hc, sessionManagerReleaseName, chrt,
+		renderSessionManagerValues(obj, cfg, r.OperatorNamespace, chartImageNamespace(chrt)))
 }
 
 // renderSessionManagerValues maps SessionManagerSpec + cluster config
@@ -374,10 +375,13 @@ func (r *SessionManagerReconciler) installOrUpgradeSM(ctx context.Context, obj *
 // session-manager/templates/_helpers.tpl) reads back any prior
 // generated credentials from the live `educates-config` Secret via
 // `helm lookup`, so passwords don't rotate on every reconcile.
-func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, operatorNamespace string) map[string]any {
+//
+// imageNamespace is the chart's own image registry namespace, kept
+// under the cluster config's image registry prefix.
+func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, operatorNamespace, imageNamespace string) map[string]any {
 	values := map[string]any{}
 
-	applySMImageValues(values, obj, cfg)
+	applySMImageValues(values, obj, cfg, imageNamespace)
 	applySMIngressValues(values, obj, cfg, operatorNamespace)
 	applySMSecurityValues(values, obj, cfg)
 	applySMPackageDeliveryValues(values, cfg)
@@ -408,17 +412,11 @@ func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *confi
 
 // applySMImageValues maps the image-related inputs: the cluster
 // config's registry prefix and pull secrets plus the CR's per-image
-// overrides.
-func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) {
-	// development.imageRegistry — split prefix into host + namespace.
-	if cfg.Status.ImageRegistry != nil && cfg.Status.ImageRegistry.Prefix != "" {
-		host, ns := splitImageRegistryPrefix(cfg.Status.ImageRegistry.Prefix)
-		values["development"] = map[string]any{
-			"imageRegistry": map[string]any{
-				"host":      host,
-				"namespace": ns,
-			},
-		}
+// overrides. imageNamespace is the chart's own image registry
+// namespace, kept under the prefix.
+func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, imageNamespace string) {
+	if dev := developmentImageRegistryValues(cfg, imageNamespace); dev != nil {
+		values["development"] = dev
 	}
 
 	// imagePullSecrets — propagate from cluster config.

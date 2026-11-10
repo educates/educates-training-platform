@@ -93,6 +93,18 @@ runs a pause container, and its own helper image is overridden by the name
 ``image-puller``. See [pre-pulling workshop images](pre-pulling-workshop-images)
 for the ``imagePrePuller`` fields.
 
+Version 3's ``imageRegistry`` replaced the registry host and namespace of the
+Educates images, which it pulled from ``<host>/<namespace>/educates-<name>``.
+Version 4's ``imageRegistry.prefix`` keeps each image's upstream repository
+path under the prefix instead, as it does for the cluster services, so
+``ghcr.io/educates/educates-session-manager`` is pulled from
+``<prefix>/educates/educates-session-manager``. A version 3 mirror whose
+namespace ends in ``educates`` is reached with the host and the rest of the
+namespace as the prefix: the host alone for the namespace ``educates``, and
+``registry.internal/mirror`` for the namespace ``mirror/educates`` on
+``registry.internal``. Any other mirror needs the images copied into the
+layout the [air-gapped installation](airgapped-installation) guide describes.
+
 Anything not expressible in a narrow kind is reachable through `EducatesConfig`, which carries the four custom resource specs verbatim. Keep your v3 `values.yaml` open beside the [configuration settings](configuration-settings) reference while re-declaring; the JSON schemas give completion and validation in your editor as you go.
 
 (laptop-installs-migrate-automatically)=

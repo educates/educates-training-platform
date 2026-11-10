@@ -41,7 +41,7 @@ import (
 func renderImagePullerDaemonSet(t *testing.T, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) *renderedWorkload {
 	t.Helper()
 
-	values := renderSessionManagerValues(obj, cfg, testOperatorNamespace)
+	values := renderSessionManagerValues(obj, cfg, testOperatorNamespace, testImageNamespace)
 	for _, w := range renderWorkloads(t, vendoredcharts.SessionManager, values) {
 		if w.Kind == "DaemonSet" && w.Metadata.Name == "image-puller" {
 			return &w
@@ -100,7 +100,7 @@ func TestSessionManagerChart_ImagePullerRunsTheHelperInPlaceOfThePulledImages(t 
 		},
 	}
 	version := sessionManagerAppVersion(t)
-	helperImage := "registry.example.com/mirror/educates-image-puller:" + version
+	helperImage := "registry.example.com/mirror/educates/educates-image-puller:" + version
 
 	pod := renderImagePullerPod(t, obj, relocatedClusterConfig())
 
@@ -150,8 +150,8 @@ func TestSessionManagerChart_ImagePullerRunsTheHelperInPlaceOfThePulledImages(t 
 		}
 	}
 	wantPulled := []string{
-		"registry.example.com/mirror/educates-training-portal:" + version,
-		"registry.example.com/mirror/educates-base-environment:" + version,
+		"registry.example.com/mirror/educates/educates-training-portal:" + version,
+		"registry.example.com/mirror/educates/educates-base-environment:" + version,
 	}
 	if !reflect.DeepEqual(pulled, wantPulled) {
 		t.Errorf("pulled images = %q, want %q", pulled, wantPulled)
@@ -251,9 +251,9 @@ func TestSessionManagerChart_ImagePullerPullsNamedImagesAfterTheDefaults(t *test
 	got := pulledImages(renderImagePullerPod(t, obj, relocatedClusterConfig()))
 
 	want := []string{
-		"registry.example.com/mirror/educates-training-portal:" + version,
-		"registry.example.com/mirror/educates-base-environment:" + version,
-		"registry.example.com/mirror/educates-jdk21-environment:" + version,
+		"registry.example.com/mirror/educates/educates-training-portal:" + version,
+		"registry.example.com/mirror/educates/educates-base-environment:" + version,
+		"registry.example.com/mirror/educates/educates-jdk21-environment:" + version,
 		// An upstream pin, which the registry prefix does not relocate.
 		"ghcr.io/projectcontour/contour:v1.30.2",
 	}
@@ -268,7 +268,7 @@ func TestSessionManagerChart_ImagePullerDropsTheDefaultImages(t *testing.T) {
 
 	got := pulledImages(renderImagePullerPod(t, obj, relocatedClusterConfig()))
 
-	want := []string{"registry.example.com/mirror/educates-jdk21-environment:" + version}
+	want := []string{"registry.example.com/mirror/educates/educates-jdk21-environment:" + version}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("pulled images = %q, want %q", got, want)
 	}
@@ -298,7 +298,7 @@ func TestSessionManagerChart_ImagePullerResolvesNamesThroughTheImageOverrides(t 
 
 	want := []string{
 		portalOverride,
-		"registry.example.com/mirror/educates-base-environment:" + version,
+		"registry.example.com/mirror/educates/educates-base-environment:" + version,
 		jdkOverride,
 		customImage,
 	}
@@ -363,7 +363,7 @@ func TestSessionManagerChart_ImagePullerDerivesThePullPolicyFromTheTag(t *testin
 
 func TestSessionManagerChart_ImagePullerPullsEachImageOnce(t *testing.T) {
 	version := sessionManagerAppVersion(t)
-	jdk := "registry.example.com/mirror/educates-jdk21-environment:" + version
+	jdk := "registry.example.com/mirror/educates/educates-jdk21-environment:" + version
 	obj := prePuller(nil,
 		platformv1alpha1.PrePulledImage{Name: "jdk21-environment"},
 		// A default listed again, by name.
@@ -378,10 +378,10 @@ func TestSessionManagerChart_ImagePullerPullsEachImageOnce(t *testing.T) {
 	got := pulledImages(renderImagePullerPod(t, obj, relocatedClusterConfig()))
 
 	want := []string{
-		"registry.example.com/mirror/educates-training-portal:" + version,
-		"registry.example.com/mirror/educates-base-environment:" + version,
+		"registry.example.com/mirror/educates/educates-training-portal:" + version,
+		"registry.example.com/mirror/educates/educates-base-environment:" + version,
 		jdk,
-		"registry.example.com/mirror/educates-conda-environment:" + version,
+		"registry.example.com/mirror/educates/educates-conda-environment:" + version,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("pulled images = %q, want %q", got, want)
@@ -401,7 +401,7 @@ func installSessionManagerChart(t *testing.T, obj *platformv1alpha1.SessionManag
 	if err != nil {
 		t.Fatalf("NewMemoryClient: %v", err)
 	}
-	values := renderSessionManagerValues(obj, valuesTestClusterConfig(), testOperatorNamespace)
+	values := renderSessionManagerValues(obj, valuesTestClusterConfig(), testOperatorNamespace, testImageNamespace)
 	_, err = hc.Install(context.Background(), chrt.Metadata.Name, chrt, values)
 	return err
 }

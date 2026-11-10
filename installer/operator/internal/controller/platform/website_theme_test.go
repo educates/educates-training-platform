@@ -70,7 +70,7 @@ func emptyWebsiteTheme() map[string]string {
 }
 
 func TestSessionManagerChart_WebsiteThemeHasEveryFileEmptyByDefault(t *testing.T) {
-	values := renderSessionManagerValues(&platformv1alpha1.SessionManager{}, valuesTestClusterConfig(), "educates-installer")
+	values := renderSessionManagerValues(&platformv1alpha1.SessionManager{}, valuesTestClusterConfig(), "educates-installer", testImageNamespace)
 
 	got := renderWebsiteThemeData(t, values)
 
@@ -81,7 +81,7 @@ func TestSessionManagerChart_WebsiteThemeHasEveryFileEmptyByDefault(t *testing.T
 }
 
 func TestSessionManagerChart_WebsiteThemeKeepsInlineStyling(t *testing.T) {
-	values := renderSessionManagerValues(&platformv1alpha1.SessionManager{}, valuesTestClusterConfig(), "educates-installer")
+	values := renderSessionManagerValues(&platformv1alpha1.SessionManager{}, valuesTestClusterConfig(), "educates-installer", testImageNamespace)
 	values["websiteStyling"] = map[string]any{
 		"inline": map[string]any{
 			"workshopDashboard": map[string]any{"style": "body { color: red; }"},

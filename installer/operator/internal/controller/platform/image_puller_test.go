@@ -41,7 +41,7 @@ import (
 func renderImagePullerDaemonSet(t *testing.T, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) *renderedWorkload {
 	t.Helper()
 
-	values := renderSessionManagerValues(obj, cfg, testOperatorNamespace, testImageNamespace)
+	values := renderSessionManagerValues(obj, cfg, testOperatorNamespace, testImageRegistryNamespace)
 	for _, w := range renderWorkloads(t, vendoredcharts.SessionManager, values) {
 		if w.Kind == "DaemonSet" && w.Metadata.Name == "image-puller" {
 			return &w
@@ -401,7 +401,7 @@ func installSessionManagerChart(t *testing.T, obj *platformv1alpha1.SessionManag
 	if err != nil {
 		t.Fatalf("NewMemoryClient: %v", err)
 	}
-	values := renderSessionManagerValues(obj, valuesTestClusterConfig(), testOperatorNamespace, testImageNamespace)
+	values := renderSessionManagerValues(obj, valuesTestClusterConfig(), testOperatorNamespace, testImageRegistryNamespace)
 	_, err = hc.Install(context.Background(), chrt.Metadata.Name, chrt, values)
 	return err
 }

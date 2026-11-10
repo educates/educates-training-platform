@@ -371,14 +371,7 @@ func (r *EducatesClusterConfigReconciler) markManagedReady(obj *configv1alpha1.E
 		WorkshopPolicyEngine: obj.Spec.PolicyEnforcement.WorkshopPolicy.Engine,
 	}
 
-	// The runtime charts take their registry prefix and pull secrets
-	// from status alone, as in Inline mode, so the spec's are published
-	// here and an empty value when it sets none.
-	if obj.Spec.ImageRegistry != nil {
-		obj.Status.ImageRegistry = obj.Spec.ImageRegistry.DeepCopy()
-	} else {
-		obj.Status.ImageRegistry = &configv1alpha1.ImageRegistry{}
-	}
+	obj.Status.ImageRegistry = publishedImageRegistry(obj.Spec.ImageRegistry)
 
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               conditionReady,

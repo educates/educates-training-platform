@@ -342,21 +342,21 @@ func (r *SecretsManagerReconciler) installOrUpgrade(ctx context.Context, obj *pl
 		return helm.Result{}, fmt.Errorf("build helm client: %w", err)
 	}
 	return convergeRelease(ctx, r.Client, hc, secretsManagerReleaseName, chrt,
-		renderSecretsManagerValues(obj, cfg, chartImageNamespace(chrt)))
+		renderSecretsManagerValues(obj, cfg, chartImageRegistryNamespace(chrt)))
 }
 
 // renderSecretsManagerValues maps SecretsManager spec + the cluster
 // config status into the secrets-manager subchart's values shape. The
 // subchart's values.yaml is the contract — keep this aligned with
 // `installer/charts/educates-training-platform/charts/secrets-manager/values.yaml`.
-// imageNamespace is the chart's own image registry namespace, kept
+// imageRegistryNamespace is the chart's own image registry namespace, kept
 // under the cluster config's image registry prefix.
-func renderSecretsManagerValues(obj *platformv1alpha1.SecretsManager, cfg *configv1alpha1.EducatesClusterConfig, imageNamespace string) map[string]any {
+func renderSecretsManagerValues(obj *platformv1alpha1.SecretsManager, cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
 	values := map[string]any{
 		"logLevel": defaultLogLevel(obj.Spec.LogLevel),
 	}
 
-	if dev := developmentImageRegistryValues(cfg, imageNamespace); dev != nil {
+	if dev := developmentImageRegistryValues(cfg, imageRegistryNamespace); dev != nil {
 		values["development"] = dev
 	}
 

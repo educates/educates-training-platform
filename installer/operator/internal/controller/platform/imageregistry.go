@@ -30,9 +30,9 @@ import (
 // hack/lint-chart-versions.sh keeps it the same across the charts.
 const imageRegistryNamespaceAnnotation = "educates.dev/image-registry-namespace"
 
-// chartImageNamespace returns the registry namespace chrt publishes its
-// Educates images under.
-func chartImageNamespace(chrt *chart.Chart) string {
+// chartImageRegistryNamespace returns the registry namespace chrt
+// publishes its Educates images under.
+func chartImageRegistryNamespace(chrt *chart.Chart) string {
 	if chrt == nil || chrt.Metadata == nil {
 		return ""
 	}
@@ -49,16 +49,16 @@ func chartImageNamespace(chrt *chart.Chart) string {
 // is registry.internal/mirror/educates/educates-secrets-manager. The
 // charts compose {host}/{namespace}/educates-<name>, so the host is the
 // prefix up to its first slash, and the namespace is the rest of the
-// prefix followed by imageNamespace, the chart's own namespace. The
+// prefix followed by imageRegistryNamespace, the chart's own namespace. The
 // session-manager chart also hands the pair to workshop sessions as
 // $(image_repository).
-func developmentImageRegistryValues(cfg *configv1alpha1.EducatesClusterConfig, imageNamespace string) map[string]any {
+func developmentImageRegistryValues(cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
 	if cfg.Status.ImageRegistry == nil || cfg.Status.ImageRegistry.Prefix == "" {
 		return nil
 	}
 	host, path, _ := strings.Cut(cfg.Status.ImageRegistry.Prefix, "/")
 	var segments []string
-	for _, s := range []string{path, imageNamespace} {
+	for _, s := range []string{path, imageRegistryNamespace} {
 		if s != "" {
 			segments = append(segments, s)
 		}

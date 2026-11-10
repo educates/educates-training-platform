@@ -180,7 +180,7 @@ func (r *SessionManagerReconciler) reconcileExtra(
 	conditionType string,
 	releaseName string,
 	loadChart func() (*chart.Chart, error),
-	renderValues func(sm *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, imageNamespace string) map[string]any,
+	renderValues func(sm *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any,
 	cfg *configv1alpha1.EducatesClusterConfig,
 	intent extrasIntent, reason, message string,
 ) (extraOutcome, error) {
@@ -197,7 +197,7 @@ func (r *SessionManagerReconciler) reconcileExtra(
 			return extraOutcome{}, fmt.Errorf("load chart %s: %w", releaseName, err)
 		}
 		log.V(1).Info("converging extra", "release", releaseName)
-		res, err := convergeRelease(ctx, r.Client, hc, releaseName, chrt, renderValues(obj, cfg, chartImageNamespace(chrt)))
+		res, err := convergeRelease(ctx, r.Client, hc, releaseName, chrt, renderValues(obj, cfg, chartImageRegistryNamespace(chrt)))
 		if err != nil {
 			setExtraCondition(obj, conditionType, metav1.ConditionFalse, "InstallFailed", err.Error())
 			return extraOutcome{}, fmt.Errorf("ensure release %s: %w", releaseName, err)
@@ -271,12 +271,12 @@ func setExtraCondition(obj *platformv1alpha1.SessionManager, condType string, st
 // (effectiveIngressCARef), since every registry Ingress the
 // injector covers is created by the session manager; the resolver
 // above guarantees we only call this when that CA is configured.
-// imageNamespace is the chart's own image registry namespace, kept
+// imageRegistryNamespace is the chart's own image registry namespace, kept
 // under the cluster config's image registry prefix.
-func renderNodeCAInjectorValues(obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, operatorNamespace, imageNamespace string) map[string]any {
+func renderNodeCAInjectorValues(obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, operatorNamespace, imageRegistryNamespace string) map[string]any {
 	values := map[string]any{}
 
-	if dev := developmentImageRegistryValues(cfg, imageNamespace); dev != nil {
+	if dev := developmentImageRegistryValues(cfg, imageRegistryNamespace); dev != nil {
 		values["development"] = dev
 	}
 	if cfg.Status.ImageRegistry != nil && len(cfg.Status.ImageRegistry.PullSecrets) > 0 {

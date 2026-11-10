@@ -31,11 +31,11 @@ import (
 
 const testRuntimeImageRegistryPrefix = "mirror.example.com/educates"
 
-// testImageNamespace is the image registry namespace the embedded
+// testImageRegistryNamespace is the image registry namespace the embedded
 // runtime charts compose their Educates images under, which the
 // reconcilers read from the chart they install. The render tests below
 // read it from each chart instead.
-const testImageNamespace = "educates"
+const testImageRegistryNamespace = "educates"
 
 // prefixedClusterConfig is the test cluster config publishing the given
 // image registry prefix in status, as the cluster config reconciler does
@@ -67,23 +67,23 @@ func TestRuntimeImagesHonourImageRegistryPrefix(t *testing.T) {
 	charts := []struct {
 		name   string
 		load   func() (*chart.Chart, error)
-		values func(cfg *configv1alpha1.EducatesClusterConfig, imageNamespace string) map[string]any
+		values func(cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any
 	}{
-		{"secrets-manager", vendoredcharts.SecretsManager, func(cfg *configv1alpha1.EducatesClusterConfig, imageNamespace string) map[string]any {
-			return renderSecretsManagerValues(&platformv1alpha1.SecretsManager{}, cfg, imageNamespace)
+		{"secrets-manager", vendoredcharts.SecretsManager, func(cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
+			return renderSecretsManagerValues(&platformv1alpha1.SecretsManager{}, cfg, imageRegistryNamespace)
 		}},
-		{"lookup-service", vendoredcharts.LookupService, func(cfg *configv1alpha1.EducatesClusterConfig, imageNamespace string) map[string]any {
+		{"lookup-service", vendoredcharts.LookupService, func(cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
 			return renderLookupServiceValues(&platformv1alpha1.LookupService{
 				Spec: platformv1alpha1.LookupServiceSpec{
 					Ingress: platformv1alpha1.LookupServiceIngress{Prefix: "lookup"},
 				},
-			}, cfg, imageNamespace)
+			}, cfg, imageRegistryNamespace)
 		}},
-		{"session-manager", vendoredcharts.SessionManager, func(cfg *configv1alpha1.EducatesClusterConfig, imageNamespace string) map[string]any {
-			return renderSessionManagerValues(sessionManager, cfg, testOperatorNamespace, imageNamespace)
+		{"session-manager", vendoredcharts.SessionManager, func(cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
+			return renderSessionManagerValues(sessionManager, cfg, testOperatorNamespace, imageRegistryNamespace)
 		}},
-		{"node-ca-injector", vendoredcharts.NodeCAInjector, func(cfg *configv1alpha1.EducatesClusterConfig, imageNamespace string) map[string]any {
-			return renderNodeCAInjectorValues(sessionManager, cfg, testOperatorNamespace, imageNamespace)
+		{"node-ca-injector", vendoredcharts.NodeCAInjector, func(cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
+			return renderNodeCAInjectorValues(sessionManager, cfg, testOperatorNamespace, imageRegistryNamespace)
 		}},
 	}
 
@@ -156,7 +156,7 @@ func chartImageLocation(t *testing.T, load func() (*chart.Chart, error)) (host, 
 		t.Fatalf("load chart: %v", err)
 	}
 	host = chrt.Metadata.Annotations["educates.dev/image-registry-host"]
-	namespace = chrt.Metadata.Annotations["educates.dev/image-registry-namespace"]
+	namespace = chrt.Metadata.Annotations[imageRegistryNamespaceAnnotation]
 	if host == "" || namespace == "" {
 		t.Fatalf("chart %s lacks its image registry annotations: %v", chrt.Metadata.Name, chrt.Metadata.Annotations)
 	}

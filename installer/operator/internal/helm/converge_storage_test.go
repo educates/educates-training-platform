@@ -97,6 +97,39 @@ func TestEnsureRelease_EmptyValuesStayUnchanged(t *testing.T) {
 	}
 }
 
+// Values that become empty must replace the release's values, not keep
+// them: Helm's upgrade copies the previous values over empty new ones
+// unless told otherwise. Kept values leave the release on its old
+// settings, such as Kyverno on a removed image registry prefix, and look
+// drifted on every pass, so it is upgraded on every reconcile.
+func TestEnsureRelease_ValuesBecomingEmptyReplaceTheOldOnes(t *testing.T) {
+	c, _ := NewMemoryClient("default")
+	ctx := context.Background()
+
+	if _, err := c.EnsureRelease(ctx, "demo", minimalChart(), map[string]any{"greeting": "hi"}); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	res, err := c.EnsureRelease(ctx, "demo", minimalChart(), map[string]any{})
+	if err != nil {
+		t.Fatalf("upgrade to empty values: %v", err)
+	}
+	if res.Action != ActionUpgraded {
+		t.Fatalf("Action = %q, want %q", res.Action, ActionUpgraded)
+	}
+	if len(res.Release.Config) != 0 {
+		t.Errorf("release values = %v, want none", res.Release.Config)
+	}
+
+	res, err = c.EnsureRelease(ctx, "demo", minimalChart(), map[string]any{})
+	if err != nil {
+		t.Fatalf("second pass: %v", err)
+	}
+	if res.Action != ActionUnchanged {
+		t.Errorf("second pass Action = %q, want %q", res.Action, ActionUnchanged)
+	}
+}
+
 // A failed release whose desired inputs are unchanged must be held, not
 // retried — and left untouched. This is the regression that caused a failed
 // chart install to be reported as healthy.

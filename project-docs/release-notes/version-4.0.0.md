@@ -1582,6 +1582,14 @@ Bugs Fixed
   Any other such mirror needs the images copied into the layout the
   air-gapped installation guide describes.
 
+* When the values the operator computes for a Helm release it manages
+  became empty, the release kept its previous values, because Helm reuses
+  them on an upgrade given none. Removing ``spec.imageRegistry.prefix`` in
+  ``Managed`` mode therefore left Kyverno pulling from the removed prefix,
+  and the operator upgraded the Kyverno release on every reconcile, adding a
+  revision each time. An upgrade now always replaces the release's values
+  with the ones the operator computes.
+
 * When the workshop image already had a ``workshop`` directory in the home
   directory, workshop content downloaded using ``spec.workshop.files`` was
   copied into the home directory rather than into ``/opt/workshop``, but only

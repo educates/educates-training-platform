@@ -74,10 +74,10 @@ while read -r ref; do
 done < educates-images-X.Y.Z.txt
 ```
 
-`skopeo sync` does not produce the layout on its own: it keeps only the last path element of each
-image, or with `--scoped` its whole reference, registry host included, so it
-takes one run for each upstream namespace with that namespace added to the
-destination.
+`skopeo sync` does not produce the layout on its own: it keeps only the last
+path element of each image, or with `--scoped` its whole reference, registry
+host included, so it takes one run for each upstream namespace with that
+namespace added to the destination.
 
 The internal registry must accept repository names several levels deep, such
 as `educates/educates/educates-session-manager` under the prefix. CNCF
@@ -102,10 +102,11 @@ through cache rule maps one upstream registry to its own repository prefix.
 Zot's sync extension can map each upstream to its destination under one
 prefix, and so can the cache rules of Azure Container Registry's artifact
 cache, one for each upstream namespace, except for `reg.kyverno.io`, which
-it does not offer as an upstream. Repositories that group several proxies behind one path, such as a
-Nexus group, an Artifactory virtual repository or an Artifact Registry virtual
-repository, look an image up in each upstream in turn, so a path that exists
-on more than one upstream resolves to whichever is tried first.
+it does not offer as an upstream. Repositories that group several proxies
+behind one path, such as a Nexus group, an Artifactory virtual repository or
+an Artifact Registry virtual repository, look an image up in each upstream in
+turn, so a path that exists on more than one upstream resolves to whichever
+is tried first.
 
 Node-level registry mirrors, such as containerd's `hosts.toml` or CRI-O's
 `registries.conf`, are an alternative to the prefix: they let the nodes pull
@@ -117,10 +118,36 @@ Pointing the installation at the mirror
 
 Two settings re-root image resolution onto the mirror:
 
-* **The image registry prefix of `EducatesClusterConfig`**, `spec.imageRegistry.prefix` in Managed mode and `spec.inline.imageRegistry.prefix` in Inline mode, moves the images of everything the operator installs: the cluster services in Managed mode, and the Educates runtime components in both modes, including the images the session manager creates training portals and workshop sessions from. Each image keeps its upstream repository path, without the upstream registry host, under the prefix, which is the layout the mirroring steps above produce. With the prefix `registry.internal/educates`, `ghcr.io/educates/educates-session-manager:X.Y.Z` is pulled from `registry.internal/educates/educates/educates-session-manager:X.Y.Z`. From the CLI, set it in the `educatesClusterConfig` block of an `EducatesConfig` configuration file, or as `imageRegistry.prefix` in `EducatesInlineConfig`.
-* **The operator chart's `development.imageRegistry`** value (`{host, namespace}`) moves the operator pod's own image when installing the chart directly with Helm. When deploying via the CLI, set `operator.image.repository` in the configuration file instead.
+* **The image registry prefix of `EducatesClusterConfig`**,
+  `spec.imageRegistry.prefix` in Managed mode and
+  `spec.inline.imageRegistry.prefix` in Inline mode, moves the images of
+  everything the operator installs: the cluster services in Managed mode, and
+  the Educates runtime components in both modes, including the images the
+  session manager creates training portals and workshop sessions from. Each
+  image keeps its upstream repository path, without the upstream registry
+  host, under the prefix, which is the layout the mirroring steps above
+  produce. With the prefix `registry.internal/educates`,
+  `ghcr.io/educates/educates-session-manager:X.Y.Z` is pulled from
+  `registry.internal/educates/educates/educates-session-manager:X.Y.Z`. From
+  the CLI, set it in the `educatesClusterConfig` block of an `EducatesConfig`
+  configuration file, or as `imageRegistry.prefix` in `EducatesInlineConfig`.
+* **The operator chart's `development.imageRegistry`** value
+  (`{host, namespace}`) moves the operator pod's own image when installing the
+  chart directly with Helm. When deploying via the CLI, set
+  `operator.image.repository` in the configuration file instead.
 
-The prefix does not move the upstream images the session manager's image inventory pins for the vcluster workshop application and for Docker support in workshop sessions, such as `ghcr.io/loft-sh/vcluster-oss` and `docker`. Point those at the mirror with `imageVersions` overrides of the matching names. With a prefix set, the `$(image_repository)` data variable in workshop definitions resolves by default to where the Educates images are, `registry.internal/educates/educates` in the example above.
+The prefix does not move the upstream images the session manager's image
+inventory pins for the vcluster workshop application and for Docker support in
+workshop sessions, such as `ghcr.io/loft-sh/vcluster-oss` and `docker`. Point
+those at the mirror with `imageVersions` overrides of the matching names. With
+a prefix set, the `$(image_repository)` data variable in workshop definitions
+resolves by default to where the Educates images are,
+`registry.internal/educates/educates` in the example above.
+
+Changing the prefix on a running installation moves the cluster services and
+the Educates runtime components to the new location. Training portals and
+workshop sessions created before the change keep running the images they were
+created with.
 
 For a Helm-driven install from the transported chart tarball:
 

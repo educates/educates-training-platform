@@ -1576,11 +1576,11 @@ Bugs Fixed
   Educates image now keeps its upstream repository path under the prefix, as
   the cluster-service images do, and the ``$(image_repository)`` data
   variable of workshop definitions resolves by default to
-  ``<prefix>/educates``. A mirror laid out for the old behavior, with the
-  images at ``<prefix>/educates-<name>``, is still reached when the prefix
-  ends in ``/educates``, by removing that last segment from the prefix.
-  Any other such mirror needs the images copied into the layout the
-  air-gapped installation guide describes.
+  ``<prefix>/educates``. In ``Inline`` mode, a mirror laid out for the old
+  behavior, with the images at ``<prefix>/educates-<name>``, is still
+  reached when the prefix ends in ``/educates``, by removing that last
+  segment from the prefix. Any other such mirror needs the images copied
+  into the layout the air-gapped installation guide describes.
 
 * When the values the operator computes for a Helm release it manages
   became empty, the release kept its previous values, because Helm reuses

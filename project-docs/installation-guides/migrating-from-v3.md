@@ -104,6 +104,9 @@ namespace as the prefix: the host alone for the namespace ``educates``, and
 ``registry.internal/mirror`` for the namespace ``mirror/educates`` on
 ``registry.internal``. Any other mirror needs the images copied into the
 layout the [air-gapped installation](airgapped-installation) guide describes.
+In Managed mode the prefix also moves the cluster services the operator
+installs, such as cert-manager to ``<prefix>/jetstack/cert-manager-controller``,
+so their images need copying under the same prefix too.
 
 Anything not expressible in a narrow kind is reachable through `EducatesConfig`, which carries the four custom resource specs verbatim. Keep your v3 `values.yaml` open beside the [configuration settings](configuration-settings) reference while re-declaring; the JSON schemas give completion and validation in your editor as you go.
 

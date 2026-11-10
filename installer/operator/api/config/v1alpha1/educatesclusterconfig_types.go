@@ -747,8 +747,8 @@ type ImageRegistry struct {
 	// name-preserving mirror of the release image list holds. With
 	// "registry.internal/educates",
 	// ghcr.io/educates/educates-session-manager is pulled from
-	// registry.internal/educates/educates/educates-session-manager and
-	// quay.io/jetstack/cert-manager-controller from
+	// registry.internal/educates/educates/educates-session-manager and, in
+	// Managed mode, quay.io/jetstack/cert-manager-controller from
 	// registry.internal/educates/jetstack/cert-manager-controller. That
 	// covers the Educates images the session manager creates training
 	// portals and workshop sessions from; the upstream images its image

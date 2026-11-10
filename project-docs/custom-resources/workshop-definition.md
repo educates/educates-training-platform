@@ -90,7 +90,7 @@ Session data variables are the set of data variables which can be used in config
 * ``cluster_domain`` - The internal domain used by the Kubernetes cluster, usually ``cluster.local``.
 * ``config_password`` - A unique random password value for use when accessing the workshop session configuration.
 * ``environment_name`` - The name of the workshop environment.
-* ``image_repository`` - The host name of the image repository associated with the cluster or training portal for image storage.
+* ``image_repository`` - The image repository associated with the cluster or training portal for image storage: a registry host, optionally followed by a path.
 * ``ingress_class`` - The ingress class which Educates is configured to use for all ingress.
 * ``ingress_domain`` - The domain which should be used in the any generated hostname of ingress routes for exposing applications.
 * ``ingress_port`` - The port number for the workshop session ingress, usually port 80 or 443, but for docker deployment can be different.

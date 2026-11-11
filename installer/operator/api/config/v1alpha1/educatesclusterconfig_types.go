@@ -759,7 +759,17 @@ type ImageRegistry struct {
 	Prefix string `json:"prefix,omitempty"`
 
 	// pullSecrets references kubernetes.io/dockerconfigjson Secrets in
-	// the operator namespace.
+	// the operator namespace. The operator copies each one, under the
+	// same name, into every namespace it installs a chart into: the
+	// educates namespace in both modes and, in Managed mode, the
+	// namespace of each cluster service it installs. The copies follow
+	// their sources, are removed when a name is dropped from this list,
+	// and are owned by the EducatesClusterConfig, so they go when it is
+	// deleted. Every pod the operator installs can pull with them, and
+	// the session manager passes them on to the training portal,
+	// workshop environment and workshop session namespaces it creates.
+	// Each Secret must exist and have type kubernetes.io/dockerconfigjson;
+	// until it does, the EducatesClusterConfig is not Ready.
 	// +optional
 	PullSecrets []LocalObjectReference `json:"pullSecrets,omitempty"`
 }

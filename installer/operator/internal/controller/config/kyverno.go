@@ -202,6 +202,9 @@ func (r *EducatesClusterConfigReconciler) reconcileKyverno(ctx context.Context, 
 	if err := r.ensureNamespace(ctx, kyvernoNamespace, owner, nil); err != nil {
 		return helm.Result{}, err
 	}
+	if err := r.ensureImagePullSecretCopies(ctx, owner, kyvernoNamespace); err != nil {
+		return helm.Result{}, err
+	}
 
 	hc, err := r.HelmClientFor(kyvernoNamespace)
 	if err != nil {
@@ -248,6 +251,11 @@ func renderKyvernoValues(obj *configv1alpha1.EducatesClusterConfig) map[string]a
 		values["webhooksCleanup"] = registry()
 		values["test"] = registry()
 	}
+	// Kyverno's global.imagePullSecrets is what each component's own
+	// list, which the operator leaves unset, defaults to. It is not the
+	// top-level imagePullSecrets, which creates registry Secrets for
+	// image verification policies.
+	setGlobalImagePullSecrets(values, obj)
 
 	return values
 }

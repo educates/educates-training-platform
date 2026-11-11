@@ -126,7 +126,7 @@
               "type": "string"
             },
             "pullSecrets": {
-              "description": "pullSecrets references kubernetes.io/dockerconfigjson Secrets in\nthe operator namespace.",
+              "description": "pullSecrets references kubernetes.io/dockerconfigjson Secrets in\nthe operator namespace. The operator copies each one, under the\nsame name, into every namespace it installs a chart into: the\neducates namespace in both modes and, in Managed mode, the\nnamespace of each cluster service it installs. The copies follow\ntheir sources, are removed when a name is dropped from this list,\nand are owned by the EducatesClusterConfig, so they go when it is\ndeleted. Every pod the operator installs can pull with them, and\nthe session manager passes them on to the training portal,\nworkshop environment and workshop session namespaces it creates.\nEach Secret must exist and have type kubernetes.io/dockerconfigjson;\nuntil it does, the EducatesClusterConfig is not Ready.",
               "items": {
                 "description": "LocalObjectReference is a reference to a Kubernetes object by name in\nthe operator namespace. Cluster-scoped references (e.g., ClusterIssuer,\nIngressClass) also use this shape.",
                 "properties": {
@@ -689,7 +689,7 @@
                   "type": "string"
                 },
                 "pullSecrets": {
-                  "description": "pullSecrets references kubernetes.io/dockerconfigjson Secrets in\nthe operator namespace.",
+                  "description": "pullSecrets references kubernetes.io/dockerconfigjson Secrets in\nthe operator namespace. The operator copies each one, under the\nsame name, into every namespace it installs a chart into: the\neducates namespace in both modes and, in Managed mode, the\nnamespace of each cluster service it installs. The copies follow\ntheir sources, are removed when a name is dropped from this list,\nand are owned by the EducatesClusterConfig, so they go when it is\ndeleted. Every pod the operator installs can pull with them, and\nthe session manager passes them on to the training portal,\nworkshop environment and workshop session namespaces it creates.\nEach Secret must exist and have type kubernetes.io/dockerconfigjson;\nuntil it does, the EducatesClusterConfig is not Ready.",
                   "items": {
                     "description": "LocalObjectReference is a reference to a Kubernetes object by name in\nthe operator namespace. Cluster-scoped references (e.g., ClusterIssuer,\nIngressClass) also use this shape.",
                     "properties": {

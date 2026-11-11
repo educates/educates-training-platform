@@ -116,24 +116,14 @@ func (r *EducatesClusterConfigReconciler) mapSecretToSingleton(ctx context.Conte
 	}
 
 	// Image pull Secret references are name-only and live in the
-	// operator namespace by design.
+	// operator namespace by design. A change to one reconciles, so its
+	// copies follow it.
 	if ns != r.OperatorNamespace {
 		return nil
 	}
-	var registry *configv1alpha1.ImageRegistry
-	switch cr.Spec.Mode {
-	case configv1alpha1.ClusterConfigModeInline:
-		if cr.Spec.Inline != nil {
-			registry = cr.Spec.Inline.ImageRegistry
-		}
-	case configv1alpha1.ClusterConfigModeManaged:
-		registry = cr.Spec.ImageRegistry
-	}
-	if registry != nil {
-		for _, ref := range registry.PullSecrets {
-			if name == ref.Name {
-				return singletonRequest
-			}
+	for _, ref := range specImagePullSecrets(cr) {
+		if name == ref.Name {
+			return singletonRequest
 		}
 	}
 	return nil

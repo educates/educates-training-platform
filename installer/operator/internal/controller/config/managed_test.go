@@ -55,6 +55,7 @@ import (
 	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno/kyvernotest"
 	"github.com/educates/educates-training-platform/installer/operator/internal/ownership"
 	"github.com/educates/educates-training-platform/installer/operator/internal/pki"
+	"github.com/educates/educates-training-platform/installer/operator/internal/platformnamespace"
 	"github.com/educates/educates-training-platform/installer/operator/internal/testpki"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
@@ -609,6 +610,10 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		_ = k8sClient.DeleteAllOf(ctx, &appsv1.DaemonSet{}, client.InNamespace(contourNamespace))
 		_ = k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, client.InNamespace(externalDNSNamespace))
 		_ = k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, client.InNamespace(kyvernoNamespace))
+		// Image pull Secret copies: envtest runs no garbage collector.
+		for _, ns := range []string{contourNamespace, externalDNSNamespace, kyvernoNamespace, platformnamespace.Name} {
+			_ = k8sClient.DeleteAllOf(ctx, &corev1.Secret{}, client.InNamespace(ns))
+		}
 		_ = k8sClient.DeleteAllOf(ctx, &networkingv1.IngressClass{})
 		_ = k8sClient.DeleteAllOf(ctx, &cmv1.ClusterIssuer{})
 		// Intentionally do NOT delete the cert-manager namespace: envtest
@@ -1855,6 +1860,8 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		// always find it.
 		Expect(statusImageRegistry()).To(Equal(&configv1alpha1.ImageRegistry{}))
 
+		// A named pull Secret must exist for validation to pass.
+		Expect(k8sClient.Create(ctx, makePullSecret(testOperatorNamespace, "mirror-pull", "status"))).To(Succeed())
 		mirror := &configv1alpha1.ImageRegistry{
 			Prefix:      "mirror.example.com/educates",
 			PullSecrets: []configv1alpha1.LocalObjectReference{{Name: "mirror-pull"}},
@@ -1865,6 +1872,97 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		setSpecImageRegistry(nil)
 		Eventually(statusImageRegistry, 30*time.Second, 200*time.Millisecond).
 			Should(Equal(&configv1alpha1.ImageRegistry{}))
+	})
+
+	It("copies the pull Secrets into each namespace it installs a chart into before converging the release, and keeps them through teardown", func() {
+		Expect(k8sClient.Create(ctx, makeCustomCASecret())).To(Succeed())
+		source := makePullSecret(testOperatorNamespace, "mirror-pull-secret", "managed")
+		Expect(k8sClient.Create(ctx, source)).To(Succeed())
+		kyvernoDiscovery.SetServed(true)
+
+		spec := validManagedSpec()
+		spec.ImageRegistry = &configv1alpha1.ImageRegistry{PullSecrets: pullSecretRefs("mirror-pull-secret")}
+		spec.DNS = &configv1alpha1.DNS{
+			Provider: configv1alpha1.DNSProviderBundledExternalDNS,
+			BundledExternalDNS: &configv1alpha1.BundledExternalDNSConfig{
+				Provider: configv1alpha1.DNS01ProviderRoute53,
+				Route53: &configv1alpha1.ExternalDNSRoute53Config{
+					HostedZoneID: "Z0123456789ABCDEF",
+					IAMRoleARN:   "arn:aws:iam::123456789012:role/external-dns",
+				},
+			},
+		}
+		spec.PolicyEnforcement = bundledKyvernoPolicyEnforcement()
+		obj := &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       spec,
+		}
+		Expect(k8sClient.Create(ctx, obj)).To(Succeed())
+
+		// The copy is made in the same reconcile as the release, before
+		// it, so once the release exists so must the copy.
+		expectCopiedWithRelease := func(svc clusterServiceRelease) {
+			GinkgoHelper()
+			hc, err := helmFac.For(svc.namespace)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(func() error {
+				_, err := hc.Status(svc.releaseName)
+				return err
+			}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+			expectPullSecretCopy(svc.namespace, source)
+		}
+
+		expectCopiedWithRelease(certManagerRelease)
+		// The platform namespace is copied into before any cluster
+		// service, since the platform reconcilers wait for Ready.
+		expectPullSecretCopy(platformnamespace.Name, source)
+		for _, name := range certManagerDeployments {
+			markDeploymentAvailable(name, certManagerNamespace)
+		}
+		Eventually(func() error {
+			return k8sClient.Get(ctx, types.NamespacedName{Namespace: testOperatorNamespace, Name: wildcardCertificate}, &cmv1.Certificate{})
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+		markCertificateReady()
+
+		expectCopiedWithRelease(contourRelease)
+		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
+		markDaemonSetReady()
+
+		expectCopiedWithRelease(externalDNSRelease)
+		markDeploymentAvailable(externalDNSControllerDeploy, externalDNSNamespace)
+
+		expectCopiedWithRelease(kyvernoRelease)
+		for _, name := range kyvernoDeployments {
+			markDeploymentAvailable(name, kyvernoNamespace)
+		}
+		Eventually(readyConditionStatus, 45*time.Second, 200*time.Millisecond).
+			Should(Equal(metav1.ConditionTrue))
+
+		// A rotation in the operator namespace reaches every copy through
+		// the Secret watch, with nothing else changing.
+		rotated := makePullSecret(testOperatorNamespace, source.Name, "rotated")
+		live := getSecret(testOperatorNamespace, source.Name)
+		live.Data = rotated.Data
+		Expect(k8sClient.Update(ctx, live)).To(Succeed())
+		for _, ns := range []string{certManagerNamespace, contourNamespace, externalDNSNamespace, kyvernoNamespace, platformnamespace.Name} {
+			Eventually(func() map[string][]byte {
+				if s := getSecret(ns, source.Name); s != nil {
+					return s.Data
+				}
+				return nil
+			}, 30*time.Second, 200*time.Millisecond).Should(Equal(rotated.Data), "copy in %s did not follow the rotation", ns)
+		}
+
+		// The drain uninstalls Kyverno, whose pre-delete hooks pull
+		// images, so it leaves every copy to the garbage collector, which
+		// envtest does not run.
+		Expect(k8sClient.Delete(ctx, obj)).To(Succeed())
+		Eventually(func() bool {
+			return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, &configv1alpha1.EducatesClusterConfig{}))
+		}, 30*time.Second, 200*time.Millisecond).Should(BeTrue())
+		for _, ns := range []string{kyvernoNamespace, platformnamespace.Name} {
+			Expect(getSecret(ns, source.Name)).NotTo(BeNil(), "copy in %s deleted by the drain", ns)
+		}
 	})
 
 	It("waits for an External Kyverno to be served before reaching Ready", func() {

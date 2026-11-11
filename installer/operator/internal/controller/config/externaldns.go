@@ -148,6 +148,9 @@ func (r *EducatesClusterConfigReconciler) reconcileExternalDNS(ctx context.Conte
 	if err := r.ensureNamespace(ctx, externalDNSNamespace, owner, nil); err != nil {
 		return helm.Result{}, err
 	}
+	if err := r.ensureImagePullSecretCopies(ctx, owner, externalDNSNamespace); err != nil {
+		return helm.Result{}, err
+	}
 
 	hc, err := r.HelmClientFor(externalDNSNamespace)
 	if err != nil {
@@ -241,6 +244,7 @@ func renderExternalDNSValues(obj *configv1alpha1.EducatesClusterConfig) map[stri
 			"repository": obj.Spec.ImageRegistry.Prefix + "/" + externalDNSImagePath,
 		}
 	}
+	setGlobalImagePullSecrets(values, obj)
 
 	return values
 }

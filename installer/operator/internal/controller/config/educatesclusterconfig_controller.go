@@ -176,8 +176,9 @@ type EducatesClusterConfigReconciler struct {
 
 // Managed-mode operations:
 //   - Namespaces (create/patch for cluster-service installs).
-//   - Secrets (write — copy CustomCA into cert-manager namespace, and
-//     derive educates-ingress-ca in the operator namespace).
+//   - Secrets (write: copy CustomCA into cert-manager namespace,
+//     derive educates-ingress-ca in the operator namespace, and copy
+//     the image pull Secrets into the namespaces charts install into).
 //   - Deployments (watch — cert-manager readiness gate).
 //   - cert-manager ClusterIssuers + Certificates (SSA + watch).
 // Helm-managed resources (cert-manager's own ConfigMaps, Services,
@@ -292,6 +293,14 @@ func (r *EducatesClusterConfigReconciler) Reconcile(ctx context.Context, req ctr
 		// As in Managed mode, CA trust reaches components only as the
 		// key-free educates-ingress-ca, kept current on every reconcile.
 		err = r.ensureIngressCATrust(ctx, obj)
+	}
+	if err == nil {
+		err = r.validateImagePullSecrets(ctx, obj)
+	}
+	if err == nil {
+		// The cluster services are the user's, with their own pull
+		// secrets, so only the platform namespace gets copies.
+		err = r.ensurePlatformImagePullSecrets(ctx, obj)
 	}
 	if err != nil {
 		if verr, ok := errors.AsType[*validationError](err); ok {

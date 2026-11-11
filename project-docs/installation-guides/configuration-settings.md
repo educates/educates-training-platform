@@ -303,9 +303,10 @@ environment. You can add further images, by name or by full reference, and
 drop the default ones.
 
 The DaemonSet sets no tolerations, so it skips nodes that carry a taint, such
-as control plane nodes or a tainted workshop node pool. Image pull secrets
-configured for the installation are not copied into the ``educates``
-namespace, so an image from a registry that requires credentials is pulled
+as control plane nodes or a tainted workshop node pool. It pulls with the image
+pull secrets listed in the ``pullSecrets`` of the cluster configuration's image
+registry, which the operator copies into the ``educates`` namespace. An image
+from a registry that requires credentials those secrets do not hold is pulled
 only on nodes that hold credentials for that registry themselves.
 
 ### Turning the pre-puller on and off

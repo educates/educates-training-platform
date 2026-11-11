@@ -1582,6 +1582,27 @@ Bugs Fixed
   segment from the prefix. Any other such mirror needs the images copied
   into the layout the air-gapped installation guide describes.
 
+* The image pull secrets named in ``spec.imageRegistry.pullSecrets`` of the
+  ``EducatesClusterConfig`` in ``Managed`` mode, and in
+  ``spec.inline.imageRegistry.pullSecrets`` in ``Inline`` mode, reached no
+  pod the operator installs. A pod can use a pull secret only from its own
+  namespace, and the secrets stayed in the operator namespace, so against a
+  mirror that requires authentication the cluster services and the Educates
+  runtime components could not pull their images unless the nodes held
+  credentials for the mirror. The operator now copies each secret, under the
+  same name, into the ``educates`` namespace in both modes and, in
+  ``Managed`` mode, into the namespace of each cluster service it installs,
+  whose chart it now gives the secrets for all of its pods, Helm hooks
+  included. The copies follow their source secrets, are deleted when a name
+  is dropped from the list, and are removed with the
+  ``EducatesClusterConfig``. The session manager's rules that pass the
+  secrets on to training portal and workshop environment namespaces now have
+  them to pass on, and cover workshop session namespaces as well, adding the
+  secrets to every service account there. A listed secret must exist in the
+  operator namespace and have the type ``kubernetes.io/dockerconfigjson``;
+  until it does, the ``EducatesClusterConfig`` reports ``Ready`` as
+  ``False`` with a message naming it.
+
 * When the values the operator computes for a Helm release it manages
   became empty, the release kept its previous values, because Helm reuses
   them on an upgrade given none. Removing ``spec.imageRegistry.prefix`` in

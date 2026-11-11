@@ -159,6 +159,51 @@ helm install educates-installer educates-installer-X.Y.Z.tgz \
 kubectl apply -f educates-cluster-config.yaml   # spec.imageRegistry.prefix: registry.internal/educates
 ```
 
-If the mirror requires authentication, create the pull secret in the operator namespace and reference it via `imagePullSecrets` in the operator chart, so that the operator pod can pull its own image. The operator does not distribute registry credentials to the cluster services and Educates runtime components it installs, so the cluster's nodes must be able to pull those images from the mirror themselves, for example through node-level registry credentials or a mirror that allows anonymous pulls.
+If the mirror requires authentication, create a `kubernetes.io/dockerconfigjson`
+Secret holding its credentials in the operator namespace, `educates-installer`
+by default, and use it in two places:
+
+* **The operator chart's `imagePullSecrets`**, so that the operator pod can
+  pull its own image. From the CLI, set `operator.imagePullSecrets` in the
+  configuration file.
+* **The image pull secrets of `EducatesClusterConfig`**,
+  `spec.imageRegistry.pullSecrets` in Managed mode and
+  `spec.inline.imageRegistry.pullSecrets` in Inline mode, so that everything
+  the operator installs can pull from the mirror. From the CLI, set them in
+  the `educatesClusterConfig` block of an `EducatesConfig` configuration file,
+  or as `imageRegistry.pullSecrets` in `EducatesInlineConfig`.
+
+A pod can use a pull secret only from its own namespace, so the operator
+copies each Secret listed in `pullSecrets`, under the same name, into every
+namespace it installs a chart into: the `educates` namespace of the Educates
+runtime components in both modes, which it creates first if needed, and in
+Managed mode the `cert-manager`, `contour`, `external-dns` and `kyverno`
+namespaces of the cluster services it installs. Each of those charts is given
+the Secrets for all of its pods, Helm hooks included. In Inline mode the
+cluster services are your own and keep their own pull secrets, so only
+`educates` gets copies. Rules the session manager installs then have the
+secrets manager copy the Secrets from `educates` into the training portal,
+workshop environment and workshop session namespaces the session manager
+creates, and add them to the service accounts there. Every service account of a
+workshop session namespace gets them, so a workshop's own pods, such as the
+vcluster of a session whose images you point at the mirror with
+`imageVersions`, can pull from the mirror too. Workshop users can read the
+Secrets in their session namespaces, so give the Secrets credentials that only
+allow pulling from the mirror.
+
+The copies follow the Secrets in the operator namespace, so rotating the
+credentials there updates every copy, down to the workshop namespaces. Removing
+a name from `pullSecrets` deletes its copies. The copies belong to the
+`EducatesClusterConfig`: deleting Educates leaves them in place while the
+cluster services are uninstalled, so that Helm hooks such as Kyverno's can
+still pull, and removes them once the `EducatesClusterConfig` is gone. Until
+every Secret listed exists and has the type `kubernetes.io/dockerconfigjson`,
+the `EducatesClusterConfig` reports `Ready` as `False` with a message naming
+the entry.
+
+Alternatively, nodes that hold credentials for the mirror themselves, through a
+kubelet image credential provider, the container runtime's registry
+configuration or a cloud node identity, can pull every image without pull
+secrets.
 
 Workshop content images are a separate concern from the platform: workshops published with `educates publish-workshop` are self-contained OCI artifacts that can be relocated with `imgpkg copy`, as covered in the workshop content documentation.

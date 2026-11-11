@@ -1560,6 +1560,48 @@ Bugs Fixed
   ready. It now returns to ``True`` once the spec and the secrets it
   references pass validation.
 
+* In ``Managed`` mode, ``spec.imageRegistry.prefix`` of the
+  ``EducatesClusterConfig`` moved the images of the cluster services but not
+  those of the Educates runtime components, which take the prefix from
+  ``status.imageRegistry``, a field the operator published only in ``Inline``
+  mode. The secrets manager, lookup service, session manager and node CA
+  injector, and the training portals and workshop sessions the session
+  manager creates, kept pulling from ``ghcr.io``. ``Managed`` mode now
+  publishes the field too. In both modes, a prefix with a path also replaced
+  the ``educates`` namespace of the Educates images rather than keeping it:
+  with ``registry.internal/educates`` the session manager was pulled from
+  ``registry.internal/educates/educates-session-manager``, while a mirror of
+  the release image list holds it at
+  ``registry.internal/educates/educates/educates-session-manager``. Every
+  Educates image now keeps its upstream repository path under the prefix, as
+  the cluster-service images do, and the ``$(image_repository)`` data
+  variable of workshop definitions resolves by default to
+  ``<prefix>/educates``. In ``Inline`` mode, a mirror laid out for the old
+  behavior, with the images at ``<prefix>/educates-<name>``, is still
+  reached when the prefix ends in ``/educates``, by removing that last
+  segment from the prefix. Any other such mirror needs the images copied
+  into the layout the air-gapped installation guide describes.
+
+* When the values the operator computes for a Helm release it manages
+  became empty, the release kept its previous values, because Helm reuses
+  them on an upgrade given none. Removing ``spec.imageRegistry.prefix`` in
+  ``Managed`` mode therefore left Kyverno pulling from the removed prefix,
+  and the operator upgraded the Kyverno release on every reconcile, adding a
+  revision each time. An upgrade now always replaces the release's values
+  with the ones the operator computes.
+
+* Helm releases the operator installed or upgraded at the same time could
+  fail with an error naming a resource under the wrong API group, such as
+  ``customresourcedefinitions.rbac.authorization.k8s.io ... is forbidden``,
+  which left the release failed and its custom resource ``Degraded`` with
+  the reason ``ReleaseFailed``. This could happen whenever several releases
+  changed together, such as a change to the ``EducatesClusterConfig`` and to
+  a platform resource made at once. The Helm clients the operator creates
+  shared one Kubernetes client configuration, which Helm modifies for each
+  resource kind it handles; each Helm operation now works on a copy of its
+  own. A release already left failed this way is retried once its values or
+  chart version change.
+
 * When the workshop image already had a ``workshop`` directory in the home
   directory, workshop content downloaded using ``spec.workshop.files`` was
   copied into the home directory rather than into ``/opt/workshop``, but only

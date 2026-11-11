@@ -307,6 +307,30 @@ func driveStaticCertificateToReady() {
 		Should(Equal(metav1.ConditionTrue))
 }
 
+// statusImageRegistry returns the singleton's published
+// status.imageRegistry.
+func statusImageRegistry() *configv1alpha1.ImageRegistry {
+	got := &configv1alpha1.EducatesClusterConfig{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got); err != nil {
+		return nil
+	}
+	return got.Status.ImageRegistry
+}
+
+// setSpecImageRegistry replaces the singleton's spec.imageRegistry, nil
+// removing it, retrying while the reconciler's status writes conflict.
+func setSpecImageRegistry(registry *configv1alpha1.ImageRegistry) {
+	GinkgoHelper()
+	Eventually(func() error {
+		obj := &configv1alpha1.EducatesClusterConfig{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, obj); err != nil {
+			return err
+		}
+		obj.Spec.ImageRegistry = registry
+		return k8sClient.Update(ctx, obj)
+	}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+}
+
 // markDeploymentAvailable creates the named Deployment (if missing) and
 // sets Status.Conditions[Available]=True. cert-manager would normally
 // drive this; envtest has no controllers, so the spec drives the
@@ -1810,6 +1834,37 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			Not(BeNil()),
 			HaveField("Status", metav1.ConditionTrue),
 			HaveField("Reason", "NotRequired")))
+	})
+
+	// Components read the image registry from status, never the spec, so
+	// the runtime charts move under spec.imageRegistry.prefix only once
+	// status carries it, and follow it when it changes or goes away.
+	It("publishes spec.imageRegistry in status once Ready, and follows its changes", func() {
+		root := testpki.NewRootCA()
+		leaf := root.NewLeaf(testpki.WithDNSNames("*.educates.test"))
+		Expect(k8sClient.Create(ctx, staticWildcardSecret(leaf.ChainPEM(), leaf.KeyPEM))).To(Succeed())
+		Expect(k8sClient.Create(ctx, staticCASecret(root))).To(Succeed())
+
+		Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       staticCertificateSpec(),
+		})).To(Succeed())
+		driveStaticCertificateToReady()
+
+		// Unset, it is published empty, as in Inline mode, so components
+		// always find it.
+		Expect(statusImageRegistry()).To(Equal(&configv1alpha1.ImageRegistry{}))
+
+		mirror := &configv1alpha1.ImageRegistry{
+			Prefix:      "mirror.example.com/educates",
+			PullSecrets: []configv1alpha1.LocalObjectReference{{Name: "mirror-pull"}},
+		}
+		setSpecImageRegistry(mirror)
+		Eventually(statusImageRegistry, 30*time.Second, 200*time.Millisecond).Should(Equal(mirror))
+
+		setSpecImageRegistry(nil)
+		Eventually(statusImageRegistry, 30*time.Second, 200*time.Millisecond).
+			Should(Equal(&configv1alpha1.ImageRegistry{}))
 	})
 
 	It("waits for an External Kyverno to be served before reaching Ready", func() {

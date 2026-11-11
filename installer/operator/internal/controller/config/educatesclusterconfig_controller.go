@@ -500,6 +500,17 @@ func conditionReasonFor(obj *configv1alpha1.EducatesClusterConfig, conditionType
 	return c.Reason
 }
 
+// publishedImageRegistry returns the status.imageRegistry for the image
+// registry the spec declares: a copy of it, or an empty value when it
+// declares none, so components always find the field. The runtime charts
+// take their registry prefix and pull secrets from status alone.
+func publishedImageRegistry(declared *configv1alpha1.ImageRegistry) *configv1alpha1.ImageRegistry {
+	if declared == nil {
+		return &configv1alpha1.ImageRegistry{}
+	}
+	return declared.DeepCopy()
+}
+
 // markReady populates the inter-CR status contract and flips conditions
 // to True. Called once Inline validation has succeeded.
 func (r *EducatesClusterConfigReconciler) markReady(obj *configv1alpha1.EducatesClusterConfig, ingress *configv1alpha1.StatusIngress) {
@@ -511,12 +522,7 @@ func (r *EducatesClusterConfigReconciler) markReady(obj *configv1alpha1.Educates
 		ClusterPolicyEngine:  obj.Spec.Inline.PolicyEnforcement.ClusterPolicyEngine,
 		WorkshopPolicyEngine: obj.Spec.Inline.PolicyEnforcement.WorkshopPolicyEngine,
 	}
-	if obj.Spec.Inline.ImageRegistry != nil {
-		obj.Status.ImageRegistry = obj.Spec.Inline.ImageRegistry.DeepCopy()
-	} else {
-		// Always populate so components see a single source of truth.
-		obj.Status.ImageRegistry = &configv1alpha1.ImageRegistry{}
-	}
+	obj.Status.ImageRegistry = publishedImageRegistry(obj.Spec.Inline.ImageRegistry)
 
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               conditionValidationSucceeded,

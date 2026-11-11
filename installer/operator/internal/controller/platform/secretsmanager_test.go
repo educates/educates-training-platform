@@ -142,6 +142,20 @@ func publishIngressCAOnClusterConfig() {
 	Expect(k8sClient.Status().Update(ctx, cc)).To(Succeed())
 }
 
+// setClusterConfigImageRegistry replaces the image registry the
+// makeReadyClusterConfig fixture publishes in status.
+func setClusterConfigImageRegistry(registry *configv1alpha1.ImageRegistry) {
+	GinkgoHelper()
+	Eventually(func() error {
+		cc := &configv1alpha1.EducatesClusterConfig{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: configSingletonName}, cc); err != nil {
+			return err
+		}
+		cc.Status.ImageRegistry = registry
+		return k8sClient.Status().Update(ctx, cc)
+	}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+}
+
 // ingressCAChartRef is the clusterIngress.caCertificateRef chart value
 // publishIngressCAOnClusterConfig's reference must render to.
 func ingressCAChartRef() map[string]any {
@@ -313,6 +327,43 @@ var _ = Describe("SecretsManager reconciler", func() {
 		Expect(got.Status.DeploymentRef).NotTo(BeNil())
 		Expect(got.Status.DeploymentRef.Namespace).To(Equal(platformNamespace))
 		Expect(got.Status.DeploymentRef.Name).To(Equal(secretsManagerDeploymentName))
+	})
+
+	// A changed or removed spec.imageRegistry reaches the runtime only
+	// through the cluster config's status, so the release must follow it.
+	It("follows the cluster config's image registry into the release when it is set and removed", func() {
+		makeReadyClusterConfig()
+		Expect(k8sClient.Create(ctx, &platformv1alpha1.SecretsManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+		})).To(Succeed())
+
+		releaseConfig := func() map[string]any {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return nil
+			}
+			rel, err := hc.Status(secretsManagerReleaseName)
+			if err != nil {
+				return nil
+			}
+			return rel.Config
+		}
+		Eventually(releaseConfig, 30*time.Second, 200*time.Millisecond).ShouldNot(BeNil())
+		Expect(releaseConfig()).NotTo(HaveKey("development"))
+		Expect(releaseConfig()).NotTo(HaveKey("imagePullSecrets"))
+
+		setClusterConfigImageRegistry(&configv1alpha1.ImageRegistry{
+			Prefix:      "mirror.example.com/educates",
+			PullSecrets: []configv1alpha1.LocalObjectReference{{Name: "mirror-pull"}},
+		})
+		Eventually(releaseConfig, 30*time.Second, 200*time.Millisecond).Should(And(
+			HaveKey("development"),
+			HaveKeyWithValue("imagePullSecrets", []any{map[string]any{"name": "mirror-pull"}})))
+
+		setClusterConfigImageRegistry(&configv1alpha1.ImageRegistry{})
+		Eventually(releaseConfig, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(HaveKey("development")),
+			Not(HaveKey("imagePullSecrets"))))
 	})
 
 	It("labels the existing platform namespace privileged for Pod Security admission", func() {

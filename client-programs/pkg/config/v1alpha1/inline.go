@@ -43,8 +43,9 @@ type EducatesInlineConfig struct {
 	// Optional.
 	ClusterIssuerName string `yaml:"clusterIssuerName,omitempty"`
 
-	// ImageRegistry optionally rewrites workshop image refs to live
-	// behind an in-cluster mirror and supplies pull credentials.
+	// ImageRegistry optionally relocates the Educates component images
+	// under a mirror prefix, each keeping its upstream repository path,
+	// and names pull Secrets for the mirror.
 	ImageRegistry InlineImageRegistry `yaml:"imageRegistry,omitempty"`
 
 	// PolicyEnforcement names the engines the cluster already enforces.

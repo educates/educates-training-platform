@@ -371,6 +371,8 @@ func (r *EducatesClusterConfigReconciler) markManagedReady(obj *configv1alpha1.E
 		WorkshopPolicyEngine: obj.Spec.PolicyEnforcement.WorkshopPolicy.Engine,
 	}
 
+	obj.Status.ImageRegistry = publishedImageRegistry(obj.Spec.ImageRegistry)
+
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               conditionReady,
 		Status:             metav1.ConditionTrue,

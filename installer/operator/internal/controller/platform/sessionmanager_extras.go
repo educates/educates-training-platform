@@ -180,7 +180,7 @@ func (r *SessionManagerReconciler) reconcileExtra(
 	conditionType string,
 	releaseName string,
 	loadChart func() (*chart.Chart, error),
-	renderValues func(*platformv1alpha1.SessionManager, *configv1alpha1.EducatesClusterConfig) map[string]any,
+	renderValues func(sm *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any,
 	cfg *configv1alpha1.EducatesClusterConfig,
 	intent extrasIntent, reason, message string,
 ) (extraOutcome, error) {
@@ -197,7 +197,7 @@ func (r *SessionManagerReconciler) reconcileExtra(
 			return extraOutcome{}, fmt.Errorf("load chart %s: %w", releaseName, err)
 		}
 		log.V(1).Info("converging extra", "release", releaseName)
-		res, err := convergeRelease(ctx, r.Client, hc, releaseName, chrt, renderValues(obj, cfg))
+		res, err := convergeRelease(ctx, r.Client, hc, releaseName, chrt, renderValues(obj, cfg, chartImageRegistryNamespace(chrt)))
 		if err != nil {
 			setExtraCondition(obj, conditionType, metav1.ConditionFalse, "InstallFailed", err.Error())
 			return extraOutcome{}, fmt.Errorf("ensure release %s: %w", releaseName, err)
@@ -271,17 +271,13 @@ func setExtraCondition(obj *platformv1alpha1.SessionManager, condType string, st
 // (effectiveIngressCARef), since every registry Ingress the
 // injector covers is created by the session manager; the resolver
 // above guarantees we only call this when that CA is configured.
-func renderNodeCAInjectorValues(obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, operatorNamespace string) map[string]any {
+// imageRegistryNamespace is the chart's own image registry namespace, kept
+// under the cluster config's image registry prefix.
+func renderNodeCAInjectorValues(obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, operatorNamespace, imageRegistryNamespace string) map[string]any {
 	values := map[string]any{}
 
-	if cfg.Status.ImageRegistry != nil && cfg.Status.ImageRegistry.Prefix != "" {
-		host, ns := splitImageRegistryPrefix(cfg.Status.ImageRegistry.Prefix)
-		values["development"] = map[string]any{
-			"imageRegistry": map[string]any{
-				"host":      host,
-				"namespace": ns,
-			},
-		}
+	if dev := developmentImageRegistryValues(cfg, imageRegistryNamespace); dev != nil {
+		values["development"] = dev
 	}
 	if cfg.Status.ImageRegistry != nil && len(cfg.Status.ImageRegistry.PullSecrets) > 0 {
 		refs := make([]any, 0, len(cfg.Status.ImageRegistry.PullSecrets))
@@ -320,7 +316,7 @@ func renderNodeCAInjectorValues(obj *platformv1alpha1.SessionManager, cfg *confi
 // configurable knobs — pull secrets aren't even needed because no
 // image is deployed (it's just RBAC + a token Secret). Returning an
 // empty map keeps the chart on its defaults.
-func renderRemoteAccessValues(_ *platformv1alpha1.SessionManager, _ *configv1alpha1.EducatesClusterConfig) map[string]any {
+func renderRemoteAccessValues(_ *platformv1alpha1.SessionManager, _ *configv1alpha1.EducatesClusterConfig, _ string) map[string]any {
 	return map[string]any{}
 }
 

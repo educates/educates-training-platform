@@ -268,23 +268,20 @@ func (r *LookupServiceReconciler) installOrUpgradeLS(ctx context.Context, obj *p
 	if err != nil {
 		return helm.Result{}, fmt.Errorf("build helm client: %w", err)
 	}
-	return convergeRelease(ctx, r.Client, hc, lookupServiceReleaseName, chrt, renderLookupServiceValues(obj, cfg))
+	return convergeRelease(ctx, r.Client, hc, lookupServiceReleaseName, chrt,
+		renderLookupServiceValues(obj, cfg, chartImageRegistryNamespace(chrt)))
 }
 
 // renderLookupServiceValues maps the CR spec + cluster config status
 // into the lookup-service subchart's values shape. Keep aligned with
 // `installer/charts/educates-training-platform/charts/lookup-service/values.yaml`.
-func renderLookupServiceValues(obj *platformv1alpha1.LookupService, cfg *configv1alpha1.EducatesClusterConfig) map[string]any {
+// imageRegistryNamespace is the chart's own image registry namespace, kept
+// under the cluster config's image registry prefix.
+func renderLookupServiceValues(obj *platformv1alpha1.LookupService, cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
 	values := map[string]any{}
 
-	if cfg.Status.ImageRegistry != nil && cfg.Status.ImageRegistry.Prefix != "" {
-		host, ns := splitImageRegistryPrefix(cfg.Status.ImageRegistry.Prefix)
-		values["development"] = map[string]any{
-			"imageRegistry": map[string]any{
-				"host":      host,
-				"namespace": ns,
-			},
-		}
+	if dev := developmentImageRegistryValues(cfg, imageRegistryNamespace); dev != nil {
+		values["development"] = dev
 	}
 
 	if obj.Spec.Image != nil {

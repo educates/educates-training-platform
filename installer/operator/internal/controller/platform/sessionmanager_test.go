@@ -995,7 +995,7 @@ var _ = Describe("SessionManager reconciler", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(hc.SeedRelease(
 			nodeCAInjectorReleaseName, 1, releasecommon.StatusFailed,
-			chrt, renderNodeCAInjectorValues(smObj, cc, testOperatorNamespace),
+			chrt, renderNodeCAInjectorValues(smObj, cc, testOperatorNamespace, testImageRegistryNamespace),
 			"node-ca-injector DaemonSet is invalid: spec.template.spec.containers: Required value",
 		)).To(Succeed())
 

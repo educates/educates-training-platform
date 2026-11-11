@@ -167,9 +167,9 @@ var _ = Describe("Runtime release first install", func() {
 			load   func() (*chart.Chart, error)
 			values map[string]any
 		}{
-			{secretsManagerReleaseName, vendoredcharts.SecretsManager, renderSecretsManagerValues(smgr, cc)},
-			{lookupServiceReleaseName, vendoredcharts.LookupService, renderLookupServiceValues(ls, cc)},
-			{sessionManagerReleaseName, vendoredcharts.SessionManager, renderSessionManagerValues(sm, cc, testOperatorNamespace)},
+			{secretsManagerReleaseName, vendoredcharts.SecretsManager, renderSecretsManagerValues(smgr, cc, testImageRegistryNamespace)},
+			{lookupServiceReleaseName, vendoredcharts.LookupService, renderLookupServiceValues(ls, cc, testImageRegistryNamespace)},
+			{sessionManagerReleaseName, vendoredcharts.SessionManager, renderSessionManagerValues(sm, cc, testOperatorNamespace, testImageRegistryNamespace)},
 		}
 
 		for _, rel := range releases {

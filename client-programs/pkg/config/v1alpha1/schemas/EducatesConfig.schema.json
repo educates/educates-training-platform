@@ -119,10 +119,10 @@
           "type": "object"
         },
         "imageRegistry": {
-          "description": "imageRegistry rewrites bundled chart image refs and supplies pull\ncredentials. Applies in Managed mode (Inline mode has its own\nequivalent under spec.inline.imageRegistry).",
+          "description": "imageRegistry relocates the images of the cluster services and\nEducates components the operator installs in Managed mode. Inline\nmode has its own equivalent under spec.inline.imageRegistry.",
           "properties": {
             "prefix": {
-              "description": "prefix rewrites every bundled image reference to live under this\nprefix, e.g., \"internal-registry.corp.local/educates\". Pre-relocated\nbundles (via helm dt wrap/unwrap) do not need this set.",
+              "description": "prefix moves each image to its upstream repository path, without\nthe upstream registry host, under this prefix: the layout a\nname-preserving mirror of the release image list holds. With\n\"registry.internal/educates\",\nghcr.io/educates/educates-session-manager is pulled from\nregistry.internal/educates/educates/educates-session-manager and, in\nManaged mode, quay.io/jetstack/cert-manager-controller from\nregistry.internal/educates/jetstack/cert-manager-controller. That\ncovers the Educates images the session manager creates training\nportals and workshop sessions from; the upstream images its image\ninventory pins, such as docker-in-docker and the vcluster images,\nkeep their references and are relocated through imageVersions\noverrides instead.",
               "type": "string"
             },
             "pullSecrets": {
@@ -682,10 +682,10 @@
           "description": "inline declares pre-existing cluster resources. Used in Inline\nmode; ignored in Managed mode.",
           "properties": {
             "imageRegistry": {
-              "description": "ImageRegistry configures registry rewriting and pull credentials.\nApplies to all bundled charts in Managed mode and to the runtime in\nboth modes.",
+              "description": "imageRegistry relocates the images of the Educates components the\noperator installs, as spec.imageRegistry does in Managed mode.",
               "properties": {
                 "prefix": {
-                  "description": "prefix rewrites every bundled image reference to live under this\nprefix, e.g., \"internal-registry.corp.local/educates\". Pre-relocated\nbundles (via helm dt wrap/unwrap) do not need this set.",
+                  "description": "prefix moves each image to its upstream repository path, without\nthe upstream registry host, under this prefix: the layout a\nname-preserving mirror of the release image list holds. With\n\"registry.internal/educates\",\nghcr.io/educates/educates-session-manager is pulled from\nregistry.internal/educates/educates/educates-session-manager and, in\nManaged mode, quay.io/jetstack/cert-manager-controller from\nregistry.internal/educates/jetstack/cert-manager-controller. That\ncovers the Educates images the session manager creates training\nportals and workshop sessions from; the upstream images its image\ninventory pins, such as docker-in-docker and the vcluster images,\nkeep their references and are relocated through imageVersions\noverrides instead.",
                   "type": "string"
                 },
                 "pullSecrets": {

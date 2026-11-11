@@ -105,7 +105,7 @@ func TestApplySMImageValues_RoutesSpecialOverrides(t *testing.T) {
 		},
 	}
 	values := map[string]any{}
-	applySMImageValues(values, obj, valuesTestClusterConfig())
+	applySMImageValues(values, obj, valuesTestClusterConfig(), testImageRegistryNamespace)
 
 	image, ok := values["image"].(map[string]any)
 	if !ok {
@@ -137,7 +137,7 @@ func TestRenderNodeCAInjectorValues_ImageOverride(t *testing.T) {
 			},
 		},
 	}
-	values := renderNodeCAInjectorValues(withOverride, cfg, testOperatorNamespace)
+	values := renderNodeCAInjectorValues(withOverride, cfg, testOperatorNamespace, testImageRegistryNamespace)
 	image, ok := values["image"].(map[string]any)
 	if !ok {
 		t.Fatal("node-ca-injector override did not land on the subchart's values.image")
@@ -147,7 +147,7 @@ func TestRenderNodeCAInjectorValues_ImageOverride(t *testing.T) {
 	}
 
 	without := &platformv1alpha1.SessionManager{}
-	values = renderNodeCAInjectorValues(without, cfg, testOperatorNamespace)
+	values = renderNodeCAInjectorValues(without, cfg, testOperatorNamespace, testImageRegistryNamespace)
 	if _, present := values["image"]; present {
 		t.Errorf("values.image should be absent without an override, got %v", values["image"])
 	}
@@ -257,7 +257,7 @@ func TestRenderSessionManagerValues_PolicyEnginesFromClusterConfig(t *testing.T)
 		WorkshopPolicyEngine: configv1alpha1.WorkshopPolicyEngineNone,
 	}
 
-	policy, rules := securityValues(renderSessionManagerValues(&platformv1alpha1.SessionManager{}, cfg, "educates-installer"))
+	policy, rules := securityValues(renderSessionManagerValues(&platformv1alpha1.SessionManager{}, cfg, "educates-installer", testImageRegistryNamespace))
 	if policy != string(configv1alpha1.ClusterPolicyEngineNone) || rules != string(platformv1alpha1.WorkshopPolicyEngineNone) {
 		t.Errorf("engines = (%q, %q), want (None, None)", policy, rules)
 	}
@@ -282,7 +282,7 @@ func TestRenderSessionManagerValues_WorkshopPolicyOverrideWins(t *testing.T) {
 		"engines published":    published,
 		"no engines published": unpublished,
 	} {
-		policy, rules := securityValues(renderSessionManagerValues(sm, cfg, "educates-installer"))
+		policy, rules := securityValues(renderSessionManagerValues(sm, cfg, "educates-installer", testImageRegistryNamespace))
 		if policy != string(configv1alpha1.ClusterPolicyEngineKyverno) || rules != string(platformv1alpha1.WorkshopPolicyEngineNone) {
 			t.Errorf("%s: engines = (%q, %q), want (Kyverno, None)", name, policy, rules)
 		}
@@ -294,7 +294,7 @@ func TestRenderSessionManagerValues_WorkshopPolicyOverrideWins(t *testing.T) {
 // for both, its own defaults, stated so the Kyverno presence gate and
 // the chart agree on what session-manager enforces.
 func TestRenderSessionManagerValues_KyvernoWhenNoEnginesPublished(t *testing.T) {
-	policy, rules := securityValues(renderSessionManagerValues(&platformv1alpha1.SessionManager{}, valuesTestClusterConfig(), "educates-installer"))
+	policy, rules := securityValues(renderSessionManagerValues(&platformv1alpha1.SessionManager{}, valuesTestClusterConfig(), "educates-installer", testImageRegistryNamespace))
 	if policy != string(configv1alpha1.ClusterPolicyEngineKyverno) || rules != string(platformv1alpha1.WorkshopPolicyEngineKyverno) {
 		t.Errorf("engines = (%q, %q), want (Kyverno, Kyverno)", policy, rules)
 	}

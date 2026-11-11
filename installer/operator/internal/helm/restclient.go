@@ -46,8 +46,12 @@ func newRESTClientGetter(cfg *rest.Config, namespace string) *restClientGetter {
 	return &restClientGetter{cfg: cfg, namespace: namespace}
 }
 
+// ToRESTConfig returns a copy of the config: Helm's resource builder sets
+// GroupVersion and APIPath on the config it gets before building each
+// REST client, and every Helm client shares cfg, so concurrent Helm
+// operations would otherwise build clients for each other's API groups.
 func (g *restClientGetter) ToRESTConfig() (*rest.Config, error) {
-	return g.cfg, nil
+	return rest.CopyConfig(g.cfg), nil
 }
 
 func (g *restClientGetter) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {

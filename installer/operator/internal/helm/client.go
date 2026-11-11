@@ -170,6 +170,11 @@ func (c *Client) Upgrade(ctx context.Context, releaseName string, chrt *chart.Ch
 	act.Namespace = c.namespace
 	act.WaitStrategy = kube.HookOnlyStrategy
 	act.Timeout = actionTimeout
+	// vals is always the release's complete desired values. Without
+	// ResetValues, Helm copies the previous release's values over empty
+	// ones, so a release whose values become empty would keep its old
+	// settings and never match what the operator renders.
+	act.ResetValues = true
 
 	rel, err := act.RunWithContext(ctx, releaseName, chrt, vals)
 	if err != nil {

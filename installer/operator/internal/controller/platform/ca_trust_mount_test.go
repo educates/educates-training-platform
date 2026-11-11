@@ -115,7 +115,7 @@ func assertMountsOnlyCACrt(t *testing.T, workloads []renderedWorkload, caSecretN
 
 func TestSessionManagerChart_MountsOnlyCACrtFromCATrustSecret(t *testing.T) {
 	cfg := valuesTestClusterConfig()
-	values := renderSessionManagerValues(&platformv1alpha1.SessionManager{}, cfg, "educates-installer")
+	values := renderSessionManagerValues(&platformv1alpha1.SessionManager{}, cfg, "educates-installer", testImageRegistryNamespace)
 
 	workloads := renderWorkloads(t, vendoredcharts.SessionManager, values)
 
@@ -124,7 +124,7 @@ func TestSessionManagerChart_MountsOnlyCACrtFromCATrustSecret(t *testing.T) {
 
 func TestLookupServiceChart_MountsOnlyCACrtFromCATrustSecret(t *testing.T) {
 	cfg := valuesTestClusterConfig()
-	values := renderLookupServiceValues(&platformv1alpha1.LookupService{}, cfg)
+	values := renderLookupServiceValues(&platformv1alpha1.LookupService{}, cfg, testImageRegistryNamespace)
 
 	workloads := renderWorkloads(t, vendoredcharts.LookupService, values)
 
@@ -133,7 +133,7 @@ func TestLookupServiceChart_MountsOnlyCACrtFromCATrustSecret(t *testing.T) {
 
 func TestNodeCAInjectorChart_MountsOnlyCACrtFromCATrustSecret(t *testing.T) {
 	cfg := valuesTestClusterConfig()
-	values := renderNodeCAInjectorValues(&platformv1alpha1.SessionManager{}, cfg, testOperatorNamespace)
+	values := renderNodeCAInjectorValues(&platformv1alpha1.SessionManager{}, cfg, testOperatorNamespace, testImageRegistryNamespace)
 
 	workloads := renderWorkloads(t, vendoredcharts.NodeCAInjector, values)
 

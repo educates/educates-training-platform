@@ -19,7 +19,9 @@ from .applications import pod_template_spec_patches, session_objects_list
 from .helpers import (Applications, image_pull_policy, smart_overlay_merge,
                       substitute_variables, xget)
 from .namespace_budgets import namespace_budgets
-from .objects import WorkshopEnvironment, create_from_dict
+from .objects import (WorkshopEnvironment, create_from_dict,
+                      ensure_default_service_account,
+                      name_image_pull_secrets)
 from .operator_config import (AMPLITUDE_TRACKING_ID, BASE_ENVIRONMENT_IMAGE,
                               CLARITY_TRACKING_ID, CLUSTER_DOMAIN,
                               CLUSTER_SECURITY_POLICY_ENGINE,
@@ -753,6 +755,8 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             ) from exc
         raise
 
+    ensure_default_service_account(session_namespace)
+
     try:
         namespace_instance = pykube.Namespace.objects(api).get(name=session_namespace)
 
@@ -829,7 +833,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     kopf.adopt(service_account_body, namespace_instance.obj)
 
     try:
-        pykube.ServiceAccount(api, service_account_body).create()
+        pykube.ServiceAccount(api, name_image_pull_secrets(service_account_body)).create()
 
     except pykube.exceptions.PyKubeError as exc:
         logger.exception(
@@ -1215,6 +1219,8 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                         f"Secondary namespace {target_namespace} already exists."
                     )
                 raise
+
+            ensure_default_service_account(target_namespace)
 
             _setup_session_namespace(
                 namespace_instance.obj,

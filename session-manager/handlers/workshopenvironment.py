@@ -8,7 +8,13 @@ import yaml
 import kopf
 import pykube
 
-from .objects import create_from_dict, Workshop, SecretCopier
+from .objects import (
+    create_from_dict,
+    ensure_default_service_account,
+    name_image_pull_secrets,
+    Workshop,
+    SecretCopier,
+)
 from .helpers import (
     xget,
     resource_owned_by,
@@ -492,6 +498,8 @@ def workshop_environment_create(
 
     try:
         pykube.Namespace(api, namespace_body).create()
+
+        ensure_default_service_account(workshop_namespace)
 
         namespace_instance = pykube.Namespace.objects(api).get(name=workshop_namespace)
 
@@ -1183,7 +1191,7 @@ def workshop_environment_create(
         },
     }
 
-    pykube.ServiceAccount(api, service_account_body).create()
+    pykube.ServiceAccount(api, name_image_pull_secrets(service_account_body)).create()
 
     # Potentially use base workshop image later on to initialize storage
     # permissions.

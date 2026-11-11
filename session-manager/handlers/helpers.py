@@ -32,6 +32,32 @@ def image_pull_policy(image):
         return "IfNotPresent"
 
 
+def add_image_pull_secrets(body, names):
+    """Names each of the image pull Secrets on a ServiceAccount body,
+    keeping the ones it already names, and reports whether the body
+    changed. Bodies of any other kind are left alone.
+
+    A pod takes its ServiceAccount's image pull secrets only when it is
+    created, so naming them before the ServiceAccount is created or used
+    means no pod runs without them, even when the Secrets themselves are
+    copied into the namespace a moment later.
+
+    """
+
+    if body.get("apiVersion") != "v1" or body.get("kind") != "ServiceAccount":
+        return False
+
+    changed = False
+
+    for name in names:
+        secrets = body.setdefault("imagePullSecrets", [])
+        if {"name": name} not in secrets:
+            secrets.append({"name": name})
+            changed = True
+
+    return changed
+
+
 def resource_owned_by(child, parent):
     api_version = xget(parent, "apiVersion")
     kind = xget(parent, "kind")

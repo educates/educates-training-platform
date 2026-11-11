@@ -21,6 +21,7 @@ import (
 	"slices"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
@@ -106,6 +107,41 @@ func TestSessionManagerChart_CopiesPullSecretsIntoSessionNamespaces(t *testing.T
 	}
 	t.Errorf("no rule copies mirror-pull-secret from %s into namespaces labelled %v: %+v",
 		platformNamespace, sessionNamespaceLabels, copier.Spec.Rules)
+}
+
+// The session manager names the pull Secrets on every ServiceAccount it
+// creates, and on the default ServiceAccount of every namespace it
+// creates, before any pod can use them: a pod takes its ServiceAccount's
+// pull secrets only when it is created, which may be before secrets-manager
+// injects them. It reads the names from its runtime config.
+func TestSessionManagerChart_GivesTheRuntimeThePullSecretNames(t *testing.T) {
+	cfg := valuesTestClusterConfig()
+	cfg.Status.ImageRegistry = &configv1alpha1.ImageRegistry{
+		PullSecrets: []configv1alpha1.LocalObjectReference{{Name: "mirror-pull-secret"}},
+	}
+	values := renderSessionManagerValues(&platformv1alpha1.SessionManager{}, cfg, "educates-installer", testImageRegistryNamespace)
+
+	for doc := range renderManifests(t, vendoredcharts.SessionManager, values) {
+		var s corev1.Secret
+		if err := yaml.Unmarshal([]byte(doc), &s); err != nil {
+			t.Fatalf("parse rendered manifest: %v", err)
+		}
+		runtimeConfig, ok := s.StringData["educates-operator-config.yaml"]
+		if s.Name != "educates-config" || !ok {
+			continue
+		}
+		var config struct {
+			ImagePullSecrets []string `json:"imagePullSecrets"`
+		}
+		if err := yaml.Unmarshal([]byte(runtimeConfig), &config); err != nil {
+			t.Fatalf("parse runtime config: %v", err)
+		}
+		if !slices.Equal(config.ImagePullSecrets, []string{"mirror-pull-secret"}) {
+			t.Errorf("runtime config imagePullSecrets = %v, want [mirror-pull-secret]", config.ImagePullSecrets)
+		}
+		return
+	}
+	t.Fatal("no educates-config Secret in the rendered session-manager chart")
 }
 
 // The injector rule for session namespaces names no ServiceAccounts, so

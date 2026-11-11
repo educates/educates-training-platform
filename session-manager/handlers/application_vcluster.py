@@ -360,7 +360,8 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                 "name": "vc-my-vcluster",
                 "namespace": "$(session_namespace)-vc",
             },
-            # TODO: Add ImagePullSecrets capability
+            # Created through create_from_dict, which names the
+            # platform's image pull secrets on it.
         },
         {
             "apiVersion": "v1",
@@ -369,7 +370,8 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
                 "name": "vc-workload-my-vcluster",
                 "namespace": "$(session_namespace)",
             },
-            # TODO: Add ImagePullSecrets capability
+            # Created through create_from_dict, which names the
+            # platform's image pull secrets on it.
         },
         {
             "apiVersion": "v1",

@@ -34,6 +34,15 @@ if IMAGE_REGISTRY_HOST:
 else:
     IMAGE_REPOSITORY = "registry.default.svc.cluster.local"
 
+# Names of the image pull Secrets the SecretCopier rules of the session
+# manager's chart copy into the training portal, workshop environment and
+# workshop session namespaces. The session manager names them on the
+# ServiceAccounts it creates, see objects.name_image_pull_secrets.
+
+IMAGE_PULL_SECRETS = [
+    name for name in xget(config_values, "imagePullSecrets", []) if name
+]
+
 RUNTIME_CLASS = xget(config_values, "clusterRuntime.class", "")
 
 CLUSTER_DOMAIN = socket.getaddrinfo("kubernetes.default.svc", 0, flags=socket.AI_CANONNAME)[0][3]

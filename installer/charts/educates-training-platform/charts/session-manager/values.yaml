@@ -376,9 +376,11 @@ imagePrePuller:
 
 secretPropagation:
   # Names of image-pull Secrets that already exist in the release namespace
-  # and should be (a) propagated into every workshop-portal and
-  # workshop-environment namespace, and (b) injected into ServiceAccounts
-  # in those namespaces.
+  # and should be (a) propagated into every workshop-portal,
+  # workshop-environment and workshop-session namespace, and (b) injected
+  # into ServiceAccounts in those namespaces: the portal, environment and
+  # session ServiceAccounts, and every ServiceAccount of a session
+  # namespace.
   imagePullSecretNames: []
     # - my-registry-pull-secret
 

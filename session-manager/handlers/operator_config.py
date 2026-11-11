@@ -49,6 +49,13 @@ IMAGE_PULL_SECRETS = [
     name for name in xget(config_values, "imagePullSecrets", []) if name
 ]
 
+# Whether workshop session namespaces get those Secrets. The namespace of a
+# session's vcluster gets them either way.
+
+IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES = xget(
+    config_values, "secretPropagation.sessionNamespaces", True
+)
+
 RUNTIME_CLASS = xget(config_values, "clusterRuntime.class", "")
 
 CLUSTER_DOMAIN = socket.getaddrinfo("kubernetes.default.svc", 0, flags=socket.AI_CANONNAME)[0][3]

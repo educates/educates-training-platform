@@ -67,10 +67,10 @@ type secretPropagationResource struct {
 	} `json:"spec"`
 }
 
-// renderSecretPropagation renders the session-manager chart for a
+// renderSecretPropagation renders the session-manager chart for obj and a
 // cluster config publishing pull Secrets and returns its rendered
 // resource of the given kind and name.
-func renderSecretPropagation(t *testing.T, kind, name string, pullSecrets ...string) secretPropagationResource {
+func renderSecretPropagation(t *testing.T, obj *platformv1alpha1.SessionManager, kind, name string, pullSecrets ...string) secretPropagationResource {
 	t.Helper()
 	cfg := valuesTestClusterConfig()
 	cfg.Status.ImageRegistry = &configv1alpha1.ImageRegistry{}
@@ -78,7 +78,7 @@ func renderSecretPropagation(t *testing.T, kind, name string, pullSecrets ...str
 		cfg.Status.ImageRegistry.PullSecrets = append(cfg.Status.ImageRegistry.PullSecrets,
 			configv1alpha1.LocalObjectReference{Name: s})
 	}
-	values := renderSessionManagerValues(&platformv1alpha1.SessionManager{}, cfg, "educates-installer", testImageRegistryNamespace)
+	values := renderSessionManagerValues(obj, cfg, "educates-installer", testImageRegistryNamespace)
 
 	for doc := range renderManifests(t, vendoredcharts.SessionManager, values) {
 		var r secretPropagationResource
@@ -96,7 +96,7 @@ func renderSecretPropagation(t *testing.T, kind, name string, pullSecrets ...str
 var sessionNamespaceLabels = map[string]string{"training.educates.dev/component": "session"}
 
 func TestSessionManagerChart_CopiesPullSecretsIntoSessionNamespaces(t *testing.T) {
-	copier := renderSecretPropagation(t, "SecretCopier", "educates-downstream-image-pull-secrets", "mirror-pull-secret")
+	copier := renderSecretPropagation(t, &platformv1alpha1.SessionManager{}, "SecretCopier", "educates-downstream-image-pull-secrets", "mirror-pull-secret")
 
 	for _, rule := range copier.Spec.Rules {
 		if rule.SourceSecret.Name == "mirror-pull-secret" &&
@@ -148,7 +148,7 @@ func TestSessionManagerChart_GivesTheRuntimeThePullSecretNames(t *testing.T) {
 // it covers every one there: the default ServiceAccount, and those the
 // workshop's session objects create, such as vcluster's.
 func TestSessionManagerChart_InjectsPullSecretsIntoEverySessionServiceAccount(t *testing.T) {
-	injector := renderSecretPropagation(t, "SecretInjector", "educates-image-pull-secrets", "mirror-pull-secret")
+	injector := renderSecretPropagation(t, &platformv1alpha1.SessionManager{}, "SecretInjector", "educates-image-pull-secrets", "mirror-pull-secret")
 
 	for _, rule := range injector.Spec.Rules {
 		if maps.Equal(rule.TargetNamespaces.LabelSelector.MatchLabels, sessionNamespaceLabels) &&
@@ -159,4 +159,91 @@ func TestSessionManagerChart_InjectsPullSecretsIntoEverySessionServiceAccount(t 
 	}
 	t.Errorf("no rule injects mirror-pull-secret into every ServiceAccount of namespaces labelled %v: %+v",
 		sessionNamespaceLabels, injector.Spec.Rules)
+}
+
+// sessionNamespacesOff is a SessionManager that keeps the pull Secrets out
+// of workshop session namespaces.
+func sessionNamespacesOff() *platformv1alpha1.SessionManager {
+	return &platformv1alpha1.SessionManager{
+		Spec: platformv1alpha1.SessionManagerSpec{
+			ImagePullSecretPropagation: &platformv1alpha1.ImagePullSecretPropagation{
+				SessionNamespaces: new(false),
+			},
+		},
+	}
+}
+
+var vclusterNamespaceLabels = map[string]string{
+	"training.educates.dev/component":   "session",
+	"training.educates.dev/application": "vcluster",
+}
+
+// With session namespaces turned off, the pull Secrets still reach the
+// training portal and workshop environment namespaces, and the namespace
+// of a session's vcluster, which the session user cannot reach, but no
+// other workshop session namespace.
+func TestSessionManagerChart_PassesPullSecretsOnlyToVClusterSessionNamespacesWhenSessionNamespacesAreOff(t *testing.T) {
+	copier := renderSecretPropagation(t, sessionNamespacesOff(), "SecretCopier", "educates-downstream-image-pull-secrets", "mirror-pull-secret")
+	injector := renderSecretPropagation(t, sessionNamespacesOff(), "SecretInjector", "educates-image-pull-secrets", "mirror-pull-secret")
+
+	copiedTo := func(labels map[string]string) bool {
+		for _, rule := range copier.Spec.Rules {
+			if rule.SourceSecret.Name == "mirror-pull-secret" && maps.Equal(rule.TargetNamespaces.LabelSelector.MatchLabels, labels) {
+				return true
+			}
+		}
+		return false
+	}
+	injectedEverywhereIn := func(labels map[string]string) bool {
+		for _, rule := range injector.Spec.Rules {
+			if maps.Equal(rule.TargetNamespaces.LabelSelector.MatchLabels, labels) &&
+				slices.Contains(rule.SourceSecrets.NameSelector.MatchNames, "mirror-pull-secret") &&
+				rule.ServiceAccounts == nil {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, labels := range []map[string]string{
+		{"training.educates.dev/component": "portal"},
+		{"training.educates.dev/component": "environment"},
+		vclusterNamespaceLabels,
+	} {
+		if !copiedTo(labels) {
+			t.Errorf("pull Secret not copied into namespaces labelled %v: %+v", labels, copier.Spec.Rules)
+		}
+	}
+	if copiedTo(sessionNamespaceLabels) {
+		t.Errorf("pull Secret still copied into every session namespace: %+v", copier.Spec.Rules)
+	}
+	if !injectedEverywhereIn(vclusterNamespaceLabels) {
+		t.Errorf("pull Secret not injected into every ServiceAccount of vcluster namespaces: %+v", injector.Spec.Rules)
+	}
+	if injectedEverywhereIn(sessionNamespaceLabels) {
+		t.Errorf("pull Secret still injected into every session namespace: %+v", injector.Spec.Rules)
+	}
+}
+
+// The session manager names the pull Secrets only on the service accounts
+// of namespaces that get them, so it reads whether session namespaces do
+// from its runtime config; they do unless turned off.
+func TestSessionManagerChart_TellsTheRuntimeWhetherSessionNamespacesGetPullSecrets(t *testing.T) {
+	cfg := valuesTestClusterConfig()
+	cfg.Status.ImageRegistry = &configv1alpha1.ImageRegistry{
+		PullSecrets: []configv1alpha1.LocalObjectReference{{Name: "mirror-pull-secret"}},
+	}
+	for _, tc := range []struct {
+		obj  *platformv1alpha1.SessionManager
+		want bool
+	}{
+		{&platformv1alpha1.SessionManager{}, true},
+		{sessionNamespacesOff(), false},
+	} {
+		values := renderSessionManagerValues(tc.obj, cfg, "educates-installer", testImageRegistryNamespace)
+		propagation, _ := renderedOperatorConfig(t, values)["secretPropagation"].(map[string]any)
+		if got, ok := propagation["sessionNamespaces"].(bool); !ok || got != tc.want {
+			t.Errorf("runtime config secretPropagation.sessionNamespaces = %v, want %v", propagation["sessionNamespaces"], tc.want)
+		}
+	}
 }

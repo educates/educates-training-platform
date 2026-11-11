@@ -258,6 +258,24 @@ type ImagePrePuller struct {
 	Images []PrePulledImage `json:"images,omitempty"`
 }
 
+// ImagePullSecretPropagation says which namespaces the session manager
+// passes the image pull Secrets of EducatesClusterConfig
+// status.imageRegistry.pullSecrets on to, copying them there and naming
+// them on the service accounts there. Training portal and workshop
+// environment namespaces, and the namespace of a session's vcluster, always
+// get them.
+type ImagePullSecretPropagation struct {
+	// sessionNamespaces passes them on to the namespaces of workshop
+	// sessions: the session namespace, its secondary namespaces and those
+	// its session objects create. Workshop users can read the Secrets in
+	// those namespaces, so setting it to false keeps the credentials from
+	// them, and pods there then pull only from registries that need no
+	// credentials from them, such as a pull-through proxy.
+	// +kubebuilder:default=true
+	// +optional
+	SessionNamespaces *bool `json:"sessionNamespaces,omitempty"`
+}
+
 // PrePulledImage is one image the image pre-puller pulls, given by
 // exactly one of name and image.
 // +kubebuilder:validation:XValidation:rule="has(self.name) != has(self.image)",message="each imagePrePuller.images entry must set exactly one of name and image"
@@ -401,6 +419,11 @@ type SessionManagerSpec struct {
 
 	// +optional
 	ImagePrePuller *ImagePrePuller `json:"imagePrePuller,omitempty"`
+
+	// imagePullSecretPropagation says which namespaces the session manager
+	// passes the image pull Secrets of the cluster configuration on to.
+	// +optional
+	ImagePullSecretPropagation *ImagePullSecretPropagation `json:"imagePullSecretPropagation,omitempty"`
 
 	// registryMirrors configures per-registry mirrors for workshop
 	// container pulls.

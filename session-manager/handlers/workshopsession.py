@@ -16,8 +16,10 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from .analytics import report_analytics_event
 from .applications import pod_template_spec_patches, session_objects_list
-from .helpers import (Applications, image_pull_policy, smart_overlay_merge,
-                      substitute_variables, xget)
+from .helpers import (Applications, gets_image_pull_secrets,
+                      image_pull_policy, smart_overlay_merge,
+                      substitute_variables, vcluster_namespace_names,
+                      without_vcluster_application_label, xget)
 from .namespace_budgets import namespace_budgets
 from .objects import (WorkshopEnvironment, create_from_dict,
                       ensure_default_service_account,
@@ -29,7 +31,9 @@ from .operator_config import (AMPLITUDE_TRACKING_ID, BASE_ENVIRONMENT_IMAGE,
                               CLUSTER_STORAGE_USER, DOCKER_IN_DOCKER_IMAGE,
                               DOCKER_REGISTRY_IMAGE, DOCKERD_MIRROR_REMOTE,
                               DOCKERD_MTU, GOOGLE_TRACKING_ID,
-                              IMAGE_PULL_SECRETS, IMAGE_REPOSITORY,
+                              IMAGE_PULL_SECRETS,
+                              IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES,
+                              IMAGE_REPOSITORY,
                               INGRESS_CA_SECRET,
                               INGRESS_CLASS, INGRESS_DOMAIN, INGRESS_PROTOCOL,
                               INGRESS_SECRET, NETWORK_BLOCKCIDRS,
@@ -756,7 +760,8 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             ) from exc
         raise
 
-    ensure_default_service_account(session_namespace)
+    if IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES:
+        ensure_default_service_account(session_namespace)
 
     try:
         namespace_instance = pykube.Namespace.objects(api).get(name=session_namespace)
@@ -1221,7 +1226,8 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                     )
                 raise
 
-            ensure_default_service_account(target_namespace)
+            if IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES:
+                ensure_default_service_account(target_namespace)
 
             _setup_session_namespace(
                 namespace_instance.obj,
@@ -1260,11 +1266,27 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 )
             )
 
+    # The namespaces of a session's vcluster get the image pull Secrets even
+    # when session namespaces do not. Only an application's own objects may
+    # make one: a namespace the workshop provides loses the label marking it.
+
+    vcluster_namespaces = vcluster_namespace_names(
+        substitute_variables(object_body, session_variables)
+        for object_body in objects
+    )
+
     if workshop_spec.get("session"):
-        objects.extend(workshop_spec["session"].get("objects", []))
+        objects.extend(
+            without_vcluster_application_label(copy.deepcopy(object_body))
+            for object_body in workshop_spec["session"].get("objects", [])
+        )
 
     for object_body in objects:
         object_body = substitute_variables(object_body, session_variables)
+
+        object_image_pull_secrets = gets_image_pull_secrets(
+            object_body, vcluster_namespaces, IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES
+        )
 
         if not object_body["metadata"].get("namespace"):
             object_body["metadata"]["namespace"] = session_namespace
@@ -1380,7 +1402,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             )
 
             try:
-                create_from_dict(object_body)
+                create_from_dict(object_body, object_image_pull_secrets)
 
             except Exception as exc:
                 logger.exception(
@@ -1444,7 +1466,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             )
 
             try:
-                create_from_dict(object_body)
+                create_from_dict(object_body, object_image_pull_secrets)
 
             except Exception as exc:
                 logger.exception(

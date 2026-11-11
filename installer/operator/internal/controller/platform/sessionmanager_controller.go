@@ -411,6 +411,17 @@ func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *confi
 	return values
 }
 
+// imagePullSecretsReachSessionNamespaces reports whether the session
+// manager passes the image pull Secrets on to workshop session namespaces,
+// which it does unless spec.imagePullSecretPropagation.sessionNamespaces
+// is false.
+func imagePullSecretsReachSessionNamespaces(obj *platformv1alpha1.SessionManager) bool {
+	if p := obj.Spec.ImagePullSecretPropagation; p != nil && p.SessionNamespaces != nil {
+		return *p.SessionNamespaces
+	}
+	return true
+}
+
 // applySMImageValues maps the image-related inputs: the cluster
 // config's registry prefix and pull secrets plus the CR's per-image
 // overrides. imageRegistryNamespace is the chart's own image registry
@@ -445,6 +456,7 @@ func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionMana
 		}
 		values["secretPropagation"] = map[string]any{
 			"imagePullSecretNames": names,
+			"sessionNamespaces":    imagePullSecretsReachSessionNamespaces(obj),
 		}
 	}
 

@@ -2,7 +2,7 @@ import os
 
 import yaml
 
-from .helpers import xget
+from .helpers import APPLICATION_LABEL, VCLUSTER_APPLICATION, xget
 
 from .operator_config import (
     LOFTSH_VCLUSTER_IMAGE,
@@ -343,6 +343,13 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
             "kind": "Namespace",
             "metadata": {
                 "name": "$(session_namespace)-vc",
+                # The session manager's chart copies the image pull Secrets
+                # into namespaces with this label even when workshop session
+                # namespaces get none: the session user cannot reach this
+                # namespace, and the vcluster cannot start without them.
+                "labels": {
+                    APPLICATION_LABEL: VCLUSTER_APPLICATION,
+                },
                 "annotations": {
                     "secretgen.carvel.dev/excluded-from-wildcard-matching": "",
                     "training.educates.dev/session.role": "custom",

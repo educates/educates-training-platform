@@ -125,9 +125,22 @@ def ensure_default_service_account(namespace):
         )
 
 
-def create_from_dict(body):
-    name_image_pull_secrets(body)
+def create_from_dict(body, image_pull_secrets=True):
+    """Creates the object a body describes. Unless image_pull_secrets is
+    false, as it is for an object in, or of, a workshop session namespace
+    the Secrets are not copied into, a ServiceAccount is created naming the
+    platform's image pull Secrets, and a Namespace gets a default
+    ServiceAccount naming them.
+
+    """
+
+    if image_pull_secrets:
+        name_image_pull_secrets(body)
     resource = Resource(api, body)
     resource.create()
-    if body["apiVersion"] == "v1" and body["kind"].lower() == "namespace":
+    if (
+        image_pull_secrets
+        and body["apiVersion"] == "v1"
+        and body["kind"].lower() == "namespace"
+    ):
         ensure_default_service_account(body["metadata"]["name"])

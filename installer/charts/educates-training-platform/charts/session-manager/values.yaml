@@ -393,6 +393,14 @@ secretPropagation:
   imagePullSecretNames: []
     # - my-registry-pull-secret
 
+  # Whether workshop-session namespaces get them. Workshop users can read the
+  # Secrets in their session namespaces, so false keeps the credentials from
+  # them, and pods there then pull only from registries that need none, such
+  # as a pull-through proxy. The namespace of a session's vcluster, labelled
+  # training.educates.dev/application: vcluster, gets them either way: the
+  # session user cannot reach it, and the vcluster cannot start without them.
+  sessionNamespaces: true
+
   upstream:
     # External Secrets to copy INTO the release namespace before propagation.
     imagePullSecrets: []

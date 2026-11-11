@@ -441,6 +441,10 @@
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
           },
+          "sessionNamespaces": {
+            "description": "Whether workshop-session namespaces get the imagePullSecretNames. The namespace of a session's vcluster gets them either way.",
+            "type": "boolean"
+          },
           "upstream": {
             "type": "object",
             "additionalProperties": false,

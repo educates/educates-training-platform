@@ -7,7 +7,8 @@ import kopf
 import pykube
 
 from .objects import create_from_dict
-from .helpers import xget, substitute_variables
+from .helpers import xget, substitute_variables, without_vcluster_application_label
+from .operator_config import IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES
 from .analytics import report_analytics_event
 
 
@@ -474,9 +475,13 @@ def workshop_allocation_create(
     # Create the request objects for the workshop session.
 
     for object_body in objects:
-        # Substitute any data variables in the request objects.
+        # Substitute any data variables in the request objects. A namespace
+        # the workshop provides cannot claim to be a vcluster namespace, so
+        # it gets no image pull Secrets while session namespaces get none.
 
-        object_body = substitute_variables(object_body, all_data_variables)
+        object_body = without_vcluster_application_label(
+            substitute_variables(object_body, all_data_variables)
+        )
 
         # Set the namespace on the request object to the session namespace if it
         # is not already set.
@@ -525,7 +530,7 @@ def workshop_allocation_create(
                 session_name,
             )
 
-            create_from_dict(object_body)
+            create_from_dict(object_body, IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES)
 
         except Exception as exc:
             logger.exception(

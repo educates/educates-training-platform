@@ -529,6 +529,7 @@ with them.
     "frameAncestors" (default list $wstyle.frameAncestors)
   )
   "imagePullSecrets" (default list $sp.imagePullSecretNames)
+  "secretPropagation" (dict "sessionNamespaces" (ternary $sp.sessionNamespaces true (hasKey $sp "sessionNamespaces")))
 -}}
 {{- $merged := mergeOverwrite $typed (deepCopy (default dict .Values.config)) -}}
 {{- toYaml $merged -}}

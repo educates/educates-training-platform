@@ -145,6 +145,22 @@ spec:
                   rule: '!has(self.enabled) || !self.enabled || !has(self.includeDefaultImages)
                     || self.includeDefaultImages || (has(self.images) && size(self.images)
                     > 0)'
+              imagePullSecretPropagation:
+                description: |-
+                  imagePullSecretPropagation says which namespaces the session manager
+                  passes the image pull Secrets of the cluster configuration on to.
+                properties:
+                  sessionNamespaces:
+                    default: true
+                    description: |-
+                      sessionNamespaces passes them on to the namespaces of workshop
+                      sessions: the session namespace, its secondary namespaces and those
+                      its session objects create. Workshop users can read the Secrets in
+                      those namespaces, so setting it to false keeps the credentials from
+                      them, and pods there then pull only from registries that need no
+                      credentials from them, such as a pull-through proxy.
+                    type: boolean
+                type: object
               images:
                 description: |-
                   Images groups image-related overrides. Registry prefix and pull

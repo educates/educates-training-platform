@@ -1174,6 +1174,17 @@
           },
           "type": "object"
         },
+        "imagePullSecretPropagation": {
+          "description": "imagePullSecretPropagation says which namespaces the session manager\npasses the image pull Secrets of the cluster configuration on to.",
+          "properties": {
+            "sessionNamespaces": {
+              "default": true,
+              "description": "sessionNamespaces passes them on to the namespaces of workshop\nsessions: the session namespace, its secondary namespaces and those\nits session objects create. Workshop users can read the Secrets in\nthose namespaces, so setting it to false keeps the credentials from\nthem, and pods there then pull only from registries that need no\ncredentials from them, such as a pull-through proxy.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
         "images": {
           "description": "Images groups image-related overrides. Registry prefix and pull\nsecrets are inherited from\nEducatesClusterConfig.status.imageRegistry; only per-image overrides\nbelong here.",
           "properties": {

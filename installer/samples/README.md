@@ -54,10 +54,13 @@ kubectl delete secretsmanager cluster
 kubectl delete educatesclusterconfig cluster
 ```
 
-Deleting `EducatesClusterConfig` first is safe but blocks: its finalizer
-refuses to drain the cluster services (cert-manager, contour, kyverno,
-external-dns) while any platform CR still exists, reporting
-`Ready=False reason=PlatformCRsPresent` and naming the offenders, and
-requeues until you remove them. This prevents the platform-component
-finalizers from failing to clean up resources whose CRDs would otherwise
-already be gone. Following the reverse order above avoids the wait.
+Deleting `EducatesClusterConfig` first is safe but blocks: in either mode
+its finalizer refuses to finish while any platform CR still exists,
+reporting `Ready=False reason=PlatformCRsPresent` and naming the
+offenders, and requeues until you remove them. In Managed mode that keeps
+the cluster services (cert-manager, contour, kyverno, external-dns) in
+place, so the platform-component finalizers don't fail to clean up
+resources whose CRDs would otherwise already be gone. In both modes it
+keeps the Secrets the config owns, `educates-ingress-ca` and the image
+pull Secret copies in `educates`, which the running components use.
+Following the reverse order above avoids the wait.

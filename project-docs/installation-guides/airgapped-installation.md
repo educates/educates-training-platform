@@ -139,7 +139,14 @@ Two settings re-root image resolution onto the mirror:
 The prefix does not move the upstream images the session manager's image
 inventory pins for the vcluster workshop application and for Docker support in
 workshop sessions, such as `ghcr.io/loft-sh/vcluster-oss` and `docker`. Point
-those at the mirror with `imageVersions` overrides of the matching names. With
+those at the mirror with `imageVersions` overrides of the matching names. The
+images a session's vcluster picks itself, which the inventory does not pin, do
+move under the prefix, since the session manager makes the prefix vcluster's
+default image registry: the CoreDNS of the virtual cluster, whose version
+follows its Kubernetes version, such as `docker.io/coredns/coredns:1.14.2`
+pulled from `registry.internal/educates/coredns/coredns:1.14.2`, and the init
+container that rewrites the hosts of stateful set pods,
+`mirror.gcr.io/library/alpine:3.20`. The release image list includes them. With
 a prefix set, the `$(image_repository)` data variable in workshop definitions
 resolves by default to where the Educates images are,
 `registry.internal/educates/educates` in the example above.
@@ -187,9 +194,29 @@ workshop environment and workshop session namespaces the session manager
 creates, and add them to the service accounts there. Every service account of a
 workshop session namespace gets them, so a workshop's own pods, such as the
 vcluster of a session whose images you point at the mirror with
-`imageVersions`, can pull from the mirror too. Workshop users can read the
+`imageVersions`, can pull from the mirror too. A pod takes its service
+account's pull secrets only when it is created, so the session manager also
+names the Secrets itself on every service account it creates, and on the
+`default` service account of every namespace it creates, before anything runs
+there. Workshop users can read the
 Secrets in their session namespaces, so give the Secrets credentials that only
 allow pulling from the mirror.
+
+To keep the credentials from workshop users altogether, set
+`spec.imagePullSecretPropagation.sessionNamespaces` of the `SessionManager` to
+`false`. Workshop session namespaces then get no copies, except the namespace
+of a session's vcluster, which the session user cannot reach and which the
+vcluster needs to start. The setting applies to sessions created after it is
+changed; existing session namespaces keep their copies until their sessions
+end. Everything else keeps pulling from the mirror as
+before, but pods that a workshop or its users run in their session namespaces,
+such as those of a workshop's session objects, can then only pull images that
+need no credentials from them. One way to serve those is a pull-through proxy,
+or one for each registry, running in a namespace workshop users cannot reach,
+holding the credentials itself and serving pulls without them. The nodes pull
+the images, not the pods, so a proxy must be at an address the nodes can
+resolve and trust, such as an ingress host name or a node port on `localhost`,
+rather than a cluster service name.
 
 The copies follow the Secrets in the operator namespace, so rotating the
 credentials there updates every copy, down to the workshop namespaces. Removing

@@ -1091,6 +1091,18 @@ Features Changed
   ``vcluster`` application can still provision Kubernetes 1.33, which is no
   longer available for local Kind clusters, and cannot yet provision 1.37.
 
+* The virtual cluster of the ``vcluster`` workshop application no longer
+  syncs its service accounts to the host cluster. Every pod it runs on the
+  host now runs under the one service account ``vc-workload-my-vcluster``
+  in the virtual cluster's namespace, which the session manager creates
+  naming the installation's image pull secrets. A host service account
+  synced for each virtual one was created together with the pods using it,
+  so a pod could start before it named the pull secrets, and the virtual
+  cluster's CoreDNS then failed to pull from a registry that requires them.
+  Synced pods do not mount a host service account token, so this changes
+  only host-side policies or identities that a workshop keyed on the host
+  service account of a virtual one.
+
 * The version of ``kind`` embedded in the ``educates`` CLI has been updated
   from 0.29 to 0.33. As a result the default Kubernetes version used when
   creating a local cluster with ``educates local cluster create`` has changed
@@ -1598,10 +1610,36 @@ Bugs Fixed
   ``EducatesClusterConfig``. The session manager's rules that pass the
   secrets on to training portal and workshop environment namespaces now have
   them to pass on, and cover workshop session namespaces as well, adding the
-  secrets to every service account there. A listed secret must exist in the
-  operator namespace and have the type ``kubernetes.io/dockerconfigjson``;
-  until it does, the ``EducatesClusterConfig`` reports ``Ready`` as
-  ``False`` with a message naming it.
+  secrets to every service account there. Since a pod takes its service
+  account's pull secrets only when it is created, the session manager also
+  names them itself on every service account it creates, and on the
+  ``default`` service account of every namespace it creates, before anything
+  runs there, so that a pod created together with its service account, such
+  as a session's vcluster, cannot start without them. A pod that names pull
+  secrets of its own takes none of its service account's, so a workshop
+  session pod that names the pull secrets of its packages also names the
+  installation's. Workshop users can read the secrets in their session
+  namespaces, so setting ``spec.imagePullSecretPropagation.sessionNamespaces``
+  of the ``SessionManager`` to ``false`` keeps them out of those namespaces,
+  except the namespace of a session's vcluster, which the session user
+  cannot reach. A listed secret must exist in the operator namespace and have
+  the type ``kubernetes.io/dockerconfigjson``; until it does, the
+  ``EducatesClusterConfig`` reports ``Ready`` as ``False`` with a message
+  naming it. Since the copies go with the
+  ``EducatesClusterConfig``, deleting it in ``Inline`` mode now waits while
+  any platform resource exists, as it already did in ``Managed`` mode,
+  reporting ``Ready`` as ``False`` with the reason ``PlatformCRsPresent``.
+
+* With an image registry prefix, the images a session's vcluster picks
+  itself, which the session manager's image inventory does not pin, were
+  still pulled from their upstream registries: the CoreDNS of the virtual
+  cluster, such as ``docker.io/coredns/coredns:1.14.2``, and the init
+  container that rewrites the hosts of stateful set pods,
+  ``mirror.gcr.io/library/alpine:3.20``. The session manager now makes the
+  prefix vcluster's default image registry, so they are pulled from their
+  upstream repository path under it, such as
+  ``<prefix>/coredns/coredns:1.14.2``, and the release image list includes
+  them.
 
 * When the values the operator computes for a Helm release it manages
   became empty, the release kept its previous values, because Helm reuses

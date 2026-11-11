@@ -89,7 +89,7 @@ kubectl delete educatesclusterconfig/cluster
 helm uninstall educates-installer --namespace educates-installer
 ```
 
-Delete `EducatesClusterConfig` last: its finalizer removes the operator-managed cluster services (Kyverno among them), and the platform components need those services present while draining. Uninstalling the chart first would remove the operator that processes the finalizers, wedging deletion.
+Delete `EducatesClusterConfig` last: its finalizer removes the operator-managed cluster services (Kyverno among them), and the platform components need those services present while draining. The components also use Secrets the `EducatesClusterConfig` owns, which go with it: `educates-ingress-ca` and the copies of the image pull secrets in the `educates` namespace. In either mode, a deleted `EducatesClusterConfig` therefore waits while any platform resource exists, reporting `Ready` as `False` with the reason `PlatformCRsPresent` and naming the resources, and finishes once they are gone. Uninstalling the chart first would remove the operator that processes the finalizers, wedging deletion.
 
 Installing the runtime chart without the operator
 -------------------------------------------------

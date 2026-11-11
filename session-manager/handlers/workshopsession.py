@@ -29,7 +29,8 @@ from .operator_config import (AMPLITUDE_TRACKING_ID, BASE_ENVIRONMENT_IMAGE,
                               CLUSTER_STORAGE_USER, DOCKER_IN_DOCKER_IMAGE,
                               DOCKER_REGISTRY_IMAGE, DOCKERD_MIRROR_REMOTE,
                               DOCKERD_MTU, GOOGLE_TRACKING_ID,
-                              IMAGE_REPOSITORY, INGRESS_CA_SECRET,
+                              IMAGE_PULL_SECRETS, IMAGE_REPOSITORY,
+                              INGRESS_CA_SECRET,
                               INGRESS_CLASS, INGRESS_DOMAIN, INGRESS_PROTOCOL,
                               INGRESS_SECRET, NETWORK_BLOCKCIDRS,
                               PLATFORM_ARCH,
@@ -2009,14 +2010,17 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 package_pull_secrets.append(pull_secret_ref)
 
         # The kubelet pulls a mounted image, so any credentials it needs are
-        # the pod's rather than the fetcher's.
+        # the pod's rather than the fetcher's. A pod that names any image pull
+        # secrets of its own gets none of its service account's, so the
+        # platform's are named here too, or the session's own images could no
+        # longer be pulled from a registry that requires them.
 
         if package_pull_secrets:
             image_pull_secrets = deployment_pod_template_spec.setdefault(
                 "imagePullSecrets", []
             )
 
-            for pull_secret_ref in package_pull_secrets:
+            for pull_secret_ref in IMAGE_PULL_SECRETS + package_pull_secrets:
                 if {"name": pull_secret_ref} not in image_pull_secrets:
                     image_pull_secrets.append({"name": pull_secret_ref})
 

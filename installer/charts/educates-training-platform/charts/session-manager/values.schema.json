@@ -229,6 +229,15 @@
         }
       },
 
+      "imageRegistry": {
+        "description": "Registry prefix for the images the session manager does not pin itself, such as the CoreDNS of a session's vcluster, which keep their upstream repository path under it. Set by the Educates operator from EducatesClusterConfig.status.imageRegistry; empty keeps their upstream registries.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prefix": { "type": "string" }
+        }
+      },
+
       "resources": {
         "type": "object"
       },

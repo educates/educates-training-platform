@@ -138,6 +138,15 @@ development:
     host: ""
     namespace: ""
 
+# The registry prefix the images the session manager does not pin itself are
+# mirrored under, each at its upstream repository path without the registry
+# host: the images a session's vcluster picks, such as its CoreDNS, which the
+# session manager hands to vcluster as its default image registry. The
+# Educates operator sets it from EducatesClusterConfig.status.imageRegistry.
+# Empty keeps their upstream registries.
+imageRegistry:
+  prefix: ""
+
 # Per-image overrides, merged BY NAME on top of the chart-shipped default
 # `imageVersions` list. The default list is built in
 # `templates/_helpers.tpl` (`session-manager.imageVersions`) and mirrors

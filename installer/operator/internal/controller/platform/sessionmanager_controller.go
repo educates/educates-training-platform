@@ -418,6 +418,12 @@ func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *confi
 func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) {
 	if dev := developmentImageRegistryValues(cfg, imageRegistryNamespace); dev != nil {
 		values["development"] = dev
+		// The prefix itself, for the images a session's vcluster picks,
+		// such as CoreDNS, which the image inventory does not pin and
+		// which keep their upstream repository path under the prefix.
+		values["imageRegistry"] = map[string]any{
+			"prefix": cfg.Status.ImageRegistry.Prefix,
+		}
 	}
 
 	// imagePullSecrets — propagate from cluster config.

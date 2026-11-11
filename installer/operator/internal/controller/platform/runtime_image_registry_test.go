@@ -145,6 +145,25 @@ func TestSessionManagerChart_ImageRepositoryIsTheEducatesNamespaceUnderThePrefix
 	}
 }
 
+// TestSessionManagerChart_GivesTheRuntimeTheImageRegistryPrefix requires
+// the session manager's configuration to carry the image registry prefix
+// itself, which the session manager gives a session's vcluster as its
+// default image registry, so the images vcluster picks itself, such as
+// CoreDNS, keep their upstream repository path under the prefix. Without
+// a prefix it carries none, and vcluster keeps the upstream registries.
+func TestSessionManagerChart_GivesTheRuntimeTheImageRegistryPrefix(t *testing.T) {
+	_, namespace := chartImageLocation(t, vendoredcharts.SessionManager)
+	obj := &platformv1alpha1.SessionManager{}
+
+	for _, prefix := range []string{"", testRuntimeImageRegistryPrefix, "mirror.example.com"} {
+		values := renderSessionManagerValues(obj, prefixedClusterConfig(prefix), testOperatorNamespace, namespace)
+		registry := renderedOperatorConfig(t, values)["imageRegistry"].(map[string]any)
+		if got, _ := registry["prefix"].(string); got != prefix {
+			t.Errorf("prefix %q: runtime image registry prefix %q, want %q", prefix, got, prefix)
+		}
+	}
+}
+
 // chartImageLocation returns the registry host and namespace a runtime
 // chart composes its Educates images from by default, its
 // educates.dev/image-registry-host and -namespace annotations.

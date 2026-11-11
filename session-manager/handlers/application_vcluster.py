@@ -13,6 +13,7 @@ from .operator_config import (
     VCLUSTER_INTERNAL_CONTOUR_IMAGE,
     VCLUSTER_INTERNAL_ENVOY_IMAGE,
     CLUSTER_STORAGE_GROUP,
+    IMAGE_REGISTRY_PREFIX,
 )
 
 # The Contour manifests in packages/contour/upstream pin specific upstream
@@ -299,6 +300,15 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     }
     vcluster_config["policies"]["resourceQuota"]["enabled"] = False
     vcluster_config["policies"]["limitRange"]["enabled"] = False
+
+    # vcluster picks some images itself, which the image inventory does not
+    # pin: CoreDNS, at a version that follows the virtual cluster's Kubernetes
+    # version, and the init container that rewrites the hosts of stateful set
+    # pods. vcluster prepends its default image registry to their upstream
+    # repository path, so under the image registry prefix they are where a
+    # mirror of the release image list holds them.
+    if IMAGE_REGISTRY_PREFIX:
+        vcluster_config["controlPlane"]["advanced"]["defaultImageRegistry"] = IMAGE_REGISTRY_PREFIX
 
     # vcluster_config["controlPlane"]["ingress"]["enabled"] = True
     # vcluster_config["controlPlane"]["ingress"]["host"] = f"$(session_namespace)-vc-api.{INGRESS_DOMAIN}"

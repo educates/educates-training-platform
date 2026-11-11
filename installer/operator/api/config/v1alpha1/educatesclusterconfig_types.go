@@ -754,7 +754,10 @@ type ImageRegistry struct {
 	// portals and workshop sessions from; the upstream images its image
 	// inventory pins, such as docker-in-docker and the vcluster images,
 	// keep their references and are relocated through imageVersions
-	// overrides instead.
+	// overrides instead. The images a session's vcluster picks itself,
+	// its CoreDNS and the init container that rewrites stateful set pod
+	// hosts, move under the prefix too, as vcluster's default image
+	// registry.
 	// +optional
 	Prefix string `json:"prefix,omitempty"`
 

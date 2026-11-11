@@ -17,6 +17,9 @@
 #     distro images, docker-in-docker, and the debian base. Extracted by
 #     rendering the session-manager chart, so version bumps in the chart
 #     flow through without editing this script;
+#   - the images a session's vcluster picks itself, CoreDNS and the
+#     init container that rewrites stateful set pod hosts, listed in
+#     VCLUSTER_OWN_IMAGES below;
 #   - the upstream cluster-service images (cert-manager, Contour,
 #     external-dns, Kyverno), extracted by rendering the vendored chart
 #     tarballs with default values. Defaults are a superset of what the
@@ -72,6 +75,23 @@ secrets-manager
 lookup-service
 node-ca-injector
 operator
+"
+
+# Images a session's vcluster picks itself, which the session-manager
+# imageVersions inventory does not pin: CoreDNS, at the version vcluster
+# maps each virtual Kubernetes version the vcluster application offers to
+# (CoreDNSVersionMap in pkg/constants/coredns.go of loft-sh/vcluster, at
+# the loftsh-vcluster version), and the init container that rewrites the
+# hosts of stateful set pods (sync.toHost.pods.rewriteHosts in
+# session-manager/packages/vcluster/vcluster-all-config.yaml). With an
+# image registry prefix, the session manager makes it vcluster's default
+# image registry, so these land under it at their upstream path.
+VCLUSTER_OWN_IMAGES="
+docker.io/coredns/coredns:1.12.0
+docker.io/coredns/coredns:1.12.1
+docker.io/coredns/coredns:1.14.1
+docker.io/coredns/coredns:1.14.2
+mirror.gcr.io/library/alpine:3.20
 "
 
 # Upstream cluster-service charts the operator installs in Managed
@@ -156,6 +176,10 @@ while read -r ref; do
         *) all_refs+="$ref"$'\n' ;;
     esac
 done <<< "$session_manager_refs"
+
+for ref in $VCLUSTER_OWN_IMAGES; do
+    all_refs+="$ref"$'\n'
+done
 
 for glob in $UPSTREAM_CHART_GLOBS; do
     # shellcheck disable=SC2086 -- glob expansion is the point

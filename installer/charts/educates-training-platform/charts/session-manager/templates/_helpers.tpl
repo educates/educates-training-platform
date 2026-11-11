@@ -498,6 +498,7 @@ with them.
   "imageRegistry" (dict
     "host" (default "" $ir.host)
     "namespace" (default "" $ir.namespace)
+    "prefix" (default "" (default dict .Values.imageRegistry).prefix)
   )
   "imageVersions" (include "session-manager.imageVersions" . | fromYamlArray)
   "trainingPortal" (include "session-manager.resolvedTrainingPortal" . | fromYaml)

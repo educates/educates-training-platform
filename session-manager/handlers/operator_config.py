@@ -26,6 +26,12 @@ if os.path.exists("/var/run/secrets/kubernetes.io/serviceaccount/namespace"):
 IMAGE_REGISTRY_HOST = xget(config_values, "imageRegistry.host")
 IMAGE_REGISTRY_NAMESPACE = xget(config_values, "imageRegistry.namespace")
 
+# The registry prefix the images the session manager does not pin itself are
+# mirrored under, each at its upstream repository path: the images a session's
+# vcluster picks, such as its CoreDNS. Empty keeps their upstream registries.
+
+IMAGE_REGISTRY_PREFIX = xget(config_values, "imageRegistry.prefix", "")
+
 if IMAGE_REGISTRY_HOST:
     if IMAGE_REGISTRY_NAMESPACE:
         IMAGE_REPOSITORY = f"{IMAGE_REGISTRY_HOST}/{IMAGE_REGISTRY_NAMESPACE}"

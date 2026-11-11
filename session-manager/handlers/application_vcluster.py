@@ -253,7 +253,6 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     # CONFIGURATION CUSTOMIZATION
     #
     # Things we WANT this cluster to have:
-    # - sync service accounts of the vcluster to the host cluster
     # - sync ingresses of the vcluster to the host cluster when dedicated vcluster ingress is enabled
     # - sync storage classes of the host cluster to the vcluster so they can be used by the vcluster
     # - sync ingress classes of the host cluster to the vcluster so they can be used by the vcluster
@@ -261,6 +260,12 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     # - expose kubeconfig of the vcluster to the host cluster and save it into a secret for use in the workshop session
     #
     # Things we DO NOT WANT this cluster to have:
+    # - sync service accounts of the vcluster to the host cluster. Synced
+    #   pods then all run under the workload service account created above,
+    #   which names the platform's image pull secrets from creation; a host
+    #   service account synced for each virtual one would be created at the
+    #   same moment as the pods using it, before the SecretInjector could
+    #   name them, and those pods would never get them
     # - Expose the api server of the vcluster as ingress on the host cluster
     # - We don't want policies to be controlled by the virtual cluster as we do use the workshop policies
     #
@@ -283,7 +288,7 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     #vcluster_config["sync"]["toHost"]["persistentVolumeClaims"] = {"enabled": True}
     #vcluster_config["sync"]["toHost"]["configMaps"] = {"enabled": True}
     #vcluster_config["sync"]["toHost"]["secrets"] = {"enabled": True}
-    vcluster_config["sync"]["toHost"]["serviceAccounts"] = {"enabled": True}
+    vcluster_config["sync"]["toHost"]["serviceAccounts"] = {"enabled": False}
     vcluster_config["sync"]["toHost"]["ingresses"] = {"enabled": sync_ingress_resources}
     # FROM_HOST_SYNC
     vcluster_config["sync"]["fromHost"]["storageClasses"] = {"enabled": True}
@@ -309,6 +314,9 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
     # mirror of the release image list holds them.
     if IMAGE_REGISTRY_PREFIX:
         vcluster_config["controlPlane"]["advanced"]["defaultImageRegistry"] = IMAGE_REGISTRY_PREFIX
+
+    # The host service account every synced pod runs under.
+    vcluster_config["controlPlane"]["advanced"]["workloadServiceAccount"]["name"] = "vc-workload-my-vcluster"
 
     # vcluster_config["controlPlane"]["ingress"]["enabled"] = True
     # vcluster_config["controlPlane"]["ingress"]["host"] = f"$(session_namespace)-vc-api.{INGRESS_DOMAIN}"
@@ -378,10 +386,13 @@ def vcluster_session_objects_list(workshop_spec, application_properties):
             "kind": "ServiceAccount",
             "metadata": {
                 "name": "vc-workload-my-vcluster",
-                "namespace": "$(session_namespace)",
+                "namespace": "$(session_namespace)-vc",
             },
-            # Created through create_from_dict, which names the
-            # platform's image pull secrets on it.
+            # Every pod the vcluster syncs to the host runs under it, see
+            # controlPlane.advanced.workloadServiceAccount below. Created
+            # through create_from_dict, which names the platform's image
+            # pull secrets on it, so those pods can pull with them from
+            # the moment they are created.
         },
         {
             "apiVersion": "v1",

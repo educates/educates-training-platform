@@ -14,7 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package platform
+// Package platformnamespace names the namespace the operator installs
+// the Educates runtime components into, and creates it. The platform
+// reconcilers install their charts there, and the EducatesClusterConfig
+// reconciler copies the image pull Secrets there before any of them
+// does, so both create it the same way.
+package platformnamespace
 
 import (
 	"context"
@@ -30,14 +35,18 @@ import (
 	"github.com/educates/educates-training-platform/installer/operator/internal/podsecurity"
 )
 
-// ensurePlatformNamespace creates the shared platform namespace
-// (`educates`) if absent and reconciles the operator-owned labels on
-// it: the managed-by label and a privileged Pod Security admission
-// level. Idempotent and ownerless on purpose: three platform CRs share
-// the namespace, so setting any one of them as the owner would let a CR
-// delete cascade-drop the namespace and break its siblings. Cleanup
-// of the namespace itself is left to operator uninstall or a future
-// once-everything-is-gone sweeper.
+// Name is the shared platform namespace. Mirrors v3 behavior: the
+// umbrella `educates-training-platform` Helm chart has historically been
+// `helm install -n educates`, and the runtime components share it.
+const Name = "educates"
+
+// Ensure creates the shared platform namespace if absent and reconciles
+// the operator-owned labels on it: the managed-by label and a privileged
+// Pod Security admission level. Idempotent and ownerless on purpose:
+// three platform CRs share the namespace, so setting any one of them as
+// the owner would let a CR delete cascade-drop the namespace and break
+// its siblings. Cleanup of the namespace itself is left to operator
+// uninstall.
 //
 // The namespace is privileged because node-ca-injector, which
 // SessionManager installs whenever an ingress CA is configured, runs a
@@ -52,26 +61,26 @@ import (
 // namespace can still produce a "namespace not found" if Helm checks
 // existence before its own create-namespace handler fires. Doing the
 // create ourselves before each install removes the race.
-func ensurePlatformNamespace(ctx context.Context, c client.Client) error {
+func Ensure(ctx context.Context, c client.Client) error {
 	desiredLabels := podsecurity.PrivilegedNamespaceLabels()
 	desiredLabels[ownership.ManagedByLabel] = ownership.ManagedByValue
 
 	ns := &corev1.Namespace{}
-	err := c.Get(ctx, types.NamespacedName{Name: platformNamespace}, ns)
+	err := c.Get(ctx, types.NamespacedName{Name: Name}, ns)
 	if apierrors.IsNotFound(err) {
 		ns = &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   platformNamespace,
+				Name:   Name,
 				Labels: desiredLabels,
 			},
 		}
 		if createErr := c.Create(ctx, ns); createErr != nil && !apierrors.IsAlreadyExists(createErr) {
-			return fmt.Errorf("create Namespace %q: %w", platformNamespace, createErr)
+			return fmt.Errorf("create Namespace %q: %w", Name, createErr)
 		}
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("get Namespace %q: %w", platformNamespace, err)
+		return fmt.Errorf("get Namespace %q: %w", Name, err)
 	}
 
 	patch := client.MergeFrom(ns.DeepCopy())
@@ -79,7 +88,7 @@ func ensurePlatformNamespace(ctx context.Context, c client.Client) error {
 		return nil
 	}
 	if err := c.Patch(ctx, ns, patch); err != nil {
-		return fmt.Errorf("patch Namespace %q labels: %w", platformNamespace, err)
+		return fmt.Errorf("patch Namespace %q labels: %w", Name, err)
 	}
 	return nil
 }

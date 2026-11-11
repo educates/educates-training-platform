@@ -42,6 +42,7 @@ import (
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
+	"github.com/educates/educates-training-platform/installer/operator/internal/platformnamespace"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -52,11 +53,8 @@ import (
 const (
 	// platformNamespace is where the operator installs the runtime
 	// platform components (secrets-manager, lookup-service, and
-	// session-manager). Mirrors v3 behavior: the umbrella
-	// `educates-training-platform` Helm chart
-	// has historically been `helm install -n educates`, and three
-	// co-located components share a single namespace.
-	platformNamespace = "educates"
+	// session-manager).
+	platformNamespace = platformnamespace.Name
 
 	// secretsManagerReleaseName is the Helm release name used for the
 	// secrets-manager subchart install. Co-locating it in
@@ -330,7 +328,7 @@ func secretsManagerStatus(ctx context.Context, c client.Reader) (ready bool, ins
 // The returned Result tells the caller whether to proceed to the Deployment
 // readiness gate.
 func (r *SecretsManagerReconciler) installOrUpgrade(ctx context.Context, obj *platformv1alpha1.SecretsManager, cfg *configv1alpha1.EducatesClusterConfig) (helm.Result, error) {
-	if err := ensurePlatformNamespace(ctx, r.Client); err != nil {
+	if err := platformnamespace.Ensure(ctx, r.Client); err != nil {
 		return helm.Result{}, err
 	}
 	chrt, err := vendoredcharts.SecretsManager()

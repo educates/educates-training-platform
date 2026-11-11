@@ -44,6 +44,7 @@ import (
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
 	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno"
+	"github.com/educates/educates-training-platform/installer/operator/internal/platformnamespace"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -346,7 +347,7 @@ func (r *SessionManagerReconciler) clusterConfigReadySM(ctx context.Context) (*c
 }
 
 func (r *SessionManagerReconciler) installOrUpgradeSM(ctx context.Context, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) (helm.Result, error) {
-	if err := ensurePlatformNamespace(ctx, r.Client); err != nil {
+	if err := platformnamespace.Ensure(ctx, r.Client); err != nil {
 		return helm.Result{}, err
 	}
 	chrt, err := vendoredcharts.SessionManager()

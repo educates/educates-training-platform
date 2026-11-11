@@ -24,11 +24,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
+	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/ownership"
 	"github.com/educates/educates-training-platform/installer/operator/internal/platformnamespace"
 )
@@ -100,6 +103,7 @@ var _ = Describe("EducatesClusterConfig image pull Secret copies", func() {
 	})
 
 	AfterEach(func() {
+		_ = k8sClient.DeleteAllOf(ctx, &platformv1alpha1.SecretsManager{})
 		drainCR()
 		// envtest runs no garbage collector, so the copies the
 		// EducatesClusterConfig owned outlive it here.
@@ -212,6 +216,41 @@ var _ = Describe("EducatesClusterConfig image pull Secret copies", func() {
 
 		Expect(readyConditionStatus()).To(Equal(metav1.ConditionTrue))
 		expectPullSecretCopy(platformnamespace.Name, source)
+	})
+
+	It("refuses to finish deleting an Inline config while platform CRs exist, so the runtime keeps its copies", func() {
+		source := makePullSecret(testOperatorNamespace, "mirror-pull-secret", "guarded")
+		Expect(k8sClient.Create(ctx, source)).To(Succeed())
+		obj := &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       inlineSpecWithPullSecrets("mirror-pull-secret"),
+		}
+		Expect(k8sClient.Create(ctx, obj)).To(Succeed())
+		r := makeReconciler()
+		reconcileTwice(r)
+
+		// No platform reconciler runs here, so the CR has no finalizer.
+		sm := &platformv1alpha1.SecretsManager{ObjectMeta: metav1.ObjectMeta{Name: "cluster"}}
+		Expect(k8sClient.Create(ctx, sm)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, obj)).To(Succeed())
+		req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "cluster"}}
+		_, err := r.Reconcile(ctx, req)
+		Expect(err).NotTo(HaveOccurred())
+
+		got := &configv1alpha1.EducatesClusterConfig{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+		Expect(got.Finalizers).To(ContainElement(finalizerName))
+		Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseUninstalling))
+		ready := meta.FindStatusCondition(got.Status.Conditions, conditionReady)
+		Expect(ready).NotTo(BeNil())
+		Expect(ready.Reason).To(Equal(reasonPlatformCRsPresent))
+		Expect(ready.Message).To(ContainSubstring("SecretsManager"))
+		expectPullSecretCopy(platformnamespace.Name, source)
+
+		Expect(k8sClient.Delete(ctx, sm)).To(Succeed())
+		_, err = r.Reconcile(ctx, req)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got))).To(BeTrue())
 	})
 
 	It("leaves the source untouched when the operator runs in the educates namespace", func() {

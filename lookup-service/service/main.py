@@ -37,9 +37,9 @@ OPERATOR_NAMESPACE = os.getenv("OPERATOR_NAMESPACE", "educates-config")
 # TODO: These handler registrations are done against the global kopf registry
 # and thus will not apply to secondary operator instances which are created in
 # separate threads later as they will use their own registry. This means
-# liveness probes aren't currently checking access to secondary clusters. Also
-# need to check whether settings are being applied to the secondary operator
-# instances.
+# liveness probes aren't currently checking access to secondary clusters, and
+# the settings made below don't apply to them either: GenericOperator passes
+# them the scanning setting itself, but not the posting and watching ones.
 
 
 @kopf.on.startup()
@@ -50,6 +50,14 @@ def configure(settings: kopf.OperatorSettings, **_) -> None:
     settings.watching.connect_timeout = 1 * 60
     settings.watching.server_timeout = 5 * 60
     settings.watching.client_timeout = settings.watching.server_timeout + 10
+
+    # Serve only the resources found at startup. Otherwise kopf lists and
+    # watches CustomResourceDefinitions cluster wide, which the service account
+    # has no RBAC for, and logs each failed retry as an error. This also stops
+    # namespace observation, which only namespace patterns need, and the
+    # operator names its one namespace exactly.
+
+    settings.scanning.disabled = True
 
 
 @kopf.on.login()

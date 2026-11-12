@@ -142,6 +142,13 @@ def configure(settings: kopf.OperatorSettings, **_):
     settings.watching.server_timeout = 5 * 60
     settings.watching.client_timeout = settings.watching.server_timeout + 10
 
+    # Serve only the resources found at startup. Otherwise kopf lists and
+    # watches CustomResourceDefinitions cluster wide, which the service account
+    # has no RBAC for, and logs each failed retry as an error. This also stops
+    # namespace observation, which only namespace patterns need.
+
+    settings.scanning.disabled = True
+
 
 @kopf.on.login()
 def login_fn(**kwargs):

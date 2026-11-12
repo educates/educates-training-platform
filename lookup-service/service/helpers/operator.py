@@ -114,11 +114,22 @@ class GenericOperator(threading.Thread):
 
             logger.info("Starting managed cluster operator for %s.", self.cluster_name)
 
+            # Serve only the resources found at startup. Otherwise kopf lists
+            # and watches CustomResourceDefinitions in the managed cluster,
+            # which its credentials need not grant, and logs each failed retry
+            # as an error. This also stops namespace observation, so any
+            # namespaces given must be exact names, not patterns. The registry
+            # has no startup handler, so the settings are passed in here.
+
+            settings = kopf.OperatorSettings()
+            settings.scanning.disabled = True
+
             with contextlib.closing(event_loop):
                 try:
                     event_loop.run_until_complete(
                         kopf.operator(
                             registry=self.operator_registry,
+                            settings=settings,
                             clusterwide=clusterwide,
                             namespaces=self.namespaces,
                             memo=self.service_state,

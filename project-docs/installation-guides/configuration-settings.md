@@ -165,6 +165,16 @@ educatesClusterConfig:
   mode: Managed
   ingress:
     domain: workshops.example.com
+    ingressClassName: contour
+    controller:
+      provider: BundledContour
+    certificates:
+      provider: BundledCertManager
+      bundledCertManager:
+        issuerType: CustomCA
+        customCA:
+          caKeyPairSecretRef:
+            name: educates-custom-ca   # a CA key pair Secret you create, see below
   policyEnforcement:        # required in Managed mode, see below
     clusterPolicy:
       engine: Kyverno
@@ -173,11 +183,13 @@ educatesClusterConfig:
     kyverno:
       provider: Bundled
 secretsManager: {}
-lookupService: {}           # omit the block entirely to not deploy the component
+lookupService:              # omit the block entirely to not deploy the component
+  ingress:
+    prefix: lookup          # required: the host is lookup.workshops.example.com
 sessionManager: {}
 ```
 
-The `target` block only drives side effects of the CLI, and `kind` is its only `provider`. With `provider: kind`, `educates local cluster create --config <file>` creates the local kind cluster from `target.cluster`, which takes the same fields as the `cluster` block of `EducatesLocalConfig`, and then deploys the custom resources as the file declares them. None of the defaults of `EducatesLocalConfig` apply to the custom resources: the ingress domain is not derived from the host IP address, no certificate is chosen from the local secrets cache, and the lookup service is deployed only when the `lookupService` block is present. The loopback service that `educates serve-workshop` relies on resolves under the ingress domain of the `educatesClusterConfig` block. `target.resolver` takes the same fields as the `resolver` block of `EducatesLocalConfig`, and `educates local resolver deploy --config <file>` sets up the local DNS resolver for that same ingress domain.
+The `target` block only drives side effects of the CLI, and `kind` is its only `provider`. With `provider: kind`, `educates local cluster create --config <file>` creates the local kind cluster from `target.cluster`, which takes the same fields as the `cluster` block of `EducatesLocalConfig`, and then deploys the custom resources as the file declares them. None of the defaults of `EducatesLocalConfig` apply to the custom resources: the ingress domain is not derived from the host IP address, no certificate is chosen from the local secrets cache, and the lookup service is deployed only when the `lookupService` block is present, which must then set `ingress.prefix`, as the other kinds do with `lookup`. The loopback service that `educates serve-workshop` relies on resolves under the ingress domain of the `educatesClusterConfig` block. `target.resolver` takes the same fields as the `resolver` block of `EducatesLocalConfig`, and `educates local resolver deploy --config <file>` sets up the local DNS resolver for that same ingress domain.
 
 The CLI copies no Secrets from its local secrets cache into the cluster for an `EducatesConfig`, so you create any Secret the custom resources reference, such as a CA key pair or a wildcard certificate, in the cluster yourself. To create them before Educates is deployed, run `educates local cluster create --cluster-only --config <file>`, create the Secrets, and then run `educates admin platform deploy --config <file>`.
 

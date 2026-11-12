@@ -106,9 +106,23 @@ func imageRegistryTestConfig(prefix string) *configv1alpha1.EducatesClusterConfi
 }
 
 // renderChartImages renders a freshly loaded chart client-side, as an
-// install would, dropping the subcharts the values disable, and returns
-// the sorted, de-duplicated image references it holds.
+// install would, and returns the sorted, de-duplicated image references
+// it holds.
 func renderChartImages(t *testing.T, load func() (*chart.Chart, error), release, namespace string, values map[string]any) []string {
+	t.Helper()
+
+	var images []string
+	for _, doc := range renderChartDocuments(t, load, release, namespace, values) {
+		images = collectImages(doc, images)
+	}
+	slices.Sort(images)
+	return slices.Compact(images)
+}
+
+// renderChartDocuments renders a freshly loaded chart client-side, as an
+// install would, dropping the subcharts the values disable, and returns
+// every manifest it renders, hooks and chart tests included, decoded.
+func renderChartDocuments(t *testing.T, load func() (*chart.Chart, error), release, namespace string, values map[string]any) []any {
 	t.Helper()
 
 	chrt, err := load()
@@ -128,7 +142,7 @@ func renderChartImages(t *testing.T, load func() (*chart.Chart, error), release,
 		t.Fatalf("render chart: %v", err)
 	}
 
-	var images []string
+	var docs []any
 	for name, manifest := range manifests {
 		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
 			continue
@@ -142,11 +156,12 @@ func renderChartImages(t *testing.T, load func() (*chart.Chart, error), release,
 				}
 				t.Fatalf("decode %s: %v", name, err)
 			}
-			images = collectImages(doc, images)
+			if doc != nil {
+				docs = append(docs, doc)
+			}
 		}
 	}
-	slices.Sort(images)
-	return slices.Compact(images)
+	return docs
 }
 
 // collectImages appends the image references in a decoded manifest:

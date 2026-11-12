@@ -44,6 +44,7 @@ import (
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
 	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno"
+	"github.com/educates/educates-training-platform/installer/operator/internal/platformnamespace"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -346,7 +347,7 @@ func (r *SessionManagerReconciler) clusterConfigReadySM(ctx context.Context) (*c
 }
 
 func (r *SessionManagerReconciler) installOrUpgradeSM(ctx context.Context, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig) (helm.Result, error) {
-	if err := ensurePlatformNamespace(ctx, r.Client); err != nil {
+	if err := platformnamespace.Ensure(ctx, r.Client); err != nil {
 		return helm.Result{}, err
 	}
 	chrt, err := vendoredcharts.SessionManager()
@@ -410,6 +411,17 @@ func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *confi
 	return values
 }
 
+// imagePullSecretsReachSessionNamespaces reports whether the session
+// manager passes the image pull Secrets on to workshop session namespaces,
+// which it does unless spec.imagePullSecretPropagation.sessionNamespaces
+// is false.
+func imagePullSecretsReachSessionNamespaces(obj *platformv1alpha1.SessionManager) bool {
+	if p := obj.Spec.ImagePullSecretPropagation; p != nil && p.SessionNamespaces != nil {
+		return *p.SessionNamespaces
+	}
+	return true
+}
+
 // applySMImageValues maps the image-related inputs: the cluster
 // config's registry prefix and pull secrets plus the CR's per-image
 // overrides. imageRegistryNamespace is the chart's own image registry
@@ -417,6 +429,12 @@ func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *confi
 func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) {
 	if dev := developmentImageRegistryValues(cfg, imageRegistryNamespace); dev != nil {
 		values["development"] = dev
+		// The prefix itself, for the images a session's vcluster picks,
+		// such as CoreDNS, which the image inventory does not pin and
+		// which keep their upstream repository path under the prefix.
+		values["imageRegistry"] = map[string]any{
+			"prefix": cfg.Status.ImageRegistry.Prefix,
+		}
 	}
 
 	// imagePullSecrets — propagate from cluster config.
@@ -438,6 +456,7 @@ func applySMImageValues(values map[string]any, obj *platformv1alpha1.SessionMana
 		}
 		values["secretPropagation"] = map[string]any{
 			"imagePullSecretNames": names,
+			"sessionNamespaces":    imagePullSecretsReachSessionNamespaces(obj),
 		}
 	}
 

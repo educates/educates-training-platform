@@ -32,6 +32,92 @@ def image_pull_policy(image):
         return "IfNotPresent"
 
 
+def add_image_pull_secrets(body, names):
+    """Names each of the image pull Secrets on a ServiceAccount body,
+    keeping the ones it already names, and reports whether the body
+    changed. Bodies of any other kind are left alone.
+
+    A pod takes its ServiceAccount's image pull secrets only when it is
+    created, so naming them before the ServiceAccount is created or used
+    means no pod runs without them, even when the Secrets themselves are
+    copied into the namespace a moment later.
+
+    """
+
+    if body.get("apiVersion") != "v1" or body.get("kind") != "ServiceAccount":
+        return False
+
+    changed = False
+
+    for name in names:
+        secrets = body.setdefault("imagePullSecrets", [])
+        if {"name": name} not in secrets:
+            secrets.append({"name": name})
+            changed = True
+
+    return changed
+
+
+# The label session applications carry, and the value it has on the
+# namespace of a session's vcluster. The session manager's chart copies the
+# image pull Secrets into namespaces carrying it even when workshop session
+# namespaces get none, since the session user cannot reach that namespace.
+
+APPLICATION_LABEL = "training.educates.dev/application"
+VCLUSTER_APPLICATION = "vcluster"
+
+
+def _is_namespace(body):
+    return body.get("apiVersion") == "v1" and body.get("kind", "").lower() == "namespace"
+
+
+def vcluster_namespace_names(objects):
+    """Returns the names of the vcluster namespaces among the objects a
+    session application creates.
+
+    """
+
+    return {
+        xget(body, "metadata.name")
+        for body in objects
+        if _is_namespace(body)
+        and xget(body, "metadata.labels", {}).get(APPLICATION_LABEL)
+        == VCLUSTER_APPLICATION
+    }
+
+
+def without_vcluster_application_label(body):
+    """Removes the vcluster application label from a namespace a workshop
+    provides, so that it cannot get the image pull Secrets that only the
+    namespace of a session's vcluster gets, and returns the body.
+
+    """
+
+    if _is_namespace(body):
+        labels = xget(body, "metadata.labels", {})
+        if labels.get(APPLICATION_LABEL) == VCLUSTER_APPLICATION:
+            del labels[APPLICATION_LABEL]
+
+    return body
+
+
+def gets_image_pull_secrets(body, vcluster_namespaces, session_namespaces):
+    """Reports whether an object created for a workshop session is, or is in,
+    a namespace the image pull Secrets are copied into: any session namespace
+    while session_namespaces is true, and otherwise only one of the
+    vcluster_namespaces.
+
+    """
+
+    if session_namespaces:
+        return True
+
+    if _is_namespace(body):
+        return xget(body, "metadata.name") in vcluster_namespaces
+
+    return xget(body, "metadata.namespace") in vcluster_namespaces
+
+
 def resource_owned_by(child, parent):
     api_version = xget(parent, "apiVersion")
     kind = xget(parent, "kind")

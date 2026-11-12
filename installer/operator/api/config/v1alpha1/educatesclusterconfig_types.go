@@ -754,12 +754,25 @@ type ImageRegistry struct {
 	// portals and workshop sessions from; the upstream images its image
 	// inventory pins, such as docker-in-docker and the vcluster images,
 	// keep their references and are relocated through imageVersions
-	// overrides instead.
+	// overrides instead. The images a session's vcluster picks itself,
+	// its CoreDNS and the init container that rewrites stateful set pod
+	// hosts, move under the prefix too, as vcluster's default image
+	// registry.
 	// +optional
 	Prefix string `json:"prefix,omitempty"`
 
 	// pullSecrets references kubernetes.io/dockerconfigjson Secrets in
-	// the operator namespace.
+	// the operator namespace. The operator copies each one, under the
+	// same name, into every namespace it installs a chart into: the
+	// educates namespace in both modes and, in Managed mode, the
+	// namespace of each cluster service it installs. The copies follow
+	// their sources, are removed when a name is dropped from this list,
+	// and are owned by the EducatesClusterConfig, so they go when it is
+	// deleted. Every pod the operator installs can pull with them, and
+	// the session manager passes them on to the training portal,
+	// workshop environment and workshop session namespaces it creates.
+	// Each Secret must exist and have type kubernetes.io/dockerconfigjson;
+	// until it does, the EducatesClusterConfig is not Ready.
 	// +optional
 	PullSecrets []LocalObjectReference `json:"pullSecrets,omitempty"`
 }

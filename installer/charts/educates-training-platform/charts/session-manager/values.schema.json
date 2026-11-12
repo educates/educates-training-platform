@@ -229,6 +229,15 @@
         }
       },
 
+      "imageRegistry": {
+        "description": "Registry prefix for the images the session manager does not pin itself, such as the CoreDNS of a session's vcluster, which keep their upstream repository path under it. Set by the Educates operator from EducatesClusterConfig.status.imageRegistry; empty keeps their upstream registries.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prefix": { "type": "string" }
+        }
+      },
+
       "resources": {
         "type": "object"
       },
@@ -431,6 +440,10 @@
           "imagePullSecretNames": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
+          },
+          "sessionNamespaces": {
+            "description": "Whether workshop-session namespaces get the imagePullSecretNames. The namespace of a session's vcluster gets them either way.",
+            "type": "boolean"
           },
           "upstream": {
             "type": "object",

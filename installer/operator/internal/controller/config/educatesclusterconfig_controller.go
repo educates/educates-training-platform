@@ -64,8 +64,9 @@ const (
 )
 
 // reasonPlatformCRsPresent is published on Ready=False while a deleted
-// Managed-mode EducatesClusterConfig refuses to drain its cluster
-// services because platform component CRs still exist. Tearing down
+// EducatesClusterConfig refuses to finish because platform component
+// CRs still exist. The runtime still uses the Secrets the config owns,
+// which are garbage collected with it, and in Managed mode tearing down
 // Kyverno (and its CRDs) before the SessionManager helm release is
 // uninstalled leaves helm unable to enumerate the release's
 // ClusterPolicy resources and wedges the SessionManager finalizer.
@@ -176,8 +177,9 @@ type EducatesClusterConfigReconciler struct {
 
 // Managed-mode operations:
 //   - Namespaces (create/patch for cluster-service installs).
-//   - Secrets (write — copy CustomCA into cert-manager namespace, and
-//     derive educates-ingress-ca in the operator namespace).
+//   - Secrets (write: copy CustomCA into cert-manager namespace,
+//     derive educates-ingress-ca in the operator namespace, and copy
+//     the image pull Secrets into the namespaces charts install into).
 //   - Deployments (watch — cert-manager readiness gate).
 //   - cert-manager ClusterIssuers + Certificates (SSA + watch).
 // Helm-managed resources (cert-manager's own ConfigMaps, Services,
@@ -225,28 +227,32 @@ func (r *EducatesClusterConfigReconciler) Reconcile(ctx context.Context, req ctr
 	// failure re-attempt only what's still present.
 	if !obj.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(obj, finalizerName) {
-			if obj.Spec.Mode == configv1alpha1.ClusterConfigModeManaged {
-				// Refuse to drain cluster services while platform
-				// component CRs exist. Their helm releases track
-				// resources created from cluster-service CRDs (Kyverno
-				// ClusterPolicy in particular); removing Kyverno first
-				// leaves helm unable to enumerate those kinds and the
-				// platform finalizers wedge with an opaque "failed to
-				// delete release". Surface the required order instead
-				// and wait — platform-CR deletion events re-enqueue us.
-				present, err := r.platformCRsPresent(ctx)
-				if err != nil {
+			// Refuse to finish while platform component CRs exist, in
+			// either mode. The Secrets the EducatesClusterConfig owns,
+			// educates-ingress-ca and the image pull Secret copies in
+			// educates, are garbage collected with it, and the runtime
+			// still pulls and trusts with them. In Managed mode the
+			// platform helm releases also track resources created from
+			// cluster-service CRDs (Kyverno ClusterPolicy in
+			// particular); removing Kyverno first leaves helm unable to
+			// enumerate those kinds and the platform finalizers wedge
+			// with an opaque "failed to delete release". Surface the
+			// required order instead and wait — platform-CR deletion
+			// events re-enqueue us.
+			present, err := r.platformCRsPresent(ctx)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if len(present) > 0 {
+				r.markUninstallBlocked(obj, present)
+				if err := r.updateStatusWithTransitionLog(ctx, obj); err != nil {
 					return ctrl.Result{}, err
 				}
-				if len(present) > 0 {
-					r.markUninstallBlocked(obj, present)
-					if err := r.updateStatusWithTransitionLog(ctx, obj); err != nil {
-						return ctrl.Result{}, err
-					}
-					// Watch-driven wakeup is the primary signal; the
-					// requeue is a backstop against missed events.
-					return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
-				}
+				// Watch-driven wakeup is the primary signal; the
+				// requeue is a backstop against missed events.
+				return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+			}
+			if obj.Spec.Mode == configv1alpha1.ClusterConfigModeManaged {
 				if err := r.cleanupManaged(ctx, obj); err != nil {
 					log.Error(err, "Managed-mode cleanup failed; reconcile will retry")
 					return ctrl.Result{}, err
@@ -292,6 +298,14 @@ func (r *EducatesClusterConfigReconciler) Reconcile(ctx context.Context, req ctr
 		// As in Managed mode, CA trust reaches components only as the
 		// key-free educates-ingress-ca, kept current on every reconcile.
 		err = r.ensureIngressCATrust(ctx, obj)
+	}
+	if err == nil {
+		err = r.validateImagePullSecrets(ctx, obj)
+	}
+	if err == nil {
+		// The cluster services are the user's, with their own pull
+		// secrets, so only the platform namespace gets copies.
+		err = r.ensurePlatformImagePullSecrets(ctx, obj)
 	}
 	if err != nil {
 		if verr, ok := errors.AsType[*validationError](err); ok {
@@ -639,10 +653,10 @@ func (r *EducatesClusterConfigReconciler) platformCRsPresent(ctx context.Context
 }
 
 // markUninstallBlocked publishes the deletion-ordering refusal: the
-// config is terminating but cluster-service teardown can't start until
-// the named platform CRs are gone. Interface fields (status.ingress
-// etc.) are left untouched — components still uninstalling may read
-// them.
+// config is terminating but can't finish, its cluster-service teardown
+// included in Managed mode, until the named platform CRs are gone.
+// Interface fields (status.ingress etc.) are left untouched —
+// components still uninstalling may read them.
 func (r *EducatesClusterConfigReconciler) markUninstallBlocked(obj *configv1alpha1.EducatesClusterConfig, present []string) {
 	obj.Status.Phase = configv1alpha1.ClusterConfigPhaseUninstalling
 	meta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
@@ -650,7 +664,7 @@ func (r *EducatesClusterConfigReconciler) markUninstallBlocked(obj *configv1alph
 		Status: metav1.ConditionFalse,
 		Reason: reasonPlatformCRsPresent,
 		Message: fmt.Sprintf(
-			"cluster-service teardown blocked: platform CRs still present (%s); delete them first so their components uninstall while the cluster services they depend on are still running",
+			"deletion blocked: platform CRs still present (%s); delete them first so their components uninstall while the cluster configuration they depend on, and in Managed mode its cluster services, are still in place",
 			strings.Join(present, ", ")),
 		ObservedGeneration: obj.Generation,
 	})

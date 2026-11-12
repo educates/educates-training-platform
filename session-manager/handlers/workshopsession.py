@@ -16,10 +16,14 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from .analytics import report_analytics_event
 from .applications import pod_template_spec_patches, session_objects_list
-from .helpers import (Applications, image_pull_policy, smart_overlay_merge,
-                      substitute_variables, xget)
+from .helpers import (Applications, gets_image_pull_secrets,
+                      image_pull_policy, smart_overlay_merge,
+                      substitute_variables, vcluster_namespace_names,
+                      without_vcluster_application_label, xget)
 from .namespace_budgets import namespace_budgets
-from .objects import WorkshopEnvironment, create_from_dict
+from .objects import (WorkshopEnvironment, create_from_dict,
+                      ensure_default_service_account,
+                      name_image_pull_secrets)
 from .operator_config import (AMPLITUDE_TRACKING_ID, BASE_ENVIRONMENT_IMAGE,
                               CLARITY_TRACKING_ID, CLUSTER_DOMAIN,
                               CLUSTER_SECURITY_POLICY_ENGINE,
@@ -27,7 +31,10 @@ from .operator_config import (AMPLITUDE_TRACKING_ID, BASE_ENVIRONMENT_IMAGE,
                               CLUSTER_STORAGE_USER, DOCKER_IN_DOCKER_IMAGE,
                               DOCKER_REGISTRY_IMAGE, DOCKERD_MIRROR_REMOTE,
                               DOCKERD_MTU, GOOGLE_TRACKING_ID,
-                              IMAGE_REPOSITORY, INGRESS_CA_SECRET,
+                              IMAGE_PULL_SECRETS,
+                              IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES,
+                              IMAGE_REPOSITORY,
+                              INGRESS_CA_SECRET,
                               INGRESS_CLASS, INGRESS_DOMAIN, INGRESS_PROTOCOL,
                               INGRESS_SECRET, NETWORK_BLOCKCIDRS,
                               PLATFORM_ARCH,
@@ -753,6 +760,9 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             ) from exc
         raise
 
+    if IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES:
+        ensure_default_service_account(session_namespace)
+
     try:
         namespace_instance = pykube.Namespace.objects(api).get(name=session_namespace)
 
@@ -829,7 +839,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     kopf.adopt(service_account_body, namespace_instance.obj)
 
     try:
-        pykube.ServiceAccount(api, service_account_body).create()
+        pykube.ServiceAccount(api, name_image_pull_secrets(service_account_body)).create()
 
     except pykube.exceptions.PyKubeError as exc:
         logger.exception(
@@ -1216,6 +1226,9 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                     )
                 raise
 
+            if IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES:
+                ensure_default_service_account(target_namespace)
+
             _setup_session_namespace(
                 namespace_instance.obj,
                 workshop_name,
@@ -1253,11 +1266,27 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 )
             )
 
+    # The namespaces of a session's vcluster get the image pull Secrets even
+    # when session namespaces do not. Only an application's own objects may
+    # make one: a namespace the workshop provides loses the label marking it.
+
+    vcluster_namespaces = vcluster_namespace_names(
+        substitute_variables(object_body, session_variables)
+        for object_body in objects
+    )
+
     if workshop_spec.get("session"):
-        objects.extend(workshop_spec["session"].get("objects", []))
+        objects.extend(
+            without_vcluster_application_label(copy.deepcopy(object_body))
+            for object_body in workshop_spec["session"].get("objects", [])
+        )
 
     for object_body in objects:
         object_body = substitute_variables(object_body, session_variables)
+
+        object_image_pull_secrets = gets_image_pull_secrets(
+            object_body, vcluster_namespaces, IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES
+        )
 
         if not object_body["metadata"].get("namespace"):
             object_body["metadata"]["namespace"] = session_namespace
@@ -1373,7 +1402,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             )
 
             try:
-                create_from_dict(object_body)
+                create_from_dict(object_body, object_image_pull_secrets)
 
             except Exception as exc:
                 logger.exception(
@@ -1437,7 +1466,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             )
 
             try:
-                create_from_dict(object_body)
+                create_from_dict(object_body, object_image_pull_secrets)
 
             except Exception as exc:
                 logger.exception(
@@ -2003,14 +2032,17 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 package_pull_secrets.append(pull_secret_ref)
 
         # The kubelet pulls a mounted image, so any credentials it needs are
-        # the pod's rather than the fetcher's.
+        # the pod's rather than the fetcher's. A pod that names any image pull
+        # secrets of its own gets none of its service account's, so the
+        # platform's are named here too, or the session's own images could no
+        # longer be pulled from a registry that requires them.
 
         if package_pull_secrets:
             image_pull_secrets = deployment_pod_template_spec.setdefault(
                 "imagePullSecrets", []
             )
 
-            for pull_secret_ref in package_pull_secrets:
+            for pull_secret_ref in IMAGE_PULL_SECRETS + package_pull_secrets:
                 if {"name": pull_secret_ref} not in image_pull_secrets:
                     image_pull_secrets.append({"name": pull_secret_ref})
 

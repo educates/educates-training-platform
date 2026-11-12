@@ -26,6 +26,12 @@ if os.path.exists("/var/run/secrets/kubernetes.io/serviceaccount/namespace"):
 IMAGE_REGISTRY_HOST = xget(config_values, "imageRegistry.host")
 IMAGE_REGISTRY_NAMESPACE = xget(config_values, "imageRegistry.namespace")
 
+# The registry prefix the images the session manager does not pin itself are
+# mirrored under, each at its upstream repository path: the images a session's
+# vcluster picks, such as its CoreDNS. Empty keeps their upstream registries.
+
+IMAGE_REGISTRY_PREFIX = xget(config_values, "imageRegistry.prefix", "")
+
 if IMAGE_REGISTRY_HOST:
     if IMAGE_REGISTRY_NAMESPACE:
         IMAGE_REPOSITORY = f"{IMAGE_REGISTRY_HOST}/{IMAGE_REGISTRY_NAMESPACE}"
@@ -33,6 +39,22 @@ if IMAGE_REGISTRY_HOST:
         IMAGE_REPOSITORY = IMAGE_REGISTRY_HOST
 else:
     IMAGE_REPOSITORY = "registry.default.svc.cluster.local"
+
+# Names of the image pull Secrets the SecretCopier rules of the session
+# manager's chart copy into the training portal, workshop environment and
+# workshop session namespaces. The session manager names them on the
+# ServiceAccounts it creates, see objects.name_image_pull_secrets.
+
+IMAGE_PULL_SECRETS = [
+    name for name in xget(config_values, "imagePullSecrets", []) if name
+]
+
+# Whether workshop session namespaces get those Secrets. The namespace of a
+# session's vcluster gets them either way.
+
+IMAGE_PULL_SECRETS_IN_SESSION_NAMESPACES = xget(
+    config_values, "secretPropagation.sessionNamespaces", True
+)
 
 RUNTIME_CLASS = xget(config_values, "clusterRuntime.class", "")
 

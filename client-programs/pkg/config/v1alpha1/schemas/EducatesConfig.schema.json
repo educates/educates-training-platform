@@ -122,11 +122,11 @@
           "description": "imageRegistry relocates the images of the cluster services and\nEducates components the operator installs in Managed mode. Inline\nmode has its own equivalent under spec.inline.imageRegistry.",
           "properties": {
             "prefix": {
-              "description": "prefix moves each image to its upstream repository path, without\nthe upstream registry host, under this prefix: the layout a\nname-preserving mirror of the release image list holds. With\n\"registry.internal/educates\",\nghcr.io/educates/educates-session-manager is pulled from\nregistry.internal/educates/educates/educates-session-manager and, in\nManaged mode, quay.io/jetstack/cert-manager-controller from\nregistry.internal/educates/jetstack/cert-manager-controller. That\ncovers the Educates images the session manager creates training\nportals and workshop sessions from; the upstream images its image\ninventory pins, such as docker-in-docker and the vcluster images,\nkeep their references and are relocated through imageVersions\noverrides instead.",
+              "description": "prefix moves each image to its upstream repository path, without\nthe upstream registry host, under this prefix: the layout a\nname-preserving mirror of the release image list holds. With\n\"registry.internal/educates\",\nghcr.io/educates/educates-session-manager is pulled from\nregistry.internal/educates/educates/educates-session-manager and, in\nManaged mode, quay.io/jetstack/cert-manager-controller from\nregistry.internal/educates/jetstack/cert-manager-controller. That\ncovers the Educates images the session manager creates training\nportals and workshop sessions from; the upstream images its image\ninventory pins, such as docker-in-docker and the vcluster images,\nkeep their references and are relocated through imageVersions\noverrides instead. The images a session's vcluster picks itself,\nits CoreDNS and the init container that rewrites stateful set pod\nhosts, move under the prefix too, as vcluster's default image\nregistry.",
               "type": "string"
             },
             "pullSecrets": {
-              "description": "pullSecrets references kubernetes.io/dockerconfigjson Secrets in\nthe operator namespace.",
+              "description": "pullSecrets references kubernetes.io/dockerconfigjson Secrets in\nthe operator namespace. The operator copies each one, under the\nsame name, into every namespace it installs a chart into: the\neducates namespace in both modes and, in Managed mode, the\nnamespace of each cluster service it installs. The copies follow\ntheir sources, are removed when a name is dropped from this list,\nand are owned by the EducatesClusterConfig, so they go when it is\ndeleted. Every pod the operator installs can pull with them, and\nthe session manager passes them on to the training portal,\nworkshop environment and workshop session namespaces it creates.\nEach Secret must exist and have type kubernetes.io/dockerconfigjson;\nuntil it does, the EducatesClusterConfig is not Ready.",
               "items": {
                 "description": "LocalObjectReference is a reference to a Kubernetes object by name in\nthe operator namespace. Cluster-scoped references (e.g., ClusterIssuer,\nIngressClass) also use this shape.",
                 "properties": {
@@ -685,11 +685,11 @@
               "description": "imageRegistry relocates the images of the Educates components the\noperator installs, as spec.imageRegistry does in Managed mode.",
               "properties": {
                 "prefix": {
-                  "description": "prefix moves each image to its upstream repository path, without\nthe upstream registry host, under this prefix: the layout a\nname-preserving mirror of the release image list holds. With\n\"registry.internal/educates\",\nghcr.io/educates/educates-session-manager is pulled from\nregistry.internal/educates/educates/educates-session-manager and, in\nManaged mode, quay.io/jetstack/cert-manager-controller from\nregistry.internal/educates/jetstack/cert-manager-controller. That\ncovers the Educates images the session manager creates training\nportals and workshop sessions from; the upstream images its image\ninventory pins, such as docker-in-docker and the vcluster images,\nkeep their references and are relocated through imageVersions\noverrides instead.",
+                  "description": "prefix moves each image to its upstream repository path, without\nthe upstream registry host, under this prefix: the layout a\nname-preserving mirror of the release image list holds. With\n\"registry.internal/educates\",\nghcr.io/educates/educates-session-manager is pulled from\nregistry.internal/educates/educates/educates-session-manager and, in\nManaged mode, quay.io/jetstack/cert-manager-controller from\nregistry.internal/educates/jetstack/cert-manager-controller. That\ncovers the Educates images the session manager creates training\nportals and workshop sessions from; the upstream images its image\ninventory pins, such as docker-in-docker and the vcluster images,\nkeep their references and are relocated through imageVersions\noverrides instead. The images a session's vcluster picks itself,\nits CoreDNS and the init container that rewrites stateful set pod\nhosts, move under the prefix too, as vcluster's default image\nregistry.",
                   "type": "string"
                 },
                 "pullSecrets": {
-                  "description": "pullSecrets references kubernetes.io/dockerconfigjson Secrets in\nthe operator namespace.",
+                  "description": "pullSecrets references kubernetes.io/dockerconfigjson Secrets in\nthe operator namespace. The operator copies each one, under the\nsame name, into every namespace it installs a chart into: the\neducates namespace in both modes and, in Managed mode, the\nnamespace of each cluster service it installs. The copies follow\ntheir sources, are removed when a name is dropped from this list,\nand are owned by the EducatesClusterConfig, so they go when it is\ndeleted. Every pod the operator installs can pull with them, and\nthe session manager passes them on to the training portal,\nworkshop environment and workshop session namespaces it creates.\nEach Secret must exist and have type kubernetes.io/dockerconfigjson;\nuntil it does, the EducatesClusterConfig is not Ready.",
                   "items": {
                     "description": "LocalObjectReference is a reference to a Kubernetes object by name in\nthe operator namespace. Cluster-scoped references (e.g., ClusterIssuer,\nIngressClass) also use this shape.",
                     "properties": {
@@ -1169,6 +1169,17 @@
             "includeDefaultImages": {
               "default": true,
               "description": "includeDefaultImages pulls the default images, the training portal\nand the workshop base environment, ahead of the entries in images.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "imagePullSecretPropagation": {
+          "description": "imagePullSecretPropagation says which namespaces the session manager\npasses the image pull Secrets of the cluster configuration on to.",
+          "properties": {
+            "sessionNamespaces": {
+              "default": true,
+              "description": "sessionNamespaces passes them on to the namespaces of workshop\nsessions: the session namespace, its secondary namespaces and those\nits session objects create. Workshop users can read the Secrets in\nthose namespaces, so setting it to false keeps the credentials from\nthem, and pods there then pull only from registries that need no\ncredentials from them, such as a pull-through proxy.",
               "type": "boolean"
             }
           },

@@ -469,6 +469,13 @@ resolution.
 {{- $proxy := default dict $dd.proxyCache -}}
 {{- $wa := default dict .Values.workshopAnalytics -}}
 {{- $wstyle := default dict .Values.websiteStyling -}}
+{{/*
+The runtime names the propagated image pull Secrets on the ServiceAccounts it
+creates, and on the default ServiceAccount of the namespaces it creates, so a
+pod created before the SecretInjector reaches its ServiceAccount still pulls
+with them.
+*/}}
+{{- $sp := default dict .Values.secretPropagation -}}
 {{- $typed := dict
   "operator" (dict "namespace" .Release.Namespace)
   "version" .Chart.AppVersion
@@ -491,6 +498,7 @@ resolution.
   "imageRegistry" (dict
     "host" (default "" $ir.host)
     "namespace" (default "" $ir.namespace)
+    "prefix" (default "" (default dict .Values.imageRegistry).prefix)
   )
   "imageVersions" (include "session-manager.imageVersions" . | fromYamlArray)
   "trainingPortal" (include "session-manager.resolvedTrainingPortal" . | fromYaml)
@@ -520,6 +528,8 @@ resolution.
     "defaultTheme" (default "" $wstyle.defaultTheme)
     "frameAncestors" (default list $wstyle.frameAncestors)
   )
+  "imagePullSecrets" (default list $sp.imagePullSecretNames)
+  "secretPropagation" (dict "sessionNamespaces" (ternary $sp.sessionNamespaces true (hasKey $sp "sessionNamespaces")))
 -}}
 {{- $merged := mergeOverwrite $typed (deepCopy (default dict .Values.config)) -}}
 {{- toYaml $merged -}}

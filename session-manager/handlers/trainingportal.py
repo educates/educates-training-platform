@@ -5,7 +5,8 @@ import pykube
 
 from .analytics import report_analytics_event
 from .helpers import image_pull_policy, resource_owned_by, xget
-from .objects import SecretCopier
+from .objects import (SecretCopier, ensure_default_service_account,
+                      name_image_pull_secrets)
 from .operator_config import (AMPLITUDE_TRACKING_ID, ANALYTICS_WEBHOOK_URL,
                               CLARITY_TRACKING_ID,
                               CLUSTER_SECURITY_POLICY_ENGINE,
@@ -391,6 +392,8 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
 
     try:
         pykube.Namespace(api, namespace_body).create()
+
+        ensure_default_service_account(portal_namespace)
 
         namespace_instance = pykube.Namespace.objects(api).get(name=portal_namespace)
 
@@ -1053,7 +1056,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
 
         SecretCopier(api, theme_secret_copier_body).create()
 
-        pykube.ServiceAccount(api, service_account_body).create()
+        pykube.ServiceAccount(api, name_image_pull_secrets(service_account_body)).create()
         pykube.Secret(api, service_account_token_body).create()
         pykube.ClusterRoleBinding(api, cluster_role_binding_body).create()
         pykube.PersistentVolumeClaim(api, persistent_volume_claim_body).create()

@@ -95,6 +95,9 @@ const (
 // Cleanup is the strict reverse.
 func (r *EducatesClusterConfigReconciler) reconcileManaged(ctx context.Context, obj *configv1alpha1.EducatesClusterConfig) (ctrl.Result, error) {
 	err := r.validateManaged(ctx, obj)
+	if err == nil {
+		err = r.validateImagePullSecrets(ctx, obj)
+	}
 	var staticCert *pki.WildcardCertificate
 	if err == nil {
 		// As in Inline mode, a static certificate is checked, its chain
@@ -108,6 +111,13 @@ func (r *EducatesClusterConfigReconciler) reconcileManaged(ctx context.Context, 
 		// spec alone, so it is derived before any cluster service is
 		// installed and kept current on every reconcile.
 		err = r.ensureIngressCATrust(ctx, obj)
+	}
+	if err == nil {
+		// Each cluster-service phase copies the pull Secrets into its own
+		// namespace before it converges its release. The platform
+		// namespace is copied into here, so a rotation reaches it even
+		// while a cluster-service phase waits.
+		err = r.ensurePlatformImagePullSecrets(ctx, obj)
 	}
 	if err != nil {
 		if verr, ok := errors.AsType[*validationError](err); ok {
@@ -411,6 +421,9 @@ func (r *EducatesClusterConfigReconciler) reconcileCertManager(ctx context.Conte
 	if err := r.ensureNamespace(ctx, certManagerNamespace, owner, nil); err != nil {
 		return helm.Result{}, err
 	}
+	if err := r.ensureImagePullSecretCopies(ctx, owner, certManagerNamespace); err != nil {
+		return helm.Result{}, err
+	}
 
 	hc, err := r.HelmClientFor(certManagerNamespace)
 	if err != nil {
@@ -498,6 +511,9 @@ func renderCertManagerValues(obj *configv1alpha1.EducatesClusterConfig) map[stri
 	if obj != nil && obj.Spec.ImageRegistry != nil && obj.Spec.ImageRegistry.Prefix != "" {
 		values["imageRegistry"] = obj.Spec.ImageRegistry.Prefix
 	}
+	// cert-manager applies global.imagePullSecrets through the
+	// ServiceAccounts it renders for each of its pods.
+	setGlobalImagePullSecrets(values, obj)
 
 	// ACME DNS01 with identity-based auth needs the cert-manager
 	// controller's ServiceAccount to carry a cloud-specific

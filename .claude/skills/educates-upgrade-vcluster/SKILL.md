@@ -53,6 +53,16 @@ separate appVersion to resolve.
    upstream chart `values.yaml`, copied verbatim (with comments) for the target
    tag. session-manager loads it, applies a handful of Educates overrides, and
    ships it as the config Secret. Update the version pin in its 3-line header.
+5. **`hack/generate-image-list.sh`** — `VCLUSTER_OWN_IMAGES`, the images
+   vcluster picks itself and the inventory does not pin: the CoreDNS tag of
+   each `K8S_VERSIONS` entry, from `CoreDNSVersionMap` in
+   `pkg/constants/coredns.go` of `loft-sh/vcluster` at the target tag, and the
+   rewrite-hosts init container image from `vcluster-all-config.yaml`
+   (`sync.toHost.pods.rewriteHosts.initContainer.image`). With an image
+   registry prefix, session-manager sets vcluster's
+   `controlPlane.advanced.defaultImageRegistry` to it, so these are pulled from
+   `<prefix>/coredns/coredns` and `<prefix>/library/alpine`, and the mirror
+   needs them.
 
 ## Release-page artifacts
 
@@ -187,6 +197,7 @@ services / ingresses so the reconciled RBAC is actually hit.
 - [ ] `application_vcluster.py`: imports, `K8S_VERSIONS`, `K8S_DEFAULT_VERSION` updated
 - [ ] `K8S_VERSIONS` aligned with the platform set (`pkg/constants/kubernetes.go`), or divergence agreed with the user
 - [ ] `vcluster-all-config.yaml` re-copied from the tag + header pin updated
+- [ ] `VCLUSTER_OWN_IMAGES` in `hack/generate-image-list.sh` matches vcluster's `CoreDNSVersionMap` for every `K8S_VERSIONS` entry and the rewrite-hosts init image
 - [ ] Embedded StatefulSet / Services reconciled against the render, Educates customizations preserved
 - [ ] Embedded RBAC reconciled AND mirrored into `educates:session-manager:vcluster` (clusterroles.yaml)
 - [ ] Non-root syncer securityContext kept + flagged for runtime validation

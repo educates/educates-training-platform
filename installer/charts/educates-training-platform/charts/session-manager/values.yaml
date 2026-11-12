@@ -138,6 +138,15 @@ development:
     host: ""
     namespace: ""
 
+# The registry prefix the images the session manager does not pin itself are
+# mirrored under, each at its upstream repository path without the registry
+# host: the images a session's vcluster picks, such as its CoreDNS, which the
+# session manager hands to vcluster as its default image registry. The
+# Educates operator sets it from EducatesClusterConfig.status.imageRegistry.
+# Empty keeps their upstream registries.
+imageRegistry:
+  prefix: ""
+
 # Per-image overrides, merged BY NAME on top of the chart-shipped default
 # `imageVersions` list. The default list is built in
 # `templates/_helpers.tpl` (`session-manager.imageVersions`) and mirrors
@@ -376,11 +385,21 @@ imagePrePuller:
 
 secretPropagation:
   # Names of image-pull Secrets that already exist in the release namespace
-  # and should be (a) propagated into every workshop-portal and
-  # workshop-environment namespace, and (b) injected into ServiceAccounts
-  # in those namespaces.
+  # and should be (a) propagated into every workshop-portal,
+  # workshop-environment and workshop-session namespace, and (b) injected
+  # into ServiceAccounts in those namespaces: the portal, environment and
+  # session ServiceAccounts, and every ServiceAccount of a session
+  # namespace.
   imagePullSecretNames: []
     # - my-registry-pull-secret
+
+  # Whether workshop-session namespaces get them. Workshop users can read the
+  # Secrets in their session namespaces, so false keeps the credentials from
+  # them, and pods there then pull only from registries that need none, such
+  # as a pull-through proxy. The namespace of a session's vcluster, labelled
+  # training.educates.dev/application: vcluster, gets them either way: the
+  # session user cannot reach it, and the vcluster cannot start without them.
+  sessionNamespaces: true
 
   upstream:
     # External Secrets to copy INTO the release namespace before propagation.

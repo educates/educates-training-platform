@@ -285,6 +285,7 @@ Runtime behavior settings live on the `SessionManager` custom resource spec, rea
   and workshop base environment images, and any further images you list, onto
   every node ahead of time. It is off unless ``enabled`` is ``true``. See
   [pre-pulling workshop images](pre-pulling-workshop-images).
+* `imagePullSecretPropagation.sessionNamespaces`: whether workshop session namespaces get copies of the cluster configuration's image pull secrets, `true` unless set. Workshop users can read the secrets there, so `false` keeps the credentials from them; the namespace of a session's vcluster gets them either way. See [air-gapped installation](airgapped-installation) for what then pulls images there.
 * `nodeCATrust`, `remoteAccess`: node-level CA trust injection and cross-cluster CLI access. With `nodeCATrust.mode` at its default, `Auto`, the node CA injector is installed whenever the cluster publishes a CA, which includes every Managed mode install with a custom CA, every `StaticCertificate` install that names a CA trust Secret, and every Inline mode install that names a CA Secret, and also whenever `ingressOverrides.caCertificateSecretRef` is set. Nodes trust the CA the session manager uses: the override's `educates-session-manager-ingress-ca` when one is set, otherwise the cluster's `educates-ingress-ca`. With `Enabled`, the `SessionManager` reports `Ready` as `False` only when neither the cluster nor an override provides a CA. Set it to `Disabled` to keep the privileged node CA injector DaemonSet off.
 
 Use `kubectl explain sessionmanager.spec` for the full schema. A few spec blocks (`defaultAccessCredentials`, `registryMirrors`, and ConfigMap/URL-sourced themes) are reserved in the CRD but rejected as not yet supported in this release.
@@ -303,9 +304,10 @@ environment. You can add further images, by name or by full reference, and
 drop the default ones.
 
 The DaemonSet sets no tolerations, so it skips nodes that carry a taint, such
-as control plane nodes or a tainted workshop node pool. Image pull secrets
-configured for the installation are not copied into the ``educates``
-namespace, so an image from a registry that requires credentials is pulled
+as control plane nodes or a tainted workshop node pool. It pulls with the image
+pull secrets listed in the ``pullSecrets`` of the cluster configuration's image
+registry, which the operator copies into the ``educates`` namespace. An image
+from a registry that requires credentials those secrets do not hold is pulled
 only on nodes that hold credentials for that registry themselves.
 
 ### Turning the pre-puller on and off

@@ -139,7 +139,14 @@ Two settings re-root image resolution onto the mirror:
 The prefix does not move the upstream images the session manager's image
 inventory pins for the vcluster workshop application and for Docker support in
 workshop sessions, such as `ghcr.io/loft-sh/vcluster-oss` and `docker`. Point
-those at the mirror with `imageVersions` overrides of the matching names. With
+those at the mirror with `imageVersions` overrides of the matching names. The
+images a session's vcluster picks itself, which the inventory does not pin, do
+move under the prefix, since the session manager makes the prefix vcluster's
+default image registry: the CoreDNS of the virtual cluster, whose version
+follows its Kubernetes version, such as `docker.io/coredns/coredns:1.14.2`
+pulled from `registry.internal/educates/coredns/coredns:1.14.2`, and the init
+container that rewrites the hosts of stateful set pods,
+`mirror.gcr.io/library/alpine:3.20`. The release image list includes them. With
 a prefix set, the `$(image_repository)` data variable in workshop definitions
 resolves by default to where the Educates images are,
 `registry.internal/educates/educates` in the example above.
@@ -159,6 +166,71 @@ helm install educates-installer educates-installer-X.Y.Z.tgz \
 kubectl apply -f educates-cluster-config.yaml   # spec.imageRegistry.prefix: registry.internal/educates
 ```
 
-If the mirror requires authentication, create the pull secret in the operator namespace and reference it via `imagePullSecrets` in the operator chart, so that the operator pod can pull its own image. The operator does not distribute registry credentials to the cluster services and Educates runtime components it installs, so the cluster's nodes must be able to pull those images from the mirror themselves, for example through node-level registry credentials or a mirror that allows anonymous pulls.
+If the mirror requires authentication, create a `kubernetes.io/dockerconfigjson`
+Secret holding its credentials in the operator namespace, `educates-installer`
+by default, and use it in two places:
+
+* **The operator chart's `imagePullSecrets`**, so that the operator pod can
+  pull its own image. From the CLI, set `operator.imagePullSecrets` in the
+  configuration file.
+* **The image pull secrets of `EducatesClusterConfig`**,
+  `spec.imageRegistry.pullSecrets` in Managed mode and
+  `spec.inline.imageRegistry.pullSecrets` in Inline mode, so that everything
+  the operator installs can pull from the mirror. From the CLI, set them in
+  the `educatesClusterConfig` block of an `EducatesConfig` configuration file,
+  or as `imageRegistry.pullSecrets` in `EducatesInlineConfig`.
+
+A pod can use a pull secret only from its own namespace, so the operator
+copies each Secret listed in `pullSecrets`, under the same name, into every
+namespace it installs a chart into: the `educates` namespace of the Educates
+runtime components in both modes, which it creates first if needed, and in
+Managed mode the `cert-manager`, `contour`, `external-dns` and `kyverno`
+namespaces of the cluster services it installs. Each of those charts is given
+the Secrets for all of its pods, Helm hooks included. In Inline mode the
+cluster services are your own and keep their own pull secrets, so only
+`educates` gets copies. Rules the session manager installs then have the
+secrets manager copy the Secrets from `educates` into the training portal,
+workshop environment and workshop session namespaces the session manager
+creates, and add them to the service accounts there. Every service account of a
+workshop session namespace gets them, so a workshop's own pods, such as the
+vcluster of a session whose images you point at the mirror with
+`imageVersions`, can pull from the mirror too. A pod takes its service
+account's pull secrets only when it is created, so the session manager also
+names the Secrets itself on every service account it creates, and on the
+`default` service account of every namespace it creates, before anything runs
+there. Workshop users can read the
+Secrets in their session namespaces, so give the Secrets credentials that only
+allow pulling from the mirror.
+
+To keep the credentials from workshop users altogether, set
+`spec.imagePullSecretPropagation.sessionNamespaces` of the `SessionManager` to
+`false`. Workshop session namespaces then get no copies, except the namespace
+of a session's vcluster, which the session user cannot reach and which the
+vcluster needs to start. The setting applies to sessions created after it is
+changed; existing session namespaces keep their copies until their sessions
+end. Everything else keeps pulling from the mirror as
+before, but pods that a workshop or its users run in their session namespaces,
+such as those of a workshop's session objects, can then only pull images that
+need no credentials from them. One way to serve those is a pull-through proxy,
+or one for each registry, running in a namespace workshop users cannot reach,
+holding the credentials itself and serving pulls without them. The nodes pull
+the images, not the pods, so a proxy must be at an address the nodes can
+resolve and trust, such as an ingress host name or a node port on `localhost`,
+rather than a cluster service name.
+
+The copies follow the Secrets in the operator namespace, so rotating the
+credentials there updates every copy, down to the workshop namespaces. Removing
+a name from `pullSecrets` deletes its copies. The copies belong to the
+`EducatesClusterConfig`: deleting Educates leaves them in place while the
+cluster services are uninstalled, so that Helm hooks such as Kyverno's can
+still pull, and removes them once the `EducatesClusterConfig` is gone. Until
+every Secret listed exists and has the type `kubernetes.io/dockerconfigjson`,
+the `EducatesClusterConfig` reports `Ready` as `False` with a message naming
+the entry.
+
+Alternatively, nodes that hold credentials for the mirror themselves, through a
+kubelet image credential provider, the container runtime's registry
+configuration or a cloud node identity, can pull every image without pull
+secrets.
 
 Workshop content images are a separate concern from the platform: workshops published with `educates publish-workshop` are self-contained OCI artifacts that can be relocated with `imgpkg copy`, as covered in the workshop content documentation.

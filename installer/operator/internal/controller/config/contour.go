@@ -165,6 +165,9 @@ func (r *EducatesClusterConfigReconciler) reconcileContour(ctx context.Context, 
 	if err := r.ensureNamespace(ctx, contourNamespace, owner, podsecurity.PrivilegedNamespaceLabels()); err != nil {
 		return helm.Result{}, err
 	}
+	if err := r.ensureImagePullSecretCopies(ctx, owner, contourNamespace); err != nil {
+		return helm.Result{}, err
+	}
 
 	hc, err := r.HelmClientFor(contourNamespace)
 	if err != nil {
@@ -290,6 +293,7 @@ func renderContourValues(obj *configv1alpha1.EducatesClusterConfig) map[string]a
 			"imageRegistry": obj.Spec.ImageRegistry.Prefix,
 		}
 	}
+	setGlobalImagePullSecrets(values, obj)
 
 	return values
 }

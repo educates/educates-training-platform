@@ -163,7 +163,7 @@ After creating ``ClusterConfig`` resources, you can verify they have been regist
 
 ```
 curl --silent -X GET -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  http://educates-api.<ingress-domain>/api/v1/clusters | jq
+  https://lookup.<ingress-domain>/api/v1/clusters | jq
 ```
 
 This will return a list of all registered clusters with their names and labels. You can also check the lookup service logs to confirm that the cluster operator threads have started for each configured cluster:

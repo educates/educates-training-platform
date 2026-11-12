@@ -1669,3 +1669,20 @@ Bugs Fixed
   execute permission when ``vendir`` unpacked an archive was skipped without
   any message. Scripts under ``$HOME/workshop/setup.d`` are now made
   executable as well.
+
+* For about a minute after starting, the training portal, secrets manager,
+  session manager, lookup service and tunnel manager each logged nine
+  ``ERROR`` messages for failed requests to list
+  ``customresourcedefinitions.apiextensions.k8s.io``, followed by the warning
+  ``Not enough permissions to watch for resources``. The lookup service did
+  the same for each cluster it manages. The kopf operator framework they run
+  on watches custom resource definitions to notice ones created or changed
+  while it runs, and their service accounts are not permitted to read them,
+  so kopf fell back to serving the custom resources it found at startup.
+  They now tell kopf to work that way from the start, so it no longer makes
+  the requests or logs the errors and the warning, and what they serve is
+  unchanged. An upgrade of Educates restarts them, which picks up any changed
+  Educates custom resource definitions. The ``educates:remote-access``
+  cluster role no longer has a rule for ``customresourcedefinitions`` in the
+  core API group, which granted nothing, since custom resource definitions
+  belong to the ``apiextensions.k8s.io`` API group.

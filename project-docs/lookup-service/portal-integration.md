@@ -27,7 +27,7 @@ When a workshop session ends, the user's browser is redirected to a return URL. 
 * The user clicks the exit icon in the workshop dashboard.
 * The workshop duration expires (a countdown popup is shown before expiry).
 
-If a ``clientIndexUrl`` was provided in the session request, the user will be redirected to that URL when the session ends. If ``clientIndexUrl`` was not provided, the user will be redirected to the training portal's own index page.
+The user is redirected to the ``clientIndexUrl`` given in the session request. Every session request must include one, since the training portal rejects a request without it.
 
 When the user is redirected back to the ``clientIndexUrl``, a ``notification`` query string parameter will be appended to indicate the reason for the redirect. The possible values are:
 

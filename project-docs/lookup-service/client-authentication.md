@@ -10,7 +10,7 @@ Authenticating a client
 To authenticate, send an HTTP ``POST`` request to the ``/auth/login`` endpoint with a JSON body containing the client username and password:
 
 ```
-curl -X POST http://educates-api.<ingress-domain>/auth/login \
+curl -X POST https://lookup.<ingress-domain>/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "<name>", "password": "<password>"}'
 ```
@@ -42,7 +42,7 @@ After obtaining an access token, include it in the ``Authorization`` header of s
 
 ```
 curl -X GET -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  http://educates-api.<ingress-domain>/api/v1/workshops?tenant=<tenant-name>
+  https://lookup.<ingress-domain>/api/v1/workshops?tenant=<tenant-name>
 ```
 
 If the token has expired or been revoked, the API will return HTTP 401. When this occurs, the client should re-authenticate by calling the ``/auth/login`` endpoint again to obtain a new token.
@@ -54,7 +54,7 @@ To check whether a token is still valid without making an API call, send an HTTP
 
 ```
 curl -X GET -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  http://educates-api.<ingress-domain>/auth/verify
+  https://lookup.<ingress-domain>/auth/verify
 ```
 
 If the token is valid, the response will be HTTP 200. If the token has expired or been revoked, the response will be HTTP 401.
@@ -66,7 +66,7 @@ An access token can be explicitly revoked by calling the ``/auth/logout`` endpoi
 
 ```
 curl -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  http://educates-api.<ingress-domain>/auth/logout
+  https://lookup.<ingress-domain>/auth/logout
 ```
 
 In addition to explicit revocation, access tokens are also invalidated in the following circumstances:
@@ -85,7 +85,7 @@ When testing the REST API from the command line, a common pattern is to capture 
 
 ```
 ACCESS_TOKEN=$(curl --silent -X POST \
-  http://educates-api.<ingress-domain>/auth/login \
+  https://lookup.<ingress-domain>/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "custom-portal", "password": "my-secret"}' \
   | jq -r -e .access_token) && echo $ACCESS_TOKEN

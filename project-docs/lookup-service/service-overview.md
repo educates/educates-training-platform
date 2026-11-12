@@ -29,11 +29,12 @@ The lookup service introduces several concepts for organizing how workshops are 
 Enabling the lookup service
 ---------------------------
 
-The lookup service is an optional component of Educates. To enable it, include the ``lookupService`` configuration when deploying Educates:
+The lookup service is an optional component of Educates. The Educates CLI deploys it by default with every configuration kind except ``EducatesConfig``, through the ``lookupService`` setting, which defaults to ``true``. Set it to ``false`` to leave the lookup service out:
 
 ```yaml
-lookupService:
-  enabled: true
+lookupService: false
 ```
 
-Once deployed, the lookup service will be accessible via an ingress at a URL of the form ``http://educates-api.<ingress-domain>``. Before it can be used, you will need to configure at least one monitored cluster, one tenant, and one client. These are configured by creating custom resources in the ``educates-config`` namespace of the cluster where the lookup service is running.
+With the ``EducatesConfig`` kind, or when you apply the Educates custom resources yourself, the lookup service is deployed by a ``LookupService`` resource, whose ``spec.ingress.prefix`` is required. See [Configuration Settings](../installation-guides/configuration-settings) for the configuration kinds.
+
+Once deployed, the lookup service is accessible through an ingress at ``https://lookup.<ingress-domain>``, or with ``http`` when the ingress protocol of the installation is ``http``. The host name is the ``spec.ingress.prefix`` of the ``LookupService`` resource followed by the ingress domain, and the Educates CLI sets the prefix to ``lookup``. Before it can be used, you will need to configure at least one monitored cluster, one tenant, and one client. These are configured by creating custom resources in the ``educates-config`` namespace of the cluster where the lookup service is running.

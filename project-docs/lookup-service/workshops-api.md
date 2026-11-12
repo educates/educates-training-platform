@@ -10,7 +10,7 @@ To retrieve the list of workshops available through a tenant, send an HTTP ``GET
 
 ```
 curl -X GET -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  http://educates-api.<ingress-domain>/api/v1/workshops?tenant=<tenant-name>
+  https://lookup.<ingress-domain>/api/v1/workshops?tenant=<tenant-name>
 ```
 
 The ``tenant`` parameter is required and specifies which tenant to query workshops for. A client with the ``tenant`` role can only query tenants it has been granted access to, as defined in the ``spec.tenants`` field of its ``ClientConfig`` resource.
@@ -57,7 +57,7 @@ curl -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     "clientIndexUrl": "https://portal.example.com/",
     "clientUserId": "user-12345"
   }' \
-  http://educates-api.<ingress-domain>/api/v1/workshops
+  https://lookup.<ingress-domain>/api/v1/workshops
 ```
 
 The request body is a JSON object with the following properties:
@@ -66,7 +66,7 @@ The request body is a JSON object with the following properties:
 
 * ``workshopName`` (required) - The name of the workshop to request a session for. This must match the ``name`` of one of the workshops returned by the listing endpoint.
 
-* ``clientIndexUrl`` (optional) - A URL that the user will be redirected to when the workshop session ends. This could be the main page of your custom portal. If not specified, the user will be redirected to the training portal's own index page when the session ends. For more details on how redirection works, see [Portal Integration](portal-integration).
+* ``clientIndexUrl`` (required) - A URL that the user will be redirected to when the workshop session ends. This could be the main page of your custom portal. The training portal rejects a session request without one, and the lookup service then responds with HTTP 503. For more details on how redirection works, see [Portal Integration](portal-integration).
 
 * ``clientUserId`` (optional) - A unique identifier for the end user requesting the workshop. If provided and the user already has an active session for the same workshop, the existing session will be returned rather than creating a new one. This prevents users from accidentally creating duplicate sessions and allows them to reconnect to an existing session if they close their browser. If not provided, a new session will be created for every request. It is recommended that custom portals always provide this parameter.
 
@@ -105,7 +105,7 @@ The possible error responses are:
 * HTTP 400 - The request body is malformed or missing required fields.
 * HTTP 401 - The access token is invalid or has expired.
 * HTTP 403 - The client is not permitted to access the specified tenant.
-* HTTP 503 - The specified tenant configuration does not exist, or no capacity is available to fulfill the request.
+* HTTP 503 - The specified tenant configuration does not exist, no capacity is available to fulfill the request, or the request has no ``clientIndexUrl``.
 
 Session allocation
 ------------------

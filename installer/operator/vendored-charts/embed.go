@@ -52,16 +52,16 @@ func CertManager() (*chart.Chart, error) {
 // ContourChartVersion is the upstream Helm chart version (semver
 // version of the *chart*, distinct from the Contour appVersion).
 // Surfaced in status.bundledChartVersions["contour"].
-const ContourChartVersion = "0.8.0"
+const ContourChartVersion = "0.9.0"
 
 // ContourAppVersion is the Project Contour binary version the
 // embedded chart installs. Less load-bearing than ContourChartVersion
 // (the chart version is what's pinned in our build), but useful to
 // expose in logs/diagnostics so a reader doesn't have to crack the
 // tarball to learn which Contour they're running.
-const ContourAppVersion = "1.33.7"
+const ContourAppVersion = "1.33.8"
 
-//go:embed contour-0.8.0.tgz
+//go:embed contour-0.9.0.tgz
 var contourTarball []byte
 
 // Contour parses the embedded Project Contour chart tarball and

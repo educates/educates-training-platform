@@ -118,9 +118,9 @@ For local kind-cluster users, the v4 CLI migrates your configuration on first us
 
 * translates it to a v4 ``config.yaml`` (``EducatesLocalConfig``), carrying over
   the ingress domain, kind cluster settings (listen address, API server,
-  subnets, volume mounts, registry mirrors), local DNS resolver settings, image
-  version overrides, image pre-puller settings, website styling references,
-  and image pull secret propagation;
+  subnets, volume mounts, registry mirrors), the local DNS resolver's extra
+  domains, image version overrides, image pre-puller settings, website styling
+  references, and image pull secret propagation;
 * renames the original to `values.yaml.v3-backup`; and
 * prints a notice naming both files, followed by a line for each setting it
   carried over in a changed form or dropped. There is no prompt and no flag:
@@ -138,10 +138,22 @@ migration carries such a name over as a ``name`` entry, and since the version
 ``SessionManager`` reporting ``InstallFailed`` with a message naming the entry.
 Replace that entry with the image's full reference as an ``image`` entry, or
 remove it. A version 3 file without ``imagePuller`` leaves
-``imagePrePuller`` unset, so the pre-puller is on with its default images. The
-notice says what was carried over and what was dropped, with lines such as:
+``imagePrePuller`` unset, so the pre-puller is on with its default images.
+
+The migration also drops ``localDNSResolver.targetAddress``. A local cluster's
+names now resolve to its ``cluster.listenAddress`` when that is a specific IP
+address, and otherwise to your host's IP address. The migration leaves
+``cluster.listenAddress`` as it was, since setting it changes where Kind
+publishes the cluster's ports. To keep resolving the cluster at the old target
+address, set ``cluster.listenAddress`` to it and create the cluster again. Names
+that resolve elsewhere go in files of your own in the data home's ``dnsmasq.d``
+folder, as described in [names of your own](local-dns-resolver-own-names).
+
+The notice says what was carried over and what was dropped, with lines such
+as:
 
 ```
+dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to its cluster.listenAddress when that is a specific IP address, and otherwise to the host's IP address; set cluster.listenAddress to 192.168.1.10 to keep resolving the cluster there, or for other names add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home
 dropped imageVersions entry pause-container: the image pre-puller now runs its own image-puller helper, which a pause container image cannot replace
 carried imagePuller over to imagePrePuller: enabled: true, images: jdk17-environment
 dropped imagePuller.prePullImages names the v4 image inventory does not hold: session-manager; to pull one, add its full reference to imagePrePuller.images as an image entry

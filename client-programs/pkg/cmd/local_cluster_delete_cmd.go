@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
@@ -43,7 +47,19 @@ func (o *LocalClusterDeleteOptions) Run(id localclusters.Identity) error {
 		})
 	}
 
-	return c.DeleteCluster()
+	if err := c.DeleteCluster(); err != nil {
+		return err
+	}
+
+	// A running local DNS resolver stops serving the domains of a named
+	// cluster once its kind cluster is gone.
+	rep := progress.New(os.Stdout, 0, isStdoutTTY(os.Stdout))
+	if err := refreshLocalResolver(rep, func() ([]byte, error) {
+		return localResolverConfig(context.Background())
+	}); err != nil {
+		return fmt.Errorf("local DNS resolver: %w", err)
+	}
+	return nil
 }
 
 func (p *ProjectInfo) NewLocalClusterDeleteCmd() *cobra.Command {

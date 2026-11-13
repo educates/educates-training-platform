@@ -166,6 +166,14 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	} else if exists {
 		return fmt.Errorf("kind cluster '%s' already exists; run 'educates local cluster delete%s' first or use the existing cluster directly", id.KindName, localClusterFlagArg(id))
 	}
+	// The local DNS resolver serves the domains of every local cluster,
+	// so a domain another cluster claims is refused here, whether or not
+	// the resolver runs. A running resolver serves this same
+	// configuration once the kind cluster exists.
+	resolverConfig, err := localResolverConfig(ctx, localclusters.ClusterConfig{ID: id, Config: in.Deploy, Source: configPath})
+	if err != nil {
+		return err
+	}
 	if err := checkHostPortsAvailable(ctx, in.Cluster.ListenAddress, o.Verbose, w); err != nil {
 		return err
 	}
@@ -194,6 +202,9 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return clusterConfig.CreateCluster(bootstrap, o.ClusterImage, onPhase, o.Verbose)
 	}); err != nil {
 		return err
+	}
+	if err := refreshLocalResolver(rep, func() ([]byte, error) { return resolverConfig, nil }); err != nil {
+		return fmt.Errorf("local DNS resolver: %w", err)
 	}
 	// The registry, loopback and mirror steps talk to the cluster just
 	// created, through its own context in the kubeconfig kind wrote it in.

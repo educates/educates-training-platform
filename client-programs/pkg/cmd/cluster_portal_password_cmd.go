@@ -102,6 +102,7 @@ func (p *ProjectInfo) NewClusterPortalPasswordCmd() *cobra.Command {
 		"",
 		"Context to use from Kubeconfig",
 	)
+	addLocalClusterContextFlag(c, &o.KubeconfigOptions)
 	c.Flags().BoolVar(
 		&o.Admin,
 		"admin",

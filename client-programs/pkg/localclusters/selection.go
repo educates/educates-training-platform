@@ -23,6 +23,13 @@ type Selection struct {
 	Env string
 }
 
+// IsSet reports whether sel names a local cluster explicitly: the flag
+// was given, even with an empty value, or the environment variable is
+// not empty. Otherwise Resolve falls back to the default local cluster.
+func (sel Selection) IsSet() bool {
+	return sel.FlagSet || sel.Env != ""
+}
+
 // Resolve returns the identity of the local cluster sel selects in the
 // data home dataHome. The flag wins when it was given, and an explicitly
 // empty flag means the default local cluster. Otherwise a non-empty

@@ -120,3 +120,16 @@ func TestRefreshLoopbackService_ReadErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestKindKubeconfigPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("KUBECONFIG", "/elsewhere/config")
+
+	if got, want := KindKubeconfigPath(""), home+"/.kube/config"; got != want {
+		t.Errorf("KindKubeconfigPath(\"\") = %q, want %q", got, want)
+	}
+	if got, want := KindKubeconfigPath("/given/config"), "/given/config"; got != want {
+		t.Errorf("KindKubeconfigPath(%q) = %q, want %q", want, got, want)
+	}
+}

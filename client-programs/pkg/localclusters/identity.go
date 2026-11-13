@@ -2,8 +2,8 @@
 // CLI manages: which local cluster a command means, what that cluster is
 // called in kind, in Docker, in the kubeconfig and in the data home, what
 // a named local cluster's config must declare, and, from an observed
-// state of the host, which Educates clusters exist and whether they clash
-// with one another.
+// state of the host, which Educates clusters exist, whether they clash
+// with one another, and what the local DNS resolver serves for them.
 //
 // It takes everything as plain values, the data home and the observed
 // state included. Besides the cluster configs and folders of the data

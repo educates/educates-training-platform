@@ -12,6 +12,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
+	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -28,8 +29,9 @@ const kindControlPlaneRole = "control-plane"
 // ObserveLocalClusters returns the state of the host the inventory of
 // local clusters answers from: every kind node container on the Docker
 // host, as ObserveNodeContainers returns them, with the host ports each
-// control-plane node is configured to publish, and the addresses of the
-// host's network interfaces.
+// control-plane node is configured to publish, the addresses of the
+// host's network interfaces, and the registry mirror containers, as
+// registry.ObserveMirrorContainers returns them.
 //
 // The port bindings come from each container's configured host config,
 // not from the ports it publishes now, so a stopped cluster's count too.
@@ -85,7 +87,12 @@ func ObserveLocalClusters(ctx context.Context) (localclusters.Observed, error) {
 		}
 	}
 
-	return localclusters.Observed{Nodes: nodes, InterfaceAddresses: interfaces}, nil
+	mirrors, err := registry.ObserveMirrorContainers(ctx)
+	if err != nil {
+		return localclusters.Observed{}, err
+	}
+
+	return localclusters.Observed{Nodes: nodes, InterfaceAddresses: interfaces, Mirrors: mirrors}, nil
 }
 
 // ObserveNodeContainers returns every kind node container on the Docker

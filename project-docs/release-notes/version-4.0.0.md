@@ -349,6 +349,30 @@ New Features
   ``educates local secrets sync`` builds the certificates it copies from
   the selected cluster's configuration, and copies them into that cluster.
 
+  The one local DNS resolver serves the domains of every local cluster,
+  each pointing at its own cluster's ``resolver.targetAddress``, which for
+  a named cluster defaults to its listen address, so a named cluster on
+  ``test2.educates.test`` resolves to its own IP address while
+  ``educates.test`` still resolves to the default cluster. ``educates local
+  resolver deploy`` and ``update`` configure it for every cluster, creating
+  or deleting a cluster refreshes a running resolver, and two clusters
+  claiming the same domain is an error.
+
+  Every local cluster shares the local image registry and the registry
+  mirrors, so the commands which manage them take no ``--local-cluster``
+  and act on every local cluster. ``educates local registry deploy``
+  configures every node of every cluster to pull from the registry, and
+  points each cluster's ``registry`` Service and ``local-registry-hosting``
+  ConfigMap at it. ``educates local mirror deploy`` links a mirror into
+  every node of every cluster, and ``educates local mirror delete`` unlinks
+  it from all of them. A cluster whose configuration declares a registry
+  mirror reuses the mirror's container when another cluster created it,
+  and ``educates local cluster create`` fails before creating the Kind
+  cluster when that container pulls from another URL or as another
+  username, naming the mirror, the container's values and the declared
+  ones. A different password can't be seen on the container, so it is not
+  detected.
+
   ``educates cluster workshop serve`` can serve one workshop to several
   local clusters at once, from a terminal for each. With a cluster
   selected, its proxy listens on the cluster's listen address instead of on
@@ -1372,6 +1396,16 @@ Deprecations
   record for the ingress domain, and will be removed in a future release. If
   you run your own ``external-dns`` against the cluster, update it to version
   0.22 or later before the older annotation is removed.
+
+* The ``--kubeconfig`` and ``--context`` options of ``educates local registry
+  deploy`` are deprecated, and are ignored. The command used to create the
+  ``registry`` Service and EndpointSlice in the cluster the options, or the
+  current kube context, named. It now configures every local cluster
+  created by ``educates local cluster create``, each through its own kube
+  context in ``~/.kube/config``, and also creates the
+  ``local-registry-hosting`` ConfigMap in each, so a cluster which is not
+  such a local cluster is no longer configured. A warning is shown when
+  either option is given, and both will be removed in a future version.
 
 Bugs Fixed
 ----------

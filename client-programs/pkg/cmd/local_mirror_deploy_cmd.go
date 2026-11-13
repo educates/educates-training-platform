@@ -43,11 +43,13 @@ func (o *LocalMirrorDeployOptions) Run() error {
 	}
 
 	err := stepOnStdout(o.Verbose, "registry mirror "+o.MirrorName, "ready", func(s progress.Step) error {
-		nodes, err := registryNodes(context.Background(), defaultLocalCluster())
+		// Every local cluster shares the mirror, so it is linked into every
+		// node of every one of them.
+		inventory, err := localClusterInventory(context.Background())
 		if err != nil {
 			return err
 		}
-		return registry.DeployMirrorAndLinkToCluster(mirrorConfig, nodes, s)
+		return registry.DeployMirrorAndLinkToCluster(mirrorConfig, inventory.RegistryNodes(), s)
 	})
 
 	if err != nil {

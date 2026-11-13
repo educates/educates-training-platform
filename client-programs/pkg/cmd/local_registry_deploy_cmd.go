@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
@@ -21,61 +22,77 @@ var localRegistryDeployExample = `
   educates local registry deploy --bind-ip 192.168.1.10
 `
 
+// localRegistryDeployKubeDeprecation is why the --kubeconfig and
+// --context options of local registry deploy are deprecated.
+const localRegistryDeployKubeDeprecation = "the command now configures every local cluster, each through its own kube context"
+
 type LocalRegistryDeployOptions struct {
-	KubeconfigOptions
 	BindIP  string
 	Verbose bool
 }
 
-func (o *LocalRegistryDeployOptions) Run() error {
+func (o *LocalRegistryDeployOptions) Run(ctx context.Context) error {
 	err := stepOnStdout(o.Verbose, "deploy local registry", "ready", func(s progress.Step) error {
 		if err := registry.DeployRegistry(o.BindIP, s); err != nil {
 			return err
 		}
 
-		// Every node of the default local cluster, when it exists, gets the
-		// registry's containerd config. The registry also serves without a
-		// cluster, so a node that can't take the config is only a warning.
-		nodes, err := registryNodes(context.Background(), defaultLocalCluster())
+		// Every local cluster shares the registry, so every one of them is
+		// configured to pull from it. The registry also serves without any
+		// cluster, which then configures itself when it is created.
+		inventory, err := localClusterInventory(ctx)
 		if err != nil {
 			return err
 		}
-		if len(nodes) == 0 {
-			return nil
+		var errs []error
+		for _, t := range inventory.RegistryTargets() {
+			errs = append(errs, linkRegistryToLocalCluster(t, s))
 		}
-		if err := registry.LinkRegistryToKindNodes(nodes, s); err != nil {
-			s.Warn("registry not added to kind nodes: " + err.Error())
-		}
-		return nil
+		return errors.Join(errs...)
 	})
 
 	if err != nil {
-		return errors.Wrap(err, "failed to deploy registry")
+		return fmt.Errorf("failed to deploy registry: %w", err)
 	}
 
-	// This will fail if you do not have a Kubernetes cluster, but we can still
-	// deploy just the image registry alone without Kubernetes. If a Kubernetes
-	// cluster is created later, then the registry service will be added then.
+	return nil
+}
 
-	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
-
-	if err != nil {
-		fmt.Println("Warning: Kubernetes cluster not available")
+// linkRegistryToLocalCluster configures the local cluster t to pull from
+// the local registry: the containerd host config of each of its nodes,
+// and in the cluster the registry Service and EndpointSlice and the
+// local-registry-hosting ConfigMap, through the cluster's own context in
+// the kubeconfig file local cluster create writes it into. A stopped or
+// unreachable cluster, or a node that can't take the config, is only a
+// warning, since the registry serves without it.
+func linkRegistryToLocalCluster(t localclusters.RegistryTarget, s progress.Step) error {
+	desc := t.Identity.Description()
+	if t.State == localclusters.Stopped {
+		s.Warn(fmt.Sprintf("%s is stopped and was not configured; run 'educates local registry deploy' again once it runs", desc))
 		return nil
 	}
 
+	s.Update("configuring " + desc)
+	if err := registry.LinkRegistryToKindNodes(t.Nodes, s); err != nil {
+		s.Warn(fmt.Sprintf("registry not added to the kind nodes of %s: %v", desc, err))
+	}
+
+	clusterConfig := cluster.NewClusterConfig(cluster.KindKubeconfigPath(""), t.Identity.Context)
+	if err := cluster.IsClusterAvailableCheck(clusterConfig); err != nil {
+		s.Warn(fmt.Sprintf("%s not updated with the registry service: %v", desc, err))
+		return nil
+	}
 	client, err := clusterConfig.GetClient()
-
 	if err != nil {
-		fmt.Println("Warning: Kubernetes cluster not updated with registry service.")
-
+		s.Warn(fmt.Sprintf("%s not updated with the registry service: %v", desc, err))
 		return nil
 	}
-
-	if err = registry.UpdateRegistryK8SService(client); err != nil {
-		return errors.Wrap(err, "failed to create service for registry")
+	if err := registry.UpdateRegistryK8SService(client); err != nil {
+		return fmt.Errorf("failed to create service for registry in %s: %w", desc, err)
 	}
-
+	if err := registry.DocumentLocalRegistry(client); err != nil {
+		return fmt.Errorf("failed to document registry config in %s: %w", desc, err)
+	}
 	return nil
 }
 
@@ -83,34 +100,49 @@ func (p *ProjectInfo) NewLocalRegistryDeployCmd() *cobra.Command {
 	var o LocalRegistryDeployOptions
 
 	var c = &cobra.Command{
-		Args:    cobra.NoArgs,
-		Use:     "deploy",
-		Short:   "Deploys a local image registry",
+		Args:  cobra.NoArgs,
+		Use:   "deploy",
+		Short: "Deploys a local image registry",
+		Long: `Deploys the local image registry on localhost:5001, or keeps the one which
+already exists and moves it to its fixed address on the kind network.
+
+Every local cluster shares the registry, so the command configures every
+one of them to pull from it: each node's containerd config for
+localhost:5001 and registry.default.svc.cluster.local, and in each cluster,
+through its own kube context, the registry Service and EndpointSlice and
+the local-registry-hosting ConfigMap. A stopped cluster is skipped with a
+warning.`,
 		Example: localRegistryDeployExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ip, err := utils.ValidateAndResolveIP(o.BindIP)
 			if err != nil {
-				return errors.Wrap(err, "invalid registry bind IP")
+				return fmt.Errorf("invalid registry bind IP: %w", err)
 			}
 			o.BindIP = ip
 
-			return o.Run()
+			return o.Run(cmd.Context())
 		},
 	}
 
+	// --kubeconfig and --context chose the one cluster the command used to
+	// configure. They are still accepted, and ignored.
+	var kubeconfig, kubeContext string
+
 	c.Flags().StringVar(
-		&o.Kubeconfig,
+		&kubeconfig,
 		"kubeconfig",
 		"",
 		"kubeconfig file to use instead of $KUBECONFIG or $HOME/.kube/config",
 	)
+	_ = c.Flags().MarkDeprecated("kubeconfig", localRegistryDeployKubeDeprecation)
 
 	c.Flags().StringVar(
-		&o.Context,
+		&kubeContext,
 		"context",
 		"",
 		"Context to use from Kubeconfig",
 	)
+	_ = c.Flags().MarkDeprecated("context", localRegistryDeployKubeDeprecation)
 
 	c.Flags().StringVar(
 		&o.BindIP,

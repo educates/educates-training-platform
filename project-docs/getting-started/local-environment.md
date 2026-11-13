@@ -85,7 +85,7 @@ To deploy the registry again, you can then run:
 educates local registry deploy
 ```
 
-The local image registry, and any registry mirrors, are given fixed addresses at the top of the subnet of the `kind` Docker network, so that restarting Docker does not change the address `registry.default.svc.cluster.local` maps to. Docker Engine 29.0.0 to 29.0.3 refuse fixed addresses on the `kind` network, as do older versions until Docker is restarted for the first time after the network is created, in which case Docker picks the address instead, a warning is shown, and the address can still change when Docker restarts. If pulls from `registry.default.svc.cluster.local` inside the cluster fail, or reach a registry mirror, after Docker restarts, upgrade Docker or restart it, then run `educates local registry deploy` again. Running the command for a registry which already exists keeps its content, moves it to its fixed address, and points `registry.default.svc.cluster.local` at it. When the local cluster exists, the command also configures every one of its nodes to pull `localhost:5001` and `registry.default.svc.cluster.local` from the registry, and warns about any node which is not running and so could not be configured.
+The local image registry, and any registry mirrors, are given fixed addresses at the top of the subnet of the `kind` Docker network, so that restarting Docker does not change the address `registry.default.svc.cluster.local` maps to. Docker Engine 29.0.0 to 29.0.3 refuse fixed addresses on the `kind` network, as do older versions until Docker is restarted for the first time after the network is created, in which case Docker picks the address instead, a warning is shown, and the address can still change when Docker restarts. If pulls from `registry.default.svc.cluster.local` inside the cluster fail, or reach a registry mirror, after Docker restarts, upgrade Docker or restart it, then run `educates local registry deploy` again. Running the command for a registry which already exists keeps its content, moves it to its fixed address, and points `registry.default.svc.cluster.local` at it. The command also configures every local cluster to pull from the registry: every one of its nodes pulls `localhost:5001` and `registry.default.svc.cluster.local` from the registry, and inside the cluster, through its own kube context, the `registry` Service and the `local-registry-hosting` ConfigMap point at it. It warns about a cluster which is stopped, and about any node which is not running, and so could not be configured. The `--kubeconfig` and `--context` options of the command are deprecated and ignored, since every local cluster is configured through its own kube context.
 
 If you have successively pushed new builds of images to the local image registry using the same image version tag, the registry can blow out in size over time due to unreferenced image layers. To reclaim space consumed by these unreferenced image layers, you can run:
 
@@ -251,6 +251,8 @@ resolver:
   - example.com
 ```
 
+When you run several local clusters, as described in [Running several local clusters](multiple-local-clusters), the one local DNS resolver serves the domains of all of them, each pointing at its own cluster's address. Creating or deleting a local cluster refreshes a running resolver. After changing the `ingress` or `resolver` configuration of a cluster in any other way, run `educates local resolver update` to have the resolver serve it.
+
 Linux systems may already provide a local DNS resolver in which case you can configure it, however how that is done will depend on the Linux distributions.
 
 If the Linux distribution uses a `dnsmasq` server as the local DNS resolver, it should be configured with an entry like the following:
@@ -401,7 +403,7 @@ url for the remote registry mirror. We could have provided credentials for Docke
 educates local cluster create
 ```
 
-This will deploy the cluster and all defined mirrors automatically.
+This will deploy the cluster and all defined mirrors automatically. When you run [several local clusters](multiple-local-clusters), they share the mirror containers, and a cluster's configuration has to declare a mirror with the same URL and username as the container another cluster already created.
 
 Deploying a local registry mirror
 ---------------------------------
@@ -412,7 +414,7 @@ To deploy a local mirror for a remote registry, use the following command:
 educates local mirror deploy ghcr.io
 ```
 
-In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror. When the local cluster exists, the mirror is linked to every one of its nodes, and a warning names any node which is not running and so could not be linked.
+In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror. The mirror is linked to every node of every local cluster, as described in [running several local clusters](multiple-local-clusters), and a warning names any node which is not running and so could not be linked.
 
 Optionally, you can also provide credentials, via `--username` and `--password`, for authenticating to the remote registry. Use these if you are mirroring a private registry, or to provide DockerHub credentials to avoid request throttling.
 
@@ -429,7 +431,7 @@ To delete a local registry mirror, run:
 educates local mirror delete ghcr.io
 ```
 
-This will stop and remove the mirror container and clean up the configuration from every running node of the cluster.
+This will stop and remove the mirror container and clean up the configuration from every running node of every local cluster.
 
 As pointed out earlier, if the mirror configuration exists in the local cluster's configuration, if the Educates local cluster is recreated then the mirror will be recreated as well.
 
@@ -437,7 +439,7 @@ As pointed out earlier, if the mirror configuration exists in the local cluster'
 Running several local clusters
 ------------------------------
 
-The cluster `educates local cluster create` makes is the default local cluster. Next to it you can run any number of named local clusters, for example to test two builds of Educates side by side, or one workshop against both. Each named cluster is a Kind cluster of its own, `educates-<name>`, with the kube context `kind-educates-<name>`, its own configuration, and a host IP address of its own on which it publishes ports 80 and 443. Every cluster shares the local image registry on `localhost:5001`, so an image you push there once can be pulled by any of them, and the registry mirrors a cluster's configuration declares share their containers with any other cluster that declares them. The `educates local registry deploy`, `educates local mirror deploy` and `educates local mirror delete` commands configure the nodes of the default cluster only.
+The cluster `educates local cluster create` makes is the default local cluster. Next to it you can run any number of named local clusters, for example to test two builds of Educates side by side, or one workshop against both. Each named cluster is a Kind cluster of its own, `educates-<name>`, with the kube context `kind-educates-<name>`, its own configuration, and a host IP address of its own on which it publishes ports 80 and 443. Every cluster shares the local image registry on `localhost:5001`, so an image you push there once can be pulled by any of them, and the registry mirrors a cluster's configuration declares share their containers with any other cluster that declares them.
 
 To create a named cluster called `test2` on the host IP address `10.10.10.2`, run:
 
@@ -501,6 +503,22 @@ With no `ingress.domain` in its configuration, a named cluster uses the `nip.io`
 To use a domain of your own, pass `--domain` when you create the cluster, or set `ingress.domain` in its configuration. As for the default cluster, a domain of your own is served over HTTPS and needs a CA in the local secrets cache, as described in [custom ingress domain](custom-ingress-domain).
 
 An `EducatesConfig` with `target.provider: kind` can also serve as a named cluster's configuration. Its `target.cluster.listenAddress` must be a specific IP address of your host, by the same rules, and it gets no `nip.io` fallback: its domain is the one its custom resources declare.
+
+### The DNS resolver
+
+One local DNS resolver serves every local cluster. It points the ingress domain and the `resolver.extraDomains` of each cluster at that cluster's own address, its `resolver.targetAddress`, which defaults to your host's IP address for the default cluster, as described in [Local DNS resolver](local-dns-resolver), and to the listen address for a named cluster. The `educates local resolver deploy` and `educates local resolver update` commands always configure it for every cluster, and take no `--local-cluster` option. The `--domain` option of `educates local resolver deploy` overrides the domain of the default cluster only.
+
+A named cluster is served while its Kind cluster exists. Creating or deleting a cluster refreshes a resolver that is already running, adding or removing that cluster's domains, so you don't need to run `educates local resolver update` yourself.
+
+The resolver answers a name from the most specific domain it serves, so a named cluster can use a subdomain of the default cluster's domain. With the default cluster on `educates.test` and the named cluster `test2` created with `--domain test2.educates.test`, names under `test2.educates.test` resolve to `10.10.10.2`, and every other name under `educates.test` still resolves to the default cluster. Two clusters claiming the same domain is an error that names both. The resolver commands report it, and so does `educates local cluster create`, before it creates anything.
+
+On macOS, the file `/etc/resolver/educates.test` you created for the default cluster's domain also covers its subdomains, so a named cluster on `test2.educates.test` needs no new file. A named cluster on a domain outside the ones you already resolve, such as `workshops.example.test`, needs a file of its own, `/etc/resolver/workshops.example.test`, with the same `nameserver 127.0.0.1` entry. A cluster on its `nip.io` domain needs neither, since `nip.io` names resolve through public DNS.
+
+### The shared registry and mirrors
+
+Every local cluster pulls from the one local image registry and the one set of registry mirror containers, so the commands which manage them take no `--local-cluster` option and act on every local cluster. `educates local registry deploy` configures every node of every cluster to pull from the registry, and inside each cluster, through its own kube context, points the `registry` Service and the `local-registry-hosting` ConfigMap at it. `educates local mirror deploy` links the mirror into every node of every local cluster, and `educates local mirror delete` unlinks it from every one of them. A node which is not running can't be configured, and the deploy commands warn about it, so run the command again once its cluster runs.
+
+When a cluster's configuration declares a mirror in `cluster.registryMirrors` whose container another cluster already created, `educates local cluster create` reuses that container and links it into every node of the new cluster. The container keeps the URL and username it was created with, so creating a cluster whose configuration declares the mirror with another `url` or `username` fails before the Kind cluster is created. The error names the mirror, the values its container has, and the values the configuration declares. Either declare the mirror as its container has it, or delete the mirror with `educates local mirror delete`, which unlinks it from every cluster, and create the cluster again, which creates the mirror with the new values. Every cluster which declares the mirror then needs those values too. A different `password` can't be seen on the container, so it is not detected, and the mirror keeps the password it was created with until you delete it.
 
 ### Listing the clusters
 

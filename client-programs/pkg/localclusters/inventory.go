@@ -24,6 +24,10 @@ type Observed struct {
 	// InterfaceAddresses is every address of the host's network
 	// interfaces.
 	InterfaceAddresses []netip.Addr
+
+	// Mirrors is every registry mirror container on the Docker host,
+	// running or stopped, which every local cluster shares.
+	Mirrors []MirrorContainer
 }
 
 // Inventory is what the CLI knows about the Educates clusters of one data

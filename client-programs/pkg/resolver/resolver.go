@@ -1,16 +1,16 @@
+// Package resolver runs the local DNS resolver, a dnsmasq container that
+// serves the configuration it is given from the data home.
 package resolver
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"html/template"
 	"io"
 	"net/netip"
 	"os"
 	"path"
 
-	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
@@ -22,24 +22,14 @@ import (
 )
 
 const (
-	dnsmasqConfigTemplateData = `
-#log-queries
-no-resolv
-server=1.0.0.1
-server=1.1.1.1
-strict-order
-
-address=/{{.IngressDomain}}/{{.TargetAddress}}
-
-{{- range $Domain := .ExtraDomains }}
-address=/{{$Domain}}/{{$.TargetAddress}}
-{{- end }}
-`
 	dnsmasqImage          = "ghcr.io/dockur/dnsmasq:2.93"
 	resolverContainerName = "educates-resolver"
 )
 
-func DeployResolver(domain string, targetAddress string, extraDomains []string) error {
+// DeployResolver starts the local DNS resolver container serving the
+// dnsmasq configuration content. When the container already exists it is
+// left as it is, its configuration included.
+func DeployResolver(content []byte) error {
 	ctx := context.Background()
 
 	fmt.Println("Deploying local DNS resolver")
@@ -69,7 +59,7 @@ func DeployResolver(domain string, targetAddress string, extraDomains []string) 
 	defer reader.Close()
 	io.Copy(os.Stdout, reader)
 
-	configFileName, err := generateDnsmasqConfig(domain, targetAddress, extraDomains)
+	configFileName, err := writeConfig(content)
 	if err != nil {
 		return err
 	}
@@ -168,29 +158,15 @@ func DeleteResolver() error {
 	return nil
 }
 
-func UpdateResolver(domain string, targetAddress string, extraDomains []string) error {
-	ctx := context.Background()
-
+// UpdateResolver replaces the configuration of the local DNS resolver
+// with the dnsmasq configuration content and restarts its container, so
+// it serves it. It fails when the container does not exist.
+func UpdateResolver(content []byte) error {
 	fmt.Println("Updating local DNS resolver configuration")
 
-	cli, err := docker.NewDockerClient()
-	if err != nil {
-		return errors.Wrap(err, "unable to create docker client")
-	}
-
-	_, err = cli.ContainerInspect(ctx, resolverContainerName, client.ContainerInspectOptions{})
-	if err != nil {
-		return errors.Wrap(err, "resolver container not found")
-	}
-
-	configFileName, err := generateDnsmasqConfig(domain, targetAddress, extraDomains)
+	configFileName, err := refreshResolver(content)
 	if err != nil {
 		return err
-	}
-
-	_, err = cli.ContainerRestart(ctx, resolverContainerName, client.ContainerRestartOptions{})
-	if err != nil {
-		return errors.Wrap(err, "failed to restart resolver")
 	}
 
 	fmt.Println("Local DNS resolver configuration updated and reloaded")
@@ -199,62 +175,75 @@ func UpdateResolver(domain string, targetAddress string, extraDomains []string) 
 	return nil
 }
 
-func generateDnsmasqConfig(domain string, targetAddress string, extraDomains []string) (string, error) {
-	dnsmasqConfigTemplate, err := template.New("dnsmasq-config").Parse(dnsmasqConfigTemplateData)
-
+// ResolverExists reports whether the local DNS resolver container exists,
+// running or not.
+func ResolverExists() (bool, error) {
+	cli, err := docker.NewDockerClient()
 	if err != nil {
-		return "", errors.Wrap(err, "failed to parse dnsmasq config template")
+		return false, errors.Wrap(err, "unable to create docker client")
 	}
 
-	var clusterConfigData bytes.Buffer
+	_, err = cli.ContainerInspect(context.Background(), resolverContainerName, client.ContainerInspectOptions{})
+	switch {
+	case err == nil:
+		return true, nil
+	case cerrdefs.IsNotFound(err):
+		return false, nil
+	default:
+		return false, errors.Wrap(err, "unable to inspect DNS resolver container")
+	}
+}
 
-	localIPAddress, err := hostinfo.DetectHostIP()
+// RefreshResolver is UpdateResolver printing nothing, for commands that
+// report their own progress.
+func RefreshResolver(content []byte) error {
+	_, err := refreshResolver(content)
+	return err
+}
 
+// refreshResolver writes the dnsmasq configuration content for the local
+// DNS resolver and restarts its container, and returns the path of the
+// configuration file. It fails when the container does not exist.
+func refreshResolver(content []byte) (string, error) {
+	ctx := context.Background()
+
+	cli, err := docker.NewDockerClient()
 	if err != nil {
-		localIPAddress = "127.0.0.1"
+		return "", errors.Wrap(err, "unable to create docker client")
 	}
 
-	if targetAddress == "" {
-		targetAddress = localIPAddress
-	}
-
-	type TemplateConfig struct {
-		IngressDomain string
-		TargetAddress string
-		ExtraDomains  []string
-	}
-
-	// We remove from extraDomains any domains that are already included in the
-	// IngressDomain.
-
-	for i, extraDomain := range extraDomains {
-		if domain == extraDomain {
-			extraDomains = append(extraDomains[:i], extraDomains[i+1:]...)
-		}
-	}
-
-	config := TemplateConfig{
-		IngressDomain: domain,
-		TargetAddress: targetAddress,
-		ExtraDomains:  extraDomains,
-	}
-
-	err = dnsmasqConfigTemplate.Execute(&clusterConfigData, config)
-
+	_, err = cli.ContainerInspect(ctx, resolverContainerName, client.ContainerInspectOptions{})
 	if err != nil {
-		return "", errors.Wrap(err, "failed to generate dnsmasq config")
+		return "", errors.Wrap(err, "resolver container not found")
 	}
 
+	configFileName, err := writeConfig(content)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = cli.ContainerRestart(ctx, resolverContainerName, client.ContainerRestartOptions{})
+	if err != nil {
+		return "", errors.Wrap(err, "failed to restart resolver")
+	}
+
+	return configFileName, nil
+}
+
+// writeConfig writes the dnsmasq configuration content to dnsmasq.conf in
+// the data home, the file the resolver container mounts, rewriting it in
+// place, and returns its path.
+func writeConfig(content []byte) (string, error) {
 	configFileDir := utils.GetEducatesHomeDir()
 	configFileName := path.Join(configFileDir, "dnsmasq.conf")
 
-	err = os.MkdirAll(configFileDir, os.ModePerm)
+	err := os.MkdirAll(configFileDir, os.ModePerm)
 
 	if err != nil {
 		return "", errors.Wrapf(err, "unable to create config directory")
 	}
 
-	err = os.WriteFile(configFileName, clusterConfigData.Bytes(), 0644)
+	err = os.WriteFile(configFileName, content, 0644)
 
 	if err != nil {
 		return "", errors.Wrap(err, "failed to write dnsmasq config")

@@ -19,6 +19,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
@@ -91,7 +92,7 @@ func DeployRegistryAndLinkToCluster(bindIP string, nodes []string, client *kuber
 	}
 
 	// This is needed so that kubernetes nodes can pull images from the local registry
-	if err = documentLocalRegistry(client); err != nil {
+	if err = DocumentLocalRegistry(client); err != nil {
 		return errors.Wrap(err, "failed to document registry config in cluster")
 	}
 
@@ -259,7 +260,9 @@ func createRegistryContainer(bindIP string, p Progress) error {
 /**
  * This function is used to deploy a registry mirror and link it to the cluster.
  * It is used when creating a new local registry mirror. nodes names the
- * cluster's node containers that get the mirror's containerd host config.
+ * node containers that get the mirror's containerd host config: those of
+ * the local cluster being created, or of every local cluster. An existing
+ * mirror container is reused as it is.
  */
 func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, nodes []string, p Progress) error {
 	err := createMirrorContainer(mirrorConfig, p)
@@ -269,7 +272,7 @@ func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, nodes []string, p 
 	}
 
 	if len(nodes) == 0 {
-		warn(p, "mirror not added to kind nodes: no node containers of the local cluster found")
+		warn(p, "mirror not added to kind nodes: no local cluster found")
 		return nil
 	}
 
@@ -548,10 +551,11 @@ func removeRegistryConfigFromKindNode(ctx context.Context, cli *client.Client, c
 }
 
 /**
- * This function is used to document the local registry in the cluster.
- * It is used when creating a new local registry.
+ * This function documents the local registry in the cluster, through the
+ * kube-public/local-registry-hosting ConfigMap. It is used when creating
+ * a local cluster or deploying the local registry.
  */
-func documentLocalRegistry(client *kubernetes.Clientset) error {
+func DocumentLocalRegistry(client *kubernetes.Clientset) error {
 	yamlBytes, err := yaml.Marshal(`host: "localhost:5001"`)
 	if err != nil {
 		return err
@@ -629,8 +633,9 @@ func DeleteRegistry(p Progress) error {
 
 /**
  * This function is used to delete a local registry mirror and unlink it from the cluster.
- * It is used when deleting a local registry mirror. nodes names the
- * cluster's node containers to remove the mirror's containerd host config from.
+ * It is used when deleting a local registry mirror. nodes names the node
+ * containers, of every local cluster, to remove the mirror's containerd
+ * host config from.
  */
 func DeleteMirrorAndUnlinkFromCluster(mirrorConfig *MirrorConfig, nodes []string, p Progress) error {
 	ctx := context.Background()
@@ -736,6 +741,35 @@ func registryMirrorLabelFilters() client.Filters {
 	return client.Filters{}.
 		Add("label", constants.EducatesContainersRoleLabelKey+"="+constants.EducatesContainersMirrorRoleLabel).
 		Add("label", constants.EducatesContainersAppLabelKey+"="+constants.EducatesContainersAppLabel)
+}
+
+// ObserveMirrorContainers returns every registry mirror container on the
+// Docker host, running or stopped, found by the labels createMirrorContainer
+// puts on it, with the mirror, remote registry URL and username those
+// labels name.
+func ObserveMirrorContainers(ctx context.Context) ([]localclusters.MirrorContainer, error) {
+	cli, err := docker.NewDockerClient()
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to create docker client")
+	}
+
+	list, err := cli.ContainerList(ctx, client.ContainerListOptions{
+		All:     true,
+		Filters: registryMirrorLabelFilters(),
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to list registry mirrors")
+	}
+
+	mirrors := make([]localclusters.MirrorContainer, 0, len(list.Items))
+	for _, item := range list.Items {
+		mirrors = append(mirrors, localclusters.MirrorContainer{
+			Mirror:   item.Labels[constants.EducatesContainersMirrorLabelKey],
+			URL:      item.Labels[constants.EducatesContainersURLLabelKey],
+			Username: item.Labels[constants.EducatesContainersUsernameLabelKey],
+		})
+	}
+	return mirrors, nil
 }
 
 // ListRegistryMirrors returns the deployed local registry mirrors, sorted

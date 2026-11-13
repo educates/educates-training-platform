@@ -26,11 +26,13 @@ func (o *LocalMirrorDeleteOptions) Run() error {
 	}
 
 	return stepOnStdout(false, "delete registry mirror "+o.MirrorName, "deleted", func(s progress.Step) error {
-		nodes, err := registryNodes(context.Background(), defaultLocalCluster())
+		// Every local cluster shares the mirror, so it is unlinked from
+		// every node of every one of them.
+		inventory, err := localClusterInventory(context.Background())
 		if err != nil {
 			return err
 		}
-		return registry.DeleteMirrorAndUnlinkFromCluster(mirrorConfig, nodes, s)
+		return registry.DeleteMirrorAndUnlinkFromCluster(mirrorConfig, inventory.RegistryNodes(), s)
 	})
 }
 

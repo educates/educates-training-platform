@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -39,11 +41,20 @@ type LocalClusterDeleteOptions struct {
 // otherwise it keeps them and names the clusters still using them. It
 // does so even when the kind cluster was already gone, and still reports
 // that.
+//
+// A DNS resolver that keeps running is refreshed once the kind cluster is
+// gone, so it stops serving a named cluster's domains.
 func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Identity) error {
 	c := cluster.NewKindClusterConfig("", id)
 
 	err := c.DeleteCluster()
-	if !o.AllComponents || (err != nil && !cluster.IsNotFound(err)) {
+	if !o.AllComponents {
+		if err != nil {
+			return err
+		}
+		return refreshResolverAfterDelete(ctx)
+	}
+	if err != nil && !cluster.IsNotFound(err) {
 		return err
 	}
 
@@ -54,7 +65,7 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 	if users := inventory.SharedInfrastructureUsers(id); len(users) > 0 {
 		fmt.Printf("Skipped deleting the local registry, DNS resolver and registry mirrors: still in use by %s.\n",
 			localclusters.DescribeClusters(users))
-		return err
+		return errors.Join(err, refreshResolverAfterDelete(ctx))
 	}
 
 	// Best-effort cleanup: surface each as a step but don't fail the
@@ -68,6 +79,19 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 	})
 
 	return err
+}
+
+// refreshResolverAfterDelete refreshes a running local DNS resolver once a
+// local cluster's kind cluster is gone, so it stops serving the domains
+// of a named cluster.
+func refreshResolverAfterDelete(ctx context.Context) error {
+	rep := progress.New(os.Stdout, 0, isStdoutTTY(os.Stdout))
+	if err := refreshLocalResolver(rep, func() ([]byte, error) {
+		return observedResolverConfig(ctx)
+	}); err != nil {
+		return fmt.Errorf("local DNS resolver: %w", err)
+	}
+	return nil
 }
 
 func (p *ProjectInfo) NewLocalClusterDeleteCmd() *cobra.Command {

@@ -351,18 +351,33 @@ New Features
   ``educates local secrets sync`` builds the certificates it copies from
   the selected cluster's configuration, and copies them into that cluster.
 
-  The one local DNS resolver serves the domains of every local cluster,
-  each pointing at its own cluster's ``resolver.targetAddress``, which for
-  a named cluster defaults to its listen address, so a named cluster on
-  ``test2.educates.test`` resolves to its own IP address while
-  ``educates.test`` still resolves to the default cluster. ``educates local
-  resolver deploy`` and ``update`` configure it for every cluster, creating
-  or deleting a cluster refreshes a running resolver, and two clusters
-  claiming the same domain is an error. A refresh that fails is a warning,
-  since the cluster has been created or deleted by then, and another
-  cluster's configuration that does not load, or that the resolver can't
-  use, is left out with a warning naming its file rather than failing the
-  command for every other cluster.
+  The one local DNS resolver has no settings of its own: every local
+  cluster contributes its names, its ingress domain and its
+  ``resolver.extraDomains``, which resolve to its listen address when that
+  is a specific IP address, and otherwise to the host's IP address. A named
+  cluster on ``test2.educates.test`` therefore resolves to its own IP
+  address while ``educates.test`` still resolves to the default cluster.
+  ``educates local resolver deploy`` and ``update`` configure it for every
+  cluster, creating or deleting a cluster refreshes a running resolver, and
+  two clusters claiming the same domain is an error. A refresh that fails
+  is a warning, since the cluster has been created or deleted by then, and
+  another cluster's configuration that does not load, or that the resolver
+  can't use, is left out with a warning naming its file rather than failing
+  the command for every other cluster. Names that resolve to anything other
+  than a local cluster, such as a virtual machine, go in ``*.conf`` files of
+  your own in ``<data-home>/dnsmasq.d``, which the resolver container mounts
+  and its configuration reads after every cluster's entries, and which the
+  CLI creates but never writes into. A resolver deployed by an earlier
+  release lacks the mount: ``educates local resolver update`` and the
+  refreshes warn to re-create it with ``educates local resolver delete``
+  and ``educates local resolver deploy``. The new ``educates local resolver
+  view`` command shows each cluster the resolver serves with its address
+  and where that comes from, and every name with its cluster, where it
+  comes from and notes, such as a name that wins over another cluster's
+  broader name, one of your files naming a domain a cluster also serves,
+  or, on macOS, a name no ``/etc/resolver`` file forwards. In
+  ``dnsmasq.conf``, each cluster's entries start with a comment naming the
+  cluster, its configuration file and where its address comes from.
 
   Every local cluster shares the local image registry and the registry
   mirrors, so the commands which manage them take no ``--local-cluster``
@@ -998,6 +1013,24 @@ Features Changed
   form. Write ``imagePrePuller: {enabled: false}`` in place of
   ``imagePrePuller: false``, and drop ``imagePrePuller: true``, which is the
   default. See [pre-pulling workshop images](pre-pulling-workshop-images).
+
+* The local DNS resolver's ``targetAddress`` setting,
+  ``localDNSResolver.targetAddress`` in a version 3 ``values.yaml``, is
+  gone. A local cluster's names, its ingress domain and
+  ``resolver.extraDomains``, now resolve to its
+  ``cluster.listenAddress`` when that is a specific IP address, and
+  otherwise to the host's IP address, as before. To have them resolve to an
+  alias added to a network interface, set ``cluster.listenAddress`` to the
+  alias and create the cluster again. Names that resolve to anything other
+  than a local cluster, such as a virtual machine, go in ``*.conf`` files of
+  your own in the ``dnsmasq.d`` folder of the CLI data home, which the
+  resolver reads. The CLI's first-run migration of a version 3
+  ``values.yaml`` drops ``localDNSResolver.targetAddress``, leaving
+  ``cluster.listenAddress`` as it was, and its notice says how to keep
+  resolving the cluster at that address. A version 4 configuration that
+  still sets ``resolver.targetAddress``, or ``target.resolver.targetAddress``
+  in an ``EducatesConfig``, fails to load with an error saying what
+  replaces it. See [local DNS resolver](local-dns-resolver).
 
 * The CLI's first-run migration of a version 3 ``values.yaml`` carries
   ``imagePuller`` over to ``imagePrePuller``, so the pre-puller keeps its

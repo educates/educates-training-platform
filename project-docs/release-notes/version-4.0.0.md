@@ -284,6 +284,28 @@ New Features
   yet ``Ready``), or a fully installed and ready cluster — making it easy to
   tell a working install from a partial or broken one.
 
+* Several local clusters can now run at the same time. Next to the default
+  local cluster, ``educates local cluster create --local-cluster test2
+  --listen-address 10.10.10.2`` creates the named local cluster ``test2``:
+  the Kind cluster ``educates-test2``, with the kube context
+  ``kind-educates-test2``, publishing ports 80 and 443 on the host IP
+  address ``10.10.10.2``, with Educates installed and reachable at
+  ``10-10-10-2.nip.io``. A named cluster keeps its configuration in
+  ``clusters/<name>/config.yaml`` in the data home, which ``create`` writes
+  from ``--listen-address`` and the optional ``--domain`` when it is
+  missing. Its ``cluster.listenAddress`` must be a specific IP address of
+  the host, neither ``0.0.0.0`` nor a loopback address, and without an
+  ``ingress.domain`` the cluster uses the ``nip.io`` name of that address
+  and is served over plain HTTP. The ``create``, ``delete``, ``start``,
+  ``stop`` and ``status`` commands of ``educates local cluster`` select a
+  cluster with ``--local-cluster``, or for a whole terminal with the
+  ``EDUCATES_LOCAL_CLUSTER`` environment variable, and act on the default
+  cluster without either. Deleting a named cluster keeps its
+  configuration, and every cluster pulls from the one local image registry
+  on ``localhost:5001``. The platform install of ``educates local cluster
+  create`` now always targets the cluster it has just created, whatever
+  ``--context`` or ``KUBECONFIG`` say.
+
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to
   a tagged image reference instead of listing ``files``. The two are mutually

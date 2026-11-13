@@ -24,7 +24,7 @@ The argument is a dotted field path; with no argument the top-level fields are l
 EducatesLocalConfig
 -------------------
 
-The laptop scenario: a local kind cluster with operator-managed cluster services and a self-signed CA. This is the only kind that lives at a fixed location (`<data-home>/config.yaml`, where `<data-home>` is `$XDG_DATA_HOME/educates`, overridable via `EDUCATES_CLI_DATA_HOME`) and is managed with the `educates local config` commands rather than edited as a project file. See [local environment](local-environment).
+The laptop scenario: a local kind cluster with operator-managed cluster services and a self-signed CA. This is the only kind that lives at a fixed location (`<data-home>/config.yaml` for the default local cluster, and `<data-home>/clusters/<name>/config.yaml` for a named local cluster, where `<data-home>` is `$XDG_DATA_HOME/educates`, overridable via `EDUCATES_CLI_DATA_HOME`) and is managed with the `educates local config` commands rather than edited as a project file. A named local cluster's `cluster.listenAddress` must be a specific IP address of the host, as described in [running several local clusters](multiple-local-clusters). See [local environment](local-environment).
 
 ```yaml
 apiVersion: cli.educates.dev/v1alpha1

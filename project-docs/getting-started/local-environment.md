@@ -433,6 +433,66 @@ This will stop and remove the mirror container and clean up the configuration fr
 
 As pointed out earlier, if the mirror configuration exists in the local cluster's configuration, if the Educates local cluster is recreated then the mirror will be recreated as well.
 
+(multiple-local-clusters)=
+Running several local clusters
+------------------------------
+
+The cluster `educates local cluster create` makes is the default local cluster. Next to it you can run any number of named local clusters, for example to test two builds of Educates side by side, or one workshop against both. Each named cluster is a Kind cluster of its own, `educates-<name>`, with the kube context `kind-educates-<name>`, its own configuration, and a host IP address of its own on which it publishes ports 80 and 443. Every cluster shares the local image registry on `localhost:5001`, so an image you push there once can be pulled by any of them, and the registry mirrors a cluster's configuration declares share their containers with any other cluster that declares them.
+
+To create a named cluster called `test2` on the host IP address `10.10.10.2`, run:
+
+```
+educates local cluster create --local-cluster test2 --listen-address 10.10.10.2
+```
+
+When the named cluster has no configuration yet, this writes one to `clusters/test2/config.yaml` in the data home, declaring `cluster.listenAddress` and, when you add `--domain`, `ingress.domain`. It then creates the Kind cluster `educates-test2` and installs Educates into it, while the default cluster keeps running. The install always targets the cluster just created, through its own kube context, whatever `--context` or `KUBECONFIG` say. Creating a named cluster with neither a configuration nor `--listen-address` fails, and so does a `--listen-address` or `--domain` that disagrees with an existing configuration: the options only write a missing configuration, and never change one. You can also supply the configuration with `--config`, in which case the file supplies the configuration and `--local-cluster` the name of the cluster.
+
+The `educates local cluster create`, `delete`, `start`, `stop` and `status` commands act on the cluster `--local-cluster` names. To act on one cluster for every command in a terminal, set the `EDUCATES_LOCAL_CLUSTER` environment variable instead:
+
+```
+export EDUCATES_LOCAL_CLUSTER=test2
+educates local cluster status
+```
+
+The `--local-cluster` option takes precedence over the environment variable, and an empty value, as in `--local-cluster=`, selects the default cluster even when the variable is set. With neither, the commands act on the default cluster, as they always have. A cluster name is a lowercase DNS label of at most 31 characters.
+
+Deleting a named cluster with `educates local cluster delete --local-cluster test2` deletes its Kind cluster and keeps its configuration, so you can create it again with just `--local-cluster test2`. The `--all` option also deletes the local image registry, the DNS resolver and the registry mirrors that every cluster shares, so use it only when deleting the last cluster.
+
+Kind makes the cluster it created last the current context of your kubeconfig, and commands that act on a cluster through the current context, such as `educates cluster workshop deploy`, follow it. Switch between clusters with `kubectl config use-context`, for example `kubectl config use-context kind-educates` for the default cluster.
+
+### The listen address
+
+A named cluster's `cluster.listenAddress` must be a specific IP address of your host. It cannot be left out, and it cannot be `0.0.0.0`, which would claim ports 80 and 443 on every host address and leave none for another cluster. It cannot be a loopback address either, such as `127.0.0.2` or `::1`. Workshop sessions resolve the cluster's ingress domain to the listen address, and inside a pod a loopback address reaches the pod itself rather than your host, so the cluster could not reach its own ingress. For the same reason, an alias added to the loopback interface does not work as a listen address.
+
+The address has to exist on your host before you create the cluster, and you add it once:
+
+* On macOS, add it as an alias on a network interface, such as the interface which already holds the address of your default cluster, or your primary interface `en0`:
+
+  ```
+  sudo ifconfig en0 alias 10.10.10.2 netmask 255.255.255.255
+  ```
+
+* On Linux, add it to a network interface:
+
+  ```
+  sudo ip address add 10.10.10.2/32 dev eth0
+  ```
+
+Neither command persists the address across a restart of your host, so add it again after one, or configure it permanently through your operating system's network settings.
+
+Docker Desktop 4.97 and later serves published ports below 1024 on loopback addresses only, unless the setting "Allow privileged port forwarding to external machines", under **Settings > Advanced**, is turned on. A named cluster publishes ports 80 and 443 on a non-loopback address, so turn this setting on before creating one.
+
+### The ingress domain
+
+With no `ingress.domain` in its configuration, a named cluster uses the `nip.io` name of its listen address, with dashes, such as `10-10-10-2.nip.io` for `10.10.10.2`, and `ingress.insecure` defaults to true, so the cluster is served over plain HTTP with no certificate authority to manage. This mirrors the default cluster, which falls back to the `nip.io` name of your host's IP address. As `nip.io` names only IPv4 addresses, a cluster listening on an IPv6 address needs an `ingress.domain` of its own.
+
+To use a domain of your own, pass `--domain` when you create the cluster, or set `ingress.domain` in its configuration. As for the default cluster, a domain of your own is served over HTTPS and needs a CA in the local secrets cache, as described in [custom ingress domain](custom-ingress-domain).
+
+An `EducatesConfig` with `target.provider: kind` can also serve as a named cluster's configuration. Its `target.cluster.listenAddress` must be a specific IP address of your host, by the same rules, and it gets no `nip.io` fallback: its domain is the one its custom resources declare.
+
+### A second data home is not a second cluster
+
+The `EDUCATES_CLI_DATA_HOME` environment variable moves the data home, where the command line tool keeps its configuration and local secrets cache, but it is not a way to run several local clusters. A second data home still creates the Kind cluster `educates`, binds the same host ports, and manages the same registry, resolver and mirror containers as the first, so the two collide. Use named clusters instead, which share one data home.
 
 Customize local pod and service CIDRs
 -------------------------------------

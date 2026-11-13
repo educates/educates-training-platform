@@ -23,9 +23,6 @@ const (
 	kindRoleLabelKey    = "io.x-k8s.kind.role"
 )
 
-// kindControlPlaneRole is the role kind names a control-plane node by.
-const kindControlPlaneRole = "control-plane"
-
 // ObserveLocalClusters returns the state of the host the inventory of
 // local clusters answers from: every kind node container on the Docker
 // host, as ObserveNodeContainers returns them, with the host ports each
@@ -47,7 +44,7 @@ func ObserveLocalClusters(ctx context.Context) (localclusters.Observed, error) {
 	}
 
 	for i, n := range nodes {
-		if n.Role != kindControlPlaneRole {
+		if n.Role != localclusters.ControlPlaneRole {
 			continue
 		}
 		info, err := cli.ContainerInspect(ctx, n.Name, client.ContainerInspectOptions{})

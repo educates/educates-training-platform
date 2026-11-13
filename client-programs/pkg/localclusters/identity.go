@@ -29,10 +29,14 @@ const (
 	// config.
 	kindConfigFileName = "educates-cluster-config.yaml"
 
-	// Node roles as kind names them.
-	controlPlaneRole         = "control-plane"
+	// externalLoadBalancerRole is the role kind names the external load
+	// balancer of a cluster with several control-plane nodes by.
 	externalLoadBalancerRole = "external-load-balancer"
 )
+
+// ControlPlaneRole is the role kind names a control-plane node by, in
+// the role label of its node container.
+const ControlPlaneRole = "control-plane"
 
 // MaxNameLength is the longest local cluster name. It keeps every node
 // container name kind derives from educates-<name> within a 63-character
@@ -122,7 +126,7 @@ func (id Identity) Description() string {
 // ControlPlaneNode is the name of the node container kind creates for the
 // cluster's first control-plane node.
 func (id Identity) ControlPlaneNode() string {
-	return id.KindName + "-" + controlPlaneRole
+	return id.KindName + "-" + ControlPlaneRole
 }
 
 // NodeNames returns the names of the node containers kind creates for the
@@ -135,7 +139,7 @@ func (id Identity) ControlPlaneNode() string {
 // load balancer runs no kubelet.
 func (id Identity) NodeNames(roles []string) []string {
 	if len(roles) == 0 {
-		roles = []string{controlPlaneRole}
+		roles = []string{ControlPlaneRole}
 	}
 	counts := map[string]int{}
 	name := func(role string) string {
@@ -150,7 +154,7 @@ func (id Identity) NodeNames(roles []string) []string {
 	for _, role := range roles {
 		names = append(names, name(role))
 	}
-	if counts[controlPlaneRole] > 1 {
+	if counts[ControlPlaneRole] > 1 {
 		names = append(names, name(externalLoadBalancerRole))
 	}
 	return names

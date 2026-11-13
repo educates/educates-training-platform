@@ -147,7 +147,7 @@ func (id Identity) nodes(observed []NodeContainer) []NodeContainer {
 // roleRank orders node roles the way kind lists them.
 func roleRank(role string) int {
 	switch role {
-	case controlPlaneRole:
+	case ControlPlaneRole:
 		return 0
 	case workerRole:
 		return 1

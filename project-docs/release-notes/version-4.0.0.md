@@ -249,7 +249,9 @@ New Features
 * The ``educates local mirror list`` command lists the local image
   registry mirrors that have been deployed, complementing the existing
   ``deploy`` and ``delete`` commands in the ``educates local mirror``
-  group.
+  group. It also lists the mirrors ``mirrors.yaml`` in the CLI data home
+  declares whose container is missing, and says in a ``DECLARED`` column
+  whether the file declares each mirror.
 
 * The ``educates cluster portal export`` command exports a training portal
   and the workshops it references as Kubernetes resource YAML, either to
@@ -384,24 +386,29 @@ New Features
   and act on every local cluster. ``educates local registry deploy``
   configures every node of every cluster to pull from the registry, and
   points each cluster's ``registry`` Service and ``local-registry-hosting``
-  ConfigMap at it. Every registry mirror container which exists is linked
-  into every local cluster, the default one included, whichever cluster's
-  configuration or command created it. ``educates local mirror deploy``
-  links a mirror into every node of every running cluster, and
-  ``educates local cluster create`` and ``educates local cluster start``
-  link every mirror into every node of the cluster, so a cluster created
-  later, or stopped when the mirror was deployed, gets it too. A mirror a
-  cluster's configuration declares in ``cluster.registryMirrors`` is one
-  the cluster needs: create and start first create its container when it
-  is missing, and reuse it when another cluster or command created it.
-  They fail, before creating the Kind cluster or starting its nodes, when
-  that container pulls from another URL or as another username, naming
-  the mirror, the container's values and the declared ones. A different
+  ConfigMap at it. Registry mirrors are declared once for every local
+  cluster, in ``mirrors.yaml`` in the data home, and no cluster's
+  configuration declares any. Every registry mirror container which exists
+  is linked into every local cluster, the default one included, whether
+  ``mirrors.yaml`` declares it or ``educates local mirror deploy``
+  deployed it. ``educates local mirror deploy`` links a mirror into every
+  node of every running cluster, without adding it to ``mirrors.yaml``,
+  and ``educates local cluster create`` and ``educates local cluster
+  start`` link every mirror into every node of the cluster, so a cluster
+  created later, or stopped when the mirror was deployed, gets it too.
+  Create and start first create the container of a mirror ``mirrors.yaml``
+  declares when it is missing, and reuse it when it exists. They fail,
+  before creating the Kind cluster or starting its nodes, when
+  ``mirrors.yaml`` does not load, or when a declared mirror's container
+  pulls from another URL or as another username, naming the file, the
+  mirror, the container's values and the declared ones. A different
   password can't be seen on the container, so it is not detected.
   ``educates local mirror delete`` unlinks a mirror from every node of
-  every running cluster, and warns, naming each cluster whose
-  configuration declares the mirror, since that cluster's next start, or
-  its next create once deleted, creates the mirror again.
+  every running cluster, and warns, naming ``mirrors.yaml``, when the file
+  declares the mirror, since the next create or start of any cluster
+  creates it again. ``educates local mirror list`` says, in a ``DECLARED``
+  column, whether ``mirrors.yaml`` declares each mirror, and also lists a
+  declared mirror whose container is missing.
 
   ``educates cluster workshop serve`` can serve one workshop to several
   local clusters at once, from a terminal for each. When it serves a local
@@ -1043,6 +1050,24 @@ Features Changed
   still sets ``resolver.targetAddress``, or ``target.resolver.targetAddress``
   in an ``EducatesConfig``, fails to load with an error saying what
   replaces it. See [local DNS resolver](local-dns-resolver).
+
+* Registry mirrors for local clusters are now declared once, for every
+  local cluster, in ``mirrors.yaml`` in the CLI data home, a file of its
+  own of kind ``EducatesLocalMirrors``, where version 3 declared them in
+  ``localKindCluster.registryMirrors`` of ``values.yaml``. Each entry takes
+  the same fields as before. ``educates local cluster create`` and
+  ``educates local cluster start`` create any mirror the file declares
+  which does not exist yet, and link every mirror into every node of the
+  cluster. The CLI only reads the file, so ``educates local mirror deploy``
+  and ``educates local mirror delete`` leave it as it is. The CLI's
+  first-run migration of a version 3 ``values.yaml`` writes
+  ``localKindCluster.registryMirrors`` to ``mirrors.yaml``, saying so in
+  its notice. When ``mirrors.yaml`` already exists, the migration leaves it
+  as it is, and the notice names the mirrors to add to it by hand. A
+  version 4 configuration that declares ``cluster.registryMirrors``, or
+  ``target.cluster.registryMirrors`` in an ``EducatesConfig``, fails to load
+  with an error naming its mirrors and saying to move them to
+  ``mirrors.yaml``. See [declaring mirrors for every cluster](local-mirrors-file).
 
 * Every local cluster now declares the specific IP address of the host it
   publishes its ports 80 and 443 on, ``cluster.listenAddress``. Version 3

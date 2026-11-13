@@ -490,6 +490,33 @@ To use a domain of your own, pass `--domain` when you create the cluster, or set
 
 An `EducatesConfig` with `target.provider: kind` can also serve as a named cluster's configuration. Its `target.cluster.listenAddress` must be a specific IP address of your host, by the same rules, and it gets no `nip.io` fallback: its domain is the one its custom resources declare.
 
+### A named cluster's configuration
+
+To write a named cluster's configuration without creating the cluster, for example to change it before you first create the cluster, run `educates local config init` with the same options:
+
+```
+educates local config init --local-cluster test2 --listen-address 10.10.10.2
+```
+
+A named cluster needs `--listen-address`, and `--domain` is optional. As for the default cluster, `educates local config init` refuses to replace an existing configuration unless you add `--force`. The `--defaults` option writes only the default cluster's configuration, while `educates local config view --local-cluster test2` shows the defaults a named cluster takes.
+
+The `educates local config get`, `set`, `view` and `edit` commands also select a cluster with `--local-cluster` or the `EDUCATES_LOCAL_CLUSTER` environment variable, and act on that cluster's configuration, or on the default cluster's with neither. For example, to give the named cluster `test2` a domain of its own:
+
+```
+educates local config set --local-cluster test2 ingress.domain test2.educates.test
+```
+
+For a named cluster, `educates local config set` and `edit` refuse a change that breaks the rules for its listen address, such as a loopback address, and `educates local config view` shows the `nip.io` name of the listen address as the domain when the configuration sets none.
+
+To remove a named cluster's configuration once you no longer need the cluster, delete the cluster first and then its configuration:
+
+```
+educates local cluster delete --local-cluster test2
+educates local config delete --local-cluster test2
+```
+
+`educates local config delete` removes the folder `clusters/test2` of the data home, which holds the cluster's configuration and its Kind configuration file. It refuses while the Kind cluster `educates-test2` exists, and it never deletes the default cluster's configuration.
+
 ### A second data home is not a second cluster
 
 The `EDUCATES_CLI_DATA_HOME` environment variable moves the data home, where the command line tool keeps its configuration and local secrets cache, but it is not a way to run several local clusters. A second data home still creates the Kind cluster `educates`, binds the same host ports, and manages the same registry, resolver and mirror containers as the first, so the two collide. Use named clusters instead, which share one data home.

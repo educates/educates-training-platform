@@ -307,7 +307,13 @@ New Features
   ``stop`` and ``status`` commands of ``educates local cluster`` select a
   cluster with ``--local-cluster``, or for a whole terminal with the
   ``EDUCATES_LOCAL_CLUSTER`` environment variable, and act on the default
-  cluster without either. Deleting a named cluster keeps its
+  cluster without either. The ``init``, ``get``, ``set``, ``view`` and
+  ``edit`` commands of ``educates local config`` select a cluster the same
+  way, so ``educates local config init --local-cluster test2
+  --listen-address 10.10.10.2`` writes the configuration of ``test2``
+  without creating the cluster. The new ``educates local config delete``
+  removes a named cluster's configuration, and refuses while the cluster
+  exists and for the default cluster. Deleting a named cluster keeps its
   configuration, and every cluster pulls from the one local image registry
   on ``localhost:5001``. The platform install of ``educates local cluster
   create`` now always targets the cluster it has just created, whatever

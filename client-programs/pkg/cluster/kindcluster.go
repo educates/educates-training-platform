@@ -102,7 +102,7 @@ var clusterConfigTemplateData string
 
 // ClusterExists reports whether the local cluster's kind cluster
 // currently exists. err is set only when the underlying list call
-// failed; the existence outcome itself is not an error — callers decide
+// failed; the existence outcome itself is not an error: callers decide
 // whether "exists" or "does not exist" is acceptable for the operation
 // they're performing (CreateCluster wants !exists; Delete/Start/Stop/Status
 // want exists).

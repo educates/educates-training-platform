@@ -153,12 +153,13 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	//    registry mirror's container exists with other values, host 80/443
 	//    are bound, or a secure install has no certificate source. The
 	//    clash check reads every Educates cluster's configured bindings,
-	//    so a stopped cluster counts too. The host-port case is the v3
-	//    busybox probe, last, for holders that are not Educates clusters;
-	//    kind itself fails later with a much less actionable error if
-	//    Envoy can't publish. The certificate case is the one the deploy
-	//    resolves later: without this check it would only fail after the
-	//    kind cluster and registry already exist.
+	//    so a stopped cluster counts too. The host-port case comes last,
+	//    for holders that are not Educates clusters: a probe container
+	//    tries to publish ports 80 and 443 on the listen address, since
+	//    kind would otherwise fail later with a much less actionable
+	//    error when Envoy can't publish them. The certificate case is the
+	//    one the deploy resolves later: without this check it would only
+	//    fail after the kind cluster and registry already exist.
 	in, err := p.prepareLocalCreate(cfg)
 	if err != nil {
 		return err

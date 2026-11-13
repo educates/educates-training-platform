@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 
+	"gopkg.in/yaml.v2"
+
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1/schemas"
 )
@@ -30,6 +32,20 @@ func LoadLocalMirrors(dataHome string) ([]v1alpha1.RegistryMirror, error) {
 		return nil, err
 	}
 	return mirrors.RegistryMirrors, nil
+}
+
+// marshalLocalMirrors returns the registry mirrors file that declares
+// mirrors: the yaml-language-server modeline, then the EducatesLocalMirrors
+// that holds them.
+func marshalLocalMirrors(mirrors []v1alpha1.RegistryMirror) ([]byte, error) {
+	body, err := yaml.Marshal(&v1alpha1.EducatesLocalMirrors{
+		TypeMeta:        v1alpha1.TypeMeta{APIVersion: v1alpha1.APIVersion, Kind: v1alpha1.KindEducatesLocalMirrors},
+		RegistryMirrors: mirrors,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal the registry mirrors: %w", err)
+	}
+	return append([]byte(LocalMirrorsModeline+"\n"), body...), nil
 }
 
 // loadLocalMirrorsBytes loads data, the registry mirrors file source, by

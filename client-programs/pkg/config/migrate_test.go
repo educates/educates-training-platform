@@ -434,6 +434,102 @@ localDNSResolver:
 	}
 }
 
+const v3RegistryMirrorsValues = `localKindCluster:
+  listenAddress: 10.10.10.1
+  registryMirrors:
+    - mirror: docker.io
+      url: https://registry-1.docker.io
+      username: alice
+      password: secret
+    - mirror: ghcr.io
+      port: "5002"
+      bindIP: 127.0.0.1
+`
+
+func TestMaybeMigrateV3_RegistryMirrors_AreWrittenToMirrorsYAML(t *testing.T) {
+	dataHome := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte(v3RegistryMirrorsValues), 0o644))
+	var notice bytes.Buffer
+
+	if err := MaybeMigrateV3(dataHome, &notice); err != nil {
+		t.Fatalf("MaybeMigrateV3: %v", err)
+	}
+
+	mirrorsPath := filepath.Join(dataHome, "mirrors.yaml")
+	got, err := LoadLocalMirrors(dataHome)
+	if err != nil {
+		t.Fatalf("LoadLocalMirrors on the migrated mirrors.yaml: %v\n%s", err, readFile(t, mirrorsPath))
+	}
+	want := []v1alpha1.RegistryMirror{
+		{Mirror: "docker.io", URL: "https://registry-1.docker.io", Username: "alice", Password: "secret"},
+		{Mirror: "ghcr.io", Port: "5002", BindIP: "127.0.0.1"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("migrated registry mirrors = %+v, want %+v", got, want)
+	}
+	if body := string(readFile(t, mirrorsPath)); !strings.HasPrefix(body, LocalMirrorsModeline+"\n") {
+		t.Errorf("mirrors.yaml does not start with the schema modeline:\n%s", body)
+	}
+	if written := string(readFile(t, filepath.Join(dataHome, "config.yaml"))); strings.Contains(written, "registryMirrors") {
+		t.Errorf("the migrated config declares registry mirrors:\n%s", written)
+	}
+	for _, want := range []string{"moved localKindCluster.registryMirrors to " + mirrorsPath, "every local cluster",
+		"docker.io", "ghcr.io"} {
+		if !strings.Contains(notice.String(), want) {
+			t.Errorf("notice does not mention %q:\n%s", want, notice.String())
+		}
+	}
+	if strings.Contains(notice.String(), "secret") {
+		t.Errorf("notice gives a mirror's password:\n%s", notice.String())
+	}
+}
+
+func TestMaybeMigrateV3_RegistryMirrors_WithAMirrorsYAML_LeaveItAndSayWhatToAdd(t *testing.T) {
+	dataHome := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte(v3RegistryMirrorsValues), 0o644))
+	mirrorsPath := filepath.Join(dataHome, "mirrors.yaml")
+	const existing = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalMirrors\nregistryMirrors:\n- mirror: quay.io\n"
+	must(t, os.WriteFile(mirrorsPath, []byte(existing), 0o644))
+	var notice bytes.Buffer
+
+	if err := MaybeMigrateV3(dataHome, &notice); err != nil {
+		t.Fatalf("MaybeMigrateV3: %v", err)
+	}
+
+	if body := string(readFile(t, mirrorsPath)); body != existing {
+		t.Errorf("mirrors.yaml was overwritten:\n%s", body)
+	}
+	if written := string(readFile(t, filepath.Join(dataHome, "config.yaml"))); strings.Contains(written, "registryMirrors") {
+		t.Errorf("the migrated config declares registry mirrors:\n%s", written)
+	}
+	for _, want := range []string{mirrorsPath + " already exists", "docker.io, ghcr.io", "by hand",
+		"localKindCluster.registryMirrors", filepath.Join(dataHome, "values.yaml.v3-backup")} {
+		if !strings.Contains(notice.String(), want) {
+			t.Errorf("notice does not mention %q:\n%s", want, notice.String())
+		}
+	}
+	if strings.Contains(notice.String(), "secret") {
+		t.Errorf("notice gives a mirror's password:\n%s", notice.String())
+	}
+}
+
+func TestMaybeMigrateV3_NoRegistryMirrors_WritesNoMirrorsYAML(t *testing.T) {
+	dataHome := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte("localKindCluster:\n  listenAddress: 10.10.10.1\n"), 0o644))
+	var notice bytes.Buffer
+
+	if err := MaybeMigrateV3(dataHome, &notice); err != nil {
+		t.Fatalf("MaybeMigrateV3: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dataHome, "mirrors.yaml")); err == nil {
+		t.Error("mirrors.yaml was written for a v3 file without registry mirrors")
+	}
+	if strings.Contains(notice.String(), "registryMirrors") {
+		t.Errorf("notice mentions registry mirrors for a file without any:\n%s", notice.String())
+	}
+}
+
 // stubHostIP makes host IP detection report ip for the rest of the test
 // t, or fail when ip is empty.
 func stubHostIP(t *testing.T, ip string) {

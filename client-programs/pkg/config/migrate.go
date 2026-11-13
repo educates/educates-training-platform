@@ -19,7 +19,8 @@ import (
 //  1. dataHome has no values.yaml — nothing to migrate (first-time user).
 //  2. dataHome has config.yaml — already migrated (or never had v3).
 //  3. dataHome has values.yaml + provider ∈ {"", "kind"} — migration
-//     ran successfully (config.yaml written, values.yaml renamed to
+//     ran successfully (config.yaml written, the registry mirrors written
+//     to mirrors.yaml unless it exists, values.yaml renamed to
 //     values.yaml.v3-backup).
 //
 // Returns a user-actionable error when values.yaml is present without
@@ -83,6 +84,16 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 	}
 
 	cfg, notes := translateV3ToV4(v3raw)
+	// v4 declares registry mirrors for every local cluster in a file of
+	// their own, written before the config, so a mirror is never lost: a
+	// migration that fails here leaves the v3 values.yaml in place.
+	mirrorsNote, err := migrateV3RegistryMirrors(dataHome, translateV3RegistryMirrors(v3raw), backupPath)
+	if err != nil {
+		return err
+	}
+	if mirrorsNote != "" {
+		notes = append(notes, mirrorsNote)
+	}
 	out, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("marshal v4 config: %w", err)
@@ -214,18 +225,6 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		}
 		cfg.Cluster.VolumeMounts = append(cfg.Cluster.VolumeMounts, vm)
 	}
-	for _, m := range listV3Path(v3, "localKindCluster", "registryMirrors") {
-		entry := asMap(m)
-		cfg.Cluster.RegistryMirrors = append(cfg.Cluster.RegistryMirrors, v1alpha1.RegistryMirror{
-			Mirror:   strMap(entry, "mirror"),
-			URL:      strMap(entry, "url"),
-			Username: strMap(entry, "username"),
-			Password: strMap(entry, "password"),
-			Port:     strMap(entry, "port"),
-			BindIP:   strMap(entry, "bindIP"),
-		})
-	}
-
 	// resolver. A local cluster's names now resolve to its listen address,
 	// so targetAddress goes. Setting the listen address from it instead
 	// would change where kind publishes the cluster's ports, so the notice
@@ -279,6 +278,59 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 	}
 
 	return cfg, notes
+}
+
+// translateV3RegistryMirrors returns the registry mirrors of a v3 values
+// map, its localKindCluster.registryMirrors, which v4 declares for every
+// local cluster in the registry mirrors file of the data home.
+func translateV3RegistryMirrors(v3 map[string]interface{}) []v1alpha1.RegistryMirror {
+	var mirrors []v1alpha1.RegistryMirror
+	for _, m := range listV3Path(v3, "localKindCluster", "registryMirrors") {
+		entry := asMap(m)
+		mirrors = append(mirrors, v1alpha1.RegistryMirror{
+			Mirror:   strMap(entry, "mirror"),
+			URL:      strMap(entry, "url"),
+			Username: strMap(entry, "username"),
+			Password: strMap(entry, "password"),
+			Port:     strMap(entry, "port"),
+			BindIP:   strMap(entry, "bindIP"),
+		})
+	}
+	return mirrors
+}
+
+// migrateV3RegistryMirrors writes mirrors, the registry mirrors of a v3
+// values.yaml, to the registry mirrors file of the data home dataHome,
+// and returns the line of the migration notice that says so. A file that
+// already exists is left as it is, and the line names the mirrors to add
+// to it by hand, from backupPath, where the v3 values.yaml is kept. With
+// no mirrors, it writes nothing and returns no line.
+func migrateV3RegistryMirrors(dataHome string, mirrors []v1alpha1.RegistryMirror, backupPath string) (string, error) {
+	if len(mirrors) == 0 {
+		return "", nil
+	}
+	names := make([]string, 0, len(mirrors))
+	for _, m := range mirrors {
+		names = append(names, m.Mirror)
+	}
+	path := LocalMirrorsPath(dataHome)
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Sprintf("left localKindCluster.registryMirrors out, since %s already exists and is left as it is: "+
+			"add the registry mirrors %s to it by hand, from localKindCluster.registryMirrors in %s",
+			path, strings.Join(names, ", "), backupPath), nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("check for %s: %w", path, err)
+	}
+	body, err := marshalLocalMirrors(mirrors)
+	if err != nil {
+		return "", err
+	}
+	// The file holds the mirrors' passwords, so only the user reads it.
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		return "", fmt.Errorf("write %s: %w", path, err)
+	}
+	return fmt.Sprintf("moved localKindCluster.registryMirrors to %s, where the registry mirrors every local "+
+		"cluster needs are declared: %s", path, strings.Join(names, ", ")), nil
 }
 
 // migrateV3ListenAddress returns the cluster.listenAddress of the

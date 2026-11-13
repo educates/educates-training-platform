@@ -187,16 +187,24 @@ it writes this ``mirrors.yaml``:
 apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalMirrors
 registryMirrors:
-- mirror: docker.io
-  url: registry-1.docker.io
-  username: my-dockerhub-user
-  password: my-dockerhub-token
-- mirror: ghcr.io
+  - mirror: docker.io
+    url: registry-1.docker.io
+    username: my-dockerhub-user
+    password: my-dockerhub-token
+  - mirror: ghcr.io
 ```
 
 When ``mirrors.yaml`` already exists, the migration leaves it as it is, and
-the notice names the version 3 mirrors to add to it by hand from
-``values.yaml.v3-backup``.
+the notice names the version 3 mirrors to add to it from
+``values.yaml.v3-backup``, by hand or with ``educates local mirror deploy``,
+which records a mirror in the file. From then on, ``educates local mirror
+deploy`` and ``educates local mirror delete`` keep the file up to date.
+
+A ``config.yaml`` from a pre-release of version 4 that still has
+``cluster.registryMirrors`` is moved once, the first time a command reads
+it: its mirrors go to ``mirrors.yaml``, the previous configuration is kept
+as ``config.yaml.bak``, and ``cluster.registryMirrors`` is removed from it,
+as described in [mirrors in a cluster's configuration](local-mirrors-move).
 
 The notice says what was carried over and what was dropped, with lines such
 as:

@@ -451,7 +451,7 @@ A local image mirror acts as a proxy for a remote container registry. When you c
 Declaring mirrors for every cluster
 -----------------------------------
 
-You declare the registry mirrors your local clusters use once, in the file `mirrors.yaml` in the data home, such as `~/Library/Application Support/educates/mirrors.yaml` on macOS. The file serves every local cluster: when you create or start a cluster, Educates deploys any mirror the file declares which does not exist yet, and links every mirror to every node of the cluster. This ensures that all image pulls for the mirrored registries are routed through your local mirror, improving speed and reliability.
+The registry mirrors your local clusters use are declared once, in the file `mirrors.yaml` in the data home, such as `~/Library/Application Support/educates/mirrors.yaml` on macOS. The file serves every local cluster: when you create or start a cluster, Educates deploys any mirror the file declares which does not exist yet, and links every mirror to every node of the cluster. This ensures that all image pulls for the mirrored registries are routed through your local mirror, improving speed and reliability. [`educates local mirror deploy`](local-mirror-deploy) records a mirror in the file, creating it the first time, and [`educates local mirror delete`](local-mirror-delete) removes it, so a mirror stays declared until you delete it. A file the commands wrote, or one you wrote yourself, looks like this:
 
 ```yaml
 # yaml-language-server: $schema=https://schemas.educates.dev/cli/v1alpha1/EducatesLocalMirrors.json
@@ -465,24 +465,41 @@ registryMirrors:
     password: my-dockerhub-token
 ```
 
-In this example, we're mirroring GitHub Container Registry as well as Docker Hub. Each entry names, in `mirror`, the registry the mirror serves, as image references name it, and the file declares each mirror once. Docker Hub has an alternate `url` for the remote registry the mirror pulls from, which otherwise defaults to the name in `mirror`, and a `username` and `password` for Docker Hub, which prevent image pull throttling. Since the file can hold such credentials, keep it readable only by you. The first line points an editor with a YAML language server at the schema of the file, so it validates the file and completes its fields, and `educates local config explain registryMirrors --kind mirrors` describes every field.
+In this example, we're mirroring GitHub Container Registry as well as Docker Hub. Each entry names, in `mirror`, the registry the mirror serves, as image references name it, and the file declares each mirror once. Docker Hub has an alternate `url` for the remote registry the mirror pulls from, which otherwise defaults to the name in `mirror`, and a `username` and `password` for Docker Hub, which prevent image pull throttling. Since the file can hold such credentials, the command line tool writes it readable only by you, and you should keep it that way. The first line points an editor with a YAML language server at the schema of the file, so it validates the file and completes its fields, and `educates local config explain registryMirrors --kind mirrors` describes every field.
 
-The command line tool reads `mirrors.yaml` and never writes it, except when it [migrates a version 3 configuration](migrating-from-v3), so `educates local mirror deploy` and `educates local mirror delete` leave it as it is. Without the file, no mirror is declared. A file that does not load, such as one with a field the `EducatesLocalMirrors` kind lacks or a mirror declared twice, fails `educates local cluster create` and `educates local cluster start` before they change anything, with an error naming the file and why.
+You can also edit `mirrors.yaml` by hand, to add a mirror, or to change one before its container exists. The mirror commands rewrite only the entry of the mirror they act on: a new entry goes at the end, and the other entries, their order and your comments are kept as they were. Without the file, no mirror is declared. A file that does not load, such as one with a field the `EducatesLocalMirrors` kind lacks or a mirror declared twice, fails `educates local cluster create`, `educates local cluster start` and the `educates local mirror` commands before they change anything, with an error naming the file and why.
 
 ```
 educates local cluster create
 ```
 
-This will deploy the cluster and all declared mirrors automatically. Any other mirror which already exists, deployed with `educates local mirror deploy`, is linked into the cluster as well. When you run [several local clusters](multiple-local-clusters), they share `mirrors.yaml` and the mirror containers.
+This will deploy the cluster and all declared mirrors automatically. Any other mirror container which already exists, such as one an earlier version of the command line tool deployed without recording it, is linked into the cluster as well. When you run [several local clusters](multiple-local-clusters), they share `mirrors.yaml` and the mirror containers.
 
-A cluster's configuration declares no mirrors. A configuration which still has `cluster.registryMirrors`, or `target.cluster.registryMirrors` in an `EducatesConfig`, fails to load with an error naming the mirrors it declares, without their passwords:
+(local-mirrors-move)=
+### Mirrors in a cluster's configuration
+
+A cluster's configuration declares no mirrors. When a configuration in the data home, the default cluster's `config.yaml` or a named cluster's `clusters/<name>/config.yaml`, still has `cluster.registryMirrors`, or `target.cluster.registryMirrors` in an `EducatesConfig`, the first command that reads it moves the mirrors to `mirrors.yaml`, once. The command writes the entries into `mirrors.yaml`, creating it when it does not exist yet, then keeps the previous configuration beside it as `config.yaml.bak`, readable only by you since it holds the mirrors' passwords, then removes `cluster.registryMirrors` from the configuration, keeping the rest of the file and its comments. An existing backup is never overwritten: when `config.yaml.bak` exists, the backup is named with the time instead, such as `config.yaml.20261113-214120.bak`. The command prints a note, and goes on with the configuration as moved:
 
 ```
-/Users/me/Library/Application Support/educates/config.yaml: cluster.registryMirrors was removed: registry mirrors are now declared once, for every local cluster, under registryMirrors in /Users/me/Library/Application Support/educates/mirrors.yaml, of kind EducatesLocalMirrors. Move the entries of the registry mirrors ghcr.io, docker.io there, and remove cluster.registryMirrors from the config
+note: moved cluster.registryMirrors of /Users/me/Library/Application Support/educates/config.yaml to /Users/me/Library/Application Support/educates/mirrors.yaml, which declares the registry mirrors of every local cluster: ghcr.io, docker.io. The previous config is kept as /Users/me/Library/Application Support/educates/config.yaml.bak.
 ```
 
-Move those entries as they are to `registryMirrors` in `mirrors.yaml`, starting the file with the first three lines of the example above when it does not exist yet, and remove `cluster.registryMirrors` from the configuration.
+A mirror `mirrors.yaml` already records with the same URL and username is left as it is there, password included, and the note says so. A mirror it records with another URL or username stops the move before anything is written, with an error naming the mirror and both values, and the configuration stays as it was until the two agree.
 
+A configuration outside the data home, given with `--config`, is never rewritten. It fails to load with an error showing the `educates local mirror deploy` command that records each of its mirrors, without their passwords:
+
+```
+/Users/me/educates/my-config.yaml: cluster.registryMirrors was removed: registry mirrors are now declared once, for every local cluster, in /Users/me/Library/Application Support/educates/mirrors.yaml, which 'educates local mirror deploy' and 'educates local mirror delete' write. Record the registry mirrors of this config there with:
+
+  educates local mirror deploy ghcr.io
+  educates local mirror deploy docker.io --url registry-1.docker.io --username my-dockerhub-user
+
+adding --password <password> to the command of docker.io, which the config gives a password, and remove cluster.registryMirrors from the config
+```
+
+Run those commands, adding `--password` with the password where the configuration has one, and remove `cluster.registryMirrors` from the configuration.
+
+(local-mirror-deploy)=
 Deploying a local registry mirror
 ---------------------------------
 
@@ -496,7 +513,9 @@ In this example we are creating a mirror to GitHub Container Registry (ghcr.io).
 
 Optionally, you can also provide credentials, via `--username` and `--password`, for authenticating to the remote registry. Use these if you are mirroring a private registry, or to provide DockerHub credentials to avoid request throttling.
 
-It is important to note that, when done this way, the mirror is not added to `mirrors.yaml`. The mirror container is what persists: while it exists, `educates local cluster create` and `educates local cluster start` link it into every node of the cluster, so recreating the cluster keeps the mirror. Once you delete the mirror, a cluster gets it back only when `mirrors.yaml` declares it.
+The command records the mirror in [`mirrors.yaml`](local-mirrors-file) before it deploys the container, creating the file the first time, with the mirror's name, and its `url`, `username` and `password` when you give them. Every local cluster you create or start later needs the mirrors the file declares, so the mirror stays until you delete it: a cluster created later gets it, and should its container go, the next `educates local cluster create` or `educates local cluster start` deploys it again.
+
+Running the command again for a mirror `mirrors.yaml` records keeps the recorded entry. A mirror the file records with another `--url` or `--username` is refused, with an error saying to run `educates local mirror delete` first, and so is a mirror whose container already exists with another URL or username. The same URL and username with another `--password` records the new password, and the command warns that the mirror's existing container keeps the password it was created with until you delete the mirror and deploy it again. Without `--password`, the recorded password is kept, and is the one a new container gets.
 
 This command is most useful in case you want to clean your existing mirror and delete the mirror, and hence it's contents, and then recreate the mirror.
 
@@ -510,16 +529,15 @@ To delete a local registry mirror, run:
 educates local mirror delete ghcr.io
 ```
 
-This will stop and remove the mirror container and clean up the configuration from every running node of every local cluster.
+This will remove the mirror from `mirrors.yaml`, keeping the rest of the file as it was, then stop and remove the mirror container, with the images it cached, and clean up the configuration from every running node of every local cluster. Since the mirror is no longer declared, it stays deleted: no local cluster created or started later deploys it again.
 
-As pointed out earlier, when `mirrors.yaml` declares the mirror, the next `educates local cluster create` or `educates local cluster start` of any local cluster creates the mirror again. The command warns about it, naming the file:
+A mirror `mirrors.yaml` records which has no container, such as one whose container you removed with Docker, is removed from the file, and the command says so:
 
 ```
-⚠ delete registry mirror docker.io: /Users/me/Library/Application Support/educates/mirrors.yaml declares registry mirror docker.io, so the next 'educates local cluster create' or 'educates local cluster start', of any local cluster, creates the mirror again. Remove the mirror from /Users/me/Library/Application Support/educates/mirrors.yaml to keep it deleted
-✓ delete registry mirror docker.io: deleted
+✓ delete registry mirror ghcr.io: removed registry mirror ghcr.io from /Users/me/Library/Application Support/educates/mirrors.yaml; it had no container
 ```
 
-Remove the mirror from `mirrors.yaml` to keep it deleted.
+A mirror which `mirrors.yaml` does not record and which has no container is an error.
 
 Listing the local registry mirrors
 ----------------------------------
@@ -539,13 +557,13 @@ ghcr.io     ghcr.io                                    missing                  
 quay.io     quay.io                                    Up 2 hours   educates-registry-mirror-quay.io     no
 ```
 
-A declared mirror whose container is missing, such as `ghcr.io` here, shows the status `missing` with the URL and username `mirrors.yaml` declares, and the next `educates local cluster create` or `educates local cluster start` creates it. A mirror which is not declared, such as `quay.io` here, was deployed with `educates local mirror deploy`, and is gone once you delete it. A `mirrors.yaml` that does not load fails the command, naming the file and why.
+A declared mirror whose container is missing, such as `ghcr.io` here, shows the status `missing` with the URL and username `mirrors.yaml` declares, and the next `educates local cluster create` or `educates local cluster start` creates it. A mirror which is not declared, such as `quay.io` here, has a container that `mirrors.yaml` does not record, such as one an earlier version of the command line tool deployed, or one you removed from the file by hand, and is gone once you delete it. Running `educates local mirror deploy` for it, with the URL and username it shows, records it. A `mirrors.yaml` that does not load fails the command, naming the file and why.
 
 (multiple-local-clusters)=
 Running several local clusters
 ------------------------------
 
-The cluster `educates local cluster create` makes is the default local cluster. Next to it you can run any number of named local clusters, for example to test two builds of Educates side by side, or one workshop against both. Each named cluster is a Kind cluster of its own, `educates-<name>`, with the kube context `kind-educates-<name>`, its own configuration, and a host IP address of its own on which it publishes ports 80 and 443. Every cluster shares the local image registry on `localhost:5001`, so an image you push there once can be pulled by any of them, and every registry mirror is linked into every cluster, whether `mirrors.yaml` in the data home declares it or a command deployed it.
+The cluster `educates local cluster create` makes is the default local cluster. Next to it you can run any number of named local clusters, for example to test two builds of Educates side by side, or one workshop against both. Each named cluster is a Kind cluster of its own, `educates-<name>`, with the kube context `kind-educates-<name>`, its own configuration, and a host IP address of its own on which it publishes ports 80 and 443. Every cluster shares the local image registry on `localhost:5001`, so an image you push there once can be pulled by any of them, and every registry mirror is linked into every cluster, since `mirrors.yaml` in the data home declares the mirrors once for all of them.
 
 To create a named cluster called `test2` on the host IP address `10.10.10.2`, run:
 
@@ -637,13 +655,13 @@ On macOS, the file `/etc/resolver/educates.test` you created for the default clu
 
 ### The shared registry and mirrors
 
-Every local cluster pulls from the one local image registry and the one set of registry mirror containers, so the commands which manage them take no `--local-cluster` option and act on every local cluster. `educates local registry deploy` configures every node of every cluster to pull from the registry, and inside each cluster, through its own kube context, points the `registry` Service and the `local-registry-hosting` ConfigMap at it. `educates local mirror deploy` links the mirror into every node of every running local cluster, and `educates local mirror delete` unlinks it from every one of them. A node which is not running can't be configured, and the deploy commands warn about it. Run `educates local registry deploy` again once its cluster runs. A mirror needs nothing more, since starting the cluster links it.
+Every local cluster pulls from the one local image registry and the one set of registry mirror containers, so the commands which manage them take no `--local-cluster` option and act on every local cluster. `educates local registry deploy` configures every node of every cluster to pull from the registry, and inside each cluster, through its own kube context, points the `registry` Service and the `local-registry-hosting` ConfigMap at it. `educates local mirror deploy` records the mirror in `mirrors.yaml` and links it into every node of every running local cluster, and `educates local mirror delete` removes it from `mirrors.yaml` and unlinks it from every one of them. A node which is not running can't be configured, and the deploy commands warn about it. Run `educates local registry deploy` again once its cluster runs. A mirror needs nothing more, since starting the cluster links it.
 
-Every registry mirror container which exists is linked into every local cluster, whether `mirrors.yaml` declares it or `educates local mirror deploy` deployed it. `educates local cluster create` and `educates local cluster start` link every one of them into every node of the cluster, so a mirror reaches a cluster created later, and a cluster which was stopped when the mirror was deployed gets it when it starts. Linking a mirror which a node already has writes the same configuration again. A mirror which can't be linked into a node is a warning, and that node pulls from the registry directly. A node which has a mirror's configuration tries the mirror first and then the registry the image names, so it still pulls when the mirror's container is stopped or deleted.
+Every registry mirror container which exists is linked into every local cluster, whether `mirrors.yaml` declares it or not. `educates local cluster create` and `educates local cluster start` link every one of them into every node of the cluster, so a mirror reaches a cluster created later, and a cluster which was stopped when the mirror was deployed gets it when it starts. Linking a mirror which a node already has writes the same configuration again. A mirror which can't be linked into a node is a warning, and that node pulls from the registry directly. A node which has a mirror's configuration tries the mirror first and then the registry the image names, so it still pulls when the mirror's container is stopped or deleted.
 
-Every local cluster needs the mirrors [`mirrors.yaml`](local-mirrors-file) declares. When a declared mirror's container doesn't exist yet, `educates local cluster create` and `educates local cluster start` create it first. When an earlier create or start, or `educates local mirror deploy`, already created it, they reuse that container. The container keeps the URL and username it was created with, so once you declare the mirror in `mirrors.yaml` with another `url` or `username`, `educates local cluster create` fails before the Kind cluster is created, and `educates local cluster start` before the nodes start. The error names `mirrors.yaml`, the mirror, the values its container has, and the values the file declares. Either declare the mirror as its container has it, or delete the mirror with `educates local mirror delete`, which unlinks it from every cluster, and create or start the cluster again, which creates the mirror with the new values. A different `password` can't be seen on the container, so it is not detected, and the mirror keeps the password it was created with until you delete it.
+Every local cluster needs the mirrors [`mirrors.yaml`](local-mirrors-file) declares. When a declared mirror's container doesn't exist yet, `educates local cluster create` and `educates local cluster start` create it first. When an earlier create or start, or `educates local mirror deploy`, already created it, they reuse that container. The container keeps the URL and username it was created with, so once you edit the mirror in `mirrors.yaml` by hand to another `url` or `username`, `educates local cluster create` fails before the Kind cluster is created, and `educates local cluster start` before the nodes start. The error names `mirrors.yaml`, the mirror, the values its container has, and the values the file declares. Either declare the mirror as its container has it, or delete the mirror with `educates local mirror delete`, which unlinks it from every cluster and removes it from `mirrors.yaml`, then deploy it with the new values with `educates local mirror deploy`. A different `password` can't be seen on the container, so it is not detected, and the mirror keeps the password it was created with until you delete it.
 
-Since every cluster needs the mirrors `mirrors.yaml` declares, deleting one of them with `educates local mirror delete` lasts only until any local cluster next starts or is next created, which creates the mirror again. The command warns about it, naming the file, as [deleting a local registry mirror](local-mirror-delete) shows. Remove the mirror from `mirrors.yaml` to keep it deleted.
+Since `educates local mirror delete` removes the mirror from `mirrors.yaml` as well as its container, a deleted mirror stays deleted: no local cluster created or started later deploys it again, as [deleting a local registry mirror](local-mirror-delete) describes.
 
 ### Listing the clusters
 

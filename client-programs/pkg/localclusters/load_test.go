@@ -3,10 +3,12 @@ package localclusters
 import (
 	"errors"
 	"io/fs"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
 func TestLoadConfigOfAMissingNamedConfigSaysHowToWriteOne(t *testing.T) {
@@ -183,6 +185,43 @@ func TestLoadedConfigDomain(t *testing.T) {
 
 			if got := loaded.Domain(); got != tc.want {
 				t.Errorf("Domain() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadedConfigRegistryMirrors(t *testing.T) {
+	dataHome := t.TempDir()
+	cases := []struct {
+		name string
+		body string
+		want []v1alpha1.RegistryMirror
+	}{
+		{name: "the mirrors an EducatesLocalConfig declares", body: localConfigHeader +
+			"cluster:\n  listenAddress: 10.10.10.1\n  registryMirrors:\n" +
+			"  - mirror: docker.io\n    username: alice\n    password: secret\n" +
+			"  - mirror: gcr.io\n    url: mirror.gcr.io\n",
+			want: []v1alpha1.RegistryMirror{
+				{Mirror: "docker.io", Username: "alice", Password: "secret"},
+				{Mirror: "gcr.io", URL: "mirror.gcr.io"},
+			}},
+		{name: "the mirrors an EducatesConfig's target declares", body: escapeConfig(
+			"  cluster:\n    listenAddress: 10.10.10.1\n    registryMirrors:\n    - mirror: quay.io\n", ""),
+			want: []v1alpha1.RegistryMirror{{Mirror: "quay.io"}}},
+		{name: "none declared", body: localConfigHeader + "cluster:\n  listenAddress: 10.10.10.1\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			writeClusterConfig(t, dataHome, "", tc.body)
+			loaded, err := LoadConfig(Default(dataHome))
+			if err != nil {
+				t.Fatalf("LoadConfig: %v", err)
+			}
+
+			got := loaded.RegistryMirrors()
+
+			if len(got) != len(tc.want) || (len(got) > 0 && !reflect.DeepEqual(got, tc.want)) {
+				t.Errorf("RegistryMirrors() = %+v, want %+v", got, tc.want)
 			}
 		})
 	}

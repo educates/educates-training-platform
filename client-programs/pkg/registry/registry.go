@@ -259,10 +259,14 @@ func createRegistryContainer(bindIP string, p Progress) error {
 
 /**
  * This function is used to deploy a registry mirror and link it to the cluster.
- * It is used when creating a new local registry mirror. nodes names the
- * node containers that get the mirror's containerd host config: those of
- * the local cluster being created, or of every local cluster. An existing
- * mirror container is reused as it is.
+ * It is used when creating a new local registry mirror, and when creating
+ * or starting a local cluster. nodes names the node containers that get the
+ * mirror's containerd host config: those of the local cluster being created
+ * or started, or of every local cluster. An existing mirror container is
+ * reused as it is. Linking is idempotent: a node that already has the host
+ * config gets it written again. The host config names only the mirror
+ * container, so containerd falls back to the registry's own host for the
+ * namespace when the mirror can't be reached.
  */
 func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, nodes []string, p Progress) error {
 	err := createMirrorContainer(mirrorConfig, p)

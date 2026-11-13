@@ -95,6 +95,12 @@ takes the config from the file and the cluster's name from the flag, and
 makes the cluster's folder <data-home>/clusters/<name>/ without copying
 the file into it.
 
+Every registry mirror container that exists is linked into each node of
+the new cluster, whichever cluster's config or command created it. A
+mirror the config declares in cluster.registryMirrors is created first
+when it is missing, and create refuses to run when its container exists
+with another URL or username.
+
 --cluster-only stops after step 4 — useful for testing the platform
 deploy against a hand-prepared cluster.`,
 		Example: localClusterCreateExample,
@@ -280,18 +286,11 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return fmt.Errorf("loopback service: %w", err)
 	}
 
-	// 4. registry mirrors declared in config (pull-through caches).
-	for _, m := range in.Cluster.RegistryMirrors {
-		label := "registry mirror " + m.Mirror
-		if m.URL != "" {
-			label += " → " + m.URL
-		}
-		mc := registryMirrorFromConfig(m)
-		if err := runStep(rep, label, "ready", func(s progress.Step) error {
-			return registry.DeployMirrorAndLinkToCluster(&mc, nodes, s)
-		}); err != nil {
-			return fmt.Errorf("mirror %s: %w", m.Mirror, err)
-		}
+	// 4. registry mirrors (pull-through caches): every mirror container
+	//    that exists, whichever cluster's config or command created it,
+	//    and every mirror the config declares, created first when missing.
+	if err := linkRegistryMirrors(rep, inventory.MirrorsToLink(in.Cluster.RegistryMirrors), nodes); err != nil {
+		return err
 	}
 
 	if o.ClusterOnly {
@@ -504,6 +503,27 @@ func kindBootstrapFromConfig(clusterCfg v1alpha1.LocalClusterConfig) *cluster.Ki
 		VolumeMounts: mounts,
 		Nodes:        nodes,
 	}
+}
+
+// linkRegistryMirrors links each of mirrors into the node containers
+// nodes of a local cluster, one step each, creating first a mirror whose
+// container is missing. A mirror that can't be linked into a node is a
+// warning; one whose container can't be created or joined to the cluster
+// network is an error.
+func linkRegistryMirrors(rep progress.Reporter, mirrors []v1alpha1.RegistryMirror, nodes []string) error {
+	for _, m := range mirrors {
+		label := "registry mirror " + m.Mirror
+		if m.URL != "" {
+			label += " → " + m.URL
+		}
+		mc := registryMirrorFromConfig(m)
+		if err := runStep(rep, label, "ready", func(s progress.Step) error {
+			return registry.DeployMirrorAndLinkToCluster(&mc, nodes, s)
+		}); err != nil {
+			return fmt.Errorf("mirror %s: %w", m.Mirror, err)
+		}
+	}
+	return nil
 }
 
 func registryMirrorFromConfig(m v1alpha1.RegistryMirror) registry.MirrorConfig {

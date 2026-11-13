@@ -1540,6 +1540,19 @@ Deprecations
 Bugs Fixed
 ----------
 
+* Deploying a local image registry mirror could fail with ``network sandbox
+  for container ... not found``, after a warning that Docker refused the
+  mirror's fixed address, and then succeed when run again. The mirror's
+  container was started before it joined its networks, and the registry,
+  which contacts its upstream registry as it starts, could look up the
+  upstream while joining a network made Docker switch the container to its
+  embedded DNS resolver, which did not answer yet. The registry exited,
+  Docker restarted it, and joining the cluster network during the restart
+  failed. A mirror's container now joins its networks before it starts.
+  The warning about a refused fixed address now appears only when Docker
+  refused that address and the mirror joined the network at another one,
+  and gives Docker's reason.
+
 * With Kyverno as the cluster security policy engine, the namespace of a
   workshop environment, in which its workshop session pods run, was given no
   ``pod-security.kubernetes.io/enforce`` label, so the default level of the

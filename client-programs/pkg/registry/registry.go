@@ -391,14 +391,29 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 		return errors.Wrap(err, "cannot create local registry mirror container")
 	}
 
+	// The container joins its networks before it starts. The registry
+	// contacts its upstream as it starts, and a network joined while it
+	// runs switches its DNS to Docker's embedded resolver before that
+	// resolver answers: the lookup fails, the registry exits, and Docker
+	// restarts it, refusing any network change meanwhile. A container that
+	// fails to join is removed, so that deploying again starts afresh.
+	if err := joinMirrorNetworks(ctx, cli, mirrorContainerName, mirrorFixedAddressFor, p); err != nil {
+		cli.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
+		return err
+	}
+
 	if _, err := cli.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
 		return errors.Wrap(err, "unable to start local registry mirror")
 	}
 
-	cli.NetworkDisconnect(ctx, EducatesNetworkName, client.NetworkDisconnectOptions{Container: mirrorContainerName})
+	return nil
+}
 
-	_, err = cli.NetworkConnect(ctx, EducatesNetworkName, client.NetworkConnectOptions{
-		Container:      mirrorContainerName,
+// joinMirrorNetworks connects the mirror container containerName to the
+// educates network and links it to the cluster network.
+func joinMirrorNetworks(ctx context.Context, cli *client.Client, containerName string, fixedAddress func(clusterNetwork) (netip.Addr, error), p Progress) error {
+	_, err := cli.NetworkConnect(ctx, EducatesNetworkName, client.NetworkConnectOptions{
+		Container:      containerName,
 		EndpointConfig: &network.EndpointSettings{},
 	})
 
@@ -406,7 +421,7 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 		return errors.Wrap(err, "unable to connect local registry mirror to educates network")
 	}
 
-	if err = linkToClusterNetwork(mirrorContainerName, mirrorFixedAddressFor, p); err != nil {
+	if err := linkToClusterNetwork(containerName, fixedAddress, p); err != nil {
 		return errors.Wrap(err, "failed to link local registry mirror to cluster")
 	}
 

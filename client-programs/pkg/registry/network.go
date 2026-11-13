@@ -240,13 +240,40 @@ func linkToClusterNetwork(containerName string, fixedAddress func(clusterNetwork
 		cli.NetworkDisconnect(ctx, ClusterNetworkName, client.NetworkDisconnectOptions{Container: containerName})
 	}
 
-	if err := connectToClusterNetwork(ctx, cli, containerName, addr); err != nil {
-		warn(p, fmt.Sprintf("Docker refused fixed address %s for %s, so a Docker restart can still change its address (Docker Engine 29.0.4 or later avoids this)", addr, containerName))
+	connect := func(a netip.Addr) error {
+		return connectToClusterNetwork(ctx, cli, containerName, a)
+	}
 
-		return connectToClusterNetwork(ctx, cli, containerName, netip.Addr{})
+	refused, err := connectWithFallback(connect, addr)
+
+	if err != nil {
+		return err
+	}
+
+	if refused != nil {
+		warn(p, fmt.Sprintf("Docker refused fixed address %s for %s (%v), so a Docker restart can still change its address (Docker Engine 29.0.4 or later avoids this)", addr, containerName, refused))
 	}
 
 	return nil
+}
+
+// connectWithFallback connects through connect at the fixed address addr,
+// and when that fails, at an address Docker picks. refused is the fixed
+// address's error when only the fallback succeeded. When the fallback fails
+// too, err is its error and refused is nil: a container that can't join at
+// any address says nothing about the fixed one.
+func connectWithFallback(connect func(netip.Addr) error, addr netip.Addr) (refused error, err error) {
+	fixedErr := connect(addr)
+
+	if fixedErr == nil {
+		return nil, nil
+	}
+
+	if err := connect(netip.Addr{}); err != nil {
+		return nil, err
+	}
+
+	return fixedErr, nil
 }
 
 // connectToClusterNetwork connects a container to the cluster network, at

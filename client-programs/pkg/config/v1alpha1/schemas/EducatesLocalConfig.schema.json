@@ -49,23 +49,6 @@
             }
           }
         },
-        "registryMirrors": {
-          "type": "array",
-          "description": "Pull-through cache registries to configure on the cluster, reducing repeated pulls from upstream registries. The always-on localhost:5001 registry is implicit and not listed here.",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["mirror"],
-            "properties": {
-              "mirror":   { "type": "string", "minLength": 1, "description": "Upstream registry host to mirror, for example docker.io or ghcr.io." },
-              "url":      { "type": "string", "description": "URL of the registry the mirror proxies to. Defaults to the mirror host." },
-              "username": { "type": "string", "description": "Username for authenticating to the upstream registry." },
-              "password": { "type": "string", "description": "Password for authenticating to the upstream registry." },
-              "port":     { "type": "string", "description": "Host port the mirror is published on." },
-              "bindIP":   { "type": "string", "description": "Host address the mirror is published on." }
-            }
-          }
-        },
         "nodes": {
           "type": "array",
           "description": "Nodes of the Kind cluster. Leave empty for the default single control-plane cluster; when set, the list fully declares the cluster's nodes and must include a control-plane node.",

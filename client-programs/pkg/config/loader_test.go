@@ -665,6 +665,66 @@ func TestLoad_EducatesConfig_BogusEnvelopeField(t *testing.T) {
 	}
 }
 
+// A config that still declares registry mirrors in its cluster block
+// fails to load with an error saying they are declared in mirrors.yaml in
+// the data home now, and naming the mirrors to move there, in place of
+// the schema's generic one.
+func TestLoad_ClusterRegistryMirrors_SayTheyMovedToMirrorsYAML(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	const mirrors = "- mirror: docker.io\n  username: alice\n  password: secret\n- mirror: ghcr.io\n"
+	cases := []struct {
+		name  string
+		body  string
+		field string
+	}{
+		{
+			name: "an EducatesLocalConfig",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
+				"cluster:\n  listenAddress: 10.10.10.1\n  registryMirrors:\n" + indent(mirrors, "  "),
+			field: "cluster.registryMirrors",
+		},
+		{
+			name: "an EducatesConfig",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesConfig\n" +
+				"target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.1\n    registryMirrors:\n" + indent(mirrors, "    "),
+			field: "target.cluster.registryMirrors",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadBytes([]byte(tc.body), "config.yaml")
+			if err == nil {
+				t.Fatal("LoadBytes: expected error, got nil")
+			}
+			for _, want := range []string{"config.yaml: ", tc.field + " was removed",
+				filepath.Join(dataHome, "mirrors.yaml"), "every local cluster", "docker.io, ghcr.io", "Move"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+			if strings.Contains(err.Error(), "secret") {
+				t.Errorf("error %q gives a mirror's password", err)
+			}
+			if strings.Contains(err.Error(), "schema validation") {
+				t.Errorf("error %q still reports the schema's generic error", err)
+			}
+		})
+	}
+}
+
+// indent returns lines, YAML lines each ending in a newline, each with
+// prefix in front.
+func indent(lines, prefix string) string {
+	var b strings.Builder
+	for _, line := range strings.SplitAfter(lines, "\n") {
+		if line != "" {
+			b.WriteString(prefix + line)
+		}
+	}
+	return b.String()
+}
+
 // A config that still sets resolver.targetAddress, which was removed,
 // fails to load with an error saying what replaces it, in place of the
 // schema's generic one.

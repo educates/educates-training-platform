@@ -54,7 +54,7 @@ func TestExplain_LeafScalar_ShowsTypeDefaultAndDescription(t *testing.T) {
 }
 
 func TestExplain_ArrayField_DrillsIntoItems(t *testing.T) {
-	out, err := Explain(schemas.EducatesLocalConfig, "cluster.registryMirrors")
+	out, err := Explain(schemas.EducatesLocalMirrors, "registryMirrors")
 	if err != nil {
 		t.Fatalf("Explain: %v", err)
 	}

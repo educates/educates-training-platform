@@ -12,3 +12,14 @@ type EducatesLocalMirrors struct {
 
 	RegistryMirrors []RegistryMirror `yaml:"registryMirrors,omitempty"`
 }
+
+// RegistryMirror is the user-declared pull-through cache surface. The
+// always-on localhost:5001 mirror is implicit and not represented here.
+type RegistryMirror struct {
+	Mirror   string `yaml:"mirror"`
+	URL      string `yaml:"url,omitempty"`
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
+	Port     string `yaml:"port,omitempty"`
+	BindIP   string `yaml:"bindIP,omitempty"`
+}

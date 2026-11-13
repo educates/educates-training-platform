@@ -72,6 +72,9 @@ func LoadBytesWithoutDefaults(data []byte, source string) (v1alpha1.Config, erro
 	if err := checkNoResolverTargetAddress(raw, kind); err != nil {
 		return nil, fmt.Errorf("%s: %w", source, err)
 	}
+	if err := checkNoClusterRegistryMirrors(raw, kind); err != nil {
+		return nil, fmt.Errorf("%s: %w", source, err)
+	}
 
 	switch kind {
 	case v1alpha1.KindEducatesLocalConfig:
@@ -122,6 +125,48 @@ func checkNoResolverTargetAddress(raw map[string]interface{}, kind string) error
 		"dnsmasq configuration files of your own, %s",
 		resolverField, resolverField, listenAddressField,
 		filepath.Join(DnsmasqIncludeDir(utils.GetEducatesHomeDir()), "*.conf"))
+}
+
+// checkNoClusterRegistryMirrors returns an error saying where registry
+// mirrors are declared now when raw, the top level of a config of kind
+// kind, still declares them in its cluster block: cluster.registryMirrors
+// in an EducatesLocalConfig, or target.cluster.registryMirrors in an
+// EducatesConfig. Every local cluster takes its registry mirrors from the
+// registry mirrors file of the data home, so the error names that file
+// and the mirrors to move into it, never their passwords. It comes before
+// the schema's generic error, or in place of the EducatesConfig's loose
+// decode dropping the field silently.
+func checkNoClusterRegistryMirrors(raw map[string]interface{}, kind string) error {
+	var clusterPath []string
+	switch kind {
+	case v1alpha1.KindEducatesLocalConfig:
+		clusterPath = []string{"cluster"}
+	case v1alpha1.KindEducatesConfig:
+		clusterPath = []string{"target", "cluster"}
+	default:
+		return nil
+	}
+	cluster, _ := walkV3(raw, clusterPath...)
+	mirrors, set := asMap(cluster)["registryMirrors"]
+	if !set {
+		return nil
+	}
+	field := strings.Join(append(clusterPath, "registryMirrors"), ".")
+	var names []string
+	if list, ok := mirrors.([]interface{}); ok {
+		for _, m := range list {
+			if name, _ := asMap(m)["mirror"].(string); name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	move := "Move its entries there"
+	if len(names) > 0 {
+		move = fmt.Sprintf("Move the entries of the registry mirrors %s there", strings.Join(names, ", "))
+	}
+	return fmt.Errorf("%s was removed: registry mirrors are now declared once, for every local cluster, "+
+		"under registryMirrors in %s, of kind %s. %s, and remove %s from the config",
+		field, LocalMirrorsPath(utils.GetEducatesHomeDir()), v1alpha1.KindEducatesLocalMirrors, move, field)
 }
 
 // LoadLocal is the typed convenience wrapper for callers that only accept

@@ -99,9 +99,9 @@
     "resolver": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Settings for the local DNS resolver that maps the ingress domain to the cluster on the host.",
+      "description": "This cluster's entries in the local DNS resolver every local cluster shares, which has no settings of its own. This cluster's names, its ingress domain always plus extraDomains, resolve to its cluster.listenAddress when that is a specific IP address, and otherwise to the host's IP address. Names that resolve anywhere else, such as a VM, go in dnsmasq configuration files of your own, <data-home>/dnsmasq.d/*.conf, which the resolver also reads. 'educates local resolver view' shows every name it answers for.",
       "properties": {
-        "extraDomains":  { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Additional domains the resolver should also answer for, directed at the same address as the ingress domain." }
+        "extraDomains":  { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "More names that resolve to this cluster's address, as its ingress domain does, each with its subdomains. A name another local cluster also claims is an error." }
       }
     },
 

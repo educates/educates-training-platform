@@ -56,6 +56,37 @@ func TestLocalConfigExplain_KindFlagRoutes(t *testing.T) {
 	}
 }
 
+// The resolver section explains the one resolver every local cluster
+// shares, where its names resolve, and where other names go.
+func TestLocalConfigExplain_Resolver_ExplainsTheSharedResolver(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want []string
+	}{
+		{"resolver", []string{"every local cluster shares", "cluster.listenAddress", "host's IP", "dnsmasq.d"}},
+		{"resolver.extraDomains", []string{"subdomains", "another local cluster", "error"}},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			p := ProjectInfo{}
+			cmd := p.NewLocalConfigExplainCmd()
+			var buf bytes.Buffer
+			cmd.SetOut(&buf)
+			cmd.SetArgs([]string{tc.path})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			for _, want := range tc.want {
+				if !bytes.Contains(buf.Bytes(), []byte(want)) {
+					t.Errorf("explain %s does not mention %q:\n%s", tc.path, want, buf.String())
+				}
+			}
+			if bytes.Contains(buf.Bytes(), []byte("targetAddress")) {
+				t.Errorf("explain %s still mentions targetAddress:\n%s", tc.path, buf.String())
+			}
+		})
+	}
+}
+
 func TestLocalConfigExplain_UnknownKind_Errors(t *testing.T) {
 	p := ProjectInfo{}
 	cmd := p.NewLocalConfigExplainCmd()

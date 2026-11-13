@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -41,7 +43,11 @@ func (o *LocalMirrorDeployOptions) Run() error {
 	}
 
 	err := stepOnStdout(o.Verbose, "registry mirror "+o.MirrorName, "ready", func(s progress.Step) error {
-		return registry.DeployMirrorAndLinkToCluster(mirrorConfig, []string{defaultLocalCluster().ControlPlaneNode()}, s)
+		nodes, err := registryNodes(context.Background(), defaultLocalCluster())
+		if err != nil {
+			return err
+		}
+		return registry.DeployMirrorAndLinkToCluster(mirrorConfig, nodes, s)
 	})
 
 	if err != nil {

@@ -145,30 +145,81 @@ func TestMirrorsToLinkWhenNoMirrorIsDeclared(t *testing.T) {
 	}
 }
 
-func TestDeletedMirrorWarningOfADeclaredMirrorNamesTheMirrorsFile(t *testing.T) {
-	dataHome := t.TempDir()
-	declared := []v1alpha1.RegistryMirror{{Mirror: "quay.io"}, {Mirror: "docker.io", Username: "alice", Password: "secret"}}
-
-	got := NewInventory(Observed{}, dataHome).DeletedMirrorWarning("docker.io", declared)
-
-	for _, want := range []string{filepath.Join(dataHome, "mirrors.yaml") + " declares registry mirror docker.io",
-		"'educates local cluster create'", "'educates local cluster start'", "creates the mirror again",
-		"Remove the mirror from " + filepath.Join(dataHome, "mirrors.yaml")} {
-		if !strings.Contains(got, want) {
-			t.Errorf("DeletedMirrorWarning() = %q, want it to mention %q", got, want)
-		}
+func TestRemoveMirrorRecordRemovesTheEntryOfAMirror(t *testing.T) {
+	quay := v1alpha1.RegistryMirror{Mirror: "quay.io"}
+	dockerIO := v1alpha1.RegistryMirror{Mirror: "docker.io", Username: "alice", Password: "secret"}
+	cases := []struct {
+		name     string
+		observed Observed
+		want     MirrorRemoval
+		wantNote []string
+	}{
+		{
+			name:     "with its container",
+			observed: Observed{Mirrors: []MirrorContainer{{Mirror: "docker.io", Username: "alice"}}},
+			want:     MirrorRemoval{HasContainer: true},
+		},
+		{
+			name:     "without a container",
+			wantNote: []string{"removed registry mirror docker.io from", "mirrors.yaml", "had no container"},
+		},
 	}
-	if strings.Contains(got, "secret") {
-		t.Errorf("DeletedMirrorWarning() = %q, gives the mirror's password", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dataHome := t.TempDir()
+			must(t, config.RecordLocalMirror(dataHome, quay))
+			must(t, config.RecordLocalMirror(dataHome, dockerIO))
+
+			got, err := NewInventory(tc.observed, dataHome).RemoveMirrorRecord("docker.io")
+			if err != nil {
+				t.Fatalf("RemoveMirrorRecord: %v", err)
+			}
+
+			if got.HasContainer != tc.want.HasContainer {
+				t.Errorf("RemoveMirrorRecord().HasContainer = %v, want %v", got.HasContainer, tc.want.HasContainer)
+			}
+			if len(tc.wantNote) == 0 && got.Note != "" {
+				t.Errorf("RemoveMirrorRecord().Note = %q, want none", got.Note)
+			}
+			for _, want := range tc.wantNote {
+				if !strings.Contains(got.Note, want) {
+					t.Errorf("RemoveMirrorRecord().Note = %q, want it to mention %q", got.Note, want)
+				}
+			}
+			assertRecordedMirrors(t, dataHome, quay)
+		})
 	}
 }
 
-func TestDeletedMirrorWarningOfAMirrorNotDeclaredIsNone(t *testing.T) {
-	declared := []v1alpha1.RegistryMirror{{Mirror: "quay.io"}}
+// A mirror the file doesn't record, deployed before the file recorded
+// mirrors, has its container deleted, and the file is left as it is.
+func TestRemoveMirrorRecordOfAMirrorWithOnlyAContainer(t *testing.T) {
+	dataHome := t.TempDir()
+	observed := Observed{Mirrors: []MirrorContainer{{Mirror: "docker.io"}}}
 
-	if got := NewInventory(Observed{}, t.TempDir()).DeletedMirrorWarning("docker.io", declared); got != "" {
-		t.Errorf("DeletedMirrorWarning() = %q, want none", got)
+	got, err := NewInventory(observed, dataHome).RemoveMirrorRecord("docker.io")
+	if err != nil {
+		t.Fatalf("RemoveMirrorRecord: %v", err)
 	}
+
+	if want := (MirrorRemoval{HasContainer: true}); got != want {
+		t.Errorf("RemoveMirrorRecord() = %+v, want %+v", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(dataHome, "mirrors.yaml")); !os.IsNotExist(err) {
+		t.Errorf("mirrors.yaml was written: %v", err)
+	}
+}
+
+func TestRemoveMirrorRecordOfAMirrorNeitherRecordedNorDeployedIsAnError(t *testing.T) {
+	dataHome := t.TempDir()
+	must(t, config.RecordLocalMirror(dataHome, v1alpha1.RegistryMirror{Mirror: "quay.io"}))
+	observed := Observed{Mirrors: []MirrorContainer{{Mirror: "ghcr.io"}}}
+
+	_, err := NewInventory(observed, dataHome).RemoveMirrorRecord("docker.io")
+
+	assertErrorNames(t, err, "registry mirror docker.io", "no container",
+		filepath.Join(dataHome, "mirrors.yaml")+" does not record it")
+	assertRecordedMirrors(t, dataHome, v1alpha1.RegistryMirror{Mirror: "quay.io"})
 }
 
 func TestListMirrorsAreEveryMirrorContainerAndEveryDeclaredMirror(t *testing.T) {

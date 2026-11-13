@@ -88,23 +88,6 @@ func (inv Inventory) MirrorsToLink(declared []v1alpha1.RegistryMirror) []v1alpha
 	return mirrors
 }
 
-// DeletedMirrorWarning returns the warning local mirror delete gives
-// after deleting the container of the registry mirror mirror, when
-// declared, the mirrors the registry mirrors file of the data home
-// declares, holds it: the next local cluster create or start, of any
-// local cluster, creates the mirror again. The warning names the file to
-// remove the mirror from. It is empty when the file does not declare the
-// mirror.
-func (inv Inventory) DeletedMirrorWarning(mirror string, declared []v1alpha1.RegistryMirror) string {
-	if !slices.ContainsFunc(declared, func(m v1alpha1.RegistryMirror) bool { return m.Mirror == mirror }) {
-		return ""
-	}
-	path := config.LocalMirrorsPath(inv.dataHome)
-	return fmt.Sprintf("%s declares registry mirror %s, so the next 'educates local cluster create' or "+
-		"'educates local cluster start', of any local cluster, creates the mirror again. "+
-		"Remove the mirror from %s to keep it deleted", path, mirror, path)
-}
-
 // MirrorRecord is what local mirror deploy does for a registry mirror
 // once RecordMirror has recorded it.
 type MirrorRecord struct {
@@ -182,6 +165,41 @@ func (inv Inventory) RecordMirror(requested v1alpha1.RegistryMirror) (MirrorReco
 			entry.Mirror, path, entry.Mirror)
 	}
 	return record, nil
+}
+
+// MirrorRemoval is what local mirror delete does for a registry mirror
+// once RemoveMirrorRecord has removed its entry.
+type MirrorRemoval struct {
+	// HasContainer reports whether the mirror's container exists, which
+	// the command then deletes.
+	HasContainer bool
+
+	// Note is what the command tells the user when the mirror had no
+	// container, so that removing its entry was all there was to do.
+	Note string
+}
+
+// RemoveMirrorRecord removes the entry of the registry mirror mirror from
+// the registry mirrors file of the data home, before local mirror delete
+// deletes its container, so that no local cluster created or started
+// later needs the mirror any more. A mirror the file doesn't record and
+// that has no container is an error; one with only a container leaves the
+// file as it is.
+func (inv Inventory) RemoveMirrorRecord(mirror string) (MirrorRemoval, error) {
+	path := config.LocalMirrorsPath(inv.dataHome)
+	recorded, err := config.RemoveLocalMirror(inv.dataHome, mirror)
+	if err != nil {
+		return MirrorRemoval{}, err
+	}
+	removal := MirrorRemoval{HasContainer: inv.hasMirrorContainer(mirror)}
+	switch {
+	case !recorded && !removal.HasContainer:
+		return MirrorRemoval{}, fmt.Errorf("registry mirror %s has no container, and %s does not record it",
+			mirror, path)
+	case !removal.HasContainer:
+		removal.Note = fmt.Sprintf("removed registry mirror %s from %s; it had no container", mirror, path)
+	}
+	return removal, nil
 }
 
 // hasMirrorContainer reports whether the registry mirror mirror has a

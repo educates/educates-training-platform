@@ -124,3 +124,136 @@ func TestLoadLocalMirrorsOfAFileThatDoesNotLoadNamesItsPathAndWhy(t *testing.T) 
 		})
 	}
 }
+
+// Recording a mirror in a data home without the registry mirrors file
+// creates it, with the modeline, apiVersion and kind, readable only by
+// the user since it can hold passwords.
+func TestRecordLocalMirrorCreatesTheFileWhenMissing(t *testing.T) {
+	dataHome := filepath.Join(t.TempDir(), "educates")
+
+	err := RecordLocalMirror(dataHome, v1alpha1.RegistryMirror{Mirror: "docker.io", Username: "alice", Password: "secret"})
+	if err != nil {
+		t.Fatalf("RecordLocalMirror: %v", err)
+	}
+
+	path := filepath.Join(dataHome, "mirrors.yaml")
+	want := mirrorsHeader + "registryMirrors:\n  - mirror: docker.io\n    username: alice\n    password: secret\n"
+	if got := string(readFile(t, path)); got != want {
+		t.Errorf("mirrors.yaml =\n%s\nwant\n%s", got, want)
+	}
+	assertMode(t, path, 0o600)
+}
+
+// handEditedMirrors is a registry mirrors file as a user writes it, with
+// comments.
+const handEditedMirrors = mirrorsHeader +
+	"# Mirrors for my laptop.\n" +
+	"registryMirrors:\n" +
+	"  # GitHub's registry.\n" +
+	"  - mirror: ghcr.io\n" +
+	"  - mirror: docker.io\n" +
+	"    url: registry-1.docker.io # Docker Hub's own host\n" +
+	"    username: alice\n" +
+	"    password: old\n"
+
+// Recording a mirror the file has no entry for adds one at the end, and
+// recording one it has replaces that entry where it is; everything else
+// in the file stays as it was, comments included.
+func TestRecordLocalMirrorKeepsTheRestOfTheFile(t *testing.T) {
+	dataHome := t.TempDir()
+	path := filepath.Join(dataHome, "mirrors.yaml")
+	must(t, os.WriteFile(path, []byte(handEditedMirrors), 0o644))
+
+	must(t, RecordLocalMirror(dataHome, v1alpha1.RegistryMirror{Mirror: "quay.io"}))
+	must(t, RecordLocalMirror(dataHome, v1alpha1.RegistryMirror{
+		Mirror: "docker.io", URL: "registry-1.docker.io", Username: "alice", Password: "1234"}))
+
+	want := mirrorsHeader +
+		"# Mirrors for my laptop.\n" +
+		"registryMirrors:\n" +
+		"  # GitHub's registry.\n" +
+		"  - mirror: ghcr.io\n" +
+		"  - mirror: docker.io\n" +
+		"    url: registry-1.docker.io # Docker Hub's own host\n" +
+		"    username: alice\n" +
+		"    password: \"1234\"\n" +
+		"  - mirror: quay.io\n"
+	if got := string(readFile(t, path)); got != want {
+		t.Errorf("mirrors.yaml =\n%s\nwant\n%s", got, want)
+	}
+	assertMode(t, path, 0o600)
+}
+
+// Removing a mirror's entry leaves the rest of the file as it was, and
+// reports whether the file recorded the mirror.
+func TestRemoveLocalMirrorKeepsTheRestOfTheFile(t *testing.T) {
+	dataHome := t.TempDir()
+	path := filepath.Join(dataHome, "mirrors.yaml")
+	must(t, os.WriteFile(path, []byte(handEditedMirrors), 0o644))
+
+	removed, err := RemoveLocalMirror(dataHome, "docker.io")
+	if err != nil || !removed {
+		t.Fatalf("RemoveLocalMirror(docker.io) = %v, %v, want true, nil", removed, err)
+	}
+	removed, err = RemoveLocalMirror(dataHome, "quay.io")
+	if err != nil || removed {
+		t.Fatalf("RemoveLocalMirror(quay.io) = %v, %v, want false, nil", removed, err)
+	}
+
+	want := mirrorsHeader +
+		"# Mirrors for my laptop.\n" +
+		"registryMirrors:\n" +
+		"  # GitHub's registry.\n" +
+		"  - mirror: ghcr.io\n"
+	if got := string(readFile(t, path)); got != want {
+		t.Errorf("mirrors.yaml =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Removing a mirror from a data home without the registry mirrors file
+// records none and leaves the file missing.
+func TestRemoveLocalMirrorWithoutTheFile(t *testing.T) {
+	dataHome := t.TempDir()
+
+	removed, err := RemoveLocalMirror(dataHome, "docker.io")
+
+	if err != nil || removed {
+		t.Fatalf("RemoveLocalMirror() = %v, %v, want false, nil", removed, err)
+	}
+	if _, err := os.Stat(filepath.Join(dataHome, "mirrors.yaml")); !os.IsNotExist(err) {
+		t.Errorf("mirrors.yaml exists after removing a mirror from a data home without it: %v", err)
+	}
+}
+
+// A registry mirrors file that doesn't load is left as it is, and the
+// writer's error names it and why.
+func TestLocalMirrorsWriterRefusesAFileThatDoesNotLoad(t *testing.T) {
+	dataHome := t.TempDir()
+	path := filepath.Join(dataHome, "mirrors.yaml")
+	body := mirrorsHeader + "registryMirrors:\n- mirror: docker.io\n  proxy: true\n"
+	must(t, os.WriteFile(path, []byte(body), 0o644))
+
+	recordErr := RecordLocalMirror(dataHome, v1alpha1.RegistryMirror{Mirror: "quay.io"})
+	_, removeErr := RemoveLocalMirror(dataHome, "docker.io")
+
+	for name, err := range map[string]error{"RecordLocalMirror": recordErr, "RemoveLocalMirror": removeErr} {
+		if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "proxy") {
+			t.Errorf("%s() error = %v, want one naming %s and the field proxy", name, err, path)
+		}
+	}
+	if got := string(readFile(t, path)); got != body {
+		t.Errorf("mirrors.yaml changed to\n%s", got)
+	}
+}
+
+// assertMode fails t unless the file at path has the permissions want.
+func assertMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Errorf("%s mode = %o, want %o", filepath.Base(path), got, want)
+	}
+}

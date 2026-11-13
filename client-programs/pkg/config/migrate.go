@@ -321,13 +321,10 @@ func migrateV3RegistryMirrors(dataHome string, mirrors []v1alpha1.RegistryMirror
 	} else if !os.IsNotExist(err) {
 		return "", fmt.Errorf("check for %s: %w", path, err)
 	}
-	body, err := marshalLocalMirrors(mirrors)
-	if err != nil {
-		return "", err
-	}
-	// The file holds the mirrors' passwords, so only the user reads it.
-	if err := os.WriteFile(path, body, 0o600); err != nil {
-		return "", fmt.Errorf("write %s: %w", path, err)
+	for _, m := range mirrors {
+		if err := RecordLocalMirror(dataHome, m); err != nil {
+			return "", err
+		}
 	}
 	return fmt.Sprintf("moved localKindCluster.registryMirrors to %s, where the registry mirrors every local "+
 		"cluster needs are declared: %s", path, strings.Join(names, ", ")), nil

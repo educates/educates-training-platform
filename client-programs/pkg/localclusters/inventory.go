@@ -192,6 +192,20 @@ func educatesCluster(kindName, dataHome string) (Identity, bool) {
 	return id, true
 }
 
+// ClusterOfContext returns the identity of the local cluster whose kube
+// context is context, of the data home dataHome, and reports whether
+// there is one: kind-educates is the default local cluster's, and
+// kind-educates-<name> a named local cluster's when its kind cluster is
+// an Educates cluster, as NewInventory recognises one. Any other context
+// is no local cluster's.
+func ClusterOfContext(context, dataHome string) (Identity, bool) {
+	kindName, ok := strings.CutPrefix(context, "kind-")
+	if !ok {
+		return Identity{}, false
+	}
+	return educatesCluster(kindName, dataHome)
+}
+
 // CheckEducatesCluster returns an error saying why when the kind cluster
 // of the local cluster id is not an Educates cluster, as NewInventory
 // recognises one: a named local cluster whose folder clusters/<name>/ the

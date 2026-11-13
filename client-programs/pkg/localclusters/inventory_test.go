@@ -576,3 +576,33 @@ func TestDescribeClusters(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterOfContext(t *testing.T) {
+	dataHome := t.TempDir()
+	addClusterFolder(t, dataHome, "test2")
+	cases := []struct {
+		context string
+		want    string
+		ok      bool
+	}{
+		{context: "kind-educates", want: "", ok: true},
+		{context: "kind-educates-test2", want: "test2", ok: true},
+		{context: "kind-educates-x", ok: false},
+		{context: "kind-other", ok: false},
+		{context: "educates", ok: false},
+		{context: "gke_project_zone_academy", ok: false},
+		{context: "", ok: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.context, func(t *testing.T) {
+			id, ok := ClusterOfContext(tc.context, dataHome)
+
+			if ok != tc.ok || ok && id.Name != tc.want {
+				t.Errorf("ClusterOfContext(%q) = %q, %t; want %q, %t", tc.context, id.Name, ok, tc.want, tc.ok)
+			}
+			if ok && id.Context != tc.context {
+				t.Errorf("ClusterOfContext(%q) is the cluster of context %q", tc.context, id.Context)
+			}
+		})
+	}
+}

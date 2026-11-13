@@ -115,6 +115,20 @@ func KubeconfigPath(override string, fallback string) string {
 	return fallback
 }
 
+// CurrentContext returns the current context of the kubeconfig file
+// kubeconfig when it is set, and otherwise of the files $KUBECONFIG
+// names, or ~/.kube/config, as client-go loads them. It is empty when
+// there is none, or the kubeconfig can't be loaded.
+func CurrentContext(kubeconfig string) string {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	loadingRules.ExplicitPath = kubeconfig
+	config, err := loadingRules.Load()
+	if err != nil {
+		return ""
+	}
+	return config.CurrentContext
+}
+
 // KindKubeconfigPath returns the kubeconfig file kind writes a local
 // cluster's context into: kubeconfig when it is set, otherwise
 // ~/.kube/config, whatever $KUBECONFIG says.

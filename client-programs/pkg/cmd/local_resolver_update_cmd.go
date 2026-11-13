@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -22,15 +23,19 @@ type LocalResolverUpdateOptions struct {
 	LocalConfig bool
 }
 
-func (o *LocalResolverUpdateOptions) Run(ctx context.Context) error {
+// Run serves the configs of every local cluster from the running local
+// DNS resolver, and writes to errW a warning for each named local
+// cluster's config it leaves out.
+func (o *LocalResolverUpdateOptions) Run(ctx context.Context, errW io.Writer) error {
 	def, err := defaultResolverConfig(o.Config, "")
 	if err != nil {
 		return err
 	}
-	content, err := observedResolverConfig(ctx, def)
+	content, leftOut, err := observedResolverConfig(ctx, def)
 	if err != nil {
 		return err
 	}
+	warnLeftOutConfigs(errW, leftOut)
 	return resolver.UpdateResolver(os.Stdout, content)
 }
 
@@ -43,7 +48,7 @@ func (p *ProjectInfo) NewLocalResolverUpdateCmd() *cobra.Command {
 		Short:   "Updates the local DNS resolver (macOS)",
 		Long:    "Serves the current configs from the running local DNS resolver, and restarts it.\n\n" + localResolverLong,
 		Example: localResolverUpdateExample,
-		RunE:    func(cmd *cobra.Command, _ []string) error { return o.Run(cmd.Context()) },
+		RunE:    func(cmd *cobra.Command, _ []string) error { return o.Run(cmd.Context(), cmd.ErrOrStderr()) },
 	}
 	c.Flags().StringVarP(&o.Config, "config", "c", "", "path to a CLI config file (any kind) to serve the default local cluster from")
 	c.Flags().BoolVar(&o.LocalConfig, "local-config", false, "serve the default local cluster from <data-home>/config.yaml (default when --config is not given)")

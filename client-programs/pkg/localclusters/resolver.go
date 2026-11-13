@@ -40,41 +40,61 @@ type ResolverInput struct {
 // cluster's config as the resolver commands are given it. A named
 // cluster's config follows the rules of LoadNamedConfig.
 //
+// A config given that the resolver can't serve is an error. A config in
+// the data home that does not load, or that the resolver can't serve, is
+// another cluster's, so it is left out rather than failing every other
+// cluster: ResolverConfig also returns an error for each one it leaves
+// out, naming the cluster and, through why, its file, for the caller to
+// warn about.
+//
 // Each cluster's ingress domain, declared or derived as
 // LoadedConfig.Domain gives it with the observed host IP address, and
 // its resolver.extraDomains point at its target address. The default
 // local cluster's target address is resolver.targetAddress, or else the
 // observed host IP address, or else 127.0.0.1. A named local cluster's
 // target address is resolver.targetAddress, or else its listen address.
-func (inv Inventory) ResolverConfig(given ...ResolverInput) ([]byte, error) {
-	configs, err := inv.servedConfigs(given)
-	if err != nil {
-		return nil, err
-	}
-	clusters := make([]resolverCluster, 0, len(configs))
-	for _, c := range configs {
-		rc, err := newResolverCluster(c, inv.observed.HostIP)
-		if err != nil {
-			return nil, err
-		}
-		clusters = append(clusters, rc)
-	}
-	if err := checkDomainsClaimedOnce(clusters); err != nil {
-		return nil, err
-	}
-	return renderDnsmasqConfig(clusters), nil
-}
-
-// servedConfigs returns the configs of the local clusters the resolver
-// serves, as ResolverConfig says, with the configs of given in place of
-// the data home's: the default local cluster first and the named ones in
-// name order.
-func (inv Inventory) servedConfigs(given []ResolverInput) ([]ResolverInput, error) {
+func (inv Inventory) ResolverConfig(given ...ResolverInput) ([]byte, []error, error) {
 	byName := map[string]ResolverInput{}
 	for _, c := range given {
 		byName[c.Identity.Name] = c
 	}
 
+	var clusters []resolverCluster
+	var leftOut []error
+	for _, id := range inv.servedClusters(given) {
+		in, isGiven := byName[id.Name]
+		if !isGiven {
+			loaded, err := LoadConfig(id)
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				leftOut = append(leftOut, leftOutConfig(id, err))
+				continue
+			}
+			in = ResolverInput{LoadedConfig: loaded}
+		}
+		rc, err := newResolverCluster(in, inv.observed.HostIP)
+		if err != nil {
+			if isGiven {
+				return nil, nil, err
+			}
+			leftOut = append(leftOut, leftOutConfig(id, err))
+			continue
+		}
+		clusters = append(clusters, rc)
+	}
+	if err := checkDomainsClaimedOnce(clusters); err != nil {
+		return nil, nil, err
+	}
+	return renderDnsmasqConfig(clusters), leftOut, nil
+}
+
+// servedClusters returns the local clusters the resolver serves, as
+// ResolverConfig says, when they have a config: the default local
+// cluster first, then the named Educates clusters and the named clusters
+// of given, by name.
+func (inv Inventory) servedClusters(given []ResolverInput) []Identity {
 	named := map[string]Identity{}
 	for _, id := range inv.clusters {
 		if !id.IsDefault() {
@@ -86,25 +106,16 @@ func (inv Inventory) servedConfigs(given []ResolverInput) ([]ResolverInput, erro
 			named[c.Identity.Name] = c.Identity
 		}
 	}
-
-	var configs []ResolverInput
 	ids := append([]Identity{Default(inv.dataHome)}, slices.Collect(maps.Values(named))...)
 	slices.SortFunc(ids, func(a, b Identity) int { return cmp.Compare(a.Name, b.Name) })
-	for _, id := range ids {
-		if c, ok := byName[id.Name]; ok {
-			configs = append(configs, c)
-			continue
-		}
-		loaded, err := LoadConfig(id)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		configs = append(configs, ResolverInput{LoadedConfig: loaded})
-	}
-	return configs, nil
+	return ids
+}
+
+// leftOutConfig is the error for the local DNS resolver leaving out the
+// config of the local cluster id in the data home, which it can't serve
+// because of err. err names the config's file.
+func leftOutConfig(id Identity, err error) error {
+	return fmt.Errorf("the local DNS resolver leaves out %s, whose config it can't use: %w", id.Description(), err)
 }
 
 // checkDomainsClaimedOnce checks that no two of clusters serve the same

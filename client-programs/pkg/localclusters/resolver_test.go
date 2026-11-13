@@ -1,6 +1,8 @@
 package localclusters
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -32,8 +34,19 @@ type resolverInputs struct {
 }
 
 // renderResolver renders the resolver config of the inventory of in's
-// data home and observed node containers.
+// data home and observed node containers. A config the resolver leaves
+// out is an error, for the tests in which none should be.
 func renderResolver(in resolverInputs) ([]byte, error) {
+	content, leftOut, err := renderResolverLeavingOut(in)
+	if err == nil && len(leftOut) > 0 {
+		err = fmt.Errorf("left out configs: %w", errors.Join(leftOut...))
+	}
+	return content, err
+}
+
+// renderResolverLeavingOut renders the resolver config as renderResolver
+// does, and returns the configs the resolver leaves out.
+func renderResolverLeavingOut(in resolverInputs) ([]byte, []error, error) {
 	return NewInventory(Observed{Nodes: in.Observed, HostIP: in.HostIP}, in.DataHome).ResolverConfig(in.Given...)
 }
 
@@ -311,36 +324,127 @@ func TestResolverConfigServesNoDomainForAnEducatesConfigThatDeclaresNone(t *test
 	wantAddresses(t, got, "address=/extra.example.test/10.10.10.2")
 }
 
-func TestResolverConfigRefusesADefaultConfigItCannotServe(t *testing.T) {
-	cases := []struct {
-		name   string
-		body   string
-		reason string
-	}{
-		{
-			name: "an EducatesConfig without a target",
-			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesConfig\neducatesClusterConfig:\n  mode: Managed\n" +
-				"  ingress:\n    domain: workshops.example.test\n    ingressClassName: contour\n" +
-				"    controller:\n      provider: BundledContour\n    certificates:\n      provider: None\n",
-			reason: "no target",
-		},
-		{
-			name: "an EducatesInlineConfig",
-			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesInlineConfig\ndomain: workshops.example.test\n" +
-				"ingressClassName: contour\nwildcardCertificateSecret: educates-wildcard-tls\n",
-			reason: "EducatesInlineConfig",
-		},
+// unservableDefaultConfigs are default local cluster configs the local
+// DNS resolver can't serve, with why.
+var unservableDefaultConfigs = []struct {
+	name   string
+	body   string
+	reason string
+}{
+	{
+		name: "an EducatesConfig without a target",
+		body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesConfig\neducatesClusterConfig:\n  mode: Managed\n" +
+			"  ingress:\n    domain: workshops.example.test\n    ingressClassName: contour\n" +
+			"    controller:\n      provider: BundledContour\n    certificates:\n      provider: None\n",
+		reason: "no target",
+	},
+	{
+		name: "an EducatesInlineConfig",
+		body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesInlineConfig\ndomain: workshops.example.test\n" +
+			"ingressClassName: contour\nwildcardCertificateSecret: educates-wildcard-tls\n",
+		reason: "EducatesInlineConfig",
+	},
+}
+
+func TestResolverConfigRefusesAGivenDefaultConfigItCannotServe(t *testing.T) {
+	for _, tc := range unservableDefaultConfigs {
+		t.Run(tc.name, func(t *testing.T) {
+			dataHome := t.TempDir()
+			def := givenConfig(t, Default(dataHome), tc.body)
+
+			_, _, err := renderResolverLeavingOut(resolverInputs{DataHome: dataHome, HostIP: "192.168.1.10", Given: []ResolverInput{def}})
+
+			wantErrorMentioning(t, err, def.Source, tc.reason)
+		})
 	}
-	for _, tc := range cases {
+}
+
+func TestResolverConfigLeavesOutADataHomeDefaultConfigItCannotServe(t *testing.T) {
+	for _, tc := range unservableDefaultConfigs {
 		t.Run(tc.name, func(t *testing.T) {
 			dataHome := t.TempDir()
 			writeDataHomeConfig(t, dataHome, "config.yaml", tc.body)
+			writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
+				"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")
 
-			_, err := renderResolver(resolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
+			content, leftOut, err := renderResolverLeavingOut(resolverInputs{
+				DataHome: dataHome,
+				HostIP:   "192.168.1.10",
+				Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
+			})
+			if err != nil {
+				t.Fatalf("ResolverConfig: %v", err)
+			}
 
-			wantErrorMentioning(t, err, filepath.Join(dataHome, "config.yaml"), tc.reason)
+			if !strings.Contains(string(content), "address=/test2.educates.test/10.10.10.2\n") {
+				t.Errorf("rendered config does not serve test2:\n%s", content)
+			}
+			if strings.Contains(string(content), "Default local cluster") {
+				t.Errorf("rendered config serves the default local cluster it can't serve:\n%s", content)
+			}
+			if len(leftOut) != 1 {
+				t.Fatalf("left out %v, want the default local cluster's config only", leftOut)
+			}
+			wantErrorMentioning(t, leftOut[0], "the default local cluster", filepath.Join(dataHome, "config.yaml"), tc.reason)
 		})
 	}
+}
+
+func TestResolverConfigLeavesOutAnotherClustersConfigThatDoesNotLoad(t *testing.T) {
+	dataHome := t.TempDir()
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
+	writeDataHomeConfig(t, dataHome, "clusters/test3/config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.3\n")
+	observed := []NodeContainer{
+		controlPlane("educates-test2", "10.10.10.2", true),
+		controlPlane("educates-test3", "10.10.10.3", true),
+	}
+	for _, tc := range []struct {
+		name  string
+		given []ResolverInput
+	}{
+		{name: "refreshing the resolver"},
+		{name: "creating another cluster", given: []ResolverInput{givenConfig(t, namedID(t, "test4", dataHome),
+			localConfigHeader+"cluster:\n  listenAddress: 10.10.10.4\n")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			content, leftOut, err := renderResolverLeavingOut(resolverInputs{
+				DataHome: dataHome, HostIP: "192.168.1.10", Observed: observed, Given: tc.given,
+			})
+			if err != nil {
+				t.Fatalf("ResolverConfig: %v", err)
+			}
+
+			for _, line := range []string{"address=/educates.test/192.168.1.10\n", "address=/10-10-10-3.nip.io/10.10.10.3\n"} {
+				if !strings.Contains(string(content), line) {
+					t.Errorf("rendered config has no line %q:\n%s", line, content)
+				}
+			}
+			if strings.Contains(string(content), "Local cluster test2") {
+				t.Errorf("rendered config serves test2, whose config does not load:\n%s", content)
+			}
+			if len(leftOut) != 1 {
+				t.Fatalf("left out %v, want test2's config only", leftOut)
+			}
+			wantErrorMentioning(t, leftOut[0], `local cluster "test2"`,
+				filepath.Join(dataHome, "clusters", "test2", "config.yaml"), "loopback")
+		})
+	}
+}
+
+func TestResolverConfigStillRefusesADomainTwoClustersClaimWhenItLeavesOutAConfig(t *testing.T) {
+	dataHome := t.TempDir()
+	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
+
+	_, _, err := renderResolverLeavingOut(resolverInputs{
+		DataHome: dataHome,
+		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
+		Given: []ResolverInput{givenConfig(t, namedID(t, "test3", dataHome), localConfigHeader+
+			"cluster:\n  listenAddress: 10.10.10.3\ningress:\n  domain: educates.test\n")},
+	})
+
+	wantErrorMentioning(t, err, "the default local cluster", `local cluster "test3"`, `"educates.test"`)
 }
 
 // givenConfig loads body, written outside the data home, as the config of

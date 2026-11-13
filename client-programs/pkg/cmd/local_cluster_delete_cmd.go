@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 
@@ -43,7 +42,9 @@ type LocalClusterDeleteOptions struct {
 // that.
 //
 // A DNS resolver that keeps running is refreshed once the kind cluster is
-// gone, so it stops serving a named cluster's domains.
+// gone, so it stops serving a named cluster's domains. A resolver that
+// can't be refreshed is only a warning, since the cluster is gone by
+// then.
 func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Identity) error {
 	c := cluster.NewKindClusterConfig("", id)
 
@@ -52,7 +53,8 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 		if err != nil {
 			return err
 		}
-		return refreshResolverAfterDelete(ctx)
+		refreshResolverAfterDelete(ctx)
+		return nil
 	}
 	if err != nil && !cluster.IsNotFound(err) {
 		return err
@@ -65,7 +67,8 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 	if users := inventory.SharedInfrastructureUsers(id); len(users) > 0 {
 		fmt.Printf("Skipped deleting the local registry, DNS resolver and registry mirrors: still in use by %s.\n",
 			localclusters.DescribeClusters(users))
-		return errors.Join(err, refreshResolverAfterDelete(ctx))
+		refreshResolverAfterDelete(ctx)
+		return err
 	}
 
 	// Best-effort cleanup: surface each as a step but don't fail the
@@ -83,15 +86,12 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 
 // refreshResolverAfterDelete refreshes a running local DNS resolver once a
 // local cluster's kind cluster is gone, so it stops serving the domains
-// of a named cluster.
-func refreshResolverAfterDelete(ctx context.Context) error {
+// of a named cluster, warning when it can't.
+func refreshResolverAfterDelete(ctx context.Context) {
 	rep := progress.New(os.Stdout, 0, isStdoutTTY(os.Stdout))
-	if err := refreshLocalResolver(rep, func() ([]byte, error) {
+	refreshLocalResolver(rep, func() ([]byte, []error, error) {
 		return observedResolverConfig(ctx)
-	}); err != nil {
-		return fmt.Errorf("local DNS resolver: %w", err)
-	}
-	return nil
+	})
 }
 
 func (p *ProjectInfo) NewLocalClusterDeleteCmd() *cobra.Command {

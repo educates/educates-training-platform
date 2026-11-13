@@ -187,14 +187,17 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	}
 	// The local DNS resolver serves the domains of every local cluster,
 	// so a domain another cluster claims is refused here, whether or not
-	// the resolver runs. A running resolver serves this same
-	// configuration once the kind cluster exists.
-	resolverConfig, err := localResolverConfig(inventory, localclusters.ResolverInput{
+	// the resolver runs. Another cluster's config that the resolver can't
+	// use is that cluster's problem, so it is only a warning. A running
+	// resolver serves this same configuration once the kind cluster
+	// exists.
+	resolverConfig, leftOut, err := inventory.ResolverConfig(localclusters.ResolverInput{
 		LoadedConfig: localclusters.LoadedConfig{Identity: id, Config: in.Deploy, Source: configPath},
 	})
 	if err != nil {
 		return err
 	}
+	warnLeftOutConfigs(w, leftOut)
 	if err := checkHostPortsAvailable(ctx, in.Cluster.ListenAddress, o.Verbose, w); err != nil {
 		return err
 	}
@@ -224,9 +227,9 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	}); err != nil {
 		return err
 	}
-	if err := refreshLocalResolver(rep, func() ([]byte, error) { return resolverConfig, nil }); err != nil {
-		return fmt.Errorf("local DNS resolver: %w", err)
-	}
+	// The cluster exists now, so a resolver that can't be refreshed is
+	// only a warning.
+	refreshLocalResolver(rep, func() ([]byte, []error, error) { return resolverConfig, nil, nil })
 	// The registry, loopback and mirror steps talk to the cluster just
 	// created, through its own context in the kubeconfig kind wrote it in.
 	client, err := clusterConfig.Config.GetClient()

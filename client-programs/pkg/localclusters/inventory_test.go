@@ -162,7 +162,7 @@ func TestListRowsShowTheDomainTheResolverServes(t *testing.T) {
 			if got, want := rows[1].Domain, "10-10-10-2.nip.io"; got != want {
 				t.Errorf("test2's domain = %q, want %q", got, want)
 			}
-			content, err := inv.ResolverConfig()
+			content, _, err := inv.ResolverConfig()
 			if err != nil {
 				t.Fatalf("ResolverConfig: %v", err)
 			}

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
@@ -181,6 +182,24 @@ func TestLoadLocalConfig_ConfigWritingFlagsNeedANamedClusterAndNoConfigFlag(t *t
 		"cluster:\n  listenAddress: 10.10.10.2\n")
 	_, _, _, err = loadLocalConfig(&LocalClusterCreateOptions{Config: path, Domain: "test2.educates.test"}, id)
 	wantError(t, err, "--domain", "--config")
+}
+
+func TestCreateDeployFlags_TargetTheCreatedClusterWhateverContextIsGiven(t *testing.T) {
+	dataHome, named := namedClusterForTest(t)
+	const kindKubeconfig = "/home/developer/.kube/config"
+
+	for _, id := range []localclusters.Identity{localclusters.Default(dataHome), named} {
+		t.Run(id.KindName, func(t *testing.T) {
+			o := &LocalClusterCreateOptions{Context: "kind-some-other-cluster", Timeout: 7 * time.Minute, Verbose: true}
+
+			flags := createDeployFlags(o, kindKubeconfig, id)
+
+			want := deployPipelineFlags{Kubeconfig: kindKubeconfig, Context: id.Context, Timeout: 7 * time.Minute, Verbose: true}
+			if flags != want {
+				t.Errorf("deploy flags = %+v, want %+v", flags, want)
+			}
+		})
+	}
 }
 
 // writeNamedConfig writes body as the config of the named local cluster

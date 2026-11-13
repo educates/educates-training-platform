@@ -87,7 +87,9 @@ type KindClusterConfig struct {
 
 // NewKindClusterConfig manages the kind cluster of the local cluster id,
 // with its context in the kubeconfig file kubeconfig, or in
-// ~/.kube/config when kubeconfig is empty.
+// ~/.kube/config when kubeconfig is empty. Config reaches the cluster
+// through that file and the cluster's own context, never the file's
+// current context.
 func NewKindClusterConfig(kubeconfig string, id localclusters.Identity) *KindClusterConfig {
 	fallback := ""
 
@@ -101,7 +103,7 @@ func NewKindClusterConfig(kubeconfig string, id localclusters.Identity) *KindClu
 		cluster.ProviderWithLogger(cmd.NewLogger()),
 	)
 
-	return &KindClusterConfig{ClusterConfig{KubeconfigPath(kubeconfig, fallback), ""}, id, provider}
+	return &KindClusterConfig{ClusterConfig{KubeconfigPath(kubeconfig, fallback), id.Context}, id, provider}
 }
 
 //go:embed kindclusterconfig.yaml.tpl

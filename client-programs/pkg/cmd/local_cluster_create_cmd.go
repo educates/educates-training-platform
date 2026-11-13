@@ -68,7 +68,8 @@ func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
   3. Brings up the always-on localhost:5001 registry.
   4. Sets up the loopback service for 'educates serve-workshop'.
   5. Tail-calls into the platform deploy pipeline
-     (helm install operator + apply 4 platform CRs + wait Ready).
+     (helm install operator + apply 4 platform CRs + wait Ready), always
+     against the cluster just created, through its own kube context.
 
 An EducatesConfig creates the kind cluster from target.cluster and deploys
 its custom resources as declared, with no CLI defaulting: no
@@ -122,7 +123,7 @@ deploy against a hand-prepared cluster.`,
 	addLocalClusterFlag(c)
 	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP a named local cluster publishes ports 80 and 443 on, written to its config when it has none")
 	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to a named local cluster's config when it has none (default: the nip.io name of the listen address)")
-	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file (defaults to $KUBECONFIG / ~/.kube/config)")
+	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file kind writes the cluster's context into, and the platform deploy uses (defaults to ~/.kube/config)")
 	c.Flags().StringVar(&o.Context, "context", "", "context name to use within the kubeconfig (for the platform deploy tail-call)")
 	c.Flags().StringVar(&o.ClusterImage, "kind-cluster-image", "", "docker image to use when booting the kind cluster (overrides --kubernetes-version)")
 	c.Flags().StringVar(&o.KubernetesVersion, "kubernetes-version", constants.DefaultKubernetesVersion, fmt.Sprintf("Kubernetes version for the kind cluster (supported: %v)", constants.SupportedKubernetesVersions()))
@@ -194,6 +195,8 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	}); err != nil {
 		return err
 	}
+	// The registry, loopback and mirror steps talk to the cluster just
+	// created, through its own context in the kubeconfig kind wrote it in.
 	client, err := clusterConfig.Config.GetClient()
 	if err != nil {
 		return err
@@ -245,7 +248,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	//    the host-IP fallback non-deterministically against a freshly
 	//    started cluster's IP), translate here and call deployer.Deploy
 	//    directly.
-	return tailCallDeploy(ctx, w, in.Deploy, in.Plan, o)
+	return tailCallDeploy(ctx, w, in.Deploy, in.Plan, createDeployFlags(o, clusterConfig.Config.Kubeconfig, id))
 }
 
 // loadLocalConfig returns the loaded v4 config of the local cluster id +
@@ -494,11 +497,21 @@ func registryMirrorFromConfig(m v1alpha1.RegistryMirror) registry.MirrorConfig {
 // runLocalClusterCreate resolved, which is nil for an EducatesConfig.
 // Shares the translate → deploy plumbing with runDeploy via
 // translateAndDeploy.
-func tailCallDeploy(ctx context.Context, w io.Writer, cfg v1alpha1.Config, plan *localcerts.Plan, o *LocalClusterCreateOptions) error {
-	return translateAndDeploy(ctx, w, cfg, plan, deployPipelineFlags{
-		Kubeconfig: o.Kubeconfig,
-		Context:    o.Context,
+func tailCallDeploy(ctx context.Context, w io.Writer, cfg v1alpha1.Config, plan *localcerts.Plan, flags deployPipelineFlags) error {
+	return translateAndDeploy(ctx, w, cfg, plan, flags)
+}
+
+// createDeployFlags returns the connection flags of create's platform
+// deploy into the local cluster id, which kind created with its context
+// in the kubeconfig file kubeconfig. The deploy goes through that file
+// and the cluster's own context, whatever --context, KUBECONFIG or the
+// file's current context say, so it always lands in the cluster create
+// just made.
+func createDeployFlags(o *LocalClusterCreateOptions, kubeconfig string, id localclusters.Identity) deployPipelineFlags {
+	return deployPipelineFlags{
+		Kubeconfig: kubeconfig,
+		Context:    id.Context,
 		Timeout:    o.Timeout,
 		Verbose:    o.Verbose,
-	})
+	}
 }

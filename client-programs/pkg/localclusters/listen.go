@@ -1,11 +1,6 @@
 package localclusters
 
 import (
-	"errors"
-	"io/fs"
-	"os"
-
-	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
@@ -18,20 +13,11 @@ import (
 // defaults, so one that declares no listen address gives 127.0.0.1. A
 // missing config declares none and is no error.
 func ConfiguredListenAddress(id Identity) (string, error) {
-	if _, err := os.Stat(id.ConfigPath); errors.Is(err, fs.ErrNotExist) {
-		return "", nil
-	}
-	var cfg v1alpha1.Config
-	var err error
-	if id.IsDefault() {
-		cfg, err = config.Load(id.ConfigPath)
-	} else {
-		cfg, err = LoadNamedConfig(id.ConfigPath)
-	}
-	if err != nil {
+	cfg, ok, err := dataHomeConfig(id)
+	if err != nil || !ok {
 		return "", err
 	}
-	switch c := cfg.(type) {
+	switch c := cfg.Config.(type) {
 	case *v1alpha1.EducatesLocalConfig:
 		return c.Cluster.ListenAddress, nil
 	case *v1alpha1.EducatesConfig:

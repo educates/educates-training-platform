@@ -173,6 +173,38 @@ func TestMoveClusterRegistryMirrorsLeavesAnyOtherConfig(t *testing.T) {
 	}
 }
 
+// A mirror's port and bindIP never had any effect, so the move drops
+// them, and the note says so.
+func TestMoveClusterRegistryMirrorsDropsPortAndBindIP(t *testing.T) {
+	dataHome := t.TempDir()
+	path := writeDataHomeFile(t, dataHome, "config.yaml", localConfigHeader+
+		"cluster:\n  listenAddress: 10.10.10.1\n  registryMirrors:\n"+
+		"    - mirror: ghcr.io\n      port: \"5002\"\n      bindIP: 127.0.0.1\n"+
+		"    - mirror: quay.io\n      port: \"5003\"\n"+
+		"    - mirror: docker.io\n")
+	var note bytes.Buffer
+
+	if err := MoveClusterRegistryMirrors(dataHome, path, &note); err != nil {
+		t.Fatalf("MoveClusterRegistryMirrors: %v", err)
+	}
+
+	want := mirrorsHeader + "registryMirrors:\n  - mirror: ghcr.io\n  - mirror: quay.io\n  - mirror: docker.io\n"
+	if got := string(readFile(t, filepath.Join(dataHome, "mirrors.yaml"))); got != want {
+		t.Errorf("mirrors.yaml =\n%s\nwant\n%s", got, want)
+	}
+	for _, want := range []string{
+		"port and bindIP of registry mirror ghcr.io were dropped: they never had any effect",
+		"port of registry mirror quay.io was dropped: it never had any effect",
+	} {
+		if !strings.Contains(note.String(), want) {
+			t.Errorf("note does not say %q:\n%s", want, note.String())
+		}
+	}
+	if strings.Contains(note.String(), "of registry mirror docker.io") || strings.Count(note.String(), "\n") != 1 {
+		t.Errorf("note is not one line naming only what was dropped:\n%s", note.String())
+	}
+}
+
 // An existing backup is never overwritten: the previous config is kept
 // in a backup named with the time instead.
 func TestMoveClusterRegistryMirrorsKeepsAnExistingBackup(t *testing.T) {

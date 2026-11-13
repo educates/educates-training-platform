@@ -190,8 +190,6 @@ func setMirrorFields(entry *yaml.Node, mirror v1alpha1.RegistryMirror) {
 		{"url", mirror.URL},
 		{"username", mirror.Username},
 		{"password", mirror.Password},
-		{"port", mirror.Port},
-		{"bindIP", mirror.BindIP},
 	}
 	for _, f := range fields {
 		existing := yamlMappingValue(entry, f.key)

@@ -24,7 +24,7 @@ func TestLoadLocalMirrorsReturnsTheMirrorsTheFileDeclares(t *testing.T) {
 	must(t, os.WriteFile(filepath.Join(dataHome, "mirrors.yaml"), []byte(mirrorsHeader+
 		"registryMirrors:\n"+
 		"- mirror: docker.io\n  url: https://registry-1.docker.io\n  username: alice\n  password: secret\n"+
-		"- mirror: ghcr.io\n  port: \"5002\"\n  bindIP: 127.0.0.1\n"), 0o644))
+		"- mirror: ghcr.io\n"), 0o644))
 
 	got, err := LoadLocalMirrors(dataHome)
 	if err != nil {
@@ -33,7 +33,7 @@ func TestLoadLocalMirrorsReturnsTheMirrorsTheFileDeclares(t *testing.T) {
 
 	want := []v1alpha1.RegistryMirror{
 		{Mirror: "docker.io", URL: "https://registry-1.docker.io", Username: "alice", Password: "secret"},
-		{Mirror: "ghcr.io", Port: "5002", BindIP: "127.0.0.1"},
+		{Mirror: "ghcr.io"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("LoadLocalMirrors() = %+v, want %+v", got, want)
@@ -73,6 +73,16 @@ func TestLoadLocalMirrorsOfAFileThatDoesNotLoadNamesItsPathAndWhy(t *testing.T) 
 			name: "an unknown field",
 			body: mirrorsHeader + "registryMirrors:\n- mirror: docker.io\n  proxy: true\n",
 			why:  []string{"schema validation failed", "proxy"},
+		},
+		{
+			name: "a port, which never had any effect",
+			body: mirrorsHeader + "registryMirrors:\n- mirror: docker.io\n  port: \"5002\"\n",
+			why:  []string{"schema validation failed", "port"},
+		},
+		{
+			name: "a bindIP, which never had any effect",
+			body: mirrorsHeader + "registryMirrors:\n- mirror: docker.io\n  bindIP: 127.0.0.1\n",
+			why:  []string{"schema validation failed", "bindIP"},
 		},
 		{
 			name: "a mirror without its name",

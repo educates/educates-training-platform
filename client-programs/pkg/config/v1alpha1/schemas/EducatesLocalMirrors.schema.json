@@ -21,9 +21,7 @@
           "mirror":   { "type": "string", "minLength": 1, "description": "Upstream registry host to mirror, for example docker.io or ghcr.io. A mirror is declared once." },
           "url":      { "type": "string", "description": "URL of the registry the mirror proxies to. Defaults to the mirror host." },
           "username": { "type": "string", "description": "Username for authenticating to the upstream registry." },
-          "password": { "type": "string", "description": "Password for authenticating to the upstream registry." },
-          "port":     { "type": "string", "description": "Host port the mirror is published on." },
-          "bindIP":   { "type": "string", "description": "Host address the mirror is published on." }
+          "password": { "type": "string", "description": "Password for authenticating to the upstream registry." }
         }
       }
     }

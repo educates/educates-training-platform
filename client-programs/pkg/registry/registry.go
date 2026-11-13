@@ -357,7 +357,6 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 			network.MustParsePort("5000/tcp"): []network.PortBinding{
 				{
 					HostIP: netip.MustParseAddr("127.0.0.1"),
-					// HostPort: mirrorConfig.Port,
 				},
 			},
 		},

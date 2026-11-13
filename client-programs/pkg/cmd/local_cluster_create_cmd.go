@@ -539,8 +539,6 @@ func registryMirrorFromConfig(m v1alpha1.RegistryMirror) registry.MirrorConfig {
 		URL:      m.URL,
 		Username: m.Username,
 		Password: m.Password,
-		Port:     m.Port,
-		BindIP:   m.BindIP,
 	}
 }
 

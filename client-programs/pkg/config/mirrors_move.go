@@ -77,7 +77,7 @@ func MoveClusterRegistryMirrors(dataHome, path string, w io.Writer) error {
 
 	field := strings.Join(append(clusterPath, "registryMirrors"), ".")
 	mirrorsPath := LocalMirrorsPath(dataHome)
-	mirrors, err := clusterRegistryMirrors(list, path+": "+field)
+	mirrors, dropped, err := clusterRegistryMirrors(list, path+": "+field)
 	if err != nil {
 		return fmt.Errorf("%s: %s was removed, and its registry mirrors can't be moved to %s: %w",
 			path, field, mirrorsPath, err)
@@ -111,7 +111,11 @@ func MoveClusterRegistryMirrors(dataHome, path string, w io.Writer) error {
 		return err
 	}
 
-	fmt.Fprintln(w, moveNote(path, field, mirrorsPath, backup, mirrors, alreadyRecorded))
+	note := moveNote(path, field, mirrorsPath, backup, mirrors, alreadyRecorded)
+	for _, d := range dropped {
+		note += " " + d + "."
+	}
+	fmt.Fprintln(w, note)
 	return nil
 }
 
@@ -130,12 +134,28 @@ func clusterBlockPath(kind string) []string {
 }
 
 // clusterRegistryMirrors returns the registry mirrors list, the
-// registryMirrors node of a config's cluster block named source, declares.
-// They load by the rules of the registry mirrors file, so an entry with a
-// field the file's kind lacks, or a mirror declared twice, is an error.
-func clusterRegistryMirrors(list *yaml.Node, source string) ([]v1alpha1.RegistryMirror, error) {
+// registryMirrors node of a config's cluster block named source, declares,
+// and a sentence for each mirror whose port or bindIP it drops from list,
+// since they never had any effect. The rest loads by the rules of the
+// registry mirrors file, so an entry with another field the file's kind
+// lacks, or a mirror declared twice, is an error.
+func clusterRegistryMirrors(list *yaml.Node, source string) ([]v1alpha1.RegistryMirror, []string, error) {
 	if list.Kind == yaml.ScalarNode && list.Tag == "!!null" {
-		return nil, nil
+		return nil, nil, nil
+	}
+	var dropped []string
+	if list.Kind == yaml.SequenceNode {
+		for _, entry := range list.Content {
+			var fields []string
+			for _, field := range ineffectiveMirrorFields {
+				if removeYAMLMappingKey(entry, field) {
+					fields = append(fields, field)
+				}
+			}
+			if note := droppedMirrorFieldsNote(mirrorName(entry), fields); note != "" {
+				dropped = append(dropped, note)
+			}
+		}
 	}
 	doc := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
 		yamlScalar("apiVersion"), yamlScalar(v1alpha1.APIVersion),
@@ -144,13 +164,13 @@ func clusterRegistryMirrors(list *yaml.Node, source string) ([]v1alpha1.Registry
 	}}
 	data, err := encodeYAMLDocument(doc)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", source, err)
+		return nil, nil, fmt.Errorf("%s: %w", source, err)
 	}
 	mirrors, err := loadLocalMirrorsBytes(data, source)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return mirrors.RegistryMirrors, nil
+	return mirrors.RegistryMirrors, dropped, nil
 }
 
 // mirrorsToMove returns which of mirrors, the registry mirrors a config

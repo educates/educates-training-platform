@@ -462,10 +462,17 @@ func TestMaybeMigrateV3_RegistryMirrors_AreWrittenToMirrorsYAML(t *testing.T) {
 	}
 	want := []v1alpha1.RegistryMirror{
 		{Mirror: "docker.io", URL: "https://registry-1.docker.io", Username: "alice", Password: "secret"},
-		{Mirror: "ghcr.io", Port: "5002", BindIP: "127.0.0.1"},
+		{Mirror: "ghcr.io"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("migrated registry mirrors = %+v, want %+v", got, want)
+	}
+	// A v3 mirror's port and bindIP never had any effect, so they go.
+	if wantLine := "port and bindIP of registry mirror ghcr.io were dropped: they never had any effect\n"; !strings.Contains(notice.String(), wantLine) {
+		t.Errorf("notice does not say %q:\n%s", wantLine, notice.String())
+	}
+	if strings.Contains(notice.String(), "of registry mirror docker.io") {
+		t.Errorf("notice says something was dropped of docker.io, which has no port or bindIP:\n%s", notice.String())
 	}
 	if body := string(readFile(t, mirrorsPath)); !strings.HasPrefix(body, LocalMirrorsModeline+"\n") {
 		t.Errorf("mirrors.yaml does not start with the schema modeline:\n%s", body)

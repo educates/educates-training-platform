@@ -21,6 +21,4 @@ type RegistryMirror struct {
 	URL      string `yaml:"url,omitempty"`
 	Username string `yaml:"username,omitempty"`
 	Password string `yaml:"password,omitempty"`
-	Port     string `yaml:"port,omitempty"`
-	BindIP   string `yaml:"bindIP,omitempty"`
 }

@@ -345,9 +345,9 @@ func TestRecordMirrorRefusesAMirrorRecordedWithAnotherURLOrUsername(t *testing.T
 }
 
 func TestRecordMirrorWithAnotherPasswordReplacesTheRecordedOne(t *testing.T) {
-	recorded := v1alpha1.RegistryMirror{Mirror: "docker.io", Username: "alice", Password: "s3cret-old", Port: "5002"}
+	recorded := v1alpha1.RegistryMirror{Mirror: "docker.io", Username: "alice", Password: "s3cret-old"}
 	requested := v1alpha1.RegistryMirror{Mirror: "docker.io", URL: "docker.io", Username: "alice", Password: "s3cret-new"}
-	replaced := v1alpha1.RegistryMirror{Mirror: "docker.io", Username: "alice", Password: "s3cret-new", Port: "5002"}
+	replaced := v1alpha1.RegistryMirror{Mirror: "docker.io", Username: "alice", Password: "s3cret-new"}
 	cases := []struct {
 		name     string
 		observed Observed

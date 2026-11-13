@@ -87,13 +87,15 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 	// v4 declares registry mirrors for every local cluster in a file of
 	// their own, written before the config, so a mirror is never lost: a
 	// migration that fails here leaves the v3 values.yaml in place.
-	mirrorsNote, err := migrateV3RegistryMirrors(dataHome, translateV3RegistryMirrors(v3raw), backupPath)
+	mirrors, droppedNotes := translateV3RegistryMirrors(v3raw)
+	mirrorsNote, err := migrateV3RegistryMirrors(dataHome, mirrors, backupPath)
 	if err != nil {
 		return err
 	}
 	if mirrorsNote != "" {
 		notes = append(notes, mirrorsNote)
 	}
+	notes = append(notes, droppedNotes...)
 	out, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("marshal v4 config: %w", err)
@@ -282,21 +284,53 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 
 // translateV3RegistryMirrors returns the registry mirrors of a v3 values
 // map, its localKindCluster.registryMirrors, which v4 declares for every
-// local cluster in the registry mirrors file of the data home.
-func translateV3RegistryMirrors(v3 map[string]interface{}) []v1alpha1.RegistryMirror {
+// local cluster in the registry mirrors file of the data home, with a
+// line of the migration notice for each mirror whose port or bindIP it
+// dropped, since they never had any effect.
+func translateV3RegistryMirrors(v3 map[string]interface{}) ([]v1alpha1.RegistryMirror, []string) {
 	var mirrors []v1alpha1.RegistryMirror
+	var notes []string
 	for _, m := range listV3Path(v3, "localKindCluster", "registryMirrors") {
 		entry := asMap(m)
-		mirrors = append(mirrors, v1alpha1.RegistryMirror{
+		mirror := v1alpha1.RegistryMirror{
 			Mirror:   strMap(entry, "mirror"),
 			URL:      strMap(entry, "url"),
 			Username: strMap(entry, "username"),
 			Password: strMap(entry, "password"),
-			Port:     strMap(entry, "port"),
-			BindIP:   strMap(entry, "bindIP"),
-		})
+		}
+		mirrors = append(mirrors, mirror)
+		var dropped []string
+		for _, field := range ineffectiveMirrorFields {
+			if _, set := entry[field]; set {
+				dropped = append(dropped, field)
+			}
+		}
+		if note := droppedMirrorFieldsNote(mirror.Mirror, dropped); note != "" {
+			notes = append(notes, note)
+		}
 	}
-	return mirrors
+	return mirrors, notes
+}
+
+// ineffectiveMirrorFields are the fields a registry mirror took in
+// version 3, and in pre-releases of version 4, that never had any effect:
+// a mirror's container is published on a port of the loopback address
+// Docker picks.
+var ineffectiveMirrorFields = []string{"port", "bindIP"}
+
+// droppedMirrorFieldsNote says that fields, among ineffectiveMirrorFields,
+// of the registry mirror mirror were dropped, since they never had any
+// effect, or is empty when fields is.
+func droppedMirrorFieldsNote(mirror string, fields []string) string {
+	switch len(fields) {
+	case 0:
+		return ""
+	case 1:
+		return fmt.Sprintf("%s of registry mirror %s was dropped: it never had any effect", fields[0], mirror)
+	default:
+		return fmt.Sprintf("%s of registry mirror %s were dropped: they never had any effect",
+			strings.Join(fields, " and "), mirror)
+	}
 }
 
 // migrateV3RegistryMirrors writes mirrors, the registry mirrors of a v3

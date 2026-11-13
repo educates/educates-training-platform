@@ -194,6 +194,11 @@ registryMirrors:
   - mirror: ghcr.io
 ```
 
+A version 3 mirror's ``port`` and ``bindIP`` never had any effect, since a
+mirror's container is published on a port Docker picks on ``127.0.0.1``, so
+the migration drops them, and its notice says so for each mirror that set
+them.
+
 When ``mirrors.yaml`` already exists, the migration leaves it as it is, and
 the notice names the version 3 mirrors to add to it from
 ``values.yaml.v3-backup``, by hand or with ``educates local mirror deploy``,

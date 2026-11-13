@@ -1055,7 +1055,13 @@ Features Changed
   local cluster, in ``mirrors.yaml`` in the CLI data home, a file of its
   own of kind ``EducatesLocalMirrors``, where version 3 declared them in
   ``localKindCluster.registryMirrors`` of ``values.yaml``. Each entry takes
-  the same fields as before. ``educates local cluster create`` and
+  the same fields as before, ``mirror``, ``url``, ``username`` and
+  ``password``, except ``port`` and ``bindIP``, which never had any effect,
+  since a mirror's container is published on a port Docker picks on
+  ``127.0.0.1``, and which a ``mirrors.yaml`` entry no longer accepts. The
+  CLI's migration of a version 3 ``values.yaml``, and the move of a
+  configuration's mirrors described below, drop them, saying so for each
+  mirror. ``educates local cluster create`` and
   ``educates local cluster start`` create any mirror the file declares
   which does not exist yet, and link every mirror into every node of the
   cluster. ``educates local mirror deploy`` now records the mirror in

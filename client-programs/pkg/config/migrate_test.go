@@ -116,9 +116,6 @@ func TestMaybeMigrateV3_KindProvider_Migrates(t *testing.T) {
 	if cfg.Cluster.VolumeMounts[0].ReadOnly == nil || !*cfg.Cluster.VolumeMounts[0].ReadOnly {
 		t.Errorf("VolumeMounts[0].ReadOnly = %v, want true", cfg.Cluster.VolumeMounts[0].ReadOnly)
 	}
-	if got, want := cfg.Resolver.TargetAddress, "192.168.1.10"; got != want {
-		t.Errorf("Resolver.TargetAddress = %q, want %q", got, want)
-	}
 	if got := len(cfg.Resolver.ExtraDomains); got != 1 {
 		t.Errorf("ExtraDomains len = %d, want 1", got)
 	}

@@ -200,10 +200,10 @@ func maybeApplyHostDomain(c *v1alpha1.EducatesLocalConfig) (string, error) {
 # nip.io fallback, and ingress.insecure was defaulted to true so the
 # cluster is served over plain HTTP with no CA to manage (a nip.io
 # address cannot obtain a trusted TLS certificate). For a secure install
-# portable across networks, configure the resolver block
-# (resolver.targetAddress + resolver.extraDomains), set ingress.domain to
-# a fixed name like 'workshop.test', and add a CA with
-# 'educates local secrets add ca'.
+# portable across networks, set ingress.domain to a fixed name like
+# 'workshop.test', which the local DNS resolver resolves to
+# cluster.listenAddress when that is a specific IP address, and add a CA
+# with 'educates local secrets add ca'.
 `, ip), nil
 }
 

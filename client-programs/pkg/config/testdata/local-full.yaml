@@ -21,7 +21,6 @@ cluster:
       bindIP: 192.168.1.10
 
 resolver:
-  targetAddress: 192.168.1.10
   extraDomains:
     - example.test
     - workshop.test

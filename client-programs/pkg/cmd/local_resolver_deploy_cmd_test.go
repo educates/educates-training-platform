@@ -38,8 +38,9 @@ func TestDefaultResolverConfig_EscapeConfig_ServesItsIngressDomain(t *testing.T)
 kind: EducatesConfig
 target:
   provider: kind
+  cluster:
+    listenAddress: 192.168.50.50
   resolver:
-    targetAddress: 192.168.50.50
     extraDomains:
     - extra.example.test
 educatesClusterConfig:

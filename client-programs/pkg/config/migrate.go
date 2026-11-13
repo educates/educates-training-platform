@@ -222,7 +222,6 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 	}
 
 	// resolver
-	cfg.Resolver.TargetAddress = strV3Path(v3, "localDNSResolver", "targetAddress")
 	for _, d := range listV3Path(v3, "localDNSResolver", "extraDomains") {
 		if s, ok := d.(string); ok {
 			cfg.Resolver.ExtraDomains = append(cfg.Resolver.ExtraDomains, s)

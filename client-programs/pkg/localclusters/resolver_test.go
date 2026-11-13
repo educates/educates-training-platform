@@ -74,10 +74,10 @@ func wantAddresses(t *testing.T, got []string, want ...string) {
 	}
 }
 
-func TestResolverConfigServesTheDefaultClusterDomainAtItsTargetAddress(t *testing.T) {
+func TestResolverConfigServesTheDefaultClusterDomainAtItsListenAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
-		"ingress:\n  domain: educates.test\nresolver:\n  targetAddress: 10.10.10.1\n")
+		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 
 	content, err := renderResolver(resolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
 	if err != nil {
@@ -98,6 +98,17 @@ address=/educates.test/10.10.10.1
 	}
 }
 
+func TestResolverConfigPointsTheDefaultClusterAtItsSpecificListenAddress(t *testing.T) {
+	dataHome := t.TempDir()
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
+		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"+
+		"resolver:\n  extraDomains:\n  - example.test\n")
+
+	got := renderAddresses(t, resolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
+
+	wantAddresses(t, got, "address=/educates.test/10.10.10.1", "address=/example.test/10.10.10.1")
+}
+
 func TestResolverConfigPointsTheDefaultClusterAtTheHostIPByDefault(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
@@ -109,7 +120,7 @@ func TestResolverConfigPointsTheDefaultClusterAtTheHostIPByDefault(t *testing.T)
 
 func TestResolverConfigServesTheDefaultClusterHostIPNipDomainWhenItDeclaresNone(t *testing.T) {
 	dataHome := t.TempDir()
-	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"resolver:\n  targetAddress: 10.10.10.1\n")
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n")
 
 	got := renderAddresses(t, resolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
 
@@ -136,15 +147,14 @@ func TestResolverConfigServesNoDomainForADefaultClusterWithNoneAndNoHostIP(t *te
 	wantAddresses(t, got, "address=/example.test/127.0.0.1")
 }
 
-func TestResolverConfigServesEveryClusterAtItsOwnTargetAddress(t *testing.T) {
+func TestResolverConfigServesEveryClusterAtItsOwnListenAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
-		"ingress:\n  domain: educates.test\nresolver:\n  targetAddress: 10.10.10.1\n")
+		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test3/config.yaml", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.3\ningress:\n  domain: test3.example.test\n"+
-		"resolver:\n  targetAddress: 192.168.50.3\n")
+		"cluster:\n  listenAddress: 10.10.10.3\ningress:\n  domain: test3.example.test\n")
 
 	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
@@ -159,7 +169,7 @@ func TestResolverConfigServesEveryClusterAtItsOwnTargetAddress(t *testing.T) {
 	wantAddresses(t, got,
 		"address=/educates.test/10.10.10.1",
 		"address=/test2.educates.test/10.10.10.2",
-		"address=/test3.example.test/192.168.50.3",
+		"address=/test3.example.test/10.10.10.3",
 	)
 }
 
@@ -293,7 +303,7 @@ func TestResolverConfigServesTheDomainAnEducatesConfigDeclares(t *testing.T) {
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", escapeConfig(
 		"  cluster:\n    listenAddress: 10.10.10.2\n", "test2.example.test"))
 	writeDataHomeConfig(t, dataHome, "clusters/test3/config.yaml", escapeConfig(
-		"  cluster:\n    listenAddress: 10.10.10.3\n  resolver:\n    targetAddress: 192.168.50.3\n", "test3.example.test"))
+		"  cluster:\n    listenAddress: 10.10.10.3\n  resolver:\n    extraDomains:\n    - extra3.example.test\n", "test3.example.test"))
 
 	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
@@ -305,7 +315,8 @@ func TestResolverConfigServesTheDomainAnEducatesConfigDeclares(t *testing.T) {
 		"address=/workshops.example.test/192.168.1.10",
 		"address=/extra.example.test/192.168.1.10",
 		"address=/test2.example.test/10.10.10.2",
-		"address=/test3.example.test/192.168.50.3",
+		"address=/test3.example.test/10.10.10.3",
+		"address=/extra3.example.test/10.10.10.3",
 	)
 }
 

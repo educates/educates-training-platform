@@ -5,8 +5,6 @@ target:
   provider: kind
   cluster:
     listenAddress: 127.0.0.1
-  resolver:
-    targetAddress: 127.0.0.1
 
 operator:
   image:

@@ -101,7 +101,6 @@
       "additionalProperties": false,
       "description": "Settings for the local DNS resolver that maps the ingress domain to the cluster on the host.",
       "properties": {
-        "targetAddress": { "type": "string", "description": "IP address the resolver answers with for the ingress domain. Defaults to the host's primary network interface IP." },
         "extraDomains":  { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Additional domains the resolver should also answer for, directed at the same address as the ingress domain." }
       }
     },

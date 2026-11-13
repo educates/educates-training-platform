@@ -29,8 +29,8 @@ type ResolverInput struct {
 
 // ResolverConfig returns the dnsmasq configuration of the local DNS
 // resolver, which serves the domains of every local cluster, each
-// pointing at its own cluster's target address, or the error that two
-// clusters claim the same domain.
+// pointing at its own cluster's address, or the error that two clusters
+// claim the same domain.
 //
 // The local clusters served are the default local cluster, when the data
 // home holds its config, every named Educates cluster that has a config
@@ -49,10 +49,9 @@ type ResolverInput struct {
 //
 // Each cluster's ingress domain, declared or derived as
 // LoadedConfig.Domain gives it with the observed host IP address, and
-// its resolver.extraDomains point at its target address. The default
-// local cluster's target address is resolver.targetAddress, or else the
-// observed host IP address, or else 127.0.0.1. A named local cluster's
-// target address is resolver.targetAddress, or else its listen address.
+// its resolver.extraDomains point at its address, as resolverAddress
+// gives it from the cluster's listen address and the observed host IP
+// address. The same rule holds for the default and the named clusters.
 func (inv Inventory) ResolverConfig(given ...ResolverInput) ([]byte, []error, error) {
 	byName := map[string]ResolverInput{}
 	for _, c := range given {
@@ -143,11 +142,11 @@ func checkDomainsClaimedOnce(clusters []resolverCluster) error {
 }
 
 // resolverCluster is what the local DNS resolver serves for one local
-// cluster: the domains that point at the cluster's target address.
+// cluster: the domains that point at the cluster's address.
 type resolverCluster struct {
-	id            Identity
-	domains       []string
-	targetAddress string
+	id      Identity
+	domains []string
+	address string
 }
 
 // newResolverCluster returns what the resolver serves for the local
@@ -167,28 +166,18 @@ func newResolverCluster(given ResolverInput, hostIP string) (resolverCluster, er
 		return resolverCluster{}, fmt.Errorf("%s: unsupported kind %q for the local DNS resolver", source, given.Config.GetKind())
 	}
 
-	// A named local cluster is reached at its listen address, and the
-	// default local cluster at the host's IP address, or at the loopback
-	// address when that is not known.
-	address := fields.listenAddress
-	if id.IsDefault() {
-		address = cmp.Or(hostIP, loopbackTargetAddress)
-	}
+	address, _ := resolverAddress(fields.listenAddress, hostIP)
 	domain := cmp.Or(given.ResolverDomainOverride, given.Domain(hostIP))
 	return resolverCluster{
-		id:            id,
-		domains:       servedDomains(domain, fields.resolver.ExtraDomains),
-		targetAddress: cmp.Or(fields.resolver.TargetAddress, address),
+		id:      id,
+		domains: servedDomains(domain, fields.resolver.ExtraDomains),
+		address: address,
 	}, nil
 }
 
-// loopbackTargetAddress is the default local cluster's target address
-// when neither its config nor the host's IP address gives one.
-const loopbackTargetAddress = "127.0.0.1"
-
 // servedDomains returns the domains a local cluster's entries point at its
-// target address: its ingress domain, when it has one, then its extra
-// domains, each once, leaving out empty ones.
+// address: its ingress domain, when it has one, then its extra domains,
+// each once, leaving out empty ones.
 func servedDomains(domain string, extraDomains []string) []string {
 	var domains []string
 	seen := map[string]bool{}
@@ -230,7 +219,7 @@ func renderDnsmasqConfig(clusters []resolverCluster) []byte {
 		}
 		fmt.Fprintf(&b, "\n# %s\n", heading)
 		for _, domain := range c.domains {
-			fmt.Fprintf(&b, "address=/%s/%s\n", domain, c.targetAddress)
+			fmt.Fprintf(&b, "address=/%s/%s\n", domain, c.address)
 		}
 	}
 	return []byte(b.String())

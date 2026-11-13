@@ -81,9 +81,12 @@ type RegistryMirror struct {
 	BindIP   string `yaml:"bindIP,omitempty"`
 }
 
+// LocalResolverConfig is a local cluster's entries in the local DNS
+// resolver every local cluster shares. Its names, the cluster's ingress
+// domain and ExtraDomains, resolve to the cluster's listen address when
+// that is a specific IP address, and otherwise to the host's IP address.
 type LocalResolverConfig struct {
-	TargetAddress string   `yaml:"targetAddress,omitempty"`
-	ExtraDomains  []string `yaml:"extraDomains,omitempty"`
+	ExtraDomains []string `yaml:"extraDomains,omitempty"`
 }
 
 type LocalIngressConfig struct {

@@ -430,6 +430,28 @@ func TestCheckStartLeavesAClusterWithNoNodesToTheStart(t *testing.T) {
 	}
 }
 
+func TestCheckEducatesClusterRefusesANamedClusterWithoutAFolder(t *testing.T) {
+	dataHome := t.TempDir()
+	id := namedID(t, "foo", dataHome)
+
+	err := CheckEducatesCluster(id)
+
+	wantErrorMentioning(t, err, `local cluster "foo"`, filepath.Join(dataHome, "clusters", "foo"),
+		"educates-foo", "is not a local cluster", "left alone",
+		"educates local cluster create --local-cluster foo")
+}
+
+func TestCheckEducatesClusterAcceptsTheClustersTheInventoryCounts(t *testing.T) {
+	dataHome := t.TempDir()
+	addClusterFolder(t, dataHome, "test2")
+
+	for _, id := range []Identity{Default(dataHome), namedID(t, "test2", dataHome)} {
+		if err := CheckEducatesCluster(id); err != nil {
+			t.Errorf("CheckEducatesCluster(%s) = %v, want nil", id.Description(), err)
+		}
+	}
+}
+
 func TestClustersIsEmptyWithNoEducatesCluster(t *testing.T) {
 	observed := Observed{Nodes: []NodeContainer{controlPlane("kind", "0.0.0.0", true)}}
 

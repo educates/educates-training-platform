@@ -26,7 +26,7 @@ func (p *ProjectInfo) NewLocalClusterStatusCmd() *cobra.Command {
 		Short:   "Status of the local Kubernetes cluster",
 		Example: localClusterStatusExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			id, err := selectedLocalCluster(cmd)
+			id, err := selectedEducatesCluster(cmd)
 			if err != nil {
 				return err
 			}

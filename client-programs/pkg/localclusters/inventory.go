@@ -2,6 +2,7 @@ package localclusters
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/netip"
 	"os"
@@ -184,11 +185,32 @@ func educatesCluster(kindName, dataHome string) (Identity, bool) {
 		return Identity{}, false
 	}
 	id, err := Named(name, dataHome)
-	if err != nil {
-		return Identity{}, false
-	}
-	if info, err := os.Stat(filepath.Dir(id.ConfigPath)); err != nil || !info.IsDir() {
+	if err != nil || !hasClusterFolder(id) {
 		return Identity{}, false
 	}
 	return id, true
+}
+
+// CheckEducatesCluster returns an error saying why when the kind cluster
+// of the local cluster id is not an Educates cluster, as NewInventory
+// recognises one: a named local cluster whose folder clusters/<name>/ the
+// data home does not hold. Commands that act on an existing local cluster
+// refuse it, so they leave alone a kind cluster educates-<name> made by
+// hand. The default local cluster is always an Educates cluster.
+func CheckEducatesCluster(id Identity) error {
+	if id.IsDefault() || hasClusterFolder(id) {
+		return nil
+	}
+	return fmt.Errorf("there is no local cluster %q: the data home has no folder %s for it, and a kind cluster %s "+
+		"without one is not a local cluster, so it is left alone. Create the local cluster with "+
+		"'educates local cluster create --%s %s'",
+		id.Name, filepath.Dir(id.ConfigPath), id.KindName, SelectionFlagName, id.Name)
+}
+
+// hasClusterFolder reports whether the data home holds the folder of the
+// named local cluster id, clusters/<name>/, which makes its kind cluster
+// an Educates cluster.
+func hasClusterFolder(id Identity) bool {
+	info, err := os.Stat(filepath.Dir(id.ConfigPath))
+	return err == nil && info.IsDir()
 }

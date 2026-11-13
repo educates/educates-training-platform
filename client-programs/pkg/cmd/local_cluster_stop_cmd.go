@@ -21,7 +21,7 @@ func (p *ProjectInfo) NewLocalClusterStopCmd() *cobra.Command {
 		Short:   "Stops the local Kubernetes cluster",
 		Example: localClusterStopExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			id, err := selectedLocalCluster(cmd)
+			id, err := selectedEducatesCluster(cmd)
 			if err != nil {
 				return err
 			}

@@ -45,6 +45,23 @@ func selectedLocalCluster(c *cobra.Command) (localclusters.Identity, error) {
 	return localclusters.Resolve(localClusterSelection(c), utils.GetEducatesHomeDir())
 }
 
+// selectedEducatesCluster returns the identity of the local cluster the
+// command c acts on, as selectedLocalCluster selects it, for a command
+// that acts on an existing local cluster. A named local cluster whose
+// kind cluster is not an Educates cluster, since the data home holds no
+// folder for it, is refused with an error saying why, so the command
+// leaves alone a kind cluster educates-<name> made by hand.
+func selectedEducatesCluster(c *cobra.Command) (localclusters.Identity, error) {
+	id, err := selectedLocalCluster(c)
+	if err != nil {
+		return localclusters.Identity{}, err
+	}
+	if err := localclusters.CheckEducatesCluster(id); err != nil {
+		return localclusters.Identity{}, err
+	}
+	return id, nil
+}
+
 // explicitlySelectedLocalCluster returns the identity of the local
 // cluster the command c's --local-cluster flag or EDUCATES_LOCAL_CLUSTER
 // selects, and true. With neither set it returns false and no identity:

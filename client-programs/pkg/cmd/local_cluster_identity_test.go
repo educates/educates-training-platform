@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -57,6 +59,42 @@ func TestLocalClusterCommandsSelectTheLocalCluster(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestCommandsOnAnExistingLocalClusterRefuseANamedClusterWithoutAFolder(t *testing.T) {
+	p := &ProjectInfo{}
+	for name, newCmd := range map[string]func() *cobra.Command{
+		"delete": p.NewLocalClusterDeleteCmd,
+		"start":  p.NewLocalClusterStartCmd,
+		"stop":   p.NewLocalClusterStopCmd,
+		"status": p.NewLocalClusterStatusCmd,
+	} {
+		t.Run(name, func(t *testing.T) {
+			dataHome := t.TempDir()
+			t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+			t.Setenv("EDUCATES_LOCAL_CLUSTER", "")
+			if err := os.MkdirAll(filepath.Join(dataHome, "clusters", "test2"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			for _, args := range [][]string{{"--local-cluster", "test2"}, {"--local-cluster="}, {}} {
+				c := newCmd()
+				if err := c.ParseFlags(args); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := selectedEducatesCluster(c); err != nil {
+					t.Errorf("%s %q: selectedEducatesCluster = %v, want an Educates cluster", name, args, err)
+				}
+			}
+
+			c := newCmd()
+			if err := c.ParseFlags([]string{"--local-cluster", "foo"}); err != nil {
+				t.Fatal(err)
+			}
+			_, err := selectedEducatesCluster(c)
+			wantError(t, err, `local cluster "foo"`, filepath.Join(dataHome, "clusters", "foo"), "educates-foo")
+		})
 	}
 }
 

@@ -103,7 +103,7 @@ func (p *ProjectInfo) NewLocalClusterDeleteCmd() *cobra.Command {
 		Short:   "Deletes the local Kubernetes cluster",
 		Example: localClusterDeleteExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			id, err := selectedLocalCluster(cmd)
+			id, err := selectedEducatesCluster(cmd)
 			if err != nil {
 				return err
 			}

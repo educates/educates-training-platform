@@ -384,15 +384,24 @@ New Features
   and act on every local cluster. ``educates local registry deploy``
   configures every node of every cluster to pull from the registry, and
   points each cluster's ``registry`` Service and ``local-registry-hosting``
-  ConfigMap at it. ``educates local mirror deploy`` links a mirror into
-  every node of every cluster, and ``educates local mirror delete`` unlinks
-  it from all of them. A cluster whose configuration declares a registry
-  mirror reuses the mirror's container when another cluster created it,
-  and ``educates local cluster create`` fails before creating the Kind
-  cluster when that container pulls from another URL or as another
-  username, naming the mirror, the container's values and the declared
-  ones. A different password can't be seen on the container, so it is not
-  detected.
+  ConfigMap at it. Every registry mirror container which exists is linked
+  into every local cluster, the default one included, whichever cluster's
+  configuration or command created it. ``educates local mirror deploy``
+  links a mirror into every node of every running cluster, and
+  ``educates local cluster create`` and ``educates local cluster start``
+  link every mirror into every node of the cluster, so a cluster created
+  later, or stopped when the mirror was deployed, gets it too. A mirror a
+  cluster's configuration declares in ``cluster.registryMirrors`` is one
+  the cluster needs: create and start first create its container when it
+  is missing, and reuse it when another cluster or command created it.
+  They fail, before creating the Kind cluster or starting its nodes, when
+  that container pulls from another URL or as another username, naming
+  the mirror, the container's values and the declared ones. A different
+  password can't be seen on the container, so it is not detected.
+  ``educates local mirror delete`` unlinks a mirror from every node of
+  every running cluster, and warns, naming each cluster whose
+  configuration declares the mirror, since that cluster's next start, or
+  its next create once deleted, creates the mirror again.
 
   ``educates cluster workshop serve`` can serve one workshop to several
   local clusters at once, from a terminal for each. When it serves a local

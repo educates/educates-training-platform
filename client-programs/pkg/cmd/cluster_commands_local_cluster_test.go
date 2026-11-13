@@ -25,12 +25,9 @@ func commandsWithContextFlag() map[string]*cobra.Command {
 	return found
 }
 
-// commandsWithOwnContextRules take --context with rules of their own:
-// create deploys into the cluster it creates, and the local registry is
-// shared by every local cluster.
+// commandsWithOwnContextRules take --context with rules of their own: the
+// local registry is shared by every local cluster.
 var commandsWithOwnContextRules = []string{
-	"educates local cluster create",
-	"educates create-cluster",
 	"educates local registry deploy",
 }
 

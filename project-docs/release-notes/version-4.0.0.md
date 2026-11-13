@@ -313,6 +313,21 @@ New Features
   create`` now always targets the cluster it has just created, whatever
   ``--context`` or ``KUBECONFIG`` say.
 
+  The ``educates cluster workshop``, ``educates cluster portal`` and
+  ``educates cluster session`` commands and their aliases, ``educates admin
+  platform deploy`` and ``delete``, ``educates admin diagnostics collect``,
+  ``educates admin lookup kubeconfig`` and ``educates local secrets sync``
+  also take ``--local-cluster`` and honour ``EDUCATES_LOCAL_CLUSTER``. With
+  a cluster selected, they act on its kube context, ``kind-educates`` or
+  ``kind-educates-<name>``, looked up in the file ``--kubeconfig`` names or
+  else in ``~/.kube/config``, whatever ``KUBECONFIG`` says, so a terminal
+  set to one cluster stays on it. ``--context`` takes precedence over both,
+  and with neither set the commands use the current context as before.
+  With ``--local-config``, ``educates admin platform deploy`` and
+  ``render`` read the selected cluster's configuration.
+  ``educates local secrets sync`` builds the certificates it copies from
+  the selected cluster's configuration, and copies them into that cluster.
+
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to
   a tagged image reference instead of listing ``files``. The two are mutually

@@ -16,6 +16,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1/schemas"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -31,6 +32,9 @@ var localConfigSetExample = `
 
   # Switch the image pre-puller off:
   educates local config set imagePrePuller.enabled false
+
+  # Set the ingress domain of the named local cluster test2:
+  educates local config set --local-cluster test2 ingress.domain test2.educates.test
 `
 
 func (p *ProjectInfo) NewLocalConfigSetCmd() *cobra.Command {
@@ -54,17 +58,33 @@ VALUE is coerced based on its raw form:
 
 The full config is re-validated against the EducatesLocalConfig schema
 after the change. The write only happens when validation passes, so
-type / enum errors are caught up front with the offending field path.`,
+type / enum errors are caught up front with the offending field path.
+
+--local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, sets a field in the
+config of a named local cluster instead,
+<data-home>/clusters/<name>/config.yaml. That config must also keep
+following the rules of a named local cluster's config, such as a
+cluster.listenAddress that is a specific IP address of the host.`,
 		Example: localConfigSetExample,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runLocalConfigSet(cmd.OutOrStdout(), args[0], args[1])
+			id, err := selectedLocalCluster(cmd)
+			if err != nil {
+				return err
+			}
+			return runLocalConfigSet(cmd.OutOrStdout(), id, args[0], args[1])
 		},
 	}
+	addLocalClusterFlag(c)
 	return c
 }
 
-func runLocalConfigSet(w io.Writer, path, rawValue string) error {
-	cfgPath := defaultLocalCluster().ConfigPath
+// runLocalConfigSet sets the field at the dotted path path of the config
+// of the local cluster id to rawValue.
+func runLocalConfigSet(w io.Writer, id localclusters.Identity, path, rawValue string) error {
+	if err := checkNamedConfigExists(id); err != nil {
+		return err
+	}
+	cfgPath := id.ConfigPath
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return fmt.Errorf("read %s (run 'educates local config init' first?): %w", cfgPath, err)
@@ -90,8 +110,8 @@ func runLocalConfigSet(w io.Writer, path, rawValue string) error {
 				return fmt.Errorf("%s: schema validation: %w", cfgPath, verr)
 			}
 			if len(lines) > 0 {
-				return fmt.Errorf("path %q: %s does not validate as it stands ('educates local config edit' opens the file):\n%s",
-					path, cfgPath, indentLines(lines))
+				return fmt.Errorf("path %q: %s does not validate as it stands ('educates local config edit%s' opens the file):\n%s",
+					path, cfgPath, localClusterFlagArg(id), indentLines(lines))
 			}
 		}
 		return err
@@ -117,6 +137,14 @@ func runLocalConfigSet(w io.Writer, path, rawValue string) error {
 	}
 	if err := enc.Close(); err != nil {
 		return fmt.Errorf("marshal config: %w", err)
+	}
+	// A named local cluster's config also follows the rules every named
+	// cluster's config does, such as a specific, non-loopback listen
+	// address.
+	if !id.IsDefault() {
+		if err := localclusters.CheckNamedConfig(buf.Bytes(), cfgPath); err != nil {
+			return fmt.Errorf("set %q rejected: %w", path, err)
+		}
 	}
 	if err := os.WriteFile(cfgPath, buf.Bytes(), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", cfgPath, err)

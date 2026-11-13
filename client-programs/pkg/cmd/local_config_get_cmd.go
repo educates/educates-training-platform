@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 )
 
 var localConfigGetExample = `
@@ -29,21 +31,34 @@ func (p *ProjectInfo) NewLocalConfigGetCmd() *cobra.Command {
 whole file.
 
 For scalar fields, the value is printed bare (no quoting). For maps and
-lists, YAML-serialised output is emitted.`,
+lists, YAML-serialised output is emitted.
+
+--local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, reads the config of a
+named local cluster instead, <data-home>/clusters/<name>/config.yaml.`,
 		Example: localConfigGetExample,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := ""
 			if len(args) == 1 {
 				path = args[0]
 			}
-			return runLocalConfigGet(cmd.OutOrStdout(), path)
+			id, err := selectedLocalCluster(cmd)
+			if err != nil {
+				return err
+			}
+			return runLocalConfigGet(cmd.OutOrStdout(), id, path)
 		},
 	}
+	addLocalClusterFlag(c)
 	return c
 }
 
-func runLocalConfigGet(w io.Writer, path string) error {
-	cfgPath := defaultLocalCluster().ConfigPath
+// runLocalConfigGet prints the field at the dotted path path of the
+// config of the local cluster id, or the whole file when path is empty.
+func runLocalConfigGet(w io.Writer, id localclusters.Identity, path string) error {
+	if err := checkNamedConfigExists(id); err != nil {
+		return err
+	}
+	cfgPath := id.ConfigPath
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", cfgPath, err)

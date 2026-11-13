@@ -25,7 +25,7 @@ func TestLocalConfigView_Effective(t *testing.T) {
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
 	var buf bytes.Buffer
-	if err := p.runLocalConfigView(&LocalConfigViewOptions{}, &buf); err != nil {
+	if err := p.runLocalConfigView(&LocalConfigViewOptions{}, defaultLocalCluster(), &buf); err != nil {
 		t.Fatalf("runLocalConfigView: %v", err)
 	}
 	s := buf.String()
@@ -66,7 +66,7 @@ func TestLocalConfigView_Raw(t *testing.T) {
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
 	var buf bytes.Buffer
-	if err := p.runLocalConfigView(&LocalConfigViewOptions{Raw: true}, &buf); err != nil {
+	if err := p.runLocalConfigView(&LocalConfigViewOptions{Raw: true}, defaultLocalCluster(), &buf); err != nil {
 		t.Fatalf("runLocalConfigView --raw: %v", err)
 	}
 	if got := buf.String(); got != raw {
@@ -82,15 +82,15 @@ func TestLocalConfigView_FullyDefaulted_SkipsComment(t *testing.T) {
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
 
-	if err := p.runLocalConfigInit(&LocalConfigInitOptions{Defaults: true}, io.Discard); err != nil {
+	if err := p.runLocalConfigInit(&LocalConfigInitOptions{Defaults: true}, defaultLocalCluster(), io.Discard); err != nil {
 		t.Fatalf("init --defaults: %v", err)
 	}
 
 	var def, raw bytes.Buffer
-	if err := p.runLocalConfigView(&LocalConfigViewOptions{}, &def); err != nil {
+	if err := p.runLocalConfigView(&LocalConfigViewOptions{}, defaultLocalCluster(), &def); err != nil {
 		t.Fatalf("view: %v", err)
 	}
-	if err := p.runLocalConfigView(&LocalConfigViewOptions{Raw: true}, &raw); err != nil {
+	if err := p.runLocalConfigView(&LocalConfigViewOptions{Raw: true}, defaultLocalCluster(), &raw); err != nil {
 		t.Fatalf("view --raw: %v", err)
 	}
 
@@ -111,7 +111,7 @@ func TestLocalConfigInit_Defaults_WritesEffective(t *testing.T) {
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
 	var buf bytes.Buffer
-	if err := p.runLocalConfigInit(&LocalConfigInitOptions{Defaults: true}, &buf); err != nil {
+	if err := p.runLocalConfigInit(&LocalConfigInitOptions{Defaults: true}, defaultLocalCluster(), &buf); err != nil {
 		t.Fatalf("init --defaults: %v", err)
 	}
 	body, err := os.ReadFile(filepath.Join(dataHome, "config.yaml"))

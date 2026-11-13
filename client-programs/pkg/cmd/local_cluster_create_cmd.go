@@ -150,12 +150,16 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	}
 
 	// 0. Preflight: fail fast (before any docker / kind / k8s mutation)
-	//    when the cluster already exists, host 80/443 are bound, or a
-	//    secure install has no certificate source. The host-port case is
-	//    the v3 busybox probe; kind itself fails later with a much less
-	//    actionable error if Envoy can't publish. The certificate case is
-	//    the one the deploy resolves later: without this check it would
-	//    only fail after the kind cluster and registry already exist.
+	//    when the cluster already exists, its listen address clashes with
+	//    another Educates cluster or is on no host interface, host 80/443
+	//    are bound, or a secure install has no certificate source. The
+	//    clash check reads every Educates cluster's configured bindings,
+	//    so a stopped cluster counts too. The host-port case is the v3
+	//    busybox probe, last, for holders that are not Educates clusters;
+	//    kind itself fails later with a much less actionable error if
+	//    Envoy can't publish. The certificate case is the one the deploy
+	//    resolves later: without this check it would only fail after the
+	//    kind cluster and registry already exist.
 	in, err := p.prepareLocalCreate(cfg)
 	if err != nil {
 		return err
@@ -165,6 +169,13 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return err
 	} else if exists {
 		return fmt.Errorf("kind cluster '%s' already exists; run 'educates local cluster delete%s' first or use the existing cluster directly", id.KindName, localClusterFlagArg(id))
+	}
+	inventory, err := localClusterInventory(ctx)
+	if err != nil {
+		return err
+	}
+	if err := inventory.CheckCreate(id, in.Cluster.ListenAddress); err != nil {
+		return err
 	}
 	if err := checkHostPortsAvailable(ctx, in.Cluster.ListenAddress, o.Verbose, w); err != nil {
 		return err

@@ -63,6 +63,10 @@ var clusterWorkshopServeExample = `
 
   # Serve a workshop from a path on a specific local port:
   educates cluster workshop serve --file ./my-workshop --local-port 10081
+
+  # Serve the workshop to the named local cluster test2, listening on its
+  # listen address, with the Hugo server on a free port:
+  educates cluster workshop serve --local-cluster test2
 `
 
 type ClusterWorkshopServeOptions struct {
@@ -256,7 +260,12 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 		Use:     "serve",
 		Short:   "Serve workshop from local system",
 		Example: clusterWorkshopServeExample,
-		RunE:    func(_ *cobra.Command, _ []string) error { return o.Run() },
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := o.listenForSelectedCluster(cmd); err != nil {
+				return err
+			}
+			return o.Run()
+		},
 	}
 
 	c.Flags().StringVarP(
@@ -313,9 +322,9 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 	)
 	c.Flags().StringVar(
 		&o.LocalHost,
-		"local-host",
+		localHostFlagName,
 		"0.0.0.0",
-		"host on which the local proxy will be listen",
+		"host on which the local proxy will listen; with a local cluster selected, its listen address when that is a specific IP address",
 	)
 	c.Flags().IntVar(
 		&o.LocalPort,
@@ -325,9 +334,9 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 	)
 	c.Flags().IntVar(
 		&o.HugoPort,
-		"hugo-port",
+		hugoPortFlagName,
 		1313,
-		"port on which the hugo server will listen",
+		"port on which the hugo server will listen; with a local cluster selected, a free port",
 	)
 	c.Flags().StringVarP(
 		&o.Token,

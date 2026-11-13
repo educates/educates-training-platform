@@ -96,10 +96,11 @@ makes the cluster's folder <data-home>/clusters/<name>/ without copying
 the file into it.
 
 Every registry mirror container that exists is linked into each node of
-the new cluster, whichever cluster's config or command created it. A
-mirror the config declares in cluster.registryMirrors is created first
-when it is missing, and create refuses to run when its container exists
-with another URL or username.
+the new cluster, whichever command created it. A mirror the registry
+mirrors file, mirrors.yaml in the data home, declares is created first
+when it is missing. Create refuses to run when that file does not load,
+or when a declared mirror's container exists with another URL or
+username.
 
 --cluster-only stops after step 4 — useful for testing the platform
 deploy against a hand-prepared cluster.`,
@@ -164,8 +165,9 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 
 	// 0. Preflight: fail fast (before any docker / kind / k8s mutation)
 	//    when the cluster already exists, its listen address clashes with
-	//    another Educates cluster or is on no host interface, a declared
-	//    registry mirror's container exists with other values, Docker
+	//    another Educates cluster or is on no host interface, the registry
+	//    mirrors file does not load or a mirror it declares has a
+	//    container with other values, Docker
 	//    Desktop's privileged port setting is off, host 80/443 are bound,
 	//    or a secure install has no certificate source. The clash check
 	//    reads every Educates cluster's configured bindings, so a stopped
@@ -193,11 +195,16 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	if err := inventory.CheckCreate(id, in.Cluster.ListenAddress); err != nil {
 		return err
 	}
-	// Every local cluster shares one container for each registry mirror,
-	// and step 4 reuses an existing one as it is, so a declared mirror
-	// whose container pulls from another URL or as another username is
-	// refused here rather than silently pulled through.
-	if err := inventory.CheckMirrors(id, in.Cluster.RegistryMirrors); err != nil {
+	// Every local cluster needs the registry mirrors the registry mirrors
+	// file declares, and shares one container for each of them, which
+	// step 4 reuses as it is. A file that does not load, or a declared
+	// mirror whose container pulls from another URL or as another
+	// username, is refused here rather than silently pulled through.
+	declaredMirrors, err := config.LoadLocalMirrors(utils.GetEducatesHomeDir())
+	if err != nil {
+		return err
+	}
+	if err := inventory.CheckMirrors(declaredMirrors); err != nil {
 		return err
 	}
 	// The local DNS resolver serves the domains of every local cluster,
@@ -287,9 +294,9 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	}
 
 	// 4. registry mirrors (pull-through caches): every mirror container
-	//    that exists, whichever cluster's config or command created it,
-	//    and every mirror the config declares, created first when missing.
-	if err := linkRegistryMirrors(rep, inventory.MirrorsToLink(in.Cluster.RegistryMirrors), nodes); err != nil {
+	//    that exists, whichever command created it, and every mirror the
+	//    registry mirrors file declares, created first when missing.
+	if err := linkRegistryMirrors(rep, inventory.MirrorsToLink(declaredMirrors), nodes); err != nil {
 		return err
 	}
 
@@ -371,7 +378,7 @@ type localCreateInputs struct {
 	// Deploy is the config the platform deploy tail-call translates.
 	Deploy v1alpha1.Config
 
-	// Cluster declares the kind cluster and its registry mirrors.
+	// Cluster declares the kind cluster.
 	Cluster v1alpha1.LocalClusterConfig
 
 	// Domain is the ingress domain the loopback service resolves under.

@@ -98,15 +98,6 @@ func (c LoadedConfig) Domain() string {
 	return fields.domain
 }
 
-// RegistryMirrors returns the registry mirrors the config declares the
-// cluster needs: cluster.registryMirrors of an EducatesLocalConfig, or
-// target.cluster.registryMirrors of an EducatesConfig. It is empty when
-// the config declares none, or is of neither kind.
-func (c LoadedConfig) RegistryMirrors() []v1alpha1.RegistryMirror {
-	fields, _ := clusterFieldsOf(c.Config)
-	return fields.registryMirrors
-}
-
 // clusterFields is what a local cluster's config declares about the
 // cluster on the host, which the two kinds a local cluster takes declare
 // in different fields.
@@ -132,9 +123,6 @@ type clusterFields struct {
 	// cluster's extra domains in the local DNS resolver.
 	extraDomainsField string
 
-	// registryMirrors are the registry mirrors the cluster needs.
-	registryMirrors []v1alpha1.RegistryMirror
-
 	// derivesDomain reports whether a cluster whose config declares no
 	// ingress domain takes the nip.io name of its address: an
 	// EducatesLocalConfig does, and an EducatesConfig, which gets no CLI
@@ -157,7 +145,6 @@ func clusterFieldsOf(cfg v1alpha1.Config) (clusterFields, bool) {
 			domainField:        "ingress.domain",
 			resolver:           c.Resolver,
 			extraDomainsField:  "resolver.extraDomains",
-			registryMirrors:    c.Cluster.RegistryMirrors,
 			derivesDomain:      true,
 		}, true
 	case *v1alpha1.EducatesConfig:
@@ -172,7 +159,6 @@ func clusterFieldsOf(cfg v1alpha1.Config) (clusterFields, bool) {
 		fields.listenAddress = c.Target.Cluster.ListenAddress
 		fields.resolver = c.Target.Resolver
 		fields.extraDomainsField = "target.resolver.extraDomains"
-		fields.registryMirrors = c.Target.Cluster.RegistryMirrors
 		return fields, true
 	default:
 		return clusterFields{}, false

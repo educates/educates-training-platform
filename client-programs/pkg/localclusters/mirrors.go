@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
@@ -26,16 +27,16 @@ type MirrorContainer struct {
 }
 
 // CheckMirrors returns an error when a registry mirror among declared,
-// the mirrors the config of the local cluster id declares, already has a
-// container that pulls from another remote registry or as another
-// username. Every local cluster shares one container for each mirror, and
-// creating or starting id would reuse that container as it is. The error
-// names each such mirror with the values its container has and those
-// declared.
+// the mirrors the registry mirrors file of the data home declares,
+// already has a container that pulls from another remote registry or as
+// another username. Every local cluster shares one container for each
+// mirror, and creating or starting a cluster would reuse that container
+// as it is. The error names the file, and each such mirror with the
+// values its container has and those declared.
 //
 // A container's password can't be seen, so a different password is not
 // detected.
-func (inv Inventory) CheckMirrors(id Identity, declared []v1alpha1.RegistryMirror) error {
+func (inv Inventory) CheckMirrors(declared []v1alpha1.RegistryMirror) error {
 	var errs []error
 	for _, d := range declared {
 		for _, c := range inv.observed.Mirrors {
@@ -47,20 +48,20 @@ func (inv Inventory) CheckMirrors(id Identity, declared []v1alpha1.RegistryMirro
 			if declaredValues == "" {
 				continue
 			}
-			errs = append(errs, fmt.Errorf("the config of %s declares registry mirror %s with %s, "+
+			errs = append(errs, fmt.Errorf("%s declares registry mirror %s with %s, "+
 				"but the mirror's container, which every local cluster shares, already exists with %s. "+
-				"Declare the mirror as its container has it, or delete the container with "+
+				"Declare the mirror there as its container has it, or delete the container with "+
 				"'educates local mirror delete %s', which unlinks it from every local cluster, and run the command again",
-				id.Description(), d.Mirror, declaredValues, containerValues, d.Mirror))
+				config.LocalMirrorsPath(inv.dataHome), d.Mirror, declaredValues, containerValues, d.Mirror))
 		}
 	}
 	return errors.Join(errs...)
 }
 
 // MirrorsToLink returns the registry mirrors that local cluster create
-// and start link into every node of a local cluster whose config declares
-// the mirrors declared: every registry mirror container that exists,
-// whichever cluster's config or command created it, and every mirror
+// and start link into every node of a local cluster, when the registry
+// mirrors file declares the mirrors declared: every registry mirror
+// container that exists, whichever command created it, and every mirror
 // declared, whose container is created first when it is missing. Each
 // mirror comes once, sorted by name. A declared mirror carries its
 // declaration, password included, which CheckMirrors has matched with
@@ -87,26 +88,66 @@ func (inv Inventory) MirrorsToLink(declared []v1alpha1.RegistryMirror) []v1alpha
 	return mirrors
 }
 
-// ClustersDeclaringMirror returns the Educates clusters, running or
-// stopped and in the order of Clusters, whose config in the data home
-// declares the registry mirror mirror. Their next local cluster start,
-// or create once deleted, creates the mirror's container again, so local
-// mirror delete names them. A cluster whose config is missing or does not
-// load declares nothing.
-func (inv Inventory) ClustersDeclaringMirror(mirror string) []Identity {
-	var ids []Identity
-	for _, id := range inv.clusters {
-		loaded, err := LoadConfig(id)
-		if err != nil {
+// DeletedMirrorWarning returns the warning local mirror delete gives
+// after deleting the container of the registry mirror mirror, when
+// declared, the mirrors the registry mirrors file of the data home
+// declares, holds it: the next local cluster create or start, of any
+// local cluster, creates the mirror again. The warning names the file to
+// remove the mirror from. It is empty when the file does not declare the
+// mirror.
+func (inv Inventory) DeletedMirrorWarning(mirror string, declared []v1alpha1.RegistryMirror) string {
+	if !slices.ContainsFunc(declared, func(m v1alpha1.RegistryMirror) bool { return m.Mirror == mirror }) {
+		return ""
+	}
+	path := config.LocalMirrorsPath(inv.dataHome)
+	return fmt.Sprintf("%s declares registry mirror %s, so the next 'educates local cluster create' or "+
+		"'educates local cluster start', of any local cluster, creates the mirror again. "+
+		"Remove the mirror from %s to keep it deleted", path, mirror, path)
+}
+
+// ListedMirror is a registry mirror local mirror list shows: one whose
+// container exists, one the registry mirrors file declares, or both.
+type ListedMirror struct {
+	// Mirror is the registry the mirror mirrors, such as docker.io.
+	Mirror string
+
+	// Declaration is the mirror's entry in the registry mirrors file, nil
+	// when the file does not declare it.
+	Declaration *v1alpha1.RegistryMirror
+
+	// HasContainer reports whether the mirror's container exists. A
+	// declared mirror without one gets it on the next local cluster
+	// create or start.
+	HasContainer bool
+}
+
+// ListMirrors returns the registry mirrors local mirror list shows,
+// sorted by name: the mirror of each container among containers, the
+// mirrors whose containers exist, and each mirror among declared, the
+// mirrors the registry mirrors file declares, whether its container
+// exists or not.
+func ListMirrors(containers []string, declared []v1alpha1.RegistryMirror) []ListedMirror {
+	var listed []ListedMirror
+	index := map[string]int{}
+	for _, d := range declared {
+		if _, seen := index[d.Mirror]; seen {
 			continue
 		}
-		if slices.ContainsFunc(loaded.RegistryMirrors(), func(m v1alpha1.RegistryMirror) bool {
-			return m.Mirror == mirror
-		}) {
-			ids = append(ids, id)
-		}
+		index[d.Mirror] = len(listed)
+		listed = append(listed, ListedMirror{Mirror: d.Mirror, Declaration: &d})
 	}
-	return ids
+	for _, c := range containers {
+		if i, seen := index[c]; seen {
+			listed[i].HasContainer = true
+			continue
+		}
+		index[c] = len(listed)
+		listed = append(listed, ListedMirror{Mirror: c, HasContainer: true})
+	}
+	slices.SortFunc(listed, func(a, b ListedMirror) int {
+		return strings.Compare(a.Mirror, b.Mirror)
+	})
+	return listed
 }
 
 // differences describes the values of the mirror containers m and other

@@ -1,8 +1,8 @@
 package localclusters
 
 import (
+	"path/filepath"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 
@@ -11,11 +11,6 @@ import (
 
 func TestCheckMirrorsRefusesAMirrorWhoseContainerHasAnotherURL(t *testing.T) {
 	dataHome := t.TempDir()
-	addClusterFolder(t, dataHome, "test2")
-	test2, err := Named("test2", dataHome)
-	if err != nil {
-		t.Fatal(err)
-	}
 	observed := Observed{
 		Nodes: []NodeContainer{controlPlane("educates", "10.10.10.1", true)},
 		Mirrors: []MirrorContainer{
@@ -23,11 +18,12 @@ func TestCheckMirrorsRefusesAMirrorWhoseContainerHasAnotherURL(t *testing.T) {
 		},
 	}
 
-	err = NewInventory(observed, dataHome).CheckMirrors(test2, []v1alpha1.RegistryMirror{
+	err := NewInventory(observed, dataHome).CheckMirrors([]v1alpha1.RegistryMirror{
 		{Mirror: "docker.io", URL: "mirror.gcr.io"},
 	})
 
-	assertErrorNames(t, err, `local cluster "test2"`, "docker.io", "mirror.gcr.io", "registry-1.docker.io",
+	assertErrorNames(t, err, filepath.Join(dataHome, "mirrors.yaml")+" declares registry mirror docker.io",
+		"mirror.gcr.io", "registry-1.docker.io", "every local cluster shares",
 		"educates local mirror delete docker.io")
 }
 
@@ -43,7 +39,7 @@ func TestCheckMirrorsRefusesAMirrorWhoseContainerHasAnotherUsername(t *testing.T
 			name:      "different usernames",
 			container: MirrorContainer{Mirror: "docker.io", Username: "alice"},
 			declared:  v1alpha1.RegistryMirror{Mirror: "docker.io", Username: "bob", Password: "secret"},
-			wantNames: []string{"the default local cluster", "docker.io", "username alice", "username bob"},
+			wantNames: []string{"mirrors.yaml declares registry mirror docker.io", "username alice", "username bob"},
 		},
 		{
 			name:      "username declared, container anonymous",
@@ -62,7 +58,7 @@ func TestCheckMirrorsRefusesAMirrorWhoseContainerHasAnotherUsername(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			observed := Observed{Mirrors: []MirrorContainer{tc.container}}
 
-			err := NewInventory(observed, dataHome).CheckMirrors(Default(dataHome), []v1alpha1.RegistryMirror{tc.declared})
+			err := NewInventory(observed, dataHome).CheckMirrors([]v1alpha1.RegistryMirror{tc.declared})
 
 			assertErrorNames(t, err, tc.wantNames...)
 		})
@@ -89,17 +85,17 @@ func TestCheckMirrorsAcceptsMirrorsWhoseContainersMatchOrAreMissing(t *testing.T
 		{Mirror: "gcr.io", URL: "mirror.gcr.io", Username: "dave"},
 	}
 
-	if err := NewInventory(observed, dataHome).CheckMirrors(Default(dataHome), declared); err != nil {
+	if err := NewInventory(observed, dataHome).CheckMirrors(declared); err != nil {
 		t.Errorf("CheckMirrors() = %v, want nil", err)
 	}
 }
 
 func TestMirrorsToLinkAreEveryMirrorContainerAndEveryDeclaredMirror(t *testing.T) {
 	observed := Observed{Mirrors: []MirrorContainer{
-		// Created by another cluster's config or by local mirror deploy.
+		// Created by local mirror deploy, or declared earlier.
 		{Mirror: "quay.io"},
 		{Mirror: "ghcr.io", URL: "ghcr.example.com", Username: "carol"},
-		// Declared by this cluster's config too.
+		// Declared too.
 		{Mirror: "docker.io", Username: "alice"},
 	}}
 	declared := []v1alpha1.RegistryMirror{
@@ -121,7 +117,7 @@ func TestMirrorsToLinkAreEveryMirrorContainerAndEveryDeclaredMirror(t *testing.T
 	}
 }
 
-func TestMirrorsToLinkOfAClusterThatDeclaresNone(t *testing.T) {
+func TestMirrorsToLinkWhenNoMirrorIsDeclared(t *testing.T) {
 	cases := []struct {
 		name     string
 		observed []MirrorContainer
@@ -147,45 +143,57 @@ func TestMirrorsToLinkOfAClusterThatDeclaresNone(t *testing.T) {
 	}
 }
 
-func TestClustersDeclaringMirrorAreTheLocalClustersWhoseConfigDeclaresIt(t *testing.T) {
+func TestDeletedMirrorWarningOfADeclaredMirrorNamesTheMirrorsFile(t *testing.T) {
 	dataHome := t.TempDir()
-	const dockerIO = "  - mirror: docker.io\n"
-	const quayIO = "  - mirror: quay.io\n"
-	mirrorsConfig := func(listen string, mirrors ...string) string {
-		return localConfigHeader + "cluster:\n  listenAddress: " + listen + "\n  registryMirrors:\n" + strings.Join(mirrors, "")
+	declared := []v1alpha1.RegistryMirror{{Mirror: "quay.io"}, {Mirror: "docker.io", Username: "alice", Password: "secret"}}
+
+	got := NewInventory(Observed{}, dataHome).DeletedMirrorWarning("docker.io", declared)
+
+	for _, want := range []string{filepath.Join(dataHome, "mirrors.yaml") + " declares registry mirror docker.io",
+		"'educates local cluster create'", "'educates local cluster start'", "creates the mirror again",
+		"Remove the mirror from " + filepath.Join(dataHome, "mirrors.yaml")} {
+		if !strings.Contains(got, want) {
+			t.Errorf("DeletedMirrorWarning() = %q, want it to mention %q", got, want)
+		}
 	}
-	writeClusterConfig(t, dataHome, "", mirrorsConfig("10.10.10.1", dockerIO))
-	writeClusterConfig(t, dataHome, "test2", mirrorsConfig("10.10.10.2", quayIO, dockerIO))
-	writeClusterConfig(t, dataHome, "test3", mirrorsConfig("10.10.10.3", quayIO))
-	// A config whose kind cluster doesn't exist.
-	writeClusterConfig(t, dataHome, "test4", mirrorsConfig("10.10.10.4", dockerIO))
-	// A cluster with no config.
-	addClusterFolder(t, dataHome, "test5")
-	// A config that doesn't load.
-	writeClusterConfig(t, dataHome, "test6", mirrorsConfig("127.0.0.1", dockerIO))
-	observed := Observed{Nodes: []NodeContainer{
-		controlPlane("educates", "10.10.10.1", true),
-		controlPlane("educates-test2", "10.10.10.2", false),
-		controlPlane("educates-test3", "10.10.10.3", true),
-		controlPlane("educates-test5", "10.10.10.5", true),
-		controlPlane("educates-test6", "10.10.10.6", true),
-	}}
-
-	got := kindNames(NewInventory(observed, dataHome).ClustersDeclaringMirror("docker.io"))
-
-	want := []string{"educates", "educates-test2"}
-	if !slices.Equal(got, want) {
-		t.Errorf("ClustersDeclaringMirror(docker.io) = %v, want %v", got, want)
+	if strings.Contains(got, "secret") {
+		t.Errorf("DeletedMirrorWarning() = %q, gives the mirror's password", got)
 	}
 }
 
-func TestClustersDeclaringMirrorOfAMirrorNoConfigDeclares(t *testing.T) {
-	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n")
-	observed := Observed{Nodes: []NodeContainer{controlPlane("educates", "10.10.10.1", true)}}
+func TestDeletedMirrorWarningOfAMirrorNotDeclaredIsNone(t *testing.T) {
+	declared := []v1alpha1.RegistryMirror{{Mirror: "quay.io"}}
 
-	if got := NewInventory(observed, dataHome).ClustersDeclaringMirror("docker.io"); len(got) != 0 {
-		t.Errorf("ClustersDeclaringMirror(docker.io) = %v, want none", kindNames(got))
+	if got := NewInventory(Observed{}, t.TempDir()).DeletedMirrorWarning("docker.io", declared); got != "" {
+		t.Errorf("DeletedMirrorWarning() = %q, want none", got)
+	}
+}
+
+func TestListMirrorsAreEveryMirrorContainerAndEveryDeclaredMirror(t *testing.T) {
+	dockerIO := v1alpha1.RegistryMirror{Mirror: "docker.io", Username: "alice", Password: "secret"}
+	gcrIO := v1alpha1.RegistryMirror{Mirror: "gcr.io", URL: "mirror.gcr.io"}
+	containers := []string{"quay.io", "docker.io"}
+	declared := []v1alpha1.RegistryMirror{dockerIO, gcrIO}
+
+	got := ListMirrors(containers, declared)
+
+	want := []ListedMirror{
+		// Declared, with its container.
+		{Mirror: "docker.io", Declaration: &dockerIO, HasContainer: true},
+		// Declared, with no container yet: the next create or start
+		// creates it.
+		{Mirror: "gcr.io", Declaration: &gcrIO},
+		// Deployed with local mirror deploy, and not declared.
+		{Mirror: "quay.io", HasContainer: true},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ListMirrors() = %+v, want %+v", got, want)
+	}
+}
+
+func TestListMirrorsOfNoContainerAndNoDeclaredMirrorIsEmpty(t *testing.T) {
+	if got := ListMirrors(nil, nil); len(got) != 0 {
+		t.Errorf("ListMirrors() = %+v, want none", got)
 	}
 }
 

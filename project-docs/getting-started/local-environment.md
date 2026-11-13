@@ -530,7 +530,7 @@ educates local cluster list
 
 It lists the default cluster, shown as `(default)`, and every named cluster, whatever `--local-cluster` or `EDUCATES_LOCAL_CLUSTER` select. Each row has the cluster's state, the host IP address it publishes ports 80 and 443 on, its ingress domain and its kube context. The state is `running`, `stopped`, or `partly running` when only some nodes of a multi-node cluster run. The domain is the one the cluster's configuration declares, or for a named cluster the `nip.io` name of its listen address, and shows as `-` when there is none, as for a default cluster that falls back to the `nip.io` name of your host's IP address.
 
-Only the Kind clusters the command line tool manages are local clusters: the Kind cluster `educates`, and a Kind cluster `educates-<name>` whose folder `clusters/<name>/` exists in the data home. A Kind cluster you created yourself is left out of the list and ignored by every check, even when its name starts with `educates-`.
+Only the Kind clusters the command line tool manages are local clusters: the Kind cluster `educates`, and a Kind cluster `educates-<name>` whose folder `clusters/<name>/` exists in the data home. A Kind cluster you created yourself is left out of the list and ignored by every check, even when its name starts with `educates-`. The `educates local cluster delete`, `start`, `stop` and `status` commands also leave it alone: given the name of a cluster whose folder the data home does not hold, such as `--local-cluster foo` beside a Kind cluster `educates-foo` you created, they refuse with an error saying so.
 
 ### A named cluster's configuration
 

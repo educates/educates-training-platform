@@ -324,15 +324,17 @@ New Features
   context. A Kind cluster named ``educates-<name>`` counts as a local
   cluster only when its folder ``clusters/<name>/`` exists in the data
   home, so Kind clusters made by hand are left out of the list and of every
-  check. Before ``create`` creates a cluster, and before ``start`` starts
-  one, its listen address is checked against every other local cluster,
-  running or stopped: an address another cluster also uses, a cluster on
-  ``0.0.0.0`` beside any other, and an address on no network interface of
-  the host are refused with an error naming the other cluster. ``educates
-  local cluster delete --all`` now deletes the local image registry, the DNS
-  resolver and the registry mirrors only when no other local cluster
-  remains, and otherwise keeps them and names the clusters still using
-  them.
+  check, and ``delete``, ``start``, ``stop`` and ``status`` refuse a
+  ``--local-cluster`` name whose folder the data home does not hold, with
+  an error saying why. Before ``create`` creates a cluster, and before
+  ``start`` starts one, its listen address is checked against every other
+  local cluster, running or stopped: an address another cluster also uses,
+  a cluster on ``0.0.0.0`` beside any other, and an address on no network
+  interface of the host are refused with an error naming the other
+  cluster. ``educates local cluster delete --all`` now deletes the local
+  image registry, the DNS resolver and the registry mirrors only when no
+  other local cluster remains, and otherwise keeps them and names the
+  clusters still using them.
 
   The ``educates cluster workshop``, ``educates cluster portal`` and
   ``educates cluster session`` commands and their aliases, ``educates admin

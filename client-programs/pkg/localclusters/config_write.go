@@ -37,6 +37,14 @@ func (f NamedConfigFlags) IsZero() bool {
 	return f == NamedConfigFlags{}
 }
 
+// ConfigFlagsOnDefaultClusterError is the error for --listen-address or
+// --domain given while the default local cluster is selected: the flags
+// write only a named local cluster's config.
+func ConfigFlagsOnDefaultClusterError() error {
+	return fmt.Errorf("--%s and --%s write the config of a named local cluster; select one with --%s or %s",
+		ListenAddressFlagName, DomainFlagName, FlagName, SelectionEnvVar)
+}
+
 // MissingNamedConfigError is the error for the named local cluster id
 // having no config, naming both ways to write one.
 func MissingNamedConfigError(id Identity) error {

@@ -349,6 +349,14 @@ New Features
   ``educates local secrets sync`` builds the certificates it copies from
   the selected cluster's configuration, and copies them into that cluster.
 
+  ``educates cluster workshop serve`` can serve one workshop to several
+  local clusters at once, from a terminal for each. With a cluster
+  selected, its proxy listens on the cluster's listen address instead of on
+  ``0.0.0.0`` when that address is a specific IP address, keeping port
+  10081, and its Hugo server listens on a free port instead of on 1313.
+  ``--local-host``, ``--local-port`` and ``--hugo-port`` still take
+  precedence, and without a cluster selected the command listens as before.
+
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to
   a tagged image reference instead of listing ``files``. The two are mutually

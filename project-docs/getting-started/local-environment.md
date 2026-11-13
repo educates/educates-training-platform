@@ -575,6 +575,27 @@ With `--config`, `educates admin platform deploy` installs the file you name int
 
 `educates local secrets sync` copies into the selected cluster the cached secrets its configuration needs: the CA key pair for its ingress domain when the cluster is served over HTTPS, and no CA key pair for a named cluster on the `nip.io` name of its listen address, which is served over plain HTTP. Without a cluster selected, it reads the default cluster's configuration and copies into the current context, as before.
 
+### Serving a workshop to several clusters
+
+`educates cluster workshop serve` serves a workshop's instructions from your local system to the workshop sessions of a cluster, so that an edit shows in the sessions as you make it. To serve one workshop to two clusters at once, run the command in two terminals, selecting a cluster in each, the default cluster with an empty `--local-cluster=`:
+
+```
+educates cluster workshop serve --patch-workshop --local-cluster=
+```
+
+```
+educates cluster workshop serve --patch-workshop --local-cluster test2
+```
+
+With a cluster selected, two defaults of the command change, so that the two do not compete for the same ports:
+
+* The proxy that workshop sessions connect to listens on the cluster's listen address, such as `10.10.10.2`, instead of on `0.0.0.0`, every host address, when the listen address is a specific IP address: neither `0.0.0.0` nor a loopback address. It keeps port 10081, since a cluster's sessions reach your host through a loopback service under the cluster's ingress domain, which resolves to the cluster's own listen address.
+* The Hugo server, which renders the instructions, listens on a free port the operating system picks, instead of on port 1313.
+
+The `--local-host`, `--local-port` and `--hugo-port` options still take precedence when you give them. With `--patch-workshop`, both commands use the access token the command line tool keeps in the data home. Without a cluster selected, the command listens on `0.0.0.0` and port 1313, as it always has.
+
+The default cluster on a loopback listen address, such as its default `127.0.0.1`, has no address of its own for the proxy, so its proxy keeps listening on `0.0.0.0` even when you select the cluster. On macOS, a proxy listening on `0.0.0.0` can share port 10081 with one listening on a named cluster's address, which receives the connections to that address. On Linux, two proxies cannot share the port that way, so to serve a workshop to two clusters at once there, give each cluster a specific listen address, such as `10.10.10.1` for the default cluster, and select each cluster when you serve it.
+
 ### A second data home is not a second cluster
 
 The `EDUCATES_CLI_DATA_HOME` environment variable moves the data home, where the command line tool keeps its configuration and local secrets cache, but it is not a way to run several local clusters. A second data home still creates the Kind cluster `educates`, binds the same host ports, and manages the same registry, resolver and mirror containers as the first, so the two collide. Use named clusters instead, which share one data home.

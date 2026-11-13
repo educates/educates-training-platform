@@ -86,16 +86,31 @@ func DeployRegistryAndLinkToCluster(bindIP string, nodes []string, client *kuber
 
 	// This is needed to make containerd use the local registry
 
-	if err = addRegistryConfigToKindNodes("localhost:5001", fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer), nodes, p); err != nil {
-		return errors.Wrap(err, "failed to add registry config to kind nodes")
-	}
-	if err = addRegistryConfigToKindNodes("registry.default.svc.cluster.local", fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer), nodes, p); err != nil {
-		return errors.Wrap(err, "failed to add registry config to kind nodes")
+	if err = LinkRegistryToKindNodes(nodes, p); err != nil {
+		return err
 	}
 
 	// This is needed so that kubernetes nodes can pull images from the local registry
 	if err = documentLocalRegistry(client); err != nil {
 		return errors.Wrap(err, "failed to document registry config in cluster")
+	}
+
+	return nil
+}
+
+/**
+ * This function writes the local registry's containerd host config, for
+ * localhost:5001 and registry.default.svc.cluster.local, into the node
+ * containers nodes, so that containerd on each node pulls those names from
+ * the registry container. Each node must be running.
+ */
+func LinkRegistryToKindNodes(nodes []string, p Progress) error {
+	content := fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer)
+
+	for _, repositoryName := range []string{"localhost:5001", "registry.default.svc.cluster.local"} {
+		if err := addRegistryConfigToKindNodes(repositoryName, content, nodes, p); err != nil {
+			return errors.Wrap(err, "failed to add registry config to kind nodes")
+		}
 	}
 
 	return nil
@@ -253,11 +268,16 @@ func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, nodes []string, p 
 		return errors.Wrap(err, "failed to deploy registry mirror "+mirrorConfig.Mirror)
 	}
 
+	if len(nodes) == 0 {
+		warn(p, "mirror not added to kind nodes: no node containers of the local cluster found")
+		return nil
+	}
+
 	content := fmt.Sprintf(hostMirrorTomlTemplate, registryMirrorContainerName(mirrorConfig))
 	err = addRegistryConfigToKindNodes(mirrorConfig.Mirror, content, nodes, p)
 
 	if err != nil {
-		warn(p, "mirror not added to kind nodes")
+		warn(p, "mirror not added to kind nodes: "+err.Error())
 	}
 
 	return nil
@@ -390,7 +410,9 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 /**
  * This function is used to add the registry config to the kind nodes.
  * It is used when creating a new local registry or registry mirror.
- * nodes names the node containers to add it to; each must be running.
+ * nodes names the node containers to add it to. A node that is not running
+ * can't take it: every other node still gets it, and the error names each
+ * node that didn't.
  */
 func addRegistryConfigToKindNodes(repositoryName string, content string, nodes []string, p Progress) error {
 	ctx := context.Background()
@@ -403,10 +425,20 @@ func addRegistryConfigToKindNodes(repositoryName string, content string, nodes [
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
+	var failed []string
 	for _, node := range nodes {
-		if err := addRegistryConfigToKindNode(ctx, cli, runningContainerID(ctx, cli, node), repositoryName, content); err != nil {
-			return err
+		containerID := runningContainerID(ctx, cli, node)
+		if containerID == "" {
+			failed = append(failed, node+" is not running")
+			continue
 		}
+		if err := addRegistryConfigToKindNode(ctx, cli, containerID, repositoryName, content); err != nil {
+			failed = append(failed, fmt.Sprintf("%s: %v", node, err))
+		}
+	}
+
+	if len(failed) > 0 {
+		return errors.Errorf("node containers not configured: %s", strings.Join(failed, "; "))
 	}
 
 	return nil

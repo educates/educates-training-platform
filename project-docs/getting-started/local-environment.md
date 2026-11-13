@@ -67,7 +67,7 @@ When you run the `educates local cluster create` command to create the local Kub
 
 If you want to use the registry to store other images, you should tag your images with the registry host/port of `localhost:5001`, then push the image to the registry.
 
-If you want to pull images from the registry in Kubernetes deployments created in the Kubernetes cluster, you can also use `localhost:5001` and it will be automatically mapped to the local image registry, with Kubernetes also trusting the local image registry.
+If you want to pull images from the registry in Kubernetes deployments created in the Kubernetes cluster, you can also use `localhost:5001` and it will be automatically mapped to the local image registry, with Kubernetes also trusting the local image registry. This holds on every node of the cluster, including the worker nodes of a cluster that declares them in `cluster.nodes`.
 
 Should you need to pull images from the local image registry from inside of the cluster using tools such as `docker`, `imgpkg`, `oras` or `skopeo`, you will need to use the registry host of `registry.default.svc.cluster.local` instead. This also can be used for Kubernetes deployments as well. Whether you need to tell those tools to trust the image registry will depend on whether they automatically support use of HTTP for access when using `.local` addresses.
 
@@ -85,7 +85,7 @@ To deploy the registry again, you can then run:
 educates local registry deploy
 ```
 
-The local image registry, and any registry mirrors, are given fixed addresses at the top of the subnet of the `kind` Docker network, so that restarting Docker does not change the address `registry.default.svc.cluster.local` maps to. Docker Engine 29.0.0 to 29.0.3 refuse fixed addresses on the `kind` network, as do older versions until Docker is restarted for the first time after the network is created, in which case Docker picks the address instead, a warning is shown, and the address can still change when Docker restarts. If pulls from `registry.default.svc.cluster.local` inside the cluster fail, or reach a registry mirror, after Docker restarts, upgrade Docker or restart it, then run `educates local registry deploy` again. Running the command for a registry which already exists keeps its content, moves it to its fixed address, and points `registry.default.svc.cluster.local` at it.
+The local image registry, and any registry mirrors, are given fixed addresses at the top of the subnet of the `kind` Docker network, so that restarting Docker does not change the address `registry.default.svc.cluster.local` maps to. Docker Engine 29.0.0 to 29.0.3 refuse fixed addresses on the `kind` network, as do older versions until Docker is restarted for the first time after the network is created, in which case Docker picks the address instead, a warning is shown, and the address can still change when Docker restarts. If pulls from `registry.default.svc.cluster.local` inside the cluster fail, or reach a registry mirror, after Docker restarts, upgrade Docker or restart it, then run `educates local registry deploy` again. Running the command for a registry which already exists keeps its content, moves it to its fixed address, and points `registry.default.svc.cluster.local` at it. When the local cluster exists, the command also configures every one of its nodes to pull `localhost:5001` and `registry.default.svc.cluster.local` from the registry, and warns about any node which is not running and so could not be configured.
 
 If you have successively pushed new builds of images to the local image registry using the same image version tag, the registry can blow out in size over time due to unreferenced image layers. To reclaim space consumed by these unreferenced image layers, you can run:
 
@@ -383,7 +383,7 @@ A local image mirror acts as a proxy for a remote container registry. When you c
 Using mirrors when creating a cluster
 -------------------------------------
 
-You can specify registry mirrors in your cluster configuration YAML. When you create a cluster with mirrors configured, Educates will automatically deploy and link the mirrors to your local cluster. This ensures that all image pulls for the mirrored registries are routed through your local mirror, improving speed and reliability.
+You can specify registry mirrors in your cluster configuration YAML. When you create a cluster with mirrors configured, Educates will automatically deploy the mirrors and link them to every node of your local cluster. This ensures that all image pulls for the mirrored registries are routed through your local mirror, improving speed and reliability.
 
 ```yaml
 cluster:
@@ -412,7 +412,7 @@ To deploy a local mirror for a remote registry, use the following command:
 educates local mirror deploy ghcr.io
 ```
 
-In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror.
+In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror. When the local cluster exists, the mirror is linked to every one of its nodes, and a warning names any node which is not running and so could not be linked.
 
 Optionally, you can also provide credentials, via `--username` and `--password`, for authenticating to the remote registry. Use these if you are mirroring a private registry, or to provide DockerHub credentials to avoid request throttling.
 
@@ -429,7 +429,7 @@ To delete a local registry mirror, run:
 educates local mirror delete ghcr.io
 ```
 
-This will stop and remove the mirror container and clean up the configuration from the cluster. 
+This will stop and remove the mirror container and clean up the configuration from every running node of the cluster.
 
 As pointed out earlier, if the mirror configuration exists in the local cluster's configuration, if the Educates local cluster is recreated then the mirror will be recreated as well.
 

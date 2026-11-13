@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"os"
 
 	"github.com/spf13/cobra"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
@@ -44,4 +46,16 @@ func selectedLocalCluster(c *cobra.Command) (localclusters.Identity, error) {
 		sel.FlagSet, sel.Flag = true, f.Value.String()
 	}
 	return localclusters.Resolve(sel, utils.GetEducatesHomeDir())
+}
+
+// registryNodes returns the names of the node containers of the local
+// cluster id that get the containerd host config of the local registry and
+// the registry mirrors: every node of the cluster that runs a kubelet. It is
+// empty when the cluster has no node containers.
+func registryNodes(ctx context.Context, id localclusters.Identity) ([]string, error) {
+	observed, err := cluster.ObserveNodeContainers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return id.RegistryNodes(observed), nil
 }

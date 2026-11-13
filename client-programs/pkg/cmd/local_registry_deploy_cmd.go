@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
@@ -28,7 +29,24 @@ type LocalRegistryDeployOptions struct {
 
 func (o *LocalRegistryDeployOptions) Run() error {
 	err := stepOnStdout(o.Verbose, "deploy local registry", "ready", func(s progress.Step) error {
-		return registry.DeployRegistry(o.BindIP, s)
+		if err := registry.DeployRegistry(o.BindIP, s); err != nil {
+			return err
+		}
+
+		// Every node of the default local cluster, when it exists, gets the
+		// registry's containerd config. The registry also serves without a
+		// cluster, so a node that can't take the config is only a warning.
+		nodes, err := registryNodes(context.Background(), defaultLocalCluster())
+		if err != nil {
+			return err
+		}
+		if len(nodes) == 0 {
+			return nil
+		}
+		if err := registry.LinkRegistryToKindNodes(nodes, s); err != nil {
+			s.Warn("registry not added to kind nodes: " + err.Error())
+		}
+		return nil
 	})
 
 	if err != nil {

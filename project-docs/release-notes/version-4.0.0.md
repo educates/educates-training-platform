@@ -269,11 +269,18 @@ New Features
   pinning an arbitrary image.
 
 * The local Kind cluster can now be multi-node. The ``EducatesLocalConfig``
-  ``cluster.nodes`` list declares the cluster's nodes — each with a
-  ``role`` (``control-plane`` or ``worker``), optional Kubernetes node
-  ``labels``, and optional ``taints`` — so a laptop cluster can model node
-  pools for workshops that schedule across several nodes. Leaving
-  ``cluster.nodes`` unset keeps the default single control-plane cluster.
+  ``cluster.nodes`` list declares the cluster's nodes, each with a ``role``
+  (``control-plane`` or ``worker``), optional Kubernetes node ``labels``, and
+  optional ``taints``, so a laptop cluster can model node pools for workshops
+  that schedule across several nodes. Leaving ``cluster.nodes`` unset keeps
+  the default single control-plane cluster. Every node pulls from the local
+  image registry and the local registry mirrors: ``educates local cluster
+  create``, ``educates local registry deploy`` and ``educates local mirror
+  deploy`` configure each node, and ``educates local mirror delete`` removes
+  the mirror's configuration from each node. ``educates local cluster stop``
+  and ``educates local cluster start`` stop and start every node, and
+  ``educates local cluster status`` reports a cluster with only some of its
+  nodes running as partly running, naming the nodes which are not.
 
 * ``educates local cluster status`` now also reports whether Educates is
   installed on the local cluster and whether its platform components are

@@ -201,10 +201,16 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	if err != nil {
 		return err
 	}
+	// Every node of the new cluster gets the registry and mirror config,
+	// so pods scheduled on any node can pull through them.
+	nodes, err := registryNodes(ctx, id)
+	if err != nil {
+		return err
+	}
 
 	// 2. always-on local registry + k8s Service for imgpkg pulls.
 	if err := runStep(rep, "bringing up localhost:5001 registry", "ready", func(s progress.Step) error {
-		if err := registry.DeployRegistryAndLinkToCluster(o.RegistryBindIP, []string{id.ControlPlaneNode()}, client, s); err != nil {
+		if err := registry.DeployRegistryAndLinkToCluster(o.RegistryBindIP, nodes, client, s); err != nil {
 			return err
 		}
 		s.Update("registering cluster service")
@@ -232,7 +238,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		}
 		mc := registryMirrorFromConfig(m)
 		if err := runStep(rep, label, "ready", func(s progress.Step) error {
-			return registry.DeployMirrorAndLinkToCluster(&mc, []string{id.ControlPlaneNode()}, s)
+			return registry.DeployMirrorAndLinkToCluster(&mc, nodes, s)
 		}); err != nil {
 			return fmt.Errorf("mirror %s: %w", m.Mirror, err)
 		}

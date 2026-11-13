@@ -184,13 +184,13 @@ func TestLoadLocalConfig_ConfigWritingFlagsNeedANamedClusterAndNoConfigFlag(t *t
 	wantError(t, err, "--domain", "--config")
 }
 
-func TestCreateDeployFlags_TargetTheCreatedClusterWhateverContextIsGiven(t *testing.T) {
+func TestCreateDeployFlags_TargetTheCreatedCluster(t *testing.T) {
 	dataHome, named := namedClusterForTest(t)
 	const kindKubeconfig = "/home/developer/.kube/config"
 
 	for _, id := range []localclusters.Identity{localclusters.Default(dataHome), named} {
 		t.Run(id.KindName, func(t *testing.T) {
-			o := &LocalClusterCreateOptions{Context: "kind-some-other-cluster", Timeout: 7 * time.Minute, Verbose: true}
+			o := &LocalClusterCreateOptions{Timeout: 7 * time.Minute, Verbose: true}
 
 			flags := createDeployFlags(o, kindKubeconfig, id)
 

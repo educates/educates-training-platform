@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -21,7 +22,8 @@ var localClusterDeleteExample = `
   # Delete the named local cluster test2, keeping its config:
   educates local cluster delete --local-cluster test2
 
-  # Delete the local cluster along with the registry, resolver, and mirrors:
+  # Delete the local cluster along with the registry, resolver, and mirrors,
+  # which are kept while another local cluster still uses them:
   educates local cluster delete --all
 `
 
@@ -32,30 +34,60 @@ type LocalClusterDeleteOptions struct {
 
 // Run deletes the kind cluster of the local cluster id. The cluster's
 // config stays in the data home.
-func (o *LocalClusterDeleteOptions) Run(id localclusters.Identity) error {
+//
+// With AllComponents it then deletes the host infrastructure every local
+// cluster shares, the local registry, the DNS resolver and the registry
+// mirrors, but only when no other Educates cluster remains to use them;
+// otherwise it keeps them and names the clusters still using them. It
+// does so even when the kind cluster was already gone, and still reports
+// that.
+//
+// A DNS resolver that keeps running is refreshed once the kind cluster is
+// gone, so it stops serving a named cluster's domains.
+func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Identity) error {
 	c := cluster.NewKindClusterConfig("", id)
 
-	if o.AllComponents {
-		// Best-effort cleanup: surface each as a step but don't abort the
-		// cluster delete if a component is already gone.
-		_ = stepOnStdout(false, "delete local registry", "deleted", func(s progress.Step) error {
-			return registry.DeleteRegistry(s)
-		})
-		resolver.DeleteResolver()
-		_ = stepOnStdout(false, "delete registry mirrors", "deleted", func(s progress.Step) error {
-			return registry.DeleteRegistryMirrors(s)
-		})
+	err := c.DeleteCluster()
+	if !o.AllComponents {
+		if err != nil {
+			return err
+		}
+		return refreshResolverAfterDelete(ctx)
 	}
-
-	if err := c.DeleteCluster(); err != nil {
+	if err != nil && !cluster.IsNotFound(err) {
 		return err
 	}
 
-	// A running local DNS resolver stops serving the domains of a named
-	// cluster once its kind cluster is gone.
+	inventory, inventoryErr := localClusterInventory(ctx)
+	if inventoryErr != nil {
+		return inventoryErr
+	}
+	if users := inventory.SharedInfrastructureUsers(id); len(users) > 0 {
+		fmt.Printf("Skipped deleting the local registry, DNS resolver and registry mirrors: still in use by %s.\n",
+			localclusters.DescribeClusters(users))
+		return errors.Join(err, refreshResolverAfterDelete(ctx))
+	}
+
+	// Best-effort cleanup: surface each as a step but don't fail the
+	// delete if a component is already gone.
+	_ = stepOnStdout(false, "delete local registry", "deleted", func(s progress.Step) error {
+		return registry.DeleteRegistry(s)
+	})
+	resolver.DeleteResolver()
+	_ = stepOnStdout(false, "delete registry mirrors", "deleted", func(s progress.Step) error {
+		return registry.DeleteRegistryMirrors(s)
+	})
+
+	return err
+}
+
+// refreshResolverAfterDelete refreshes a running local DNS resolver once a
+// local cluster's kind cluster is gone, so it stops serving the domains
+// of a named cluster.
+func refreshResolverAfterDelete(ctx context.Context) error {
 	rep := progress.New(os.Stdout, 0, isStdoutTTY(os.Stdout))
 	if err := refreshLocalResolver(rep, func() ([]byte, error) {
-		return localResolverConfig(context.Background())
+		return localResolverConfig(ctx)
 	}); err != nil {
 		return fmt.Errorf("local DNS resolver: %w", err)
 	}
@@ -75,7 +107,7 @@ func (p *ProjectInfo) NewLocalClusterDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return o.Run(id)
+			return o.Run(cmd.Context(), id)
 		},
 	}
 
@@ -83,7 +115,7 @@ func (p *ProjectInfo) NewLocalClusterDeleteCmd() *cobra.Command {
 		&o.AllComponents,
 		"all",
 		false,
-		"delete everything, including image registry and resolver",
+		"also delete the image registry, resolver and registry mirrors, unless another local cluster still uses them",
 	)
 	addLocalClusterFlag(c)
 

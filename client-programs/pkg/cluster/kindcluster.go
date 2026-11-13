@@ -134,7 +134,7 @@ func (o *KindClusterConfig) CreateCluster(input *KindBootstrapInput, image strin
 	if exists, err := o.ClusterExists(); err != nil {
 		return err
 	} else if exists {
-		return errors.New("cluster for Educates already exists")
+		return errors.Errorf("kind cluster %s already exists", o.Identity.KindName)
 	}
 
 	clusterConfigTemplate, err := template.New("kind-cluster-config").Parse(clusterConfigTemplateData)
@@ -192,12 +192,31 @@ func (o *KindClusterConfig) CreateCluster(input *KindBootstrapInput, image strin
 	return nil
 }
 
+// NotFoundError is the error of an operation on a local cluster whose
+// kind cluster does not exist.
+type NotFoundError struct {
+	// KindName is the name of the kind cluster.
+	KindName string
+}
+
+func (e *NotFoundError) Error() string {
+	return fmt.Sprintf("kind cluster %s does not exist", e.KindName)
+}
+
+// IsNotFound reports whether err is, or wraps, a NotFoundError.
+func IsNotFound(err error) bool {
+	var notFound *NotFoundError
+	return errors.As(err, &notFound)
+}
+
+// DeleteCluster deletes the local cluster's kind cluster, returning a
+// NotFoundError when it does not exist.
 func (o *KindClusterConfig) DeleteCluster() error {
 	if exists, err := o.ClusterExists(); !exists {
 		if err != nil {
 			return err
 		}
-		return errors.New("cluster for Educates does not exist")
+		return &NotFoundError{KindName: o.Identity.KindName}
 	}
 
 	fmt.Printf("Deleting cluster %s ...\n", o.Identity.KindName)
@@ -277,12 +296,12 @@ func (o *KindClusterConfig) ClusterStatus() error {
 
 	switch o.Identity.State(observed) {
 	case localclusters.Running:
-		fmt.Println("Educates cluster is Running")
+		fmt.Printf("Educates cluster %s is Running\n", o.Identity.KindName)
 	case localclusters.PartlyRunning:
-		fmt.Printf("Educates cluster is %s (not running: %s)\n",
+		fmt.Printf("Educates cluster %s is %s (not running: %s)\n", o.Identity.KindName,
 			localclusters.PartlyRunning, strings.Join(o.Identity.NodesToStart(observed), ", "))
 	default:
-		fmt.Println("Educates cluster is NOT Running")
+		fmt.Printf("Educates cluster %s is NOT Running\n", o.Identity.KindName)
 	}
 
 	return nil
@@ -295,7 +314,7 @@ func (o *KindClusterConfig) observeExistingCluster(ctx context.Context) ([]local
 		if err != nil {
 			return nil, err
 		}
-		return nil, errors.New("cluster for Educates does not exist")
+		return nil, &NotFoundError{KindName: o.Identity.KindName}
 	}
 
 	return ObserveNodeContainers(ctx)

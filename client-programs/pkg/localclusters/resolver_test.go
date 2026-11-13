@@ -109,17 +109,6 @@ func TestRenderResolverConfigServesNoDomainForADefaultClusterWithNoneAndNoHostIP
 	wantAddresses(t, got, "address=/example.test/127.0.0.1")
 }
 
-// controlPlane is the observed control-plane node container of the kind
-// cluster kindName.
-func controlPlane(kindName string, running bool) NodeContainer {
-	return NodeContainer{
-		Name:        kindName + "-control-plane",
-		KindCluster: kindName,
-		Role:        "control-plane",
-		Running:     running,
-	}
-}
-
 func TestRenderResolverConfigServesEveryClusterAtItsOwnTargetAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
@@ -134,9 +123,9 @@ func TestRenderResolverConfigServesEveryClusterAtItsOwnTargetAddress(t *testing.
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
 		Observed: []NodeContainer{
-			controlPlane("educates", true),
-			controlPlane("educates-test3", true),
-			controlPlane("educates-test2", false),
+			controlPlane("educates", "10.10.10.1", true),
+			controlPlane("educates-test3", "10.10.10.3", true),
+			controlPlane("educates-test2", "10.10.10.2", false),
 		},
 	})
 
@@ -155,7 +144,7 @@ func TestRenderResolverConfigServesANamedClusterNipDomainWhenItDeclaresNone(t *t
 	got := renderAddresses(t, ResolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
-		Observed: []NodeContainer{controlPlane("educates-test2", true)},
+		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
 	})
 
 	wantAddresses(t, got, "address=/10-10-10-2.nip.io/10.10.10.2")
@@ -172,8 +161,8 @@ func TestRenderResolverConfigLeavesOutNamedClustersThatDoNotExist(t *testing.T) 
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
 		Observed: []NodeContainer{
-			controlPlane("educates-test3", true),
-			controlPlane("educates-other", true),
+			controlPlane("educates-test3", "10.10.10.3", true),
+			controlPlane("educates-other", "10.10.10.9", true),
 		},
 	})
 
@@ -228,8 +217,8 @@ func TestRenderResolverConfigRefusesADomainTwoClustersClaim(t *testing.T) {
 				DataHome: dataHome,
 				HostIP:   "192.168.1.10",
 				Observed: []NodeContainer{
-					controlPlane("educates-test2", true),
-					controlPlane("educates-test3", false),
+					controlPlane("educates-test2", "10.10.10.2", true),
+					controlPlane("educates-test3", "10.10.10.3", false),
 				},
 			})
 
@@ -246,7 +235,7 @@ func TestRenderResolverConfigServesExtraDomainsOncePerCluster(t *testing.T) {
 
 	got := renderAddresses(t, ResolverInputs{
 		DataHome: dataHome,
-		Observed: []NodeContainer{controlPlane("educates-test2", true)},
+		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
 	})
 
 	wantAddresses(t, got,
@@ -282,7 +271,7 @@ func TestRenderResolverConfigServesTheDomainAnEducatesConfigDeclares(t *testing.
 	got := renderAddresses(t, ResolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
-		Observed: []NodeContainer{controlPlane("educates-test2", true), controlPlane("educates-test3", true)},
+		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true), controlPlane("educates-test3", "10.10.10.3", true)},
 	})
 
 	wantAddresses(t, got,
@@ -302,7 +291,7 @@ func TestRenderResolverConfigServesNoDomainForAnEducatesConfigThatDeclaresNone(t
 	got := renderAddresses(t, ResolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
-		Observed: []NodeContainer{controlPlane("educates-test2", true)},
+		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
 	})
 
 	wantAddresses(t, got, "address=/extra.example.test/10.10.10.2")
@@ -395,7 +384,7 @@ func TestRenderResolverConfigRefusesCreatingAClusterOnADomainAnotherClaims(t *te
 
 	_, err := RenderResolverConfig(ResolverInputs{
 		DataHome: dataHome,
-		Observed: []NodeContainer{controlPlane("educates-test2", false)},
+		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", false)},
 		Given: []ClusterConfig{givenConfig(t, namedID(t, "test3", dataHome), localConfigHeader+
 			"cluster:\n  listenAddress: 10.10.10.3\ningress:\n  domain: test2.educates.test\n")},
 	})
@@ -415,7 +404,7 @@ func TestRenderResolverConfigOverridesOnlyTheDefaultClusterDomain(t *testing.T) 
 	got := renderAddresses(t, ResolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
-		Observed: []NodeContainer{controlPlane("educates-test2", true)},
+		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
 		Given:    []ClusterConfig{def},
 	})
 

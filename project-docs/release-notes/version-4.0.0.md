@@ -311,14 +311,31 @@ New Features
   configuration, and every cluster pulls from the one local image registry
   on ``localhost:5001``. The platform install of ``educates local cluster
   create`` now always targets the cluster it has just created, whatever
-  ``--context`` or ``KUBECONFIG`` say. The one local DNS resolver serves
-  the domains of every local cluster, each pointing at its own cluster's
-  ``resolver.targetAddress``, which for a named cluster defaults to its
-  listen address, so a named cluster on ``test2.educates.test`` resolves to
-  its own IP address while ``educates.test`` still resolves to the default
-  cluster. ``educates local resolver deploy`` and ``update`` configure it
-  for every cluster, creating or deleting a cluster refreshes a running
-  resolver, and two clusters claiming the same domain is an error.
+  ``KUBECONFIG`` or the current kube context say.
+
+  ``educates local cluster list`` shows every local cluster, the default
+  one marked, with its state, listen address, ingress domain and kube
+  context. A Kind cluster named ``educates-<name>`` counts as a local
+  cluster only when its folder ``clusters/<name>/`` exists in the data
+  home, so Kind clusters made by hand are left out of the list and of every
+  check. Before ``create`` creates a cluster, and before ``start`` starts
+  one, its listen address is checked against every other local cluster,
+  running or stopped: an address another cluster also uses, a cluster on
+  ``0.0.0.0`` beside any other, and an address on no network interface of
+  the host are refused with an error naming the other cluster. ``educates
+  local cluster delete --all`` now deletes the local image registry, the DNS
+  resolver and the registry mirrors only when no other local cluster
+  remains, and otherwise keeps them and names the clusters still using
+  them.
+
+  The one local DNS resolver serves the domains of every local cluster,
+  each pointing at its own cluster's ``resolver.targetAddress``, which for
+  a named cluster defaults to its listen address, so a named cluster on
+  ``test2.educates.test`` resolves to its own IP address while
+  ``educates.test`` still resolves to the default cluster. ``educates local
+  resolver deploy`` and ``update`` configure it for every cluster, creating
+  or deleting a cluster refreshes a running resolver, and two clusters
+  claiming the same domain is an error.
 
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to

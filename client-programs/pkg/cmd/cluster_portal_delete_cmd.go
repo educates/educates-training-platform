@@ -84,6 +84,7 @@ func (p *ProjectInfo) NewClusterPortalDeleteCmd() *cobra.Command {
 		"",
 		"Context to use from Kubeconfig",
 	)
+	addLocalClusterContextFlag(c, &o.KubeconfigOptions)
 	c.Flags().StringVarP(
 		&o.Portal,
 		"portal",

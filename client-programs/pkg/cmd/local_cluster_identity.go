@@ -41,11 +41,31 @@ func localClusterFlagArg(id localclusters.Identity) string {
 // an empty value meaning the default local cluster, otherwise the one
 // EDUCATES_LOCAL_CLUSTER names, and otherwise the default local cluster.
 func selectedLocalCluster(c *cobra.Command) (localclusters.Identity, error) {
+	return localclusters.Resolve(localClusterSelection(c), utils.GetEducatesHomeDir())
+}
+
+// explicitlySelectedLocalCluster returns the identity of the local
+// cluster the command c's --local-cluster flag or EDUCATES_LOCAL_CLUSTER
+// selects, and true. With neither set it returns false and no identity:
+// the command acts on no local cluster in particular.
+func explicitlySelectedLocalCluster(c *cobra.Command) (localclusters.Identity, bool, error) {
+	sel := localClusterSelection(c)
+	if !sel.IsSet() {
+		return localclusters.Identity{}, false, nil
+	}
+	id, err := localclusters.Resolve(sel, utils.GetEducatesHomeDir())
+	return id, err == nil, err
+}
+
+// localClusterSelection returns what the command c was told about which
+// local cluster to act on: its --local-cluster flag, when it takes one,
+// and EDUCATES_LOCAL_CLUSTER.
+func localClusterSelection(c *cobra.Command) localclusters.Selection {
 	sel := localclusters.Selection{Env: os.Getenv(localclusters.SelectionEnvVar)}
 	if f := c.Flags().Lookup(localclusters.FlagName); f != nil && f.Changed {
 		sel.FlagSet, sel.Flag = true, f.Value.String()
 	}
-	return localclusters.Resolve(sel, utils.GetEducatesHomeDir())
+	return sel
 }
 
 // registryNodes returns the names of the node containers of the local

@@ -63,6 +63,27 @@ func TestResolveSelection(t *testing.T) {
 	}
 }
 
+func TestSelectionIsSet(t *testing.T) {
+	cases := []struct {
+		name string
+		sel  Selection
+		want bool
+	}{
+		{name: "neither the flag nor the environment variable", sel: Selection{}, want: false},
+		{name: "the environment variable", sel: Selection{Env: "test2"}, want: true},
+		{name: "the flag", sel: Selection{FlagSet: true, Flag: "test3"}, want: true},
+		{name: "an explicitly empty flag", sel: Selection{FlagSet: true}, want: true},
+		{name: "a flag value that was not given", sel: Selection{Flag: "test3"}, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.sel.IsSet(); got != tc.want {
+				t.Errorf("%+v.IsSet() = %t, want %t", tc.sel, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestResolveRejectsInvalidNamesNamingTheSource(t *testing.T) {
 	cases := []struct {
 		name   string

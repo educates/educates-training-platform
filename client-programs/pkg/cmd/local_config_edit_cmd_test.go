@@ -101,7 +101,7 @@ func TestRunLocalConfigEdit_InvalidThenValid(t *testing.T) {
 
 	stateDir := stageFakeEditor(t, invalid, valid)
 
-	if err := runLocalConfigEdit(); err != nil {
+	if err := runLocalConfigEdit(defaultLocalCluster()); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
 
@@ -138,7 +138,7 @@ func TestRunLocalConfigEdit_ValidFirstPass_Saves(t *testing.T) {
 	valid := defaultLocalConfigYAML + "\n# first-pass-marker\n"
 	stateDir := stageFakeEditor(t, valid)
 
-	if err := runLocalConfigEdit(); err != nil {
+	if err := runLocalConfigEdit(defaultLocalCluster()); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
 	if n := editorInvocations(t, stateDir); n != 1 {
@@ -164,7 +164,7 @@ func TestRunLocalConfigEdit_QuitNoChanges_DoesNotCreateFile(t *testing.T) {
 	// a quit-without-saving on a pristine data home.
 	stateDir := stageFakeEditor(t)
 
-	if err := runLocalConfigEdit(); err != nil {
+	if err := runLocalConfigEdit(defaultLocalCluster()); err != nil {
 		t.Fatalf("expected nil on no-change quit, got %v", err)
 	}
 	if n := editorInvocations(t, stateDir); n != 1 {
@@ -190,7 +190,7 @@ func TestRunLocalConfigEdit_AbortAfterError_PreservesTemp(t *testing.T) {
 	// saving, which should abort and preserve their work.
 	stateDir := stageFakeEditor(t, invalid)
 
-	err := runLocalConfigEdit()
+	err := runLocalConfigEdit(defaultLocalCluster())
 	if err == nil {
 		t.Fatal("expected an abort error after invalid edit followed by quit")
 	}

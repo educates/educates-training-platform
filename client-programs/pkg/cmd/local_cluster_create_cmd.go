@@ -294,8 +294,7 @@ func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v
 		return loadNamedLocalConfig(o, id, flags)
 	}
 	if !flags.IsZero() {
-		return nil, "", false, fmt.Errorf("--%s and --%s write the config of a named local cluster; select one with --%s or %s",
-			localclusters.ListenAddressFlagName, localclusters.DomainFlagName, localclusters.FlagName, localclusters.SelectionEnvVar)
+		return nil, "", false, localclusters.ConfigFlagsOnDefaultClusterError()
 	}
 
 	var path string

@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -12,6 +15,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/translator"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localcerts"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -26,11 +30,18 @@ const adminPlatformRenderExample = `
   # falls back to <host-IP>.nip.io with a comment header noting the
   # derivation.
   educates admin platform render --local-config
+
+  # Render the install of the named local cluster test2 from its own config:
+  educates admin platform render --local-config --local-cluster test2
 `
 
 type PlatformRenderOptions struct {
 	Config      string
 	LocalConfig bool
+
+	// LocalCluster selects the local cluster whose config LocalConfig
+	// reads.
+	LocalCluster localclusters.Selection
 }
 
 func (p *ProjectInfo) NewAdminPlatformRenderCmd() *cobra.Command {
@@ -54,37 +65,33 @@ Defaulting is flag-driven:
                     CLI version) pair.
   --local-config    Laptop convenience mode. Same defaults, plus a
                     <host-IP>.nip.io fallback for ingress.domain when
-                    empty. Output is host-specific.`,
+                    empty. Output is host-specific.
+
+--local-config reads the config of the local cluster that --local-cluster
+or EDUCATES_LOCAL_CLUSTER selects: <data-home>/config.yaml for the default
+local cluster, <data-home>/clusters/<name>/config.yaml for a named one. A
+named cluster's config with no ingress.domain takes the nip.io name of its
+cluster.listenAddress instead of the host IP's.`,
 		Example: adminPlatformRenderExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			o.LocalCluster = localClusterSelection(cmd)
 			return p.runRender(cmd.OutOrStdout(), &o)
 		},
 	}
 
 	c.Flags().StringVarP(&o.Config, "config", "c", "", "path to a CLI config file (any kind)")
 	c.Flags().BoolVar(&o.LocalConfig, "local-config", false,
-		"use <data-home>/config.yaml; applies host-IP nip.io fallback for ingress.domain")
+		"use the selected local cluster's config in the data home; applies the nip.io fallback for ingress.domain")
+	addLocalClusterFlag(c)
 	c.MarkFlagsMutuallyExclusive("config", "local-config")
+	c.MarkFlagsMutuallyExclusive("config", localclusters.FlagName)
 	c.MarkFlagsOneRequired("config", "local-config")
 
 	return c
 }
 
 func (p *ProjectInfo) runRender(w io.Writer, o *PlatformRenderOptions) error {
-	path, err := resolveConfigPath(o)
-	if err != nil {
-		return err
-	}
-	// EnsureLocalConfigFile composes the v3→v4 migration shim
-	// (MaybeMigrateV3) with the user-actionable missing-file diagnostic
-	// (MissingLocalConfigError). Returns nil when config.yaml is
-	// either already present or has just been written by migration.
-	if o.LocalConfig {
-		if err := config.EnsureLocalConfigFile(utils.GetEducatesHomeDir()); err != nil {
-			return err
-		}
-	}
-	cfg, err := config.Load(path)
+	cfg, path, err := loadPlatformConfig(o.Config, o.LocalConfig, o.LocalCluster)
 	if err != nil {
 		return err
 	}
@@ -142,17 +149,41 @@ func (c *yamlComments) Note(msg string) {
 	}
 }
 
-// resolveConfigPath picks the config file based on which flag was set.
-// --local-config resolves to <data-home>/config.yaml, where <data-home>
-// is $EDUCATES_CLI_DATA_HOME or $XDG_DATA_HOME/educates.
-func resolveConfigPath(o *PlatformRenderOptions) (string, error) {
-	if o.LocalConfig {
-		return defaultLocalCluster().ConfigPath, nil
+// loadPlatformConfig loads the config admin platform render and deploy
+// install from, and returns it with the path it was read from: the file
+// configFile when localConfig is not set, otherwise the config of the
+// local cluster sel selects, in the data home, which is
+// $EDUCATES_CLI_DATA_HOME or $XDG_DATA_HOME/educates.
+//
+// A missing default local cluster's config.yaml is migrated from a v3
+// install when there is one, and is otherwise an error that says how to
+// write it. A named local cluster's config follows the rules of
+// localclusters.LoadNamedConfig.
+func loadPlatformConfig(configFile string, localConfig bool, sel localclusters.Selection) (v1alpha1.Config, string, error) {
+	if !localConfig {
+		if configFile == "" {
+			return nil, "", fmt.Errorf("internal: neither --config nor --local-config set (should have been caught by cobra)")
+		}
+		cfg, err := config.Load(configFile)
+		return cfg, configFile, err
 	}
-	if o.Config == "" {
-		return "", fmt.Errorf("internal: neither --config nor --local-config set (should have been caught by cobra)")
+
+	id, err := localclusters.Resolve(sel, utils.GetEducatesHomeDir())
+	if err != nil {
+		return nil, "", err
 	}
-	return o.Config, nil
+	if id.IsDefault() {
+		if err := config.EnsureLocalConfigFile(utils.GetEducatesHomeDir()); err != nil {
+			return nil, id.ConfigPath, err
+		}
+		cfg, err := config.Load(id.ConfigPath)
+		return cfg, id.ConfigPath, err
+	}
+	if _, err := os.Stat(id.ConfigPath); errors.Is(err, fs.ErrNotExist) {
+		return nil, id.ConfigPath, localclusters.MissingNamedConfigError(id)
+	}
+	cfg, err := localclusters.LoadNamedConfig(id.ConfigPath)
+	return cfg, id.ConfigPath, err
 }
 
 // maybeApplyHostDomain applies <host-IP>.nip.io to ingress.domain when

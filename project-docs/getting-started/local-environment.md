@@ -460,7 +460,7 @@ The `--local-cluster` option takes precedence over the environment variable, and
 
 Deleting a named cluster with `educates local cluster delete --local-cluster test2` deletes its Kind cluster and keeps its configuration, so you can create it again with just `--local-cluster test2`. The `--all` option also deletes the local image registry, the DNS resolver and the registry mirrors that every cluster shares, but only once no other local cluster remains, running or stopped. While another one does, `--all` deletes the selected cluster, keeps the shared containers and names the clusters still using them, so the containers go with the last cluster you delete with `--all`.
 
-Kind makes the cluster it created last the current context of your kubeconfig, and commands that act on a cluster through the current context, such as `educates cluster workshop deploy`, follow it. Switch between clusters with `kubectl config use-context`, for example `kubectl config use-context kind-educates` for the default cluster.
+Selecting a cluster also decides which cluster the `educates cluster` and `educates admin` commands act on, as [commands that follow the selected cluster](local-cluster-kube-context) describes.
 
 ### The listen address
 
@@ -525,6 +525,67 @@ educates local cluster list
 It lists the default cluster, shown as `(default)`, and every named cluster, whatever `--local-cluster` or `EDUCATES_LOCAL_CLUSTER` select. Each row has the cluster's state, the host IP address it publishes ports 80 and 443 on, its ingress domain and its kube context. The state is `running`, `stopped`, or `partly running` when only some nodes of a multi-node cluster run. The domain is the one the cluster's configuration declares, or for a named cluster the `nip.io` name of its listen address, and shows as `-` when there is none, as for a default cluster that falls back to the `nip.io` name of your host's IP address.
 
 Only the Kind clusters the command line tool manages are local clusters: the Kind cluster `educates`, and a Kind cluster `educates-<name>` whose folder `clusters/<name>/` exists in the data home. A Kind cluster you created yourself is left out of the list and ignored by every check, even when its name starts with `educates-`.
+
+### A named cluster's configuration
+
+To write a named cluster's configuration without creating the cluster, for example to change it before you first create the cluster, run `educates local config init` with the same options:
+
+```
+educates local config init --local-cluster test2 --listen-address 10.10.10.2
+```
+
+A named cluster needs `--listen-address`, and `--domain` is optional. As for the default cluster, `educates local config init` refuses to replace an existing configuration unless you add `--force`. The `--defaults` option writes only the default cluster's configuration, while `educates local config view --local-cluster test2` shows the defaults a named cluster takes.
+
+The `educates local config get`, `set`, `view` and `edit` commands also select a cluster with `--local-cluster` or the `EDUCATES_LOCAL_CLUSTER` environment variable, and act on that cluster's configuration, or on the default cluster's with neither. For example, to give the named cluster `test2` a domain of its own:
+
+```
+educates local config set --local-cluster test2 ingress.domain test2.educates.test
+```
+
+For a named cluster, `educates local config set` and `edit` refuse a change that breaks the rules for its listen address, such as a loopback address, and `educates local config view` shows the `nip.io` name of the listen address as the domain when the configuration sets none.
+
+To remove a named cluster's configuration once you no longer need the cluster, delete the cluster first and then its configuration:
+
+```
+educates local cluster delete --local-cluster test2
+educates local config delete --local-cluster test2
+```
+
+`educates local config delete` removes the folder `clusters/test2` of the data home, which holds the cluster's configuration and its Kind configuration file. It refuses while the Kind cluster `educates-test2` exists, and it never deletes the default cluster's configuration.
+
+(local-cluster-kube-context)=
+### Commands that follow the selected cluster
+
+Kind makes the cluster it created last the current context of your kubeconfig. Without a cluster selected, the commands that act on a cluster through a kube context use the current context, as they always have, so they follow whichever cluster was created last, or whichever context you last switched to with `kubectl config use-context`.
+
+When you select a cluster with `--local-cluster` or `EDUCATES_LOCAL_CLUSTER`, these commands act on that cluster's kube context instead, `kind-educates` for the default cluster and `kind-educates-<name>` for a named one:
+
+* the `educates cluster workshop`, `educates cluster portal` and `educates cluster session` commands, and their aliases such as `educates deploy-workshop` and `educates serve-workshop`;
+* `educates admin platform deploy`, `educates admin platform delete`, `educates admin diagnostics collect` and `educates admin lookup kubeconfig`;
+* `educates local secrets sync`.
+
+So a terminal set to one cluster stays on it, whichever cluster Kind created last. In a terminal where you ran:
+
+```
+export EDUCATES_LOCAL_CLUSTER=test2
+educates cluster workshop deploy
+```
+
+the workshop is deployed to the cluster `educates-test2`, while in a terminal without the variable the same command deploys it to the current context.
+
+The `--context` option takes precedence over both `--local-cluster` and `EDUCATES_LOCAL_CLUSTER`: a command given `--context` acts on the context it names. Selecting a cluster never changes the current context of your kubeconfig, which `kubectl` keeps using.
+
+The context of a selected cluster is looked up in the kubeconfig file `educates local cluster create` writes it into: the file `--kubeconfig` names, and otherwise `~/.kube/config`, whatever the `KUBECONFIG` environment variable says. A terminal whose `KUBECONFIG` leaves out `~/.kube/config` therefore still reaches a selected local cluster. Without a cluster selected, the commands read `KUBECONFIG` as before.
+
+With `--local-config`, `educates admin platform deploy` and `educates admin platform render` read the configuration of the selected cluster: `config.yaml` in the data home for the default cluster, and `clusters/<name>/config.yaml` for a named one. So you can redeploy one cluster from its configuration without touching the others:
+
+```
+educates admin platform deploy --local-config --local-cluster test2
+```
+
+With `--config`, `educates admin platform deploy` installs the file you name into the selected cluster. `educates admin platform render` talks to no cluster, so `--local-cluster` only selects the configuration it renders, and cannot be combined with `--config`. `educates admin platform delete` reads no configuration, so for it `--local-cluster` only selects the cluster to remove Educates from.
+
+`educates local secrets sync` copies into the selected cluster the cached secrets its configuration needs: the CA key pair for its ingress domain when the cluster is served over HTTPS, and no CA key pair for a named cluster on the `nip.io` name of its listen address, which is served over plain HTTP. Without a cluster selected, it reads the default cluster's configuration and copies into the current context, as before.
 
 ### A second data home is not a second cluster
 

@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -112,6 +113,19 @@ func KubeconfigPath(override string, fallback string) string {
 	// }
 
 	return fallback
+}
+
+// KindKubeconfigPath returns the kubeconfig file kind writes a local
+// cluster's context into: kubeconfig when it is set, otherwise
+// ~/.kube/config, whatever $KUBECONFIG says.
+func KindKubeconfigPath(kubeconfig string) string {
+	fallback := ""
+
+	if home, err := os.UserHomeDir(); err == nil {
+		fallback = filepath.Join(home, clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
+	}
+
+	return KubeconfigPath(kubeconfig, fallback)
 }
 
 func IsClusterAvailableCheck(clusterConfig *ClusterConfig) error {

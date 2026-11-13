@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 	"k8s.io/kubectl/pkg/util/templates"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 )
 
 func (p *ProjectInfo) NewLocalConfigCmdGroup() *cobra.Command {
@@ -12,7 +16,9 @@ func (p *ProjectInfo) NewLocalConfigCmdGroup() *cobra.Command {
 		Long: "Manage local configuration files. This configuration will be used when creating a local cluster " +
 			"using the 'educates local cluster create' command. By default it will use the nip.io wildcard domain " +
 			"and Kind as the provider." + "\n" +
-			"This configuration is saved in the Educates home directory.",
+			"This configuration is saved in the Educates home directory." + "\n" +
+			"--local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, selects the named local cluster whose " +
+			"configuration, in <data-home>/clusters/<name>/config.yaml, a command manages.",
 	}
 
 	// Use a command group as it allows us to dictate the order in which they
@@ -29,6 +35,7 @@ func (p *ProjectInfo) NewLocalConfigCmdGroup() *cobra.Command {
 				p.NewLocalConfigEditCmd(),
 				p.NewLocalConfigViewCmd(),
 				p.NewLocalConfigExplainCmd(),
+				p.NewLocalConfigDeleteCmd(),
 			},
 		},
 	}
@@ -38,4 +45,18 @@ func (p *ProjectInfo) NewLocalConfigCmdGroup() *cobra.Command {
 	templates.ActsAsRootCommand(c, []string{"--help"}, commandGroups...)
 
 	return c
+}
+
+// checkNamedConfigExists returns the error naming the ways to write a
+// config when id is a named local cluster that has none. The config
+// commands that read a config check it first, so a named cluster's
+// missing config is reported the same way by each of them.
+func checkNamedConfigExists(id localclusters.Identity) error {
+	if id.IsDefault() {
+		return nil
+	}
+	if _, err := os.Stat(id.ConfigPath); os.IsNotExist(err) {
+		return localclusters.MissingNamedConfigError(id)
+	}
+	return nil
 }

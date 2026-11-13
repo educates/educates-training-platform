@@ -38,7 +38,13 @@ Two local clusters claiming the same domain is an error, but a
 subdomain of another cluster's domain, such as test2.educates.test
 beside educates.test, resolves to its own cluster.
 
-Creating or deleting a local cluster refreshes a running resolver.`
+Names that resolve to anything other than a local cluster, such as a VM,
+go in dnsmasq configuration files of your own, <data-home>/dnsmasq.d/*.conf,
+which the resolver mounts and reads after every cluster's entries. The
+command line tool creates the folder and never writes into it.
+
+Creating or deleting a local cluster refreshes a running resolver.
+'educates local resolver view' shows every name it answers for.`
 
 type LocalResolverDeployOptions struct {
 	Config      string

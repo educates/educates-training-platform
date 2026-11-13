@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
-	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localcerts"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -72,23 +69,11 @@ func (o *LocalSecretsSyncOptions) Run(w io.Writer, id localclusters.Identity) er
 // takes the nip.io name of its listen address and is served over plain
 // HTTP, and a missing one is an error that says how to write it.
 func resolveLocalSecretsSync(id localclusters.Identity) (*localcerts.Plan, error) {
-	var cfg *v1alpha1.EducatesLocalConfig
-	if id.IsDefault() {
-		local, err := config.LoadLocalConfigIfPresent(utils.GetEducatesHomeDir())
-		if err != nil {
-			return nil, err
-		}
-		cfg = local
-	} else {
-		if _, err := os.Stat(id.ConfigPath); errors.Is(err, fs.ErrNotExist) {
-			return nil, localclusters.MissingNamedConfigError(id)
-		}
-		loaded, err := localclusters.LoadNamedConfig(id.ConfigPath)
-		if err != nil {
-			return nil, err
-		}
-		cfg, _ = loaded.(*v1alpha1.EducatesLocalConfig)
+	loaded, err := localclusters.LoadConfig(id)
+	if err != nil && !(id.IsDefault() && errors.Is(err, fs.ErrNotExist)) {
+		return nil, err
 	}
+	cfg, _ := loaded.Config.(*v1alpha1.EducatesLocalConfig)
 	return localcerts.ResolveSync(cfg)
 }
 

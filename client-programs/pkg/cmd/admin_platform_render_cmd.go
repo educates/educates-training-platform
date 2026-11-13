@@ -1,11 +1,8 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -176,14 +173,9 @@ func loadPlatformConfig(configFile string, localConfig bool, sel localclusters.S
 		if err := config.EnsureLocalConfigFile(utils.GetEducatesHomeDir()); err != nil {
 			return nil, id.ConfigPath, err
 		}
-		cfg, err := config.Load(id.ConfigPath)
-		return cfg, id.ConfigPath, err
 	}
-	if _, err := os.Stat(id.ConfigPath); errors.Is(err, fs.ErrNotExist) {
-		return nil, id.ConfigPath, localclusters.MissingNamedConfigError(id)
-	}
-	cfg, err := localclusters.LoadNamedConfig(id.ConfigPath)
-	return cfg, id.ConfigPath, err
+	loaded, err := localclusters.LoadConfig(id)
+	return loaded.Config, id.ConfigPath, err
 }
 
 // maybeApplyHostDomain applies <host-IP>.nip.io to ingress.domain when

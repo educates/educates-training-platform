@@ -16,7 +16,7 @@ import (
 // which serves the domains of every local cluster of the inventory inv,
 // with the local clusters of given served from the configs given for
 // them. It fails when two clusters claim the same domain.
-func localResolverConfig(inv localclusters.Inventory, given ...localclusters.ClusterConfig) ([]byte, error) {
+func localResolverConfig(inv localclusters.Inventory, given ...localclusters.ResolverInput) ([]byte, error) {
 	// Without a host IP address, the default local cluster is served at
 	// the loopback address and gets no nip.io domain.
 	hostIP, err := hostinfo.DetectHostIP()
@@ -28,7 +28,7 @@ func localResolverConfig(inv localclusters.Inventory, given ...localclusters.Clu
 
 // observedResolverConfig is localResolverConfig for the local clusters
 // observed on the host now.
-func observedResolverConfig(ctx context.Context, given ...localclusters.ClusterConfig) ([]byte, error) {
+func observedResolverConfig(ctx context.Context, given ...localclusters.ResolverInput) ([]byte, error) {
 	inv, err := localClusterInventory(ctx)
 	if err != nil {
 		return nil, err
@@ -58,18 +58,21 @@ func refreshLocalResolver(rep progress.Reporter, render func() ([]byte, error)) 
 // local resolver commands take it: from configPath when it is set, and
 // otherwise from the data home, which must hold one. domain, when set,
 // is served in place of the config's ingress domain.
-func defaultResolverConfig(configPath, domain string) (localclusters.ClusterConfig, error) {
+func defaultResolverConfig(configPath, domain string) (localclusters.ResolverInput, error) {
 	id := defaultLocalCluster()
 	path := configPath
 	if path == "" {
 		path = id.ConfigPath
 		if err := config.EnsureLocalConfigFile(utils.GetEducatesHomeDir()); err != nil {
-			return localclusters.ClusterConfig{}, err
+			return localclusters.ResolverInput{}, err
 		}
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
-		return localclusters.ClusterConfig{}, err
+		return localclusters.ResolverInput{}, err
 	}
-	return localclusters.ClusterConfig{ID: id, Config: cfg, Source: path, Domain: domain}, nil
+	return localclusters.ResolverInput{
+		LoadedConfig:           localclusters.LoadedConfig{Identity: id, Config: cfg, Source: path},
+		ResolverDomainOverride: domain,
+	}, nil
 }

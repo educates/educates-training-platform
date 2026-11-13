@@ -148,14 +148,13 @@ func loadLocalConfigForView(id localclusters.Identity) (declared, cfg *v1alpha1.
 			return nil, nil, err
 		}
 	} else {
-		if err := checkNamedConfigExists(id); err != nil {
-			return nil, nil, err
-		}
 		// The named-cluster rules come first: the static defaults would
 		// turn a missing listen address into a loopback one.
-		if named, err = localclusters.LoadNamedConfig(id.ConfigPath); err != nil {
+		loaded, err := localclusters.LoadConfig(id)
+		if err != nil {
 			return nil, nil, err
 		}
+		named = loaded.Config
 	}
 	// LoadLocal validates against the schema and applies the static
 	// WithDefaults; it errors if the file would not load at deploy time.

@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 	"k8s.io/kubectl/pkg/util/templates"
 
@@ -48,15 +46,14 @@ func (p *ProjectInfo) NewLocalConfigCmdGroup() *cobra.Command {
 }
 
 // checkNamedConfigExists returns the error naming the ways to write a
-// config when id is a named local cluster that has none. The config
-// commands that read a config check it first, so a named cluster's
-// missing config is reported the same way by each of them.
+// config when id is a named local cluster that has none, as
+// localclusters.LoadConfig reports it. The config commands that read a
+// config check it first, so a named cluster's missing config is reported
+// the same way by each of them, including those that read the file
+// without loading it.
 func checkNamedConfigExists(id localclusters.Identity) error {
 	if id.IsDefault() {
 		return nil
 	}
-	if _, err := os.Stat(id.ConfigPath); os.IsNotExist(err) {
-		return localclusters.MissingNamedConfigError(id)
-	}
-	return nil
+	return localclusters.CheckConfigExists(id)
 }

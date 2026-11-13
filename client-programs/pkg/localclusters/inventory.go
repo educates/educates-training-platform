@@ -8,9 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/educates/educates-training-platform/client-programs/pkg/config"
-	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
 // Observed is the state of the host the inventory of local clusters
@@ -133,7 +130,13 @@ func (inv Inventory) List() []ListRow {
 		if addrs := inv.ingressAddresses(id); len(addrs) > 0 {
 			row.ListenAddress = addrs[0].String()
 		}
-		row.Domain, row.ConfigError = configuredDomain(id)
+		switch loaded, err := LoadConfig(id); {
+		case errors.Is(err, fs.ErrNotExist):
+		case err != nil:
+			row.ConfigError = err
+		default:
+			row.Domain = loaded.Domain("")
+		}
 		rows = append(rows, row)
 	}
 	return rows
@@ -167,34 +170,6 @@ func (inv Inventory) ingressAddresses(id Identity) []netip.Addr {
 		}
 	}
 	return addrs
-}
-
-// configuredDomain returns the ingress domain the config of the local
-// cluster id in the data home declares, or for a named cluster the nip.io
-// name of its listen address it falls back to. A missing config has no
-// domain and is no error.
-func configuredDomain(id Identity) (string, error) {
-	if _, err := os.Stat(id.ConfigPath); errors.Is(err, fs.ErrNotExist) {
-		return "", nil
-	}
-	var cfg v1alpha1.Config
-	var err error
-	if id.IsDefault() {
-		cfg, err = config.Load(id.ConfigPath)
-	} else {
-		cfg, err = LoadNamedConfig(id.ConfigPath)
-	}
-	if err != nil {
-		return "", err
-	}
-	switch c := cfg.(type) {
-	case *v1alpha1.EducatesLocalConfig:
-		return c.Ingress.Domain, nil
-	case *v1alpha1.EducatesConfig:
-		return c.IngressDomain(), nil
-	default:
-		return "", nil
-	}
 }
 
 // educatesCluster returns the identity of the local cluster whose kind

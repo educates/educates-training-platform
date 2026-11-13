@@ -28,7 +28,7 @@ type resolverInputs struct {
 	DataHome string
 	HostIP   string
 	Observed []NodeContainer
-	Given    []ClusterConfig
+	Given    []ResolverInput
 }
 
 // renderResolver renders the resolver config of the inventory of in's
@@ -345,7 +345,7 @@ func TestResolverConfigRefusesADefaultConfigItCannotServe(t *testing.T) {
 
 // givenConfig loads body, written outside the data home, as the config of
 // the local cluster id, the way a command given a config would.
-func givenConfig(t *testing.T, id Identity, body string) ClusterConfig {
+func givenConfig(t *testing.T, id Identity, body string) ResolverInput {
 	t.Helper()
 	path := writeConfig(t, body)
 	if id.IsDefault() {
@@ -353,13 +353,13 @@ func givenConfig(t *testing.T, id Identity, body string) ClusterConfig {
 		if err != nil {
 			t.Fatalf("config.Load: %v", err)
 		}
-		return ClusterConfig{ID: id, Config: cfg, Source: path}
+		return ResolverInput{LoadedConfig: LoadedConfig{Identity: id, Config: cfg, Source: path}}
 	}
 	cfg, err := LoadNamedConfig(path)
 	if err != nil {
 		t.Fatalf("LoadNamedConfig: %v", err)
 	}
-	return ClusterConfig{ID: id, Config: cfg, Source: path}
+	return ResolverInput{LoadedConfig: LoadedConfig{Identity: id, Config: cfg, Source: path}}
 }
 
 // namedID is the identity of the named local cluster name of dataHome.
@@ -381,7 +381,7 @@ func TestResolverConfigServesAClusterBeingCreatedFromItsGivenConfig(t *testing.T
 	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
-		Given: []ClusterConfig{givenConfig(t, namedID(t, "test2", dataHome), localConfigHeader+
+		Given: []ResolverInput{givenConfig(t, namedID(t, "test2", dataHome), localConfigHeader+
 			"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")},
 	})
 
@@ -399,7 +399,7 @@ func TestResolverConfigRefusesCreatingAClusterOnADomainAnotherClaims(t *testing.
 	_, err := renderResolver(resolverInputs{
 		DataHome: dataHome,
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", false)},
-		Given: []ClusterConfig{givenConfig(t, namedID(t, "test3", dataHome), localConfigHeader+
+		Given: []ResolverInput{givenConfig(t, namedID(t, "test3", dataHome), localConfigHeader+
 			"cluster:\n  listenAddress: 10.10.10.3\ningress:\n  domain: test2.educates.test\n")},
 	})
 
@@ -413,13 +413,13 @@ func TestResolverConfigOverridesOnlyTheDefaultClusterDomain(t *testing.T) {
 		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")
 	def := givenConfig(t, Default(dataHome), localConfigHeader+
 		"ingress:\n  domain: given.test\nresolver:\n  extraDomains:\n  - override.test\n  - extra.test\n")
-	def.Domain = "override.test"
+	def.ResolverDomainOverride = "override.test"
 
 	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
-		Given:    []ClusterConfig{def},
+		Given:    []ResolverInput{def},
 	})
 
 	wantAddresses(t, got,

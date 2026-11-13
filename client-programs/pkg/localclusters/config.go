@@ -92,43 +92,20 @@ func parseNamedConfig(data []byte, source string) (v1alpha1.Config, error) {
 	return config.ApplyDefaults(cfg), nil
 }
 
-// namedConfigValues is what a named local cluster's config declares
-// about the cluster's host address and domain, before any rule or
-// default applies.
-type namedConfigValues struct {
-	// listenAddressField is the path of the field that declares the
-	// listen address.
-	listenAddressField string
-
-	// listenAddress is the declared listen address, empty when none is.
-	listenAddress string
-
-	// domain is the declared ingress domain, empty when none is.
-	domain string
-}
-
 // declaredNamedConfig returns what cfg, loaded without defaults, declares
-// about a named local cluster, or an error when cfg is of a kind a named
-// local cluster can't take.
-func declaredNamedConfig(cfg v1alpha1.Config) (namedConfigValues, error) {
-	switch c := cfg.(type) {
-	case *v1alpha1.EducatesLocalConfig:
-		return namedConfigValues{
-			listenAddressField: "cluster.listenAddress",
-			listenAddress:      c.Cluster.ListenAddress,
-			domain:             c.Ingress.Domain,
-		}, nil
-	case *v1alpha1.EducatesConfig:
-		if c.Target != nil && c.Target.Provider == "kind" {
-			return namedConfigValues{
-				listenAddressField: "target.cluster.listenAddress",
-				listenAddress:      c.Target.Cluster.ListenAddress,
-				domain:             c.IngressDomain(),
-			}, nil
-		}
+// about a named local cluster, before any rule or default applies, or an
+// error when cfg is of a kind a named local cluster can't take: an
+// EducatesConfig takes one only with target.provider: kind.
+func declaredNamedConfig(cfg v1alpha1.Config) (clusterFields, error) {
+	fields, ok := clusterFieldsOf(cfg)
+	if c, isEducatesConfig := cfg.(*v1alpha1.EducatesConfig); isEducatesConfig && ok && c.Target.Provider != "kind" {
+		ok = false
 	}
-	return namedConfigValues{}, fmt.Errorf("a named local cluster's config is an %s, or an %s with target.provider: kind, not this %s",
-		v1alpha1.KindEducatesLocalConfig, v1alpha1.KindEducatesConfig, describeKind(cfg))
+	if !ok {
+		return clusterFields{}, fmt.Errorf("a named local cluster's config is an %s, or an %s with target.provider: kind, not this %s",
+			v1alpha1.KindEducatesLocalConfig, v1alpha1.KindEducatesConfig, describeKind(cfg))
+	}
+	return fields, nil
 }
 
 // describeKind names cfg's kind for an error, saying when an

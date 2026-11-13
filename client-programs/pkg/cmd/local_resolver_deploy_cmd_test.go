@@ -13,7 +13,7 @@ import (
 // renderWithDefault renders the resolver configuration of the current
 // data home, with no kind cluster running, serving the default local
 // cluster from def.
-func renderWithDefault(t *testing.T, def localclusters.ClusterConfig) string {
+func renderWithDefault(t *testing.T, def localclusters.ResolverInput) string {
 	t.Helper()
 	inv := localclusters.NewInventory(localclusters.Observed{}, utils.GetEducatesHomeDir())
 	content, err := inv.ResolverConfig("192.168.1.10", def)

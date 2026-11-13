@@ -3,6 +3,7 @@ package localclusters
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -46,9 +47,10 @@ func ConfigFlagsOnDefaultClusterError() error {
 }
 
 // MissingNamedConfigError is the error for the named local cluster id
-// having no config, naming both ways to write one.
+// having no config, naming both ways to write one. It wraps
+// fs.ErrNotExist.
 func MissingNamedConfigError(id Identity) error {
-	return fmt.Errorf(`local cluster %q has no config at %s. Write one with:
+	return &missingConfigError{message: fmt.Sprintf(`local cluster %q has no config at %s. Write one with:
 
   educates local config init --%s %s --%s <ip>
 
@@ -61,7 +63,7 @@ nip.io name of the listen address.`,
 		id.Name, id.ConfigPath,
 		SelectionFlagName, id.Name, ListenAddressFlagName,
 		SelectionFlagName, id.Name, ListenAddressFlagName,
-		DomainFlagName)
+		DomainFlagName)}
 }
 
 // WriteNamedConfig writes the config of the named local cluster id to
@@ -119,13 +121,11 @@ func WriteNamedConfig(id Identity, flags NamedConfigFlags) error {
 // nothing, and a flag whose value disagrees with what the file declares
 // is an error: the flags write a missing config, and never change one.
 func EnsureNamedConfig(id Identity, flags NamedConfigFlags) (bool, error) {
-	if _, err := os.Stat(id.ConfigPath); err == nil {
+	switch err := CheckConfigExists(id); {
+	case err == nil:
 		return false, checkFlagsAgree(id, flags)
-	} else if !os.IsNotExist(err) {
-		return false, fmt.Errorf("check for the config of local cluster %q: %w", id.Name, err)
-	}
-	if flags.ListenAddress == "" {
-		return false, MissingNamedConfigError(id)
+	case !errors.Is(err, fs.ErrNotExist), flags.ListenAddress == "":
+		return false, err
 	}
 	if err := WriteNamedConfig(id, flags); err != nil {
 		return false, err

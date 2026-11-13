@@ -675,7 +675,7 @@ With `--config`, `educates admin platform deploy` installs the file you name int
 
 ### Serving a workshop to several clusters
 
-`educates cluster workshop serve` serves a workshop's instructions from your local system to the workshop sessions of a cluster, so that an edit shows in the sessions as you make it. To serve one workshop to two clusters at once, run the command in two terminals, selecting a cluster in each, the default cluster with an empty `--local-cluster=`:
+`educates cluster workshop serve` serves a workshop's instructions from your local system to the workshop sessions of a cluster, so that an edit shows in the sessions as you make it. It serves the local cluster you select with `--local-cluster` or `EDUCATES_LOCAL_CLUSTER`, and with none selected, the local cluster whose kube context it reaches its cluster through: the context `--context` names, or else the current context. `kind-educates` is the default cluster's context, and `kind-educates-<name>` the context of the named cluster `<name>`. To serve one workshop to two clusters at once, run the command in two terminals, selecting a cluster in each, the default cluster with an empty `--local-cluster=`:
 
 ```
 educates cluster workshop serve --patch-workshop --local-cluster=
@@ -685,12 +685,12 @@ educates cluster workshop serve --patch-workshop --local-cluster=
 educates cluster workshop serve --patch-workshop --local-cluster test2
 ```
 
-With a cluster selected, two defaults of the command change, so that the two do not compete for the same ports:
+When the command serves a local cluster, two of its defaults change, so that two serves do not compete for the same ports:
 
 * The proxy that workshop sessions connect to listens on the cluster's listen address, such as `10.10.10.2`, instead of on `0.0.0.0`, every host address. It keeps port 10081, since a cluster's sessions reach your host through a loopback service under the cluster's ingress domain, which resolves to the cluster's own listen address. Every serve binds the address of the cluster it serves, so two serves share port 10081 on macOS and Linux alike.
 * The Hugo server, which renders the instructions, listens on a free port the operating system picks, instead of on port 1313.
 
-The `--local-host`, `--local-port` and `--hugo-port` options still take precedence when you give them. With `--patch-workshop`, both commands use the access token the command line tool keeps in the data home. Without a cluster selected, the command listens on `0.0.0.0` and port 1313, as it always has.
+The `--local-host`, `--local-port` and `--hugo-port` options still take precedence when you give them. With `--patch-workshop`, both commands use the access token the command line tool keeps in the data home. When the command serves no local cluster, as for a remote cluster or a Kind cluster you created yourself, it listens on `0.0.0.0` and port 1313, as it always has.
 
 ### A second data home is not a second cluster
 

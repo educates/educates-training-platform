@@ -395,12 +395,16 @@ New Features
   detected.
 
   ``educates cluster workshop serve`` can serve one workshop to several
-  local clusters at once, from a terminal for each. With a cluster
-  selected, its proxy listens on the cluster's listen address instead of on
-  ``0.0.0.0`` when that address is a specific IP address, keeping port
-  10081, and its Hugo server listens on a free port instead of on 1313.
-  ``--local-host``, ``--local-port`` and ``--hugo-port`` still take
-  precedence, and without a cluster selected the command listens as before.
+  local clusters at once, from a terminal for each. When it serves a local
+  cluster, the one selected, or with none selected, the one whose kube
+  context it reaches its cluster through, ``kind-educates`` or
+  ``kind-educates-<name>``, its proxy listens on the cluster's listen
+  address instead of on ``0.0.0.0``, keeping port 10081, and its Hugo
+  server listens on a free port instead of on 1313. Every serve binds the
+  address of the cluster it serves, so two serves share port 10081 on macOS
+  and Linux alike. ``--local-host``, ``--local-port`` and ``--hugo-port``
+  still take precedence, and for any other cluster the command listens as
+  before.
 
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to

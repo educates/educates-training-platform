@@ -473,6 +473,41 @@ func TestMaybeMigrateV3_PauseContainerOverride_IsDroppedAndNoted(t *testing.T) {
 	}
 }
 
+func TestMaybeMigrateV3_ResolverTargetAddress_IsDroppedAndNoted(t *testing.T) {
+	cfg, written, notice := migrateV3Values(t, `localKindCluster:
+  listenAddress: 127.0.0.1
+localDNSResolver:
+  targetAddress: 192.168.1.10
+  extraDomains:
+    - example.test
+`)
+
+	if strings.Contains(written, "targetAddress") {
+		t.Errorf("migrated file sets targetAddress:\n%s", written)
+	}
+	if got, want := cfg.Cluster.ListenAddress, "127.0.0.1"; got != want {
+		t.Errorf("Cluster.ListenAddress = %q, want the v3 listen address %q", got, want)
+	}
+	if !reflect.DeepEqual(cfg.Resolver.ExtraDomains, []string{"example.test"}) {
+		t.Errorf("Resolver.ExtraDomains = %v, want the v3 extra domains", cfg.Resolver.ExtraDomains)
+	}
+	wantLine := "dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to its " +
+		"cluster.listenAddress when that is a specific IP address, and otherwise to the host's IP address; " +
+		"set cluster.listenAddress to 192.168.1.10 to keep resolving the cluster there, or for other names " +
+		"add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home\n"
+	if !strings.Contains(notice, wantLine) {
+		t.Errorf("notice missing %q in:\n%s", wantLine, notice)
+	}
+}
+
+func TestMaybeMigrateV3_NoResolverTargetAddress_NoNote(t *testing.T) {
+	_, _, notice := migrateV3Values(t, "localDNSResolver:\n  extraDomains:\n    - example.test\n")
+
+	if strings.Contains(notice, "targetAddress") {
+		t.Errorf("notice mentions targetAddress for a file without one:\n%s", notice)
+	}
+}
+
 func TestMaybeMigrateV3_PrePullNamesMissingFromV4Inventory_AreDroppedAndNoted(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

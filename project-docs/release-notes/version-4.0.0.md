@@ -311,7 +311,7 @@ New Features
   configuration, and every cluster pulls from the one local image registry
   on ``localhost:5001``. The platform install of ``educates local cluster
   create`` now always targets the cluster it has just created, whatever
-  ``--context`` or ``KUBECONFIG`` say.
+  ``KUBECONFIG`` or the current kube context say.
 
   ``educates local cluster list`` shows every local cluster, the default
   one marked, with its state, listen address, ingress domain and kube

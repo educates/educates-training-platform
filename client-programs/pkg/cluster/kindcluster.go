@@ -14,7 +14,6 @@ import (
 	"github.com/moby/moby/client"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/kind/pkg/cmd"
 	"sigs.k8s.io/kind/pkg/log"
@@ -91,19 +90,11 @@ type KindClusterConfig struct {
 // through that file and the cluster's own context, never the file's
 // current context.
 func NewKindClusterConfig(kubeconfig string, id localclusters.Identity) *KindClusterConfig {
-	fallback := ""
-
-	home, err := os.UserHomeDir()
-
-	if err == nil {
-		fallback = filepath.Join(home, clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
-	}
-
 	provider := cluster.NewProvider(
 		cluster.ProviderWithLogger(cmd.NewLogger()),
 	)
 
-	return &KindClusterConfig{ClusterConfig{KubeconfigPath(kubeconfig, fallback), id.Context}, id, provider}
+	return &KindClusterConfig{ClusterConfig{KindKubeconfigPath(kubeconfig), id.Context}, id, provider}
 }
 
 //go:embed kindclusterconfig.yaml.tpl

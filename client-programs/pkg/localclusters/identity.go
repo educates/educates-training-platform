@@ -1,10 +1,11 @@
 // Package localclusters holds the rules about the local kind clusters the
-// CLI manages: which local cluster a command means, and what that cluster
-// is called in kind, in Docker, in the kubeconfig and in the data home.
+// CLI manages: which local cluster a command means, what that cluster is
+// called in kind, in Docker, in the kubeconfig and in the data home, and
+// what a named local cluster's config must declare.
 //
-// It takes everything as plain values, the data home included, and reads
-// neither the environment nor Docker, so callers decide where the inputs
-// come from.
+// It takes everything as plain values, the data home included. Besides
+// the cluster configs it loads and writes, it reads neither files, the
+// environment nor Docker, so callers decide where the inputs come from.
 package localclusters
 
 import (

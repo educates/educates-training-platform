@@ -50,9 +50,10 @@ func (inv Inventory) CheckMirrors(declared []v1alpha1.RegistryMirror) error {
 			}
 			errs = append(errs, fmt.Errorf("%s declares registry mirror %s with %s, "+
 				"but the mirror's container, which every local cluster shares, already exists with %s. "+
-				"Declare the mirror there as its container has it, or delete the container with "+
-				"'educates local mirror delete %s', which unlinks it from every local cluster, and run the command again",
-				config.LocalMirrorsPath(inv.dataHome), d.Mirror, declaredValues, containerValues, d.Mirror))
+				"Declare the mirror there as its container has it, or run 'educates local mirror delete %[2]s', "+
+				"which deletes the container and the mirror's entry, then deploy the mirror with the values you want "+
+				"with 'educates local mirror deploy %[2]s', and run the command again",
+				config.LocalMirrorsPath(inv.dataHome), d.Mirror, declaredValues, containerValues))
 		}
 	}
 	return errors.Join(errs...)

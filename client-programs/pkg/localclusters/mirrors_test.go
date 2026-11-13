@@ -26,7 +26,7 @@ func TestCheckMirrorsRefusesAMirrorWhoseContainerHasAnotherURL(t *testing.T) {
 
 	assertErrorNames(t, err, filepath.Join(dataHome, "mirrors.yaml")+" declares registry mirror docker.io",
 		"mirror.gcr.io", "registry-1.docker.io", "every local cluster shares",
-		"educates local mirror delete docker.io")
+		"educates local mirror delete docker.io", "educates local mirror deploy docker.io")
 }
 
 func TestCheckMirrorsRefusesAMirrorWhoseContainerHasAnotherUsername(t *testing.T) {

@@ -80,8 +80,9 @@ func DnsmasqIncludeDir(dataHome string) string {
 // LocalMirrorsPath is the path of the registry mirrors file in the data
 // home dataHome: <data-home>/mirrors.yaml. It declares, as an
 // EducatesLocalMirrors, the registry mirrors every local cluster needs.
-// The CLI reads it and never writes it, except the migration of a v3
-// values.yaml.
+// Local mirror deploy records a mirror in it, and local mirror delete
+// removes it, through RecordLocalMirror and RemoveLocalMirror, which keep
+// the rest of the file as the user wrote it.
 func LocalMirrorsPath(dataHome string) string {
 	return filepath.Join(dataHome, "mirrors.yaml")
 }

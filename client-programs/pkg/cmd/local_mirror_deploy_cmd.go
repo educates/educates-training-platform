@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 )
@@ -35,7 +36,7 @@ type LocalMirrorDeployOptions struct {
 }
 
 func (o *LocalMirrorDeployOptions) Run() error {
-	mirrorConfig := &registry.MirrorConfig{
+	requested := v1alpha1.RegistryMirror{
 		Mirror:   o.MirrorName,
 		URL:      o.MirrorURL,
 		Username: o.Username,
@@ -43,13 +44,27 @@ func (o *LocalMirrorDeployOptions) Run() error {
 	}
 
 	err := stepOnStdout(o.Verbose, "registry mirror "+o.MirrorName, "ready", func(s progress.Step) error {
-		// Every local cluster shares the mirror, so it is linked into every
-		// node of every one of them.
 		inventory, err := localClusterInventory(context.Background())
 		if err != nil {
 			return err
 		}
-		return registry.DeployMirrorAndLinkToCluster(mirrorConfig, inventory.RegistryNodes(), s)
+		// The mirror is recorded in the registry mirrors file before its
+		// container is created, so every local cluster created or started
+		// later needs it, and gets it back should the container go.
+		record, err := inventory.RecordMirror(requested)
+		if err != nil {
+			return err
+		}
+		// Every local cluster shares the mirror, so it is linked into every
+		// node of every one of them.
+		mirrorConfig := registryMirrorFromConfig(record.Mirror)
+		if err := registry.DeployMirrorAndLinkToCluster(&mirrorConfig, inventory.RegistryNodes(), s); err != nil {
+			return err
+		}
+		if record.Note != "" {
+			s.Warn(record.Note)
+		}
+		return nil
 	})
 
 	if err != nil {
@@ -66,6 +81,19 @@ func (p *ProjectInfo) NewLocalMirrorDeployCmd() *cobra.Command {
 		Args:  exactArgs(1, "mirror name is required", "NAME"),
 		Use:   "deploy NAME",
 		Short: "Deploys a local image registry mirror",
+		Long: `Records the registry mirror in the registry mirrors file, mirrors.yaml in
+the data home, creating the file when it is missing, then deploys the
+mirror's container, which every local cluster shares, and links the mirror
+into every node of every running local cluster. Every local cluster
+created or started later needs the mirrors the file records, so the
+mirror stays until 'educates local mirror delete' deletes it.
+
+A mirror the file records with another --url or --username is refused:
+delete it first. One it records with the same URL and username, deployed
+with another --password, has the new password recorded, but its existing
+container keeps the password it was created with until the mirror is
+deleted and deployed again. Without --password, the recorded password is
+kept.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o.MirrorName = args[0]
 			return o.Run()

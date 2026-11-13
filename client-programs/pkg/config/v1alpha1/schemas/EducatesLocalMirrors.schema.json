@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://schemas.educates.dev/cli/v1alpha1/EducatesLocalMirrors.json",
   "title": "EducatesLocalMirrors",
-  "description": "The registry mirrors every local cluster needs, declared once in mirrors.yaml in the CLI data home. 'educates local cluster create' and 'educates local cluster start' create a declared mirror whose container is missing, then link every mirror container that exists into every node of the cluster. The CLI reads this file and never writes it, except the migration of a version 3 values.yaml.",
+  "description": "The registry mirrors every local cluster needs, declared once in mirrors.yaml in the CLI data home. 'educates local cluster create' and 'educates local cluster start' create a declared mirror whose container is missing, then link every mirror container that exists into every node of the cluster. 'educates local mirror deploy' records a mirror in this file, creating it, and 'educates local mirror delete' removes it, keeping the rest of the file, comments included, as it was. The file can also be edited by hand.",
   "type": "object",
   "additionalProperties": false,
   "required": ["apiVersion", "kind"],

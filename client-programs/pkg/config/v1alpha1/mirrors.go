@@ -5,8 +5,9 @@ const KindEducatesLocalMirrors = "EducatesLocalMirrors"
 // EducatesLocalMirrors is the registry mirrors file of the CLI data home,
 // <data-home>/mirrors.yaml: the registry mirrors every local cluster
 // needs, declared once for all of them. Local cluster create and start
-// create a declared mirror whose container is missing. The CLI reads the
-// file and never writes it, except the migration of a v3 values.yaml.
+// create a declared mirror whose container is missing. Local mirror
+// deploy records a mirror in the file, creating it, and local mirror
+// delete removes it; the file can also be edited by hand.
 type EducatesLocalMirrors struct {
 	TypeMeta `yaml:",inline"`
 

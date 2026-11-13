@@ -105,6 +105,91 @@ func (inv Inventory) DeletedMirrorWarning(mirror string, declared []v1alpha1.Reg
 		"Remove the mirror from %s to keep it deleted", path, mirror, path)
 }
 
+// MirrorRecord is what local mirror deploy does for a registry mirror
+// once RecordMirror has recorded it.
+type MirrorRecord struct {
+	// Mirror is the mirror to deploy, as the registry mirrors file records
+	// it.
+	Mirror v1alpha1.RegistryMirror
+
+	// Note is what local mirror deploy tells the user after deploying the
+	// mirror, empty for nothing: that the mirror's container keeps the
+	// password it was created with, when RecordMirror replaced the
+	// recorded password of a mirror whose container exists.
+	Note string
+}
+
+// RecordMirror records requested, the registry mirror local mirror deploy
+// was given, in the registry mirrors file of the data home, before its
+// container is created, and returns the mirror to deploy.
+//
+// A mirror the file doesn't record is added to it. A mirror it records
+// with another URL or username is refused, and the file is left as it
+// is: the error says to delete the mirror first. One it records with the
+// same URL and username is deployed as recorded, with the password given
+// in place of the recorded one, which the file then records. The
+// container of a mirror keeps the password it was created with, so when
+// it exists and the password changed, the note says so.
+func (inv Inventory) RecordMirror(requested v1alpha1.RegistryMirror) (MirrorRecord, error) {
+	path := config.LocalMirrorsPath(inv.dataHome)
+	recorded, err := config.LoadLocalMirrors(inv.dataHome)
+	if err != nil {
+		return MirrorRecord{}, err
+	}
+	want := MirrorContainer{Mirror: requested.Mirror, URL: requested.URL, Username: requested.Username}
+	i := slices.IndexFunc(recorded, func(r v1alpha1.RegistryMirror) bool { return r.Mirror == requested.Mirror })
+	if i >= 0 {
+		have := MirrorContainer{Mirror: recorded[i].Mirror, URL: recorded[i].URL, Username: recorded[i].Username}
+		if recordedValues, requestedValues := have.differences(want); recordedValues != "" {
+			return MirrorRecord{}, fmt.Errorf("%s records registry mirror %s with %s, not %s as given. "+
+				"To change them, run 'educates local mirror delete %s' first, which deletes the mirror's "+
+				"container and its entry, and deploy the mirror again",
+				path, requested.Mirror, recordedValues, requestedValues, requested.Mirror)
+		}
+	}
+	for _, c := range inv.observed.Mirrors {
+		if c.Mirror != requested.Mirror {
+			continue
+		}
+		if containerValues, requestedValues := c.differences(want); containerValues != "" {
+			return MirrorRecord{}, fmt.Errorf("the container of registry mirror %s, which every local cluster shares, "+
+				"already exists with %s, not %s as given. To change them, run 'educates local mirror delete %s' "+
+				"first, which deletes the container, and deploy the mirror again",
+				requested.Mirror, containerValues, requestedValues, requested.Mirror)
+		}
+	}
+	if i < 0 {
+		if err := config.RecordLocalMirror(inv.dataHome, requested); err != nil {
+			return MirrorRecord{}, err
+		}
+		return MirrorRecord{Mirror: requested}, nil
+	}
+
+	entry := recorded[i]
+	if requested.Password == "" || requested.Password == entry.Password {
+		return MirrorRecord{Mirror: entry}, nil
+	}
+
+	entry.Password = requested.Password
+	if err := config.RecordLocalMirror(inv.dataHome, entry); err != nil {
+		return MirrorRecord{}, err
+	}
+	record := MirrorRecord{Mirror: entry}
+	if inv.hasMirrorContainer(entry.Mirror) {
+		record.Note = fmt.Sprintf("recorded the new password of registry mirror %s in %s, but the mirror's "+
+			"container keeps the password it was created with. To use the new one, run "+
+			"'educates local mirror delete %s', which also deletes the mirror's cached images, and deploy it again",
+			entry.Mirror, path, entry.Mirror)
+	}
+	return record, nil
+}
+
+// hasMirrorContainer reports whether the registry mirror mirror has a
+// container, running or stopped.
+func (inv Inventory) hasMirrorContainer(mirror string) bool {
+	return slices.ContainsFunc(inv.observed.Mirrors, func(c MirrorContainer) bool { return c.Mirror == mirror })
+}
+
 // ListedMirror is a registry mirror local mirror list shows: one whose
 // container exists, one the registry mirrors file declares, or both.
 type ListedMirror struct {

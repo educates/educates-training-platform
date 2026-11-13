@@ -51,7 +51,7 @@ config is <data-home>/config.yaml.`,
 func runLocalConfigDelete(w io.Writer, id localclusters.Identity, clusterExists func() (bool, error)) error {
 	if id.IsDefault() {
 		return fmt.Errorf("local config delete deletes a named local cluster's config, and never the default local cluster's; "+
-			"select a named local cluster with --%s or %s", localclusters.FlagName, localclusters.SelectionEnvVar)
+			"select a named local cluster with --%s or %s", localclusters.SelectionFlagName, localclusters.SelectionEnvVar)
 	}
 	folder := filepath.Dir(id.ConfigPath)
 	if _, err := os.Stat(folder); os.IsNotExist(err) {

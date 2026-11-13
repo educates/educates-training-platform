@@ -2,8 +2,8 @@ package localclusters
 
 import "fmt"
 
-// FlagName is the command-line flag that selects a local cluster.
-const FlagName = "local-cluster"
+// SelectionFlagName is the command-line flag that selects a local cluster.
+const SelectionFlagName = "local-cluster"
 
 // SelectionEnvVar is the environment variable that selects a local
 // cluster for every command run without the flag.
@@ -39,7 +39,7 @@ func (sel Selection) IsSet() bool {
 func Resolve(sel Selection, dataHome string) (Identity, error) {
 	name, source := sel.Env, SelectionEnvVar
 	if sel.FlagSet {
-		name, source = sel.Flag, "--"+FlagName
+		name, source = sel.Flag, "--"+SelectionFlagName
 	}
 	if name == "" {
 		return Default(dataHome), nil

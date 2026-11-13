@@ -84,7 +84,7 @@ cluster.listenAddress instead of the host IP's.`,
 		"use the selected local cluster's config in the data home; applies the nip.io fallback for ingress.domain")
 	addLocalClusterFlag(c)
 	c.MarkFlagsMutuallyExclusive("config", "local-config")
-	c.MarkFlagsMutuallyExclusive("config", localclusters.FlagName)
+	c.MarkFlagsMutuallyExclusive("config", localclusters.SelectionFlagName)
 	c.MarkFlagsOneRequired("config", "local-config")
 
 	return c

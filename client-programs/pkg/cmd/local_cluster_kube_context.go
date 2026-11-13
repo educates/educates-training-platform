@@ -15,7 +15,7 @@ import (
 // EDUCATES_LOCAL_CLUSTER is the cluster c acts on unless --context names
 // another.
 func addLocalClusterContextFlag(c *cobra.Command, o *KubeconfigOptions) {
-	c.Flags().String(localclusters.FlagName, "",
+	c.Flags().String(localclusters.SelectionFlagName, "",
 		"name of the local cluster whose kube context to use when --context is not given, overriding $"+
 			localclusters.SelectionEnvVar+"; an empty value selects the default local cluster")
 

@@ -21,7 +21,7 @@ func defaultLocalCluster() localclusters.Identity {
 // addLocalClusterFlag adds the --local-cluster flag, which selects the
 // local cluster the command acts on, to the command c.
 func addLocalClusterFlag(c *cobra.Command) {
-	c.Flags().String(localclusters.FlagName, "",
+	c.Flags().String(localclusters.SelectionFlagName, "",
 		"name of the local cluster to act on, overriding $"+localclusters.SelectionEnvVar+
 			"; an empty value selects the default local cluster")
 }
@@ -33,7 +33,7 @@ func localClusterFlagArg(id localclusters.Identity) string {
 	if id.IsDefault() {
 		return ""
 	}
-	return " --" + localclusters.FlagName + " " + id.Name
+	return " --" + localclusters.SelectionFlagName + " " + id.Name
 }
 
 // selectedLocalCluster returns the identity of the local cluster the
@@ -62,7 +62,7 @@ func explicitlySelectedLocalCluster(c *cobra.Command) (localclusters.Identity, b
 // and EDUCATES_LOCAL_CLUSTER.
 func localClusterSelection(c *cobra.Command) localclusters.Selection {
 	sel := localclusters.Selection{Env: os.Getenv(localclusters.SelectionEnvVar)}
-	if f := c.Flags().Lookup(localclusters.FlagName); f != nil && f.Changed {
+	if f := c.Flags().Lookup(localclusters.SelectionFlagName); f != nil && f.Changed {
 		sel.FlagSet, sel.Flag = true, f.Value.String()
 	}
 	return sel

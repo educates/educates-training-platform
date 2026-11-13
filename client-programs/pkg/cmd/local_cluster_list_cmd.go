@@ -40,7 +40,7 @@ out.`,
 		},
 	}
 
-	c.Flags().String(localclusters.FlagName, "",
+	c.Flags().String(localclusters.SelectionFlagName, "",
 		"ignored: list shows every local cluster, whichever is selected")
 
 	return c

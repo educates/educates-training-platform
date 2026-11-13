@@ -93,8 +93,8 @@ func TestEveryClusterCommandFollowsTheSelectedLocalCluster(t *testing.T) {
 				t.Setenv("EDUCATES_CLI_DATA_HOME", t.TempDir())
 				t.Setenv("EDUCATES_LOCAL_CLUSTER", tc.env)
 				c := commandsWithContextFlag()[path]
-				if c.Flags().Lookup(localclusters.FlagName) == nil || c.PreRunE == nil {
-					t.Fatalf("%q does not take --%s as a kube context selector", path, localclusters.FlagName)
+				if c.Flags().Lookup(localclusters.SelectionFlagName) == nil || c.PreRunE == nil {
+					t.Fatalf("%q does not take --%s as a kube context selector", path, localclusters.SelectionFlagName)
 				}
 				if err := c.ParseFlags(tc.args); err != nil {
 					t.Fatalf("ParseFlags(%q): %v", tc.args, err)

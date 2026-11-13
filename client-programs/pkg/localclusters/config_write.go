@@ -42,7 +42,7 @@ func (f NamedConfigFlags) IsZero() bool {
 // write only a named local cluster's config.
 func ConfigFlagsOnDefaultClusterError() error {
 	return fmt.Errorf("--%s and --%s write the config of a named local cluster; select one with --%s or %s",
-		ListenAddressFlagName, DomainFlagName, FlagName, SelectionEnvVar)
+		ListenAddressFlagName, DomainFlagName, SelectionFlagName, SelectionEnvVar)
 }
 
 // MissingNamedConfigError is the error for the named local cluster id
@@ -59,8 +59,8 @@ or create the cluster and write its config in one step with:
 Add --%s <domain> to either to use a domain of your own instead of the
 nip.io name of the listen address.`,
 		id.Name, id.ConfigPath,
-		FlagName, id.Name, ListenAddressFlagName,
-		FlagName, id.Name, ListenAddressFlagName,
+		SelectionFlagName, id.Name, ListenAddressFlagName,
+		SelectionFlagName, id.Name, ListenAddressFlagName,
 		DomainFlagName)
 }
 

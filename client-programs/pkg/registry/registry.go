@@ -19,6 +19,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
@@ -736,6 +737,35 @@ func registryMirrorLabelFilters() client.Filters {
 	return client.Filters{}.
 		Add("label", constants.EducatesContainersRoleLabelKey+"="+constants.EducatesContainersMirrorRoleLabel).
 		Add("label", constants.EducatesContainersAppLabelKey+"="+constants.EducatesContainersAppLabel)
+}
+
+// ObserveMirrorContainers returns every registry mirror container on the
+// Docker host, running or stopped, found by the labels createMirrorContainer
+// puts on it, with the mirror, remote registry URL and username those
+// labels name.
+func ObserveMirrorContainers(ctx context.Context) ([]localclusters.MirrorContainer, error) {
+	cli, err := docker.NewDockerClient()
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to create docker client")
+	}
+
+	list, err := cli.ContainerList(ctx, client.ContainerListOptions{
+		All:     true,
+		Filters: registryMirrorLabelFilters(),
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to list registry mirrors")
+	}
+
+	mirrors := make([]localclusters.MirrorContainer, 0, len(list.Items))
+	for _, item := range list.Items {
+		mirrors = append(mirrors, localclusters.MirrorContainer{
+			Mirror:   item.Labels[constants.EducatesContainersMirrorLabelKey],
+			URL:      item.Labels[constants.EducatesContainersURLLabelKey],
+			Username: item.Labels[constants.EducatesContainersUsernameLabelKey],
+		})
+	}
+	return mirrors, nil
 }
 
 // ListRegistryMirrors returns the deployed local registry mirrors, sorted

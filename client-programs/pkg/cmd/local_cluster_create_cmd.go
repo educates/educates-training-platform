@@ -149,7 +149,8 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 
 	// 0. Preflight: fail fast (before any docker / kind / k8s mutation)
 	//    when the cluster already exists, its listen address clashes with
-	//    another Educates cluster or is on no host interface, host 80/443
+	//    another Educates cluster or is on no host interface, a declared
+	//    registry mirror's container exists with other values, host 80/443
 	//    are bound, or a secure install has no certificate source. The
 	//    clash check reads every Educates cluster's configured bindings,
 	//    so a stopped cluster counts too. The host-port case is the v3
@@ -173,6 +174,13 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return err
 	}
 	if err := inventory.CheckCreate(id, in.Cluster.ListenAddress); err != nil {
+		return err
+	}
+	// Every local cluster shares one container for each registry mirror,
+	// and step 4 reuses an existing one as it is, so a declared mirror
+	// whose container pulls from another URL or as another username is
+	// refused here rather than silently pulled through.
+	if err := inventory.CheckMirrors(id, in.Cluster.RegistryMirrors); err != nil {
 		return err
 	}
 	if err := checkHostPortsAvailable(ctx, in.Cluster.ListenAddress, o.Verbose, w); err != nil {

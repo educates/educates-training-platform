@@ -122,7 +122,7 @@ func (p *ProjectInfo) runDeploy(ctx context.Context, w io.Writer, o *PlatformDep
 
 func resolveDeployConfigPath(o *PlatformDeployOptions) (string, error) {
 	if o.LocalConfig {
-		return config.LocalConfigPath(utils.GetEducatesHomeDir()), nil
+		return defaultLocalCluster().ConfigPath, nil
 	}
 	if o.Config == "" {
 		return "", fmt.Errorf("internal: neither --config nor --local-config set")

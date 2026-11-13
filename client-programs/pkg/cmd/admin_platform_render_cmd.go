@@ -147,7 +147,7 @@ func (c *yamlComments) Note(msg string) {
 // is $EDUCATES_CLI_DATA_HOME or $XDG_DATA_HOME/educates.
 func resolveConfigPath(o *PlatformRenderOptions) (string, error) {
 	if o.LocalConfig {
-		return config.LocalConfigPath(utils.GetEducatesHomeDir()), nil
+		return defaultLocalCluster().ConfigPath, nil
 	}
 	if o.Config == "" {
 		return "", fmt.Errorf("internal: neither --config nor --local-config set (should have been caught by cobra)")

@@ -8,9 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
-
-	"github.com/educates/educates-training-platform/client-programs/pkg/config"
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 var localConfigGetExample = `
@@ -46,7 +43,7 @@ lists, YAML-serialised output is emitted.`,
 }
 
 func runLocalConfigGet(w io.Writer, path string) error {
-	cfgPath := config.LocalConfigPath(utils.GetEducatesHomeDir())
+	cfgPath := defaultLocalCluster().ConfigPath
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", cfgPath, err)

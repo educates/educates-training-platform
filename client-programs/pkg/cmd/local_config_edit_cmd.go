@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -52,7 +53,7 @@ func runLocalConfigEdit() error {
 	if err := os.MkdirAll(dataHome, 0o755); err != nil {
 		return fmt.Errorf("create data home %q: %w", dataHome, err)
 	}
-	canonical := config.LocalConfigPath(dataHome)
+	canonical := localclusters.Default(dataHome).ConfigPath
 	tmp := fmt.Sprintf("%s.%d", canonical, os.Getpid())
 
 	// Keep the temp file on exit only when we abort after the user has made

@@ -54,7 +54,7 @@ For programmatic field reads use 'educates local config get [PATH]'.`,
 }
 
 func (p *ProjectInfo) runLocalConfigView(o *LocalConfigViewOptions, w io.Writer) error {
-	cfgPath := config.LocalConfigPath(utils.GetEducatesHomeDir())
+	cfgPath := defaultLocalCluster().ConfigPath
 	if err := config.EnsureLocalConfigFile(utils.GetEducatesHomeDir()); err != nil {
 		return err
 	}

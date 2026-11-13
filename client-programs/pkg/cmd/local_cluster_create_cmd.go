@@ -232,7 +232,7 @@ func loadLocalConfig(o *LocalClusterCreateOptions) (v1alpha1.Config, string, boo
 	if o.Config != "" {
 		path = o.Config
 	} else {
-		path = config.LocalConfigPath(utils.GetEducatesHomeDir())
+		path = defaultLocalCluster().ConfigPath
 		// Unlike render/deploy, a first-time laptop create shouldn't dead-end
 		// on "run config init first"; write a minimal default in place and
 		// carry on. Migration of an existing v3 install still takes priority.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -67,7 +68,7 @@ func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, w interface{
 	if err := os.MkdirAll(dataHome, 0o755); err != nil {
 		return fmt.Errorf("create data home %q: %w", dataHome, err)
 	}
-	path := config.LocalConfigPath(dataHome)
+	path := localclusters.Default(dataHome).ConfigPath
 	if _, err := os.Stat(path); err == nil && !o.Force {
 		return fmt.Errorf("%s already exists (use --force to overwrite)", path)
 	}

@@ -64,7 +64,7 @@ type / enum errors are caught up front with the offending field path.`,
 }
 
 func runLocalConfigSet(w io.Writer, path, rawValue string) error {
-	cfgPath := config.LocalConfigPath(utils.GetEducatesHomeDir())
+	cfgPath := defaultLocalCluster().ConfigPath
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return fmt.Errorf("read %s (run 'educates local config init' first?): %w", cfgPath, err)

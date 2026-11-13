@@ -65,7 +65,7 @@ func (p *ProjectInfo) NewLocalResolverDeployCmd() *cobra.Command {
 func loadResolverInputs(configPath string) (*v1alpha1.EducatesLocalConfig, error) {
 	path := configPath
 	if path == "" {
-		path = config.LocalConfigPath(utils.GetEducatesHomeDir())
+		path = defaultLocalCluster().ConfigPath
 		if err := config.EnsureLocalConfigFile(utils.GetEducatesHomeDir()); err != nil {
 			return nil, err
 		}

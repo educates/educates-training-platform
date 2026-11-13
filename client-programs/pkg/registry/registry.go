@@ -65,19 +65,19 @@ func warn(p Progress, msg string) {
 }
 
 const (
-	RegistryImageV3               = "docker.io/library/registry:3"
-	RegistryConfigTargetPath      = "/etc/distribution/config.yml"
-	EducatesNetworkName           = "educates"
-	ClusterNetworkName            = "kind"
-	EducatesRegistryContainer     = "educates-registry"
-	EducatesControlPlaneContainer = "educates-control-plane"
+	RegistryImageV3           = "docker.io/library/registry:3"
+	RegistryConfigTargetPath  = "/etc/distribution/config.yml"
+	EducatesNetworkName       = "educates"
+	ClusterNetworkName        = "kind"
+	EducatesRegistryContainer = "educates-registry"
 )
 
 /**
  * This function is used to deploy the registry and link it to the cluster.
- * It is used when creating a new local cluster.
+ * It is used when creating a new local cluster. nodes names the cluster's
+ * node containers that get the registry's containerd host config.
  */
-func DeployRegistryAndLinkToCluster(bindIP string, client *kubernetes.Clientset, p Progress) error {
+func DeployRegistryAndLinkToCluster(bindIP string, nodes []string, client *kubernetes.Clientset, p Progress) error {
 
 	err := createRegistryContainer(bindIP, p)
 	if err != nil {
@@ -86,10 +86,10 @@ func DeployRegistryAndLinkToCluster(bindIP string, client *kubernetes.Clientset,
 
 	// This is needed to make containerd use the local registry
 
-	if err = addRegistryConfigToKindNodes("localhost:5001", fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer), p); err != nil {
+	if err = addRegistryConfigToKindNodes("localhost:5001", fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer), nodes, p); err != nil {
 		return errors.Wrap(err, "failed to add registry config to kind nodes")
 	}
-	if err = addRegistryConfigToKindNodes("registry.default.svc.cluster.local", fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer), p); err != nil {
+	if err = addRegistryConfigToKindNodes("registry.default.svc.cluster.local", fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer), nodes, p); err != nil {
 		return errors.Wrap(err, "failed to add registry config to kind nodes")
 	}
 
@@ -243,9 +243,10 @@ func createRegistryContainer(bindIP string, p Progress) error {
 
 /**
  * This function is used to deploy a registry mirror and link it to the cluster.
- * It is used when creating a new local registry mirror.
+ * It is used when creating a new local registry mirror. nodes names the
+ * cluster's node containers that get the mirror's containerd host config.
  */
-func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, p Progress) error {
+func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, nodes []string, p Progress) error {
 	err := createMirrorContainer(mirrorConfig, p)
 
 	if err != nil {
@@ -253,7 +254,7 @@ func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, p Progress) error 
 	}
 
 	content := fmt.Sprintf(hostMirrorTomlTemplate, registryMirrorContainerName(mirrorConfig))
-	err = addRegistryConfigToKindNodes(mirrorConfig.Mirror, content, p)
+	err = addRegistryConfigToKindNodes(mirrorConfig.Mirror, content, nodes, p)
 
 	if err != nil {
 		warn(p, "mirror not added to kind nodes")
@@ -389,8 +390,9 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 /**
  * This function is used to add the registry config to the kind nodes.
  * It is used when creating a new local registry or registry mirror.
+ * nodes names the node containers to add it to; each must be running.
  */
-func addRegistryConfigToKindNodes(repositoryName string, content string, p Progress) error {
+func addRegistryConfigToKindNodes(repositoryName string, content string, nodes []string, p Progress) error {
 	ctx := context.Background()
 
 	report(p, fmt.Sprintf("adding registry config (%s) to kind nodes", repositoryName))
@@ -401,8 +403,20 @@ func addRegistryConfigToKindNodes(repositoryName string, content string, p Progr
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	containerID, _ := getContainerInfo(EducatesControlPlaneContainer)
+	for _, node := range nodes {
+		if err := addRegistryConfigToKindNode(ctx, cli, runningContainerID(ctx, cli, node), repositoryName, content); err != nil {
+			return err
+		}
+	}
 
+	return nil
+}
+
+/**
+ * This function writes the registry config into the node container
+ * containerID.
+ */
+func addRegistryConfigToKindNode(ctx context.Context, cli *client.Client, containerID, repositoryName, content string) error {
 	registryDir := "/etc/containerd/certs.d/" + repositoryName
 
 	cmdStatement := []string{"mkdir", "-p", registryDir}
@@ -428,7 +442,7 @@ func addRegistryConfigToKindNodes(repositoryName string, content string, p Progr
 	if err != nil {
 		return err
 	}
-	_, err = cli.CopyToContainer(context.Background(),
+	_, err = cli.CopyToContainer(ctx,
 		containerID,
 		client.CopyToContainerOptions{
 			DestinationPath:           "/",
@@ -444,9 +458,10 @@ func addRegistryConfigToKindNodes(repositoryName string, content string, p Progr
 
 /**
  * This function is used to remove the registry config from the kind nodes.
- * It is used when deleting a local registry mirror.
+ * It is used when deleting a local registry mirror. nodes names the node
+ * containers to remove it from; one that is not running is skipped.
  */
-func removeRegistryConfigFromKindNodes(repositoryName string, p Progress) error {
+func removeRegistryConfigFromKindNodes(repositoryName string, nodes []string, p Progress) error {
 	ctx := context.Background()
 
 	report(p, fmt.Sprintf("removing registry config (%s) from kind nodes", repositoryName))
@@ -457,12 +472,24 @@ func removeRegistryConfigFromKindNodes(repositoryName string, p Progress) error 
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	containerID, _ := getContainerInfo(EducatesControlPlaneContainer)
-
-	if containerID == "" {
-		return nil
+	for _, node := range nodes {
+		containerID := runningContainerID(ctx, cli, node)
+		if containerID == "" {
+			continue
+		}
+		if err := removeRegistryConfigFromKindNode(ctx, cli, containerID, repositoryName); err != nil {
+			return err
+		}
 	}
 
+	return nil
+}
+
+/**
+ * This function removes the registry config from the node container
+ * containerID.
+ */
+func removeRegistryConfigFromKindNode(ctx context.Context, cli *client.Client, containerID, repositoryName string) error {
 	registryDir := "/etc/containerd/certs.d/" + repositoryName
 
 	cmdStatement := []string{"rm", "-rf", registryDir}
@@ -570,9 +597,10 @@ func DeleteRegistry(p Progress) error {
 
 /**
  * This function is used to delete a local registry mirror and unlink it from the cluster.
- * It is used when deleting a local registry mirror.
+ * It is used when deleting a local registry mirror. nodes names the
+ * cluster's node containers to remove the mirror's containerd host config from.
  */
-func DeleteMirrorAndUnlinkFromCluster(mirrorConfig *MirrorConfig, p Progress) error {
+func DeleteMirrorAndUnlinkFromCluster(mirrorConfig *MirrorConfig, nodes []string, p Progress) error {
 	ctx := context.Background()
 
 	report(p, "deleting mirror container")
@@ -609,7 +637,7 @@ func DeleteMirrorAndUnlinkFromCluster(mirrorConfig *MirrorConfig, p Progress) er
 	}
 
 	// Remove the registry config from the kind nodes
-	err = removeRegistryConfigFromKindNodes(mirrorConfig.Mirror, p)
+	err = removeRegistryConfigFromKindNodes(mirrorConfig.Mirror, nodes, p)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to remove registry config from kind nodes")
@@ -879,6 +907,20 @@ func PruneRegistry(p Progress) error {
  */
 func registryMirrorContainerName(mirrorConfig *MirrorConfig) string {
 	return fmt.Sprintf("%s-mirror-%s", EducatesRegistryContainer, mirrorConfig.Mirror)
+}
+
+/**
+ * This function returns the ID of the running container named exactly
+ * name, or an empty string when no such container runs. Unlike a Docker
+ * name filter, which matches substrings, it never picks another cluster's
+ * node whose name contains this one.
+ */
+func runningContainerID(ctx context.Context, cli *client.Client, name string) string {
+	info, err := cli.ContainerInspect(ctx, name, client.ContainerInspectOptions{})
+	if err != nil || info.Container.State == nil || !info.Container.State.Running {
+		return ""
+	}
+	return info.Container.ID
 }
 
 /**

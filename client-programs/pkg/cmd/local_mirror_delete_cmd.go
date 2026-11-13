@@ -24,7 +24,7 @@ func (o *LocalMirrorDeleteOptions) Run() error {
 	}
 
 	return stepOnStdout(false, "delete registry mirror "+o.MirrorName, "deleted", func(s progress.Step) error {
-		return registry.DeleteMirrorAndUnlinkFromCluster(mirrorConfig, s)
+		return registry.DeleteMirrorAndUnlinkFromCluster(mirrorConfig, []string{defaultLocalCluster().ControlPlaneNode()}, s)
 	})
 }
 

@@ -41,7 +41,7 @@ func (o *LocalMirrorDeployOptions) Run() error {
 	}
 
 	err := stepOnStdout(o.Verbose, "registry mirror "+o.MirrorName, "ready", func(s progress.Step) error {
-		return registry.DeployMirrorAndLinkToCluster(mirrorConfig, s)
+		return registry.DeployMirrorAndLinkToCluster(mirrorConfig, []string{defaultLocalCluster().ControlPlaneNode()}, s)
 	})
 
 	if err != nil {

@@ -28,6 +28,15 @@ func LocalConfigPath(dataHome string) string {
 	return filepath.Join(dataHome, "config.yaml")
 }
 
+// DnsmasqIncludeDir is the path of the local DNS resolver's include
+// folder in the data home dataHome: <data-home>/dnsmasq.d. It holds the
+// user's own dnsmasq configuration, in *.conf files, for names that
+// resolve to anything other than a local cluster. The CLI creates it
+// empty when it is missing, and never writes into it.
+func DnsmasqIncludeDir(dataHome string) string {
+	return filepath.Join(dataHome, "dnsmasq.d")
+}
+
 // LoadLocalConfigIfPresent loads the local config of the data home
 // dataHome as it is. It returns nil when the file does not exist or holds
 // another kind than EducatesLocalConfig, and neither migrates nor writes

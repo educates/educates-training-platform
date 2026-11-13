@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1/schemas"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/xeipuuv/gojsonschema"
 	"gopkg.in/yaml.v2"
 )
@@ -67,6 +69,9 @@ func LoadBytesWithoutDefaults(data []byte, source string) (v1alpha1.Config, erro
 	if apiVersion != v1alpha1.APIVersion {
 		return nil, fmt.Errorf("%s: unsupported apiVersion %q (want %q)", source, apiVersion, v1alpha1.APIVersion)
 	}
+	if err := checkNoResolverTargetAddress(raw, kind); err != nil {
+		return nil, fmt.Errorf("%s: %w", source, err)
+	}
 
 	switch kind {
 	case v1alpha1.KindEducatesLocalConfig:
@@ -86,6 +91,37 @@ func LoadBytesWithoutDefaults(data []byte, source string) (v1alpha1.Config, erro
 	default:
 		return nil, fmt.Errorf("%s: unknown kind %q for apiVersion %q", source, kind, apiVersion)
 	}
+}
+
+// checkNoResolverTargetAddress returns an error saying what replaces
+// resolver.targetAddress when raw, the top level of a config of kind
+// kind, still sets it: resolver.targetAddress in an EducatesLocalConfig,
+// or target.resolver.targetAddress in an EducatesConfig. The field was
+// removed, so the error comes before the schema's generic one, or in
+// place of the EducatesConfig's loose decode dropping it silently.
+func checkNoResolverTargetAddress(raw map[string]interface{}, kind string) error {
+	var resolverPath []string
+	listenAddressField := "cluster.listenAddress"
+	switch kind {
+	case v1alpha1.KindEducatesLocalConfig:
+		resolverPath = []string{"resolver"}
+	case v1alpha1.KindEducatesConfig:
+		resolverPath = []string{"target", "resolver"}
+		listenAddressField = "target.cluster.listenAddress"
+	default:
+		return nil
+	}
+	resolver, _ := walkV3(raw, resolverPath...)
+	if _, set := asMap(resolver)["targetAddress"]; !set {
+		return nil
+	}
+	resolverField := strings.Join(resolverPath, ".")
+	return fmt.Errorf("%s.targetAddress was removed: remove it from the config. A local cluster's names, "+
+		"its ingress domain and %s.extraDomains, now resolve to its %s when that is a specific IP "+
+		"address, and otherwise to the host's IP address. Names that resolve anywhere else go in "+
+		"dnsmasq configuration files of your own, %s",
+		resolverField, resolverField, listenAddressField,
+		filepath.Join(DnsmasqIncludeDir(utils.GetEducatesHomeDir()), "*.conf"))
 }
 
 // LoadLocal is the typed convenience wrapper for callers that only accept

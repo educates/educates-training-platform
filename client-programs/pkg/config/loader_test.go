@@ -664,3 +664,49 @@ func TestLoad_EducatesConfig_BogusEnvelopeField(t *testing.T) {
 		t.Errorf("error %q does not mention bogus field", err.Error())
 	}
 }
+
+// A config that still sets resolver.targetAddress, which was removed,
+// fails to load with an error saying what replaces it, in place of the
+// schema's generic one.
+func TestLoad_ResolverTargetAddress_SaysItWasRemoved(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	cases := []struct {
+		name          string
+		body          string
+		field         string
+		listenAddress string
+	}{
+		{
+			name: "an EducatesLocalConfig",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
+				"resolver:\n  targetAddress: 10.10.10.1\n  extraDomains:\n  - example.test\n",
+			field:         "resolver.targetAddress",
+			listenAddress: "cluster.listenAddress",
+		},
+		{
+			name: "an EducatesConfig",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesConfig\n" +
+				"target:\n  provider: kind\n  resolver:\n    targetAddress: 10.10.10.1\n",
+			field:         "target.resolver.targetAddress",
+			listenAddress: "target.cluster.listenAddress",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadBytes([]byte(tc.body), "config.yaml")
+			if err == nil {
+				t.Fatal("LoadBytes: expected error, got nil")
+			}
+			for _, want := range []string{"config.yaml: ", tc.field + " was removed", tc.listenAddress,
+				filepath.Join(dataHome, "dnsmasq.d", "*.conf")} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+			if strings.Contains(err.Error(), "schema validation") {
+				t.Errorf("error %q still reports the schema's generic error", err)
+			}
+		})
+	}
+}

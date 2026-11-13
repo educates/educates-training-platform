@@ -223,14 +223,20 @@ func isSubdomain(domain, parent string) bool {
 // includeDirName is the name of the include folder in the data home.
 const includeDirName = "dnsmasq.d"
 
+// ReadsIncludeFile reports whether the resolver's configuration reads the
+// file of the include folder named name: one whose name ends in .conf,
+// unless it starts with a dot, which dnsmasq skips.
+func ReadsIncludeFile(name string) bool {
+	return strings.HasSuffix(name, ".conf") && !strings.HasPrefix(name, ".")
+}
+
 // includedFiles returns the files of files that the resolver's
-// configuration reads, in the order it reads them: those whose names end
-// in .conf, by name, leaving out those whose names start with a dot,
-// which dnsmasq skips.
+// configuration reads, as ReadsIncludeFile says, in the order it reads
+// them, by name.
 func includedFiles(files []IncludeFile) []IncludeFile {
 	var included []IncludeFile
 	for _, f := range files {
-		if strings.HasSuffix(f.Name, ".conf") && !strings.HasPrefix(f.Name, ".") {
+		if ReadsIncludeFile(f.Name) {
 			included = append(included, f)
 		}
 	}

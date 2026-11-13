@@ -19,7 +19,8 @@ func defaultLocalCluster() localclusters.Identity {
 }
 
 // addLocalClusterFlag adds the --local-cluster flag, which selects the
-// local cluster the command acts on, to the command c.
+// local cluster the command acts on, to the command c. Every command that
+// takes the flag adds it here, so it reads the same in each one's help.
 func addLocalClusterFlag(c *cobra.Command) {
 	c.Flags().String(localclusters.SelectionFlagName, "",
 		"name of the local cluster to act on, overriding $"+localclusters.SelectionEnvVar+

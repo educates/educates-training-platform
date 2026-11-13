@@ -40,8 +40,9 @@ out.`,
 		},
 	}
 
-	c.Flags().String(localclusters.SelectionFlagName, "",
-		"ignored: list shows every local cluster, whichever is selected")
+	// list takes --local-cluster as every local cluster command does, and
+	// lists every local cluster whichever it selects.
+	addLocalClusterFlag(c)
 
 	return c
 }

@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
@@ -429,6 +431,77 @@ localDNSResolver:
 		"add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home\n"
 	if !strings.Contains(notice, wantLine) {
 		t.Errorf("notice missing %q in:\n%s", wantLine, notice)
+	}
+}
+
+// stubHostIP makes host IP detection report ip for the rest of the test
+// t, or fail when ip is empty.
+func stubHostIP(t *testing.T, ip string) {
+	t.Helper()
+	detect := hostinfo.DetectHostIP
+	t.Cleanup(func() { hostinfo.DetectHostIP = detect })
+	hostinfo.DetectHostIP = func() (string, error) {
+		if ip == "" {
+			return "", errors.New("no route to the outside world")
+		}
+		return ip, nil
+	}
+}
+
+func TestMaybeMigrateV3_ListenAddressOnEveryHostAddress_BecomesTheHostIP(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		values string
+		was    string
+	}{
+		{name: "missing", values: "clusterIngress:\n  domain: educates.test\n", was: "was not set"},
+		{name: "0.0.0.0", values: "localKindCluster:\n  listenAddress: 0.0.0.0\n", was: "was 0.0.0.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubHostIP(t, "192.168.50.151")
+
+			cfg, _, notice := migrateV3Values(t, tc.values)
+
+			if got, want := cfg.Cluster.ListenAddress, "192.168.50.151"; got != want {
+				t.Errorf("Cluster.ListenAddress = %q, want the host's IP address %q", got, want)
+			}
+			for _, want := range []string{"set cluster.listenAddress to 192.168.50.151, this host's IP address",
+				"localKindCluster.listenAddress " + tc.was, "every host address", "specific IP address",
+				"An alias such as 10.10.10.1", "survives network changes"} {
+				if !strings.Contains(notice, want) {
+					t.Errorf("notice does not mention %q:\n%s", want, notice)
+				}
+			}
+		})
+	}
+}
+
+func TestMaybeMigrateV3_ListenAddressOnEveryHostAddress_WithNoHostIP_SaysToSetIt(t *testing.T) {
+	stubHostIP(t, "")
+
+	cfg, _, notice := migrateV3Values(t, "clusterIngress:\n  domain: educates.test\n")
+
+	if cfg.Cluster.ListenAddress != "" {
+		t.Errorf("Cluster.ListenAddress = %q, want none with no host IP address detected", cfg.Cluster.ListenAddress)
+	}
+	for _, want := range []string{"left cluster.listenAddress unset", "no IP address of this host was detected",
+		"educates local config set cluster.listenAddress <ip>"} {
+		if !strings.Contains(notice, want) {
+			t.Errorf("notice does not mention %q:\n%s", want, notice)
+		}
+	}
+}
+
+func TestMaybeMigrateV3_SpecificListenAddress_IsKeptWithoutANote(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
+
+	cfg, _, notice := migrateV3Values(t, "localKindCluster:\n  listenAddress: 10.10.10.1\n")
+
+	if got, want := cfg.Cluster.ListenAddress, "10.10.10.1"; got != want {
+		t.Errorf("Cluster.ListenAddress = %q, want the v3 listen address %q", got, want)
+	}
+	if strings.Contains(notice, "listenAddress") {
+		t.Errorf("notice mentions the listen address it kept:\n%s", notice)
 	}
 }
 

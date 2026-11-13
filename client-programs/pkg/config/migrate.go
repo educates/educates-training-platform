@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
@@ -193,7 +194,11 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 	}
 
 	// cluster
-	cfg.Cluster.ListenAddress = strV3Path(v3, "localKindCluster", "listenAddress")
+	var note string
+	cfg.Cluster.ListenAddress, note = migrateV3ListenAddress(strV3Path(v3, "localKindCluster", "listenAddress"))
+	if note != "" {
+		notes = append(notes, note)
+	}
 	cfg.Cluster.ApiServer.Address = strV3Path(v3, "localKindCluster", "apiServer", "address")
 	cfg.Cluster.ApiServer.Port = intV3Path(v3, "localKindCluster", "apiServer", "port")
 	cfg.Cluster.Networking.ServiceSubnet = strV3Path(v3, "localKindCluster", "networking", "serviceSubnet")
@@ -274,6 +279,36 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 	}
 
 	return cfg, notes
+}
+
+// migrateV3ListenAddress returns the cluster.listenAddress of the
+// migrated config for the v3 localKindCluster.listenAddress listenAddress,
+// with the line of the migration notice that says why it changed, empty
+// when it did not.
+//
+// v3 left a missing listen address to kind, which publishes the cluster's
+// ports on every host address, as 0.0.0.0 does, and every local cluster
+// now publishes them on a specific IP address of the host. Either becomes
+// the host's IP address, and with none detected, stays unset for the user
+// to set. Any other address is kept as it is.
+func migrateV3ListenAddress(listenAddress string) (string, string) {
+	if listenAddress != "" && listenAddress != "0.0.0.0" {
+		return listenAddress, ""
+	}
+	was := "was not set"
+	if listenAddress != "" {
+		was = "was " + listenAddress
+	}
+	why := fmt.Sprintf("localKindCluster.listenAddress %s, so the cluster published its ports 80 and 443 on every "+
+		"host address, and every local cluster now publishes them on a specific IP address of the host", was)
+	hostIP, err := hostinfo.DetectHostIP()
+	if err != nil || hostIP == "" {
+		return "", fmt.Sprintf("left cluster.listenAddress unset: %s, and no IP address of this host was detected. "+
+			"Set it with 'educates local config set cluster.listenAddress <ip>' before using the cluster", why)
+	}
+	return hostIP, fmt.Sprintf("set cluster.listenAddress to %s, this host's IP address: %s. An alias such as "+
+		"10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not",
+		hostIP, why)
 }
 
 // translateV3ImagePuller fills the image pre-puller block from a v3

@@ -25,7 +25,7 @@ func TestLocalConfigCommandsSelectTheLocalCluster(t *testing.T) {
 		{name: "an empty flag over the environment variable", args: []string{"--local-cluster="}, env: "test2", want: ""},
 		{name: "neither", want: ""},
 	}
-	for _, command := range []string{"init", "get", "set", "view", "edit"} {
+	for _, command := range []string{"init", "get", "set", "view", "edit", "delete"} {
 		for _, tc := range cases {
 			t.Run(command+" with "+tc.name, func(t *testing.T) {
 				dataHome := t.TempDir()

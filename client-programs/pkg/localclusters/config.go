@@ -3,7 +3,6 @@ package localclusters
 import (
 	"fmt"
 	"net/netip"
-	"os"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
@@ -53,10 +52,14 @@ func ValidateListenAddress(address string) error {
 // no CA to manage. It then gets the static defaults config.Load gives it.
 // An EducatesConfig gets no fallback and no defaults: its domain is the
 // one its custom resources declare.
+//
+// A config in the data home that still declares registry mirrors in its
+// cluster block has them moved to the registry mirrors file first, as
+// config.ReadConfigFile does.
 func LoadConfigFile(id Identity, path string) (v1alpha1.Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := config.ReadConfigFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
+		return nil, err
 	}
 	return parseConfig(id, data, path)
 }

@@ -68,6 +68,40 @@ func LocalConfigPath(dataHome string) string {
 	return filepath.Join(dataHome, "config.yaml")
 }
 
+// LocalClustersDir is the path of the folder in the data home dataHome
+// that holds a folder for each named local cluster,
+// <data-home>/clusters, with its config, config.yaml.
+func LocalClustersDir(dataHome string) string {
+	return filepath.Join(dataHome, "clusters")
+}
+
+// IsDataHomeConfig reports whether path is the config of a local cluster
+// in the data home dataHome: the default local cluster's,
+// <data-home>/config.yaml, or a named local cluster's,
+// <data-home>/clusters/<name>/config.yaml. The folders are compared as
+// files, so a path given through a symbolic link or relative to the
+// current folder matches too. A folder that doesn't exist matches none.
+func IsDataHomeConfig(dataHome, path string) bool {
+	if filepath.Base(path) != "config.yaml" {
+		return false
+	}
+	dir := filepath.Dir(path)
+	return sameDir(dir, dataHome) || sameDir(filepath.Dir(dir), LocalClustersDir(dataHome))
+}
+
+// sameDir reports whether the folders a and b are the same folder.
+func sameDir(a, b string) bool {
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ai, bi)
+}
+
 // DnsmasqIncludeDir is the path of the local DNS resolver's include
 // folder in the data home dataHome: <data-home>/dnsmasq.d. It holds the
 // user's own dnsmasq configuration, in *.conf files, for names that

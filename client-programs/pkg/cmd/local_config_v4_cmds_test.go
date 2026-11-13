@@ -199,6 +199,30 @@ func TestLocalConfigSet_PreservesModelineAndOrder(t *testing.T) {
 	}
 }
 
+// A config in the data home that still declares registry mirrors has them
+// moved to mirrors.yaml before set changes it.
+func TestLocalConfigSet_MovesRegistryMirrorsFirst(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	original := minimalLocalConfigYAML +
+		"cluster:\n  listenAddress: 10.10.10.1\n  registryMirrors:\n    - mirror: ghcr.io\n"
+	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runLocalConfigSet(io.Discard, defaultLocalCluster(), "ingress.domain", "workshop.test"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	want := minimalLocalConfigYAML + "cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: workshop.test\n"
+	if got, _ := os.ReadFile(filepath.Join(dataHome, "config.yaml")); string(got) != want {
+		t.Errorf("config.yaml =\n%s\nwant\n%s", got, want)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dataHome, "mirrors.yaml")); !strings.Contains(string(got), "- mirror: ghcr.io") {
+		t.Errorf("mirrors.yaml =\n%s\nwant it to record ghcr.io", got)
+	}
+}
+
 func TestLocalConfigSet_CoercesBoolAndInt(t *testing.T) {
 	stageInitConfig(t)
 	if err := runLocalConfigSet(io.Discard, defaultLocalCluster(), "lookupService", "false"); err != nil {

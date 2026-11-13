@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
 func TestLoadConfigOfAMissingNamedConfigSaysHowToWriteOne(t *testing.T) {
@@ -30,6 +31,21 @@ func TestLoadConfigOfAMissingDefaultConfigSaysHowToWriteOne(t *testing.T) {
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("errors.Is(%v, fs.ErrNotExist) = false, want true", err)
 	}
+}
+
+// A named cluster's config that still declares registry mirrors has them
+// moved to mirrors.yaml when it is loaded, and then loads.
+func TestLoadConfigMovesTheRegistryMirrorsOfANamedConfig(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader+
+		"cluster:\n  listenAddress: 10.10.10.2\n  registryMirrors:\n    - mirror: ghcr.io\n")
+
+	if _, err := LoadConfig(namedID(t, "test2", dataHome)); err != nil {
+		t.Fatalf("LoadConfig(test2): %v", err)
+	}
+
+	assertRecordedMirrors(t, dataHome, v1alpha1.RegistryMirror{Mirror: "ghcr.io"})
 }
 
 func TestLoadConfigAppliesTheRulesOfTheCluster(t *testing.T) {

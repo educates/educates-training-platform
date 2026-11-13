@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -88,9 +89,12 @@ func runLocalConfigSet(w io.Writer, id localclusters.Identity, path, rawValue st
 		return err
 	}
 	cfgPath := id.ConfigPath
-	data, err := os.ReadFile(cfgPath)
+	data, err := config.ReadConfigFile(cfgPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%w (run 'educates local config init' first?)", err)
+	}
 	if err != nil {
-		return fmt.Errorf("read %s (run 'educates local config init' first?): %w", cfgPath, err)
+		return err
 	}
 
 	// Edit the YAML as a yaml.v3 node tree so the file's comments (the

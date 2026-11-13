@@ -665,14 +665,15 @@ func TestLoad_EducatesConfig_BogusEnvelopeField(t *testing.T) {
 	}
 }
 
-// A config that still declares registry mirrors in its cluster block
-// fails to load with an error saying they are declared in mirrors.yaml in
-// the data home now, and naming the mirrors to move there, in place of
-// the schema's generic one.
+// A config outside the data home that still declares registry mirrors in
+// its cluster block fails to load with an error saying they are declared
+// in mirrors.yaml in the data home now, and showing the local mirror
+// deploy command that records each there, without its password, in place
+// of the schema's generic error.
 func TestLoad_ClusterRegistryMirrors_SayTheyMovedToMirrorsYAML(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
-	const mirrors = "- mirror: docker.io\n  username: alice\n  password: secret\n- mirror: ghcr.io\n"
+	const mirrors = "- mirror: docker.io\n  url: registry-1.docker.io\n  username: alice\n  password: secret\n- mirror: ghcr.io\n"
 	cases := []struct {
 		name  string
 		body  string
@@ -698,7 +699,10 @@ func TestLoad_ClusterRegistryMirrors_SayTheyMovedToMirrorsYAML(t *testing.T) {
 				t.Fatal("LoadBytes: expected error, got nil")
 			}
 			for _, want := range []string{"config.yaml: ", tc.field + " was removed",
-				filepath.Join(dataHome, "mirrors.yaml"), "every local cluster", "docker.io, ghcr.io", "Move"} {
+				filepath.Join(dataHome, "mirrors.yaml"), "every local cluster",
+				"\n  educates local mirror deploy docker.io --url registry-1.docker.io --username alice\n",
+				"\n  educates local mirror deploy ghcr.io\n",
+				"--password", "remove " + tc.field} {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("error %q does not contain %q", err, want)
 				}

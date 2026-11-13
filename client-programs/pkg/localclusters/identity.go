@@ -99,7 +99,7 @@ func Named(name, dataHome string) (Identity, error) {
 		return Identity{}, err
 	}
 	kindName := defaultKindName + "-" + name
-	dir := filepath.Join(dataHome, "clusters", name)
+	dir := filepath.Join(config.LocalClustersDir(dataHome), name)
 	return Identity{
 		Name:           name,
 		KindName:       kindName,

@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
@@ -91,10 +93,10 @@ func runLocalConfigEdit(id localclusters.Identity) error {
 
 	// Seed with current contents, or the minimal init stub when no canonical
 	// file exists yet — so 'edit' on a pristine data home is a working flow.
-	seed, err := os.ReadFile(canonical)
+	seed, err := config.ReadConfigFile(canonical)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("read %s: %w", canonical, err)
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
 		}
 		if seed, err = localclusters.ConfigYAML(id, localclusters.ConfigFlags{}); err != nil {
 			return err

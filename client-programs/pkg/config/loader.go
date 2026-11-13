@@ -20,11 +20,28 @@ import (
 // returned value implements v1alpha1.Config; callers type-switch to the
 // concrete kind.
 func Load(path string) (v1alpha1.Config, error) {
+	data, err := ReadConfigFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return LoadBytes(data, path)
+}
+
+// ReadConfigFile reads the CLI config file at path. A config of a local
+// cluster in the data home that still declares registry mirrors in its
+// cluster block has them moved to the registry mirrors file first, once,
+// with a note on standard error (MoveClusterRegistryMirrors), so every
+// command that reads such a config moves it. A failed read is an error
+// naming path and wrapping the cause, such as fs.ErrNotExist.
+func ReadConfigFile(path string) ([]byte, error) {
+	if err := MoveClusterRegistryMirrors(utils.GetEducatesHomeDir(), path, os.Stderr); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
-	return LoadBytes(data, path)
+	return data, nil
 }
 
 // LoadBytes is the path-free variant — useful for stdin and tests. The
@@ -47,9 +64,9 @@ func LoadBytes(data []byte, source string) (v1alpha1.Config, error) {
 // left out from one set to its default value. ApplyDefaults then gives it
 // the defaults Load would have.
 func LoadWithoutDefaults(path string) (v1alpha1.Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := ReadConfigFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
+		return nil, err
 	}
 	return LoadBytesWithoutDefaults(data, path)
 }
@@ -132,18 +149,17 @@ func checkNoResolverTargetAddress(raw map[string]interface{}, kind string) error
 // kind, still declares them in its cluster block: cluster.registryMirrors
 // in an EducatesLocalConfig, or target.cluster.registryMirrors in an
 // EducatesConfig. Every local cluster takes its registry mirrors from the
-// registry mirrors file of the data home, so the error names that file
-// and the mirrors to move into it, never their passwords. It comes before
-// the schema's generic error, or in place of the EducatesConfig's loose
-// decode dropping the field silently.
+// registry mirrors file of the data home, which local mirror deploy
+// writes, so the error names that file and shows the command that records
+// each mirror there, never its password. It comes before the schema's
+// generic error, or in place of the EducatesConfig's loose decode
+// dropping the field silently.
+//
+// A config in the data home never gets here, since reading it moves the
+// field to the registry mirrors file (MoveClusterRegistryMirrors).
 func checkNoClusterRegistryMirrors(raw map[string]interface{}, kind string) error {
-	var clusterPath []string
-	switch kind {
-	case v1alpha1.KindEducatesLocalConfig:
-		clusterPath = []string{"cluster"}
-	case v1alpha1.KindEducatesConfig:
-		clusterPath = []string{"target", "cluster"}
-	default:
+	clusterPath := clusterBlockPath(kind)
+	if clusterPath == nil {
 		return nil
 	}
 	cluster, _ := walkV3(raw, clusterPath...)
@@ -152,21 +168,45 @@ func checkNoClusterRegistryMirrors(raw map[string]interface{}, kind string) erro
 		return nil
 	}
 	field := strings.Join(append(clusterPath, "registryMirrors"), ".")
-	var names []string
-	if list, ok := mirrors.([]interface{}); ok {
-		for _, m := range list {
-			if name, _ := asMap(m)["mirror"].(string); name != "" {
-				names = append(names, name)
-			}
+	var commands, withPassword []string
+	list, _ := mirrors.([]interface{})
+	for _, m := range list {
+		entry := asMap(m)
+		name := strMap(entry, "mirror")
+		if name == "" {
+			continue
+		}
+		command := "  educates local mirror deploy " + name
+		if url := strMap(entry, "url"); url != "" {
+			command += " --url " + url
+		}
+		if username := strMap(entry, "username"); username != "" {
+			command += " --username " + username
+		}
+		commands = append(commands, command)
+		if strMap(entry, "password") != "" {
+			withPassword = append(withPassword, name)
 		}
 	}
-	move := "Move its entries there"
-	if len(names) > 0 {
-		move = fmt.Sprintf("Move the entries of the registry mirrors %s there", strings.Join(names, ", "))
+	removed := fmt.Sprintf("%s was removed: registry mirrors are now declared once, for every local cluster, in %s, "+
+		"which 'educates local mirror deploy' and 'educates local mirror delete' write",
+		field, LocalMirrorsPath(utils.GetEducatesHomeDir()))
+	if len(commands) == 0 {
+		return fmt.Errorf("%s. Remove %s from the config, and record any registry mirror there with "+
+			"'educates local mirror deploy <name>'", removed, field)
 	}
-	return fmt.Errorf("%s was removed: registry mirrors are now declared once, for every local cluster, "+
-		"under registryMirrors in %s, of kind %s. %s, and remove %s from the config",
-		field, LocalMirrorsPath(utils.GetEducatesHomeDir()), v1alpha1.KindEducatesLocalMirrors, move, field)
+	password := ""
+	switch len(withPassword) {
+	case 0:
+	case 1:
+		password = fmt.Sprintf("adding --password <password> to the command of %s, which the config gives a password, ",
+			withPassword[0])
+	default:
+		password = fmt.Sprintf("adding --password <password> to the commands of %s, which the config gives passwords, ",
+			strings.Join(withPassword, ", "))
+	}
+	return fmt.Errorf("%s. Record the registry mirrors of this config there with:\n\n%s\n\n%sand remove %s from the config",
+		removed, strings.Join(commands, "\n"), password, field)
 }
 
 // LoadLocal is the typed convenience wrapper for callers that only accept

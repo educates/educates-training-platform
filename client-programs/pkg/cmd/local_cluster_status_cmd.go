@@ -23,7 +23,7 @@ func (p *ProjectInfo) NewLocalClusterStatusCmd() *cobra.Command {
 		Short:   "Status of the local Kubernetes cluster",
 		Example: localClusterStatusExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			kindConfig := cluster.NewKindClusterConfig("")
+			kindConfig := cluster.NewKindClusterConfig("", defaultLocalCluster())
 
 			if err := kindConfig.ClusterStatus(); err != nil {
 				return err
@@ -45,10 +45,10 @@ func (p *ProjectInfo) NewLocalClusterStatusCmd() *cobra.Command {
 // command: an unreachable API — for example a stopped cluster — is reported
 // as unknown rather than returned as an error.
 func printEducatesPlatformStatus(ctx context.Context, kindConfig *cluster.KindClusterConfig) {
-	// Target the kind cluster explicitly by its well-known context so the
-	// status reflects the local cluster regardless of the user's current
-	// kubectl context.
-	dynamicClient, err := cluster.NewClusterConfig(kindConfig.Config.Kubeconfig, "kind-educates").GetDynamicClient()
+	// Target the kind cluster explicitly by its context so the status
+	// reflects the local cluster regardless of the user's current kubectl
+	// context.
+	dynamicClient, err := cluster.NewClusterConfig(kindConfig.Config.Kubeconfig, kindConfig.Identity.Context).GetDynamicClient()
 	if err != nil {
 		fmt.Println("\nEducates platform: unable to query the cluster")
 		return

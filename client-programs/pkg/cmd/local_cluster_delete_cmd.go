@@ -23,7 +23,7 @@ type LocalClusterDeleteOptions struct {
 }
 
 func (o *LocalClusterDeleteOptions) Run() error {
-	c := cluster.NewKindClusterConfig("")
+	c := cluster.NewKindClusterConfig("", defaultLocalCluster())
 
 	if o.AllComponents {
 		// Best-effort cleanup: surface each as a step but don't abort the

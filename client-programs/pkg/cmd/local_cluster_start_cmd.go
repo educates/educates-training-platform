@@ -18,7 +18,7 @@ func (p *ProjectInfo) NewLocalClusterStartCmd() *cobra.Command {
 		Short:   "Start the local Kubernetes cluster",
 		Example: localClusterStartExample,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			c := cluster.NewKindClusterConfig("")
+			c := cluster.NewKindClusterConfig("", defaultLocalCluster())
 
 			return c.StartCluster()
 		},

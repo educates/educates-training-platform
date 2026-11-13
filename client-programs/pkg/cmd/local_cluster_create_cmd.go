@@ -128,11 +128,12 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	if err != nil {
 		return err
 	}
-	clusterConfig := cluster.NewKindClusterConfig(o.Kubeconfig)
+	id := defaultLocalCluster()
+	clusterConfig := cluster.NewKindClusterConfig(o.Kubeconfig, id)
 	if exists, err := clusterConfig.ClusterExists(); err != nil {
 		return err
 	} else if exists {
-		return fmt.Errorf("kind cluster 'educates' already exists; run 'educates local cluster delete' first or use the existing cluster directly")
+		return fmt.Errorf("kind cluster '%s' already exists; run 'educates local cluster delete' first or use the existing cluster directly", id.KindName)
 	}
 	if err := checkHostPortsAvailable(ctx, in.Cluster.ListenAddress, o.Verbose, w); err != nil {
 		return err
@@ -154,7 +155,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	//    own full logger (spinner + detail), so the step's committed
 	//    header/footer simply frame kind's output.
 	bootstrap := kindBootstrapFromConfig(in.Cluster)
-	if err := runStep(rep, "creating kind cluster 'educates'", "ready", func(s progress.Step) error {
+	if err := runStep(rep, fmt.Sprintf("creating kind cluster '%s'", id.KindName), "ready", func(s progress.Step) error {
 		onPhase := s.Update
 		if o.Verbose {
 			onPhase = nil

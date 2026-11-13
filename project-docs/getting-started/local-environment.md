@@ -177,6 +177,12 @@ Local DNS resolver
 
 The alternative to setting up a global DNS registry to map the wildcard domain to the IP address of your local host machine, is to run a local DNS resolver for the ingress domain. This requires being able to run `dnsmasq` or equivalent locally and configuring the local DNS resolution to forward lookups for the ingress domain to the local DNS resolver.
 
+The Educates command line tool runs one local DNS resolver, a `dnsmasq` container listening on `127.0.0.1:53`, which every local cluster shares. The resolver has no settings of its own. Each local cluster contributes its names to it, its ingress domain and any domains listed under `resolver.extraDomains` in its configuration, and they resolve to that cluster's address: its `cluster.listenAddress` when that is a specific IP address, and otherwise the IP address of the primary active network interface of your host. Each name also covers its subdomains. Names that resolve to anything other than a local cluster, such as a virtual machine, go in configuration files of your own, as described in [names of your own](local-dns-resolver-own-names). To see every name the resolver answers for, which cluster or file each comes from and the address it resolves to, run:
+
+```
+educates local resolver view
+```
+
 If you are on macOS, the Educates command line tool provides the means to run `dnsmasq` for you with the required configuration. To start this run:
 
 ```
@@ -236,11 +242,11 @@ $ curl -v www.educates-local-dev.test
 * Connection #0 to host www.educates-local-dev.test left intact
 ```
 
-The IP address used as the target for addresses resolved by the local DNS resolver will be the IP address of the primary active network interface for the local host. If you want to override the IP address and change it to use an alternate IP, such as that used by an alias applied to a network interface using the ``ifconfig INTERFACE alias`` command, you can edit the local Educates config using the command ``educates local config edit`` and add configuration in the following form before deploying the local DNS resolver.
+The default local cluster listens on `127.0.0.1`, which is no use to workshop sessions inside the cluster, so its names resolve to the IP address of the primary active network interface of your host. To have them resolve to another address of your host instead, such as an alias added to a network interface with the ``ifconfig INTERFACE alias`` command, have the cluster listen on that address: set `cluster.listenAddress` to it in the local Educates config, using the command ``educates local config edit``, before you create the cluster. For a cluster that already exists, delete it and create it again, since Kind publishes the cluster's ports on the listen address when it creates the cluster. The address must exist on your host, as described in [Running several local clusters](multiple-local-clusters).
 
 ```yaml
-resolver:
-  targetAddress: 192.168.168.1
+cluster:
+  listenAddress: 192.168.168.1
 ```
 
 By default the local DNS resolver will only resolve the domain for the Educates ingress domain. If you want it to resolve other domains and also have them directed to the IP address used for accessing the local Educates cluster, you can also add them in the local Educates config.
@@ -251,7 +257,7 @@ resolver:
   - example.com
 ```
 
-When you run several local clusters, as described in [Running several local clusters](multiple-local-clusters), the one local DNS resolver serves the domains of all of them, each pointing at its own cluster's address. Creating or deleting a local cluster refreshes a running resolver. After changing the `ingress` or `resolver` configuration of a cluster in any other way, run `educates local resolver update` to have the resolver serve it.
+When you run several local clusters, as described in [Running several local clusters](multiple-local-clusters), the one local DNS resolver serves the names of all of them, each resolving to its own cluster's address. Creating or deleting a local cluster refreshes a running resolver. After changing the `cluster.listenAddress`, `ingress` or `resolver` configuration of a cluster in any other way, or the files of your own described in [names of your own](local-dns-resolver-own-names), run `educates local resolver update` to have the resolver serve it.
 
 Linux systems may already provide a local DNS resolver in which case you can configure it, however how that is done will depend on the Linux distributions.
 
@@ -272,6 +278,40 @@ educates local resolver delete
 You will need to manually remove the file you created under `/etc/resolver`.
 
 Note that when using the local DNS resolver on macOS, for it to work relies on DNS resolution within the local Kind Kubernetes cluster being passed through to the macOS system DNS resolution framework. Although this appears to work for Kubernetes Kind clusters running on macOS Intel architecture, it appears not to currently work for macOS ARM architecture. It is believed this may be because Go application binaries compiled using cross compilation do not link and use the macOS DNS frameworks and instead have a native Go implementation which bypasses the macOS `/etc/resolver` based system. If you are using macOS ARM based machines, you will need to have access to a public DNS registry or server where you can instead configure your domains. Using a DNS server on your local network or embedded in your internet router may also not work as it is also suspected that for macOS ARM acrhitecture, a Kubernetes Kind cluster bypasses local DNS servers and connects direct to a public DNS. The only known way around this at present is to override CoreDNS configuration in the Kubernetes cluster.
+
+(local-dns-resolver-own-names)=
+### Names of your own
+
+Names that resolve to anything other than a local cluster go in `dnsmasq` configuration files of your own, in the folder `dnsmasq.d` of the data home, such as `~/Library/Application Support/educates/dnsmasq.d` on macOS. The resolver container mounts the folder, and reads every file in it whose name ends in `.conf` after the entries of every local cluster. The command line tool creates the folder, empty, when it writes the resolver's configuration, and never writes into it, so creating or deleting a local cluster leaves your files as they are.
+
+For example, to resolve `vm.lab.test`, and every name under it, to a virtual machine on `192.168.64.5`, create the file `dnsmasq.d/lab.conf` in the data home holding:
+
+```
+address=/vm.lab.test/192.168.64.5
+```
+
+Then run `educates local resolver update`, which restarts the resolver so it reads the file. On macOS, a name the resolver serves also needs a file in `/etc/resolver` for it or for a domain it is inside, so for this example create `/etc/resolver/lab.test` with the same entry as for the ingress domain:
+
+```
+sudo sh -c "cat > /etc/resolver/lab.test << EOF
+nameserver 127.0.0.1
+EOF"
+```
+
+`educates local resolver view` lists the names of your files with the cluster column set to `-`, and its notes warn when one of your files names a domain a local cluster also serves, in which case the resolver answers the name with both addresses. On macOS they also say when no file in `/etc/resolver` forwards a name to the resolver. For the default cluster on `educates.test`, a named cluster `test2` on `10.10.10.2` and the file above, it shows:
+
+```
+CLUSTER     ADDRESS          ADDRESS FROM                         CONFIG
+(default)   192.168.50.151   host IP (listen address 127.0.0.1)   config.yaml
+test2       10.10.10.2       listen address                       clusters/test2/config.yaml
+
+NAME                  CLUSTER     FROM                   NOTE
+educates.test         (default)   ingress.domain         -
+test2.educates.test   test2       ingress.domain         wins over educates.test (default)
+vm.lab.test           -           dnsmasq.d/lab.conf     yours, resolves to 192.168.64.5
+```
+
+A resolver deployed by an earlier release of the command line tool does not mount the folder. `educates local resolver update`, and the refresh when a local cluster is created or deleted, still update its configuration, and warn that you need to run `educates local resolver delete` and then `educates local resolver deploy` for it to read your files.
 
 (local-secrets-cache)=
 Local secrets cache
@@ -506,7 +546,20 @@ An `EducatesConfig` with `target.provider: kind` can also serve as a named clust
 
 ### The DNS resolver
 
-One local DNS resolver serves every local cluster. It points the ingress domain and the `resolver.extraDomains` of each cluster at that cluster's own address, its `resolver.targetAddress`, which defaults to your host's IP address for the default cluster, as described in [Local DNS resolver](local-dns-resolver), and to the listen address for a named cluster. The `educates local resolver deploy` and `educates local resolver update` commands always configure it for every cluster, and take no `--local-cluster` option. The `--domain` option of `educates local resolver deploy` overrides the domain of the default cluster only.
+One local DNS resolver serves every local cluster, and it has no settings of its own. Each cluster contributes its names, its ingress domain and its `resolver.extraDomains`, which resolve to that cluster's address: its listen address when that is a specific IP address, and otherwise your host's IP address, as described in [Local DNS resolver](local-dns-resolver). A named cluster always listens on a specific IP address, so its names resolve there, and so do the default cluster's when you give it a specific listen address such as `10.10.10.1`. Names that resolve to anything other than a local cluster, such as a virtual machine, go in files of your own in the data home's `dnsmasq.d` folder, as described in [names of your own](local-dns-resolver-own-names). The `educates local resolver deploy`, `update` and `view` commands always cover every cluster, and take no `--local-cluster` option. The `--domain` option of `educates local resolver deploy` overrides the domain of the default cluster only.
+
+To see what the resolver serves, run `educates local resolver view`. Its first table has a row for each cluster, with the address its names resolve to, whether that is the cluster's listen address or your host's IP address, and the cluster's configuration file. Its second table has a row for each name, with its cluster and where it comes from: `ingress.domain`, the `nip.io` name of the listen address or of the host's IP address, `resolver.extraDomains`, or one of your files. Its notes say when a name is covered by a broader name of the same cluster, and when it wins over another cluster's broader name, as `test2.educates.test` does over `educates.test`. In the resolver's configuration file, `dnsmasq.conf` in the data home, each cluster's entries start with a comment naming the cluster, its configuration file and where its address comes from:
+
+```
+# Default local cluster (config.yaml): 10.10.10.1, its listen address
+address=/educates.test/10.10.10.1
+
+# Local cluster test2 (clusters/test2/config.yaml): 10.10.10.2, its listen address
+address=/test2.educates.test/10.10.10.2
+
+# Your own entries: dnsmasq.d/*.conf
+conf-dir=/etc/dnsmasq.d/,*.conf
+```
 
 A named cluster is served while its Kind cluster exists. Creating or deleting a cluster refreshes a resolver that is already running, adding or removing that cluster's domains, so you don't need to run `educates local resolver update` yourself. When the resolver can't be refreshed, the command warns and still succeeds, since the cluster has been created or deleted by then: fix the cause the warning names and run `educates local resolver update`.
 

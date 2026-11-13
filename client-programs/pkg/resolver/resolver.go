@@ -9,10 +9,13 @@ import (
 	"net/netip"
 	"os"
 	"path"
+	"slices"
 
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
@@ -64,6 +67,8 @@ func DeployResolver(content []byte) error {
 		return err
 	}
 
+	// The rendered configuration reads the user's own entries from the
+	// include folder, which writeConfig creates when it is missing.
 	hostConfig := &container.HostConfig{
 		PortBindings: network.PortMap{
 			network.MustParsePort("53/udp"): []network.PortBinding{
@@ -78,6 +83,12 @@ func DeployResolver(content []byte) error {
 				Type:     "bind",
 				Source:   configFileName,
 				Target:   "/etc/dnsmasq.conf",
+				ReadOnly: true,
+			},
+			{
+				Type:     "bind",
+				Source:   config.DnsmasqIncludeDir(utils.GetEducatesHomeDir()),
+				Target:   localclusters.ResolverIncludeDir,
 				ReadOnly: true,
 			},
 		},
@@ -163,35 +174,48 @@ func DeleteResolver() error {
 // it serves it, and reports what it does to w: io.Discard for a command
 // that reports its own progress. It fails when the container does not
 // exist.
-func UpdateResolver(w io.Writer, content []byte) error {
+//
+// It also reports whether the container mounts the include folder of the
+// data home, which a container created by an earlier release does not:
+// such a container serves the configuration, but none of the user's own
+// entries, until it is deleted and deployed again.
+func UpdateResolver(w io.Writer, content []byte) (includeFolderMounted bool, err error) {
 	fmt.Fprintln(w, "Updating local DNS resolver configuration")
 
 	ctx := context.Background()
 
 	cli, err := docker.NewDockerClient()
 	if err != nil {
-		return errors.Wrap(err, "unable to create docker client")
+		return false, errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, resolverContainerName, client.ContainerInspectOptions{})
+	inspected, err := cli.ContainerInspect(ctx, resolverContainerName, client.ContainerInspectOptions{})
 	if err != nil {
-		return errors.Wrap(err, "resolver container not found")
+		return false, errors.Wrap(err, "resolver container not found")
 	}
 
 	configFileName, err := writeConfig(content)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	_, err = cli.ContainerRestart(ctx, resolverContainerName, client.ContainerRestartOptions{})
 	if err != nil {
-		return errors.Wrap(err, "failed to restart resolver")
+		return false, errors.Wrap(err, "failed to restart resolver")
 	}
 
 	fmt.Fprintln(w, "Local DNS resolver configuration updated and reloaded")
 	fmt.Fprintln(w, "Local DNS resolver configuration in", configFileName)
 
-	return nil
+	return mountsIncludeFolder(inspected.Container.Mounts), nil
+}
+
+// mountsIncludeFolder reports whether a resolver container with the
+// mounts given mounts the include folder at localclusters.ResolverIncludeDir.
+func mountsIncludeFolder(mounts []container.MountPoint) bool {
+	return slices.ContainsFunc(mounts, func(m container.MountPoint) bool {
+		return m.Destination == localclusters.ResolverIncludeDir
+	})
 }
 
 // ResolverExists reports whether the local DNS resolver container exists,
@@ -215,7 +239,8 @@ func ResolverExists() (bool, error) {
 
 // writeConfig writes the dnsmasq configuration content to dnsmasq.conf in
 // the data home, the file the resolver container mounts, rewriting it in
-// place, and returns its path.
+// place, and returns its path. It also creates the include folder the
+// container mounts, empty, when it is missing, and never writes into it.
 func writeConfig(content []byte) (string, error) {
 	configFileDir := utils.GetEducatesHomeDir()
 	configFileName := path.Join(configFileDir, "dnsmasq.conf")
@@ -224,6 +249,11 @@ func writeConfig(content []byte) (string, error) {
 
 	if err != nil {
 		return "", errors.Wrapf(err, "unable to create config directory")
+	}
+
+	includeDir := config.DnsmasqIncludeDir(configFileDir)
+	if err := os.MkdirAll(includeDir, os.ModePerm); err != nil {
+		return "", errors.Wrapf(err, "unable to create the local DNS resolver include folder %s", includeDir)
 	}
 
 	err = os.WriteFile(configFileName, content, 0644)

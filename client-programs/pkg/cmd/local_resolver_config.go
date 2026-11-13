@@ -39,15 +39,16 @@ type resolverContainer struct {
 	// exists reports whether the container exists.
 	exists func() (bool, error)
 
-	// update serves a configuration from the container and restarts it.
-	update func(content []byte) error
+	// update serves a configuration from the container and restarts it,
+	// and reports whether the container mounts the include folder.
+	update func(content []byte) (includeFolderMounted bool, err error)
 }
 
 // dockerResolverContainer is the local DNS resolver container on the
 // Docker host.
 var dockerResolverContainer = resolverContainer{
 	exists: resolver.ResolverExists,
-	update: func(content []byte) error { return resolver.UpdateResolver(io.Discard, content) },
+	update: func(content []byte) (bool, error) { return resolver.UpdateResolver(io.Discard, content) },
 }
 
 // refreshLocalResolver serves the configuration render returns from the
@@ -66,6 +67,8 @@ func refreshLocalResolver(rep progress.Reporter, render func() ([]byte, []error,
 // once the kind cluster exists, or is gone, so the step warns about each
 // config render leaves out, and a resolver it can't look up, render or
 // restart is a warning that says to run 'educates local resolver update'.
+// A container without the include folder is updated, with a warning that
+// says how to re-create it.
 func refreshResolverContainer(rep progress.Reporter, c resolverContainer, render func() ([]byte, []error, error)) {
 	exists, err := c.exists()
 	if err == nil && !exists {
@@ -80,7 +83,11 @@ func refreshResolverContainer(rep progress.Reporter, c resolverContainer, render
 			step.Warn(e.Error())
 		}
 		if err == nil {
-			err = c.update(content)
+			var includeFolderMounted bool
+			includeFolderMounted, err = c.update(content)
+			if err == nil && !includeFolderMounted {
+				step.Warn(resolverWithoutIncludeFolderWarning())
+			}
 		}
 	}
 	if err != nil {
@@ -89,6 +96,16 @@ func refreshResolverContainer(rep progress.Reporter, c resolverContainer, render
 		return
 	}
 	step.Done("updated")
+}
+
+// resolverWithoutIncludeFolderWarning says that the local DNS resolver
+// container, created by an earlier release, does not mount the include
+// folder, so it serves none of the user's own entries, and how to
+// re-create it.
+func resolverWithoutIncludeFolderWarning() string {
+	return fmt.Sprintf("the local DNS resolver container was created without the include folder %s, so it serves "+
+		"none of your own entries there: run 'educates local resolver delete' then 'educates local resolver deploy' "+
+		"to pick up dnsmasq.d/", config.DnsmasqIncludeDir(utils.GetEducatesHomeDir()))
 }
 
 // defaultResolverConfig loads the default local cluster's config as the

@@ -256,8 +256,19 @@ server=1.1.1.1
 strict-order
 `
 
+// ResolverIncludeDir is where the local DNS resolver container mounts the
+// include folder of the data home, config.DnsmasqIncludeDir, read-only.
+// The rendered configuration reads the *.conf files there, the user's own
+// entries. The resolver's image has an empty folder at this path, so a
+// container created without the mount still starts.
+const ResolverIncludeDir = "/etc/dnsmasq.d"
+
+// includeSection ends the resolver's configuration: it reads the user's
+// own entries from the *.conf files of the include folder.
+const includeSection = "\n# Your own entries: dnsmasq.d/*.conf\nconf-dir=" + ResolverIncludeDir + "/,*.conf\n"
+
 // renderDnsmasqConfig renders the resolver's configuration serving
-// clusters.
+// clusters, then the user's own entries.
 func renderDnsmasqConfig(clusters []resolverCluster) []byte {
 	var b strings.Builder
 	b.WriteString(dnsmasqHeader)
@@ -267,5 +278,6 @@ func renderDnsmasqConfig(clusters []resolverCluster) []byte {
 			fmt.Fprintf(&b, "address=/%s/%s\n", domain, c.address)
 		}
 	}
+	b.WriteString(includeSection)
 	return []byte(b.String())
 }

@@ -92,6 +92,9 @@ strict-order
 
 # Default local cluster (config.yaml): 10.10.10.1, its listen address
 address=/educates.test/10.10.10.1
+
+# Your own entries: dnsmasq.d/*.conf
+conf-dir=/etc/dnsmasq.d/,*.conf
 `
 	if got := string(content); got != want {
 		t.Errorf("rendered config:\n%s\nwant:\n%s", got, want)
@@ -617,4 +620,32 @@ func TestResolverConfigServesNothingForADataHomeWithNoConfig(t *testing.T) {
 	got := renderAddresses(t, resolverInputs{DataHome: t.TempDir(), HostIP: "192.168.1.10"})
 
 	wantAddresses(t, got)
+}
+
+func TestResolverConfigIncludesTheUserEntriesAfterEveryCluster(t *testing.T) {
+	dataHome := t.TempDir()
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
+		"cluster:\n  listenAddress: 10.10.10.2\n")
+
+	for _, tc := range []struct {
+		name     string
+		dataHome string
+		observed []NodeContainer
+	}{
+		{name: "with clusters", dataHome: dataHome, observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)}},
+		{name: "with no cluster", dataHome: t.TempDir()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			content, err := renderResolver(resolverInputs{DataHome: tc.dataHome, HostIP: "192.168.1.10", Observed: tc.observed})
+			if err != nil {
+				t.Fatalf("ResolverConfig: %v", err)
+			}
+
+			want := "\n# Your own entries: dnsmasq.d/*.conf\nconf-dir=/etc/dnsmasq.d/,*.conf\n"
+			if !strings.HasSuffix(string(content), want) {
+				t.Errorf("rendered config:\n%s\nwant it to end with:\n%s", content, want)
+			}
+		})
+	}
 }

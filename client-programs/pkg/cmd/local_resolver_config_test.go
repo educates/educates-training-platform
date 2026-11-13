@@ -11,20 +11,22 @@ import (
 
 // fakeResolverContainer is a local DNS resolver container that exists
 // as exists says, records the configuration it is updated with, and fails
-// its update with updateErr.
+// its update with updateErr. With withoutIncludeFolder set it was created
+// before the include folder, so it does not mount it.
 type fakeResolverContainer struct {
-	exists    bool
-	existsErr error
-	updateErr error
-	updated   []byte
+	exists               bool
+	existsErr            error
+	updateErr            error
+	withoutIncludeFolder bool
+	updated              []byte
 }
 
 func (f *fakeResolverContainer) container() resolverContainer {
 	return resolverContainer{
 		exists: func() (bool, error) { return f.exists, f.existsErr },
-		update: func(content []byte) error {
+		update: func(content []byte) (bool, error) {
 			f.updated = content
-			return f.updateErr
+			return !f.withoutIncludeFolder, f.updateErr
 		},
 	}
 }
@@ -47,6 +49,27 @@ func TestRefreshLocalResolverServesTheRenderedConfig(t *testing.T) {
 	}
 	if strings.Contains(out, "⚠") {
 		t.Errorf("refresh warned:\n%s", out)
+	}
+}
+
+func TestRefreshLocalResolverWarnsAboutAContainerWithoutTheIncludeFolder(t *testing.T) {
+	c := &fakeResolverContainer{exists: true, withoutIncludeFolder: true}
+
+	out := refreshForTest(c, func() ([]byte, []error, error) { return []byte("# rendered\n"), nil, nil })
+
+	if string(c.updated) != "# rendered\n" {
+		t.Errorf("resolver updated with %q, want the rendered config", c.updated)
+	}
+	if got := strings.Count(out, "⚠"); got != 1 {
+		t.Errorf("refresh reported %d warnings, want one:\n%s", got, out)
+	}
+	for _, part := range []string{"dnsmasq.d", "educates local resolver delete", "educates local resolver deploy"} {
+		if !strings.Contains(out, part) {
+			t.Errorf("refresh reported:\n%s\nwant a warning mentioning %q", out, part)
+		}
+	}
+	if strings.Contains(out, "skipped") {
+		t.Errorf("refresh reported it skipped the update:\n%s", out)
 	}
 }
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 
@@ -36,7 +37,14 @@ func (o *LocalResolverUpdateOptions) Run(ctx context.Context, errW io.Writer) er
 		return err
 	}
 	warnLeftOutConfigs(errW, leftOut)
-	return resolver.UpdateResolver(os.Stdout, content)
+	includeFolderMounted, err := resolver.UpdateResolver(os.Stdout, content)
+	if err != nil {
+		return err
+	}
+	if !includeFolderMounted {
+		fmt.Fprintf(errW, "Warning: %s\n", resolverWithoutIncludeFolderWarning())
+	}
+	return nil
 }
 
 func (p *ProjectInfo) NewLocalResolverUpdateCmd() *cobra.Command {

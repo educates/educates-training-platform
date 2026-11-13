@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
@@ -13,19 +16,109 @@ import (
 // completion and validation.
 const DefaultLocalConfigModeline = `# yaml-language-server: $schema=` + v1alpha1.SchemaBaseURL + v1alpha1.KindEducatesLocalConfig + `.json`
 
-// DefaultLocalConfigYAML is the minimal EducatesLocalConfig — modeline,
-// apiVersion and kind only — written by `local config init` and by
-// `local cluster create` when no config exists yet. Every other field
-// takes its default at deploy time.
-const DefaultLocalConfigYAML = DefaultLocalConfigModeline + `
-apiVersion: ` + v1alpha1.APIVersion + `
-kind: ` + v1alpha1.KindEducatesLocalConfig + `
+// LocalMirrorsModeline is the yaml-language-server modeline that points
+// editors at the published EducatesLocalMirrors schema of the registry
+// mirrors file for completion and validation.
+const LocalMirrorsModeline = `# yaml-language-server: $schema=` + v1alpha1.SchemaBaseURL + v1alpha1.KindEducatesLocalMirrors + `.json`
+
+// hostIPListenAddressComment is the comment above a cluster.listenAddress
+// the CLI wrote from the host's detected IP address.
+const hostIPListenAddressComment = `  # This host's IP address when this file was written. An alias such as
+  # 10.10.10.1, added to a network interface, survives network changes.
 `
+
+// MarshalLocalConfig returns cfg as the CLI writes an EducatesLocalConfig
+// into the data home: the yaml-language-server modeline, then cfg. When
+// listenAddressIsHostIP is set, cfg's cluster.listenAddress is the host's
+// IP address the CLI detected, and a comment above it says so, and that
+// an alias such as 10.10.10.1 survives network changes.
+func MarshalLocalConfig(cfg *v1alpha1.EducatesLocalConfig, listenAddressIsHostIP bool) ([]byte, error) {
+	body, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal the local config: %w", err)
+	}
+	if listenAddressIsHostIP {
+		body = commentListenAddress(body, hostIPListenAddressComment)
+	}
+	return append([]byte(DefaultLocalConfigModeline+"\n"), body...), nil
+}
+
+// commentListenAddress returns body, an EducatesLocalConfig as
+// yaml.Marshal writes it, with comment above the line of its
+// cluster.listenAddress.
+func commentListenAddress(body []byte, comment string) []byte {
+	lines := strings.SplitAfter(string(body), "\n")
+	inCluster := false
+	for i, line := range lines {
+		switch {
+		case line == "cluster:\n":
+			inCluster = true
+		case inCluster && strings.HasPrefix(line, "  listenAddress:"):
+			return []byte(strings.Join(lines[:i], "") + comment + strings.Join(lines[i:], ""))
+		case !strings.HasPrefix(line, " "):
+			inCluster = false
+		}
+	}
+	return body
+}
 
 // LocalConfigPath is the path of the local config in the data home
 // dataHome: <data-home>/config.yaml.
 func LocalConfigPath(dataHome string) string {
 	return filepath.Join(dataHome, "config.yaml")
+}
+
+// LocalClustersDir is the path of the folder in the data home dataHome
+// that holds a folder for each named local cluster,
+// <data-home>/clusters, with its config, config.yaml.
+func LocalClustersDir(dataHome string) string {
+	return filepath.Join(dataHome, "clusters")
+}
+
+// IsDataHomeConfig reports whether path is the config of a local cluster
+// in the data home dataHome: the default local cluster's,
+// <data-home>/config.yaml, or a named local cluster's,
+// <data-home>/clusters/<name>/config.yaml. The folders are compared as
+// files, so a path given through a symbolic link or relative to the
+// current folder matches too. A folder that doesn't exist matches none.
+func IsDataHomeConfig(dataHome, path string) bool {
+	if filepath.Base(path) != "config.yaml" {
+		return false
+	}
+	dir := filepath.Dir(path)
+	return sameDir(dir, dataHome) || sameDir(filepath.Dir(dir), LocalClustersDir(dataHome))
+}
+
+// sameDir reports whether the folders a and b are the same folder.
+func sameDir(a, b string) bool {
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ai, bi)
+}
+
+// DnsmasqIncludeDir is the path of the local DNS resolver's include
+// folder in the data home dataHome: <data-home>/dnsmasq.d. It holds the
+// user's own dnsmasq configuration, in *.conf files, for names that
+// resolve to anything other than a local cluster. The CLI creates it
+// empty when it is missing, and never writes into it.
+func DnsmasqIncludeDir(dataHome string) string {
+	return filepath.Join(dataHome, "dnsmasq.d")
+}
+
+// LocalMirrorsPath is the path of the registry mirrors file in the data
+// home dataHome: <data-home>/mirrors.yaml. It declares, as an
+// EducatesLocalMirrors, the registry mirrors every local cluster needs.
+// Local mirror deploy records a mirror in it, and local mirror delete
+// removes it, through RecordLocalMirror and RemoveLocalMirror, which keep
+// the rest of the file as the user wrote it.
+func LocalMirrorsPath(dataHome string) string {
+	return filepath.Join(dataHome, "mirrors.yaml")
 }
 
 // LoadLocalConfigIfPresent loads the local config of the data home
@@ -67,38 +160,6 @@ func EnsureLocalConfigFile(dataHome string) error {
 		return nil
 	}
 	return MissingLocalConfigError(dataHome)
-}
-
-// EnsureOrInitLocalConfigFile is the cluster-create counterpart to
-// EnsureLocalConfigFile: where the latter returns MissingLocalConfigError
-// for a first-time user, this one writes the minimal default
-// EducatesLocalConfig in its place so `local cluster create` runs
-// end-to-end without a preceding `local config init`. It reports whether
-// it created the file so the caller can tell the user.
-//
-// The v3 → v4 migration still runs first and still wins: a laptop-kind v3
-// values.yaml is migrated (created=false), and a non-laptop v3 values.yaml
-// still errors out of MaybeMigrateV3 — we never write a default over a
-// real, if unmigratable, v3 install. The write below is reached only when
-// there is genuinely no prior config to honour.
-func EnsureOrInitLocalConfigFile(dataHome string) (created bool, err error) {
-	configPath := LocalConfigPath(dataHome)
-	if _, err := os.Stat(configPath); err == nil {
-		return false, nil
-	}
-	if err := MaybeMigrateV3(dataHome, os.Stderr); err != nil {
-		return false, err
-	}
-	if _, err := os.Stat(configPath); err == nil {
-		return false, nil
-	}
-	if err := os.MkdirAll(dataHome, 0o755); err != nil {
-		return false, fmt.Errorf("create data home %q: %w", dataHome, err)
-	}
-	if err := os.WriteFile(configPath, []byte(DefaultLocalConfigYAML), 0o644); err != nil {
-		return false, fmt.Errorf("write %s: %w", configPath, err)
-	}
-	return true, nil
 }
 
 // MissingLocalConfigError diagnoses why <data-home>/config.yaml is missing

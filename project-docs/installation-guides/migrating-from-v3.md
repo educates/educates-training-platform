@@ -118,9 +118,12 @@ For local kind-cluster users, the v4 CLI migrates your configuration on first us
 
 * translates it to a v4 ``config.yaml`` (``EducatesLocalConfig``), carrying over
   the ingress domain, kind cluster settings (listen address, API server,
-  subnets, volume mounts, registry mirrors), local DNS resolver settings, image
+  subnets, volume mounts), the local DNS resolver's extra domains, image
   version overrides, image pre-puller settings, website styling references,
   and image pull secret propagation;
+* writes the registry mirrors of ``localKindCluster.registryMirrors`` to
+  ``mirrors.yaml`` (``EducatesLocalMirrors``) beside it, unless that file
+  already exists;
 * renames the original to `values.yaml.v3-backup`; and
 * prints a notice naming both files, followed by a line for each setting it
   carried over in a changed form or dropped. There is no prompt and no flag:
@@ -138,10 +141,83 @@ migration carries such a name over as a ``name`` entry, and since the version
 ``SessionManager`` reporting ``InstallFailed`` with a message naming the entry.
 Replace that entry with the image's full reference as an ``image`` entry, or
 remove it. A version 3 file without ``imagePuller`` leaves
-``imagePrePuller`` unset, so the pre-puller is on with its default images. The
-notice says what was carried over and what was dropped, with lines such as:
+``imagePrePuller`` unset, so the pre-puller is on with its default images.
+
+Version 3 left a missing ``localKindCluster.listenAddress`` to Kind, which
+published the cluster's ports 80 and 443 on every host address, as ``0.0.0.0``
+does. Every local cluster now publishes them on a specific IP address of the
+host, as described in [listen address](local-cluster-listen-address), so the
+migration sets a missing or ``0.0.0.0`` listen address to your host's IP
+address, with a line of the notice saying so. An alias added to a network
+interface, such as ``10.10.10.1``, survives network changes, where the host's
+IP address may not, so you may want to set ``cluster.listenAddress`` to one
+instead. When the host's IP address can't be detected, the migration leaves
+``cluster.listenAddress`` unset, and the notice says to set it. Any other
+listen address is kept as it was.
+
+The migration also drops ``localDNSResolver.targetAddress``. A local cluster's
+names now resolve to its ``cluster.listenAddress``. The migration does not set
+``cluster.listenAddress`` from the target address, since setting it changes
+where Kind publishes the cluster's ports. To keep resolving the cluster at the
+old target address, set ``cluster.listenAddress`` to it and create the cluster
+again. Names that resolve elsewhere go in files of your own in the data home's
+``dnsmasq.d`` folder, as described in [names of your own](local-dns-resolver-own-names).
+
+Version 4 declares registry mirrors once for every local cluster, in
+``mirrors.yaml`` in the data home, rather than in a cluster's configuration,
+as described in [declaring mirrors for every cluster](local-mirrors-file). The
+migration writes the entries of ``localKindCluster.registryMirrors`` there as
+they are, credentials included, so it writes the file readable only by you.
+For a version 3 file with these mirrors:
+
+```yaml
+localKindCluster:
+  registryMirrors:
+    - mirror: docker.io
+      url: registry-1.docker.io
+      username: my-dockerhub-user
+      password: my-dockerhub-token
+    - mirror: ghcr.io
+```
+
+it writes this ``mirrors.yaml``:
+
+```yaml
+# yaml-language-server: $schema=https://schemas.educates.dev/cli/v1alpha1/EducatesLocalMirrors.json
+apiVersion: cli.educates.dev/v1alpha1
+kind: EducatesLocalMirrors
+registryMirrors:
+  - mirror: docker.io
+    url: registry-1.docker.io
+    username: my-dockerhub-user
+    password: my-dockerhub-token
+  - mirror: ghcr.io
+```
+
+A version 3 mirror's ``port`` and ``bindIP`` never had any effect, since a
+mirror's container is published on a port Docker picks on ``127.0.0.1``, so
+the migration drops them, and its notice says so for each mirror that set
+them.
+
+When ``mirrors.yaml`` already exists, the migration leaves it as it is, and
+the notice names the version 3 mirrors to add to it from
+``values.yaml.v3-backup``, by hand or with ``educates local mirror deploy``,
+which records a mirror in the file. From then on, ``educates local mirror
+deploy`` and ``educates local mirror delete`` keep the file up to date.
+
+A ``config.yaml`` from a pre-release of version 4 that still has
+``cluster.registryMirrors`` is moved once, the first time a command reads
+it: its mirrors go to ``mirrors.yaml``, the previous configuration is kept
+as ``config.yaml.bak``, and ``cluster.registryMirrors`` is removed from it,
+as described in [mirrors in a cluster's configuration](local-mirrors-move).
+
+The notice says what was carried over and what was dropped, with lines such
+as:
 
 ```
+set cluster.listenAddress to 192.168.1.20, this host's IP address: localKindCluster.listenAddress was not set, so the cluster published its ports 80 and 443 on every host address, and every local cluster now publishes them on a specific IP address of the host. An alias such as 10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not
+dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to its cluster.listenAddress; set cluster.listenAddress to 192.168.1.10 to keep resolving the cluster there, or for other names add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home
+moved localKindCluster.registryMirrors to /Users/me/Library/Application Support/educates/mirrors.yaml, where the registry mirrors every local cluster needs are declared: docker.io, ghcr.io
 dropped imageVersions entry pause-container: the image pre-puller now runs its own image-puller helper, which a pause container image cannot replace
 carried imagePuller over to imagePrePuller: enabled: true, images: jdk17-environment
 dropped imagePuller.prePullImages names the v4 image inventory does not hold: session-manager; to pull one, add its full reference to imagePrePuller.images as an image entry

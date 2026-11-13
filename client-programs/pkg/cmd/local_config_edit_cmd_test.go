@@ -90,6 +90,7 @@ func TestCommentEachLine(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestRunLocalConfigEdit_InvalidThenValid(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 
@@ -97,11 +98,11 @@ func TestRunLocalConfigEdit_InvalidThenValid(t *testing.T) {
 		"kind: EducatesLocalConfig\n" +
 		"operator:\n  logLevel: trace\n" // logLevel enum violation
 
-	valid := defaultLocalConfigYAML + "\n# edited-marker\n"
+	valid := minimalLocalConfigYAML + "cluster:\n  listenAddress: 10.10.10.1\n\n# edited-marker\n"
 
 	stateDir := stageFakeEditor(t, invalid, valid)
 
-	if err := runLocalConfigEdit(); err != nil {
+	if err := runLocalConfigEdit(defaultLocalCluster()); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
 
@@ -132,13 +133,14 @@ func TestRunLocalConfigEdit_InvalidThenValid(t *testing.T) {
 }
 
 func TestRunLocalConfigEdit_ValidFirstPass_Saves(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 
-	valid := defaultLocalConfigYAML + "\n# first-pass-marker\n"
+	valid := minimalLocalConfigYAML + "cluster:\n  listenAddress: 10.10.10.1\n\n# first-pass-marker\n"
 	stateDir := stageFakeEditor(t, valid)
 
-	if err := runLocalConfigEdit(); err != nil {
+	if err := runLocalConfigEdit(defaultLocalCluster()); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
 	if n := editorInvocations(t, stateDir); n != 1 {
@@ -157,6 +159,7 @@ func TestRunLocalConfigEdit_ValidFirstPass_Saves(t *testing.T) {
 }
 
 func TestRunLocalConfigEdit_QuitNoChanges_DoesNotCreateFile(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 
@@ -164,7 +167,7 @@ func TestRunLocalConfigEdit_QuitNoChanges_DoesNotCreateFile(t *testing.T) {
 	// a quit-without-saving on a pristine data home.
 	stateDir := stageFakeEditor(t)
 
-	if err := runLocalConfigEdit(); err != nil {
+	if err := runLocalConfigEdit(defaultLocalCluster()); err != nil {
 		t.Fatalf("expected nil on no-change quit, got %v", err)
 	}
 	if n := editorInvocations(t, stateDir); n != 1 {
@@ -179,6 +182,7 @@ func TestRunLocalConfigEdit_QuitNoChanges_DoesNotCreateFile(t *testing.T) {
 }
 
 func TestRunLocalConfigEdit_AbortAfterError_PreservesTemp(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 
@@ -190,7 +194,7 @@ func TestRunLocalConfigEdit_AbortAfterError_PreservesTemp(t *testing.T) {
 	// saving, which should abort and preserve their work.
 	stateDir := stageFakeEditor(t, invalid)
 
-	err := runLocalConfigEdit()
+	err := runLocalConfigEdit(defaultLocalCluster())
 	if err == nil {
 		t.Fatal("expected an abort error after invalid edit followed by quit")
 	}

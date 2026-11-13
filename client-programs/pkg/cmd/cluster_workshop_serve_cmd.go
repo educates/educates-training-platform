@@ -58,11 +58,17 @@ func calculateWorkshopRoot(path string) (string, error) {
 // }
 
 var clusterWorkshopServeExample = `
-  # Serve the workshop in the current directory from the local system:
+  # Serve the workshop in the current directory from the local system to
+  # the cluster of the current kube context. For a local cluster, the proxy
+  # listens on its listen address, with the Hugo server on a free port:
   educates cluster workshop serve
 
   # Serve a workshop from a path on a specific local port:
   educates cluster workshop serve --file ./my-workshop --local-port 10081
+
+  # Serve the workshop to the named local cluster test2, listening on its
+  # listen address, with the Hugo server on a free port:
+  educates cluster workshop serve --local-cluster test2
 `
 
 type ClusterWorkshopServeOptions struct {
@@ -256,7 +262,12 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 		Use:     "serve",
 		Short:   "Serve workshop from local system",
 		Example: clusterWorkshopServeExample,
-		RunE:    func(_ *cobra.Command, _ []string) error { return o.Run() },
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := o.listenForTargetedCluster(cmd); err != nil {
+				return err
+			}
+			return o.Run()
+		},
 	}
 
 	c.Flags().StringVarP(
@@ -285,6 +296,7 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 		"",
 		"Context to use from Kubeconfig",
 	)
+	addLocalClusterContextFlag(c, &o.KubeconfigOptions)
 	c.Flags().StringVarP(
 		&o.Portal,
 		"portal",
@@ -312,9 +324,9 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 	)
 	c.Flags().StringVar(
 		&o.LocalHost,
-		"local-host",
+		localHostFlagName,
 		"0.0.0.0",
-		"host on which the local proxy will be listen",
+		"host on which the local proxy will listen; when serving a local cluster, selected or through its kube context, its listen address",
 	)
 	c.Flags().IntVar(
 		&o.LocalPort,
@@ -324,9 +336,9 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 	)
 	c.Flags().IntVar(
 		&o.HugoPort,
-		"hugo-port",
+		hugoPortFlagName,
 		1313,
-		"port on which the hugo server will listen",
+		"port on which the hugo server will listen; when serving a local cluster, selected or through its kube context, a free port",
 	)
 	c.Flags().StringVarP(
 		&o.Token,

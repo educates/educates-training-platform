@@ -30,7 +30,6 @@ type LocalClusterConfig struct {
 	ApiServer             ApiServerConfig  `yaml:"apiServer,omitempty"`
 	Networking            NetworkingConfig `yaml:"networking,omitempty"`
 	VolumeMounts          []VolumeMount    `yaml:"volumeMounts,omitempty"`
-	RegistryMirrors       []RegistryMirror `yaml:"registryMirrors,omitempty"`
 	Nodes                 []ClusterNode    `yaml:"nodes,omitempty"`
 }
 
@@ -70,20 +69,11 @@ type VolumeMount struct {
 	ReadOnly      *bool  `yaml:"readOnly,omitempty"`
 }
 
-// RegistryMirror is the user-declared pull-through cache surface. The
-// always-on localhost:5001 mirror is implicit and not represented here.
-type RegistryMirror struct {
-	Mirror   string `yaml:"mirror"`
-	URL      string `yaml:"url,omitempty"`
-	Username string `yaml:"username,omitempty"`
-	Password string `yaml:"password,omitempty"`
-	Port     string `yaml:"port,omitempty"`
-	BindIP   string `yaml:"bindIP,omitempty"`
-}
-
+// LocalResolverConfig is a local cluster's entries in the local DNS
+// resolver every local cluster shares. Its names, the cluster's ingress
+// domain and ExtraDomains, resolve to the cluster's listen address.
 type LocalResolverConfig struct {
-	TargetAddress string   `yaml:"targetAddress,omitempty"`
-	ExtraDomains  []string `yaml:"extraDomains,omitempty"`
+	ExtraDomains []string `yaml:"extraDomains,omitempty"`
 }
 
 type LocalIngressConfig struct {
@@ -189,12 +179,11 @@ type OperatorImage struct {
 //   - ApplyCLIDefaults uses the CLI binary's compiled-in version/registry
 //     to fill operator.image.{repository,tag} when empty. Deterministic
 //     per CLI binary, so safe for GitOps.
-//   - ApplyHostDefaults uses the laptop's host IP to fill ingress.domain
-//     with a nip.io fallback. Host-specific, NOT safe for GitOps; only
-//     applied when the user opted into laptop-convenience mode
-//     (`--local-config`).
+//   - The local cluster rules (localclusters.LoadConfigFile) fill
+//     ingress.domain with the nip.io name of cluster.listenAddress when
+//     it is empty, for the config of a local cluster. Render and deploy
+//     with `--config`, the GitOps mode, don't apply them.
 func (c *EducatesLocalConfig) WithDefaults() *EducatesLocalConfig {
-	c.Cluster.WithDefaults()
 	if c.ClusterAdmin == nil {
 		t := true
 		c.ClusterAdmin = &t
@@ -206,16 +195,6 @@ func (c *EducatesLocalConfig) WithDefaults() *EducatesLocalConfig {
 	c.ImagePrePuller.WithDefaults()
 	if c.Operator.LogLevel == "" {
 		c.Operator.LogLevel = "info"
-	}
-	return c
-}
-
-// WithDefaults fills the static defaults of a kind cluster declaration.
-// Shared by EducatesLocalConfig.cluster and EducatesConfig.target.cluster,
-// so both kinds bring up the same cluster from the same fields.
-func (c *LocalClusterConfig) WithDefaults() *LocalClusterConfig {
-	if c.ListenAddress == "" {
-		c.ListenAddress = "127.0.0.1"
 	}
 	return c
 }
@@ -299,6 +278,6 @@ func (c *EducatesLocalConfig) ApplyCLIDefaults(projectVersion, imageRepository s
 	return c
 }
 
-// Host-derived defaulting (e.g. ingress.domain ← <host-IP>.nip.io) is
-// done at the caller, not on the type — the host probe is an external
-// effect that doesn't belong on a value type. See pkg/config/hostinfo.
+// The nip.io fallback for ingress.domain is applied by the caller, not on
+// the type: it belongs to the rules of a local cluster's config, which
+// localclusters.LoadConfigFile applies.

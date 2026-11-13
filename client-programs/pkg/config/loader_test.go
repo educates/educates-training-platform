@@ -23,8 +23,8 @@ func TestLoad_EmptyLocalConfig_AppliesDefaults(t *testing.T) {
 		t.Fatalf("expected *EducatesLocalConfig, got %T", cfg)
 	}
 
-	if got, want := local.Cluster.ListenAddress, "127.0.0.1"; got != want {
-		t.Errorf("ListenAddress = %q, want %q", got, want)
+	if got := local.Cluster.ListenAddress; got != "" {
+		t.Errorf("ListenAddress = %q, want none: a local cluster declares its own", got)
 	}
 	if local.ClusterAdmin == nil || *local.ClusterAdmin != true {
 		t.Errorf("ClusterAdmin = %v, want true", local.ClusterAdmin)
@@ -662,5 +662,115 @@ func TestLoad_EducatesConfig_BogusEnvelopeField(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "bogus") {
 		t.Errorf("error %q does not mention bogus field", err.Error())
+	}
+}
+
+// A config outside the data home that still declares registry mirrors in
+// its cluster block fails to load with an error saying they are declared
+// in mirrors.yaml in the data home now, and showing the local mirror
+// deploy command that records each there, without its password, in place
+// of the schema's generic error.
+func TestLoad_ClusterRegistryMirrors_SayTheyMovedToMirrorsYAML(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	const mirrors = "- mirror: docker.io\n  url: registry-1.docker.io\n  username: alice\n  password: secret\n- mirror: ghcr.io\n"
+	cases := []struct {
+		name  string
+		body  string
+		field string
+	}{
+		{
+			name: "an EducatesLocalConfig",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
+				"cluster:\n  listenAddress: 10.10.10.1\n  registryMirrors:\n" + indent(mirrors, "  "),
+			field: "cluster.registryMirrors",
+		},
+		{
+			name: "an EducatesConfig",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesConfig\n" +
+				"target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.1\n    registryMirrors:\n" + indent(mirrors, "    "),
+			field: "target.cluster.registryMirrors",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadBytes([]byte(tc.body), "config.yaml")
+			if err == nil {
+				t.Fatal("LoadBytes: expected error, got nil")
+			}
+			for _, want := range []string{"config.yaml: ", tc.field + " was removed",
+				filepath.Join(dataHome, "mirrors.yaml"), "every local cluster",
+				"\n  educates local mirror deploy docker.io --url registry-1.docker.io --username alice\n",
+				"\n  educates local mirror deploy ghcr.io\n",
+				"--password", "remove " + tc.field} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+			if strings.Contains(err.Error(), "secret") {
+				t.Errorf("error %q gives a mirror's password", err)
+			}
+			if strings.Contains(err.Error(), "schema validation") {
+				t.Errorf("error %q still reports the schema's generic error", err)
+			}
+		})
+	}
+}
+
+// indent returns lines, YAML lines each ending in a newline, each with
+// prefix in front.
+func indent(lines, prefix string) string {
+	var b strings.Builder
+	for _, line := range strings.SplitAfter(lines, "\n") {
+		if line != "" {
+			b.WriteString(prefix + line)
+		}
+	}
+	return b.String()
+}
+
+// A config that still sets resolver.targetAddress, which was removed,
+// fails to load with an error saying what replaces it, in place of the
+// schema's generic one.
+func TestLoad_ResolverTargetAddress_SaysItWasRemoved(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	cases := []struct {
+		name          string
+		body          string
+		field         string
+		listenAddress string
+	}{
+		{
+			name: "an EducatesLocalConfig",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
+				"resolver:\n  targetAddress: 10.10.10.1\n  extraDomains:\n  - example.test\n",
+			field:         "resolver.targetAddress",
+			listenAddress: "cluster.listenAddress",
+		},
+		{
+			name: "an EducatesConfig",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesConfig\n" +
+				"target:\n  provider: kind\n  resolver:\n    targetAddress: 10.10.10.1\n",
+			field:         "target.resolver.targetAddress",
+			listenAddress: "target.cluster.listenAddress",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadBytes([]byte(tc.body), "config.yaml")
+			if err == nil {
+				t.Fatal("LoadBytes: expected error, got nil")
+			}
+			for _, want := range []string{"config.yaml: ", tc.field + " was removed", tc.listenAddress,
+				filepath.Join(dataHome, "dnsmasq.d", "*.conf")} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+			if strings.Contains(err.Error(), "schema validation") {
+				t.Errorf("error %q still reports the schema's generic error", err)
+			}
+		})
 	}
 }

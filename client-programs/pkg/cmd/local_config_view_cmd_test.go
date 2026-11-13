@@ -2,30 +2,31 @@ package cmd
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
 // TestLocalConfigView_Effective asserts the default view prints only the
 // effective configuration with the CLI defaults materialised, carries the
 // yaml-language-server modeline, and points at --raw for the file as
-// written. An empty config falls back to a nip.io domain, which defaults
-// to an insecure plain-HTTP install, so those defaults must show up.
+// written. A config with no domain falls back to the nip.io name of its
+// listen address, which defaults to an insecure plain-HTTP install, so
+// those defaults must show up.
 func TestLocalConfigView_Effective(t *testing.T) {
 	dataHome := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(emptyLocal), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(localWithListenAddress), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
 	var buf bytes.Buffer
-	if err := p.runLocalConfigView(&LocalConfigViewOptions{}, &buf); err != nil {
+	if err := p.runLocalConfigView(&LocalConfigViewOptions{}, defaultLocalCluster(), &buf); err != nil {
 		t.Fatalf("runLocalConfigView: %v", err)
 	}
 	s := buf.String()
@@ -45,12 +46,11 @@ func TestLocalConfigView_Effective(t *testing.T) {
 			t.Errorf("effective configuration missing default %q:\n%s", want, s)
 		}
 	}
-	// The nip.io + insecure defaulting only resolves when a host IP is
-	// detectable; assert it when it is.
-	if _, err := hostinfo.DetectHostIP(); err == nil {
-		if !strings.Contains(s, ".nip.io") || !strings.Contains(s, "insecure: true") {
-			t.Errorf("effective view should show the nip.io + insecure default:\n%s", s)
-		}
+	if !strings.Contains(s, "domain: 10-10-10-1.nip.io") || !strings.Contains(s, "insecure: true") {
+		t.Errorf("effective view should show the nip.io + insecure default:\n%s", s)
+	}
+	if strings.Contains(s, "can't use this config") {
+		t.Errorf("effective view of a config that follows the rules says it breaks them:\n%s", s)
 	}
 }
 
@@ -66,7 +66,7 @@ func TestLocalConfigView_Raw(t *testing.T) {
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
 	var buf bytes.Buffer
-	if err := p.runLocalConfigView(&LocalConfigViewOptions{Raw: true}, &buf); err != nil {
+	if err := p.runLocalConfigView(&LocalConfigViewOptions{Raw: true}, defaultLocalCluster(), &buf); err != nil {
 		t.Fatalf("runLocalConfigView --raw: %v", err)
 	}
 	if got := buf.String(); got != raw {
@@ -75,22 +75,32 @@ func TestLocalConfigView_Raw(t *testing.T) {
 }
 
 // TestLocalConfigView_FullyDefaulted_SkipsComment asserts that when the
-// file already carries every default (as init --defaults writes), view
-// skips the explanatory comment and its output equals view --raw.
+// file already carries every default, view skips the explanatory comment
+// and its output equals view --raw.
 func TestLocalConfigView_FullyDefaulted_SkipsComment(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
-
-	if err := p.runLocalConfigInit(&LocalConfigInitOptions{Defaults: true}, io.Discard); err != nil {
-		t.Fatalf("init --defaults: %v", err)
+	cfg := &v1alpha1.EducatesLocalConfig{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.APIVersion, Kind: v1alpha1.KindEducatesLocalConfig},
+		Cluster:  v1alpha1.LocalClusterConfig{ListenAddress: "10.10.10.1"},
+	}
+	if err := p.applyLocalConfigDefaults(cfg); err != nil {
+		t.Fatalf("applyLocalConfigDefaults: %v", err)
+	}
+	body, err := config.MarshalLocalConfig(cfg, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), body, 0o644); err != nil {
+		t.Fatal(err)
 	}
 
 	var def, raw bytes.Buffer
-	if err := p.runLocalConfigView(&LocalConfigViewOptions{}, &def); err != nil {
+	if err := p.runLocalConfigView(&LocalConfigViewOptions{}, defaultLocalCluster(), &def); err != nil {
 		t.Fatalf("view: %v", err)
 	}
-	if err := p.runLocalConfigView(&LocalConfigViewOptions{Raw: true}, &raw); err != nil {
+	if err := p.runLocalConfigView(&LocalConfigViewOptions{Raw: true}, defaultLocalCluster(), &raw); err != nil {
 		t.Fatalf("view --raw: %v", err)
 	}
 
@@ -106,12 +116,13 @@ func TestLocalConfigView_FullyDefaulted_SkipsComment(t *testing.T) {
 // writes a fully-defaulted, schema-valid file carrying the modeline and
 // the static defaults.
 func TestLocalConfigInit_Defaults_WritesEffective(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
 	var buf bytes.Buffer
-	if err := p.runLocalConfigInit(&LocalConfigInitOptions{Defaults: true}, &buf); err != nil {
+	if err := p.runLocalConfigInit(&LocalConfigInitOptions{Defaults: true}, defaultLocalCluster(), &buf); err != nil {
 		t.Fatalf("init --defaults: %v", err)
 	}
 	body, err := os.ReadFile(filepath.Join(dataHome, "config.yaml"))

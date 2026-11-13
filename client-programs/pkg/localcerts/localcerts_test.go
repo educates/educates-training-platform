@@ -1114,37 +1114,32 @@ func TestResolve_LeavesAnAbsentCacheAbsent(t *testing.T) {
 }
 
 func TestResolveSync_PushesOnlyTheCAKeyPairTheLocalConfigSelects(t *testing.T) {
-	const secureConfig = `apiVersion: cli.educates.dev/v1alpha1
-kind: EducatesLocalConfig
-ingress:
-  domain: workshop.test
-`
-	const insecureConfig = secureConfig + "  insecure: true\n"
 	withoutCAKeyPairs := []string{"corporate-ca", "educates-ca", "registry", "wildcard-tls"}
 
 	for name, tc := range map[string]struct {
-		config    string
+		config    *v1alpha1.EducatesLocalConfig
 		want      []string
 		wantMints int
 	}{
-		"without a local config":        {want: withoutCAKeyPairs},
-		"with an insecure local config": {config: insecureConfig, want: withoutCAKeyPairs},
+		"without a local config":               {want: withoutCAKeyPairs},
+		"with a local config without a domain": {config: localConfig("", false), want: withoutCAKeyPairs},
+		"with an insecure local config":        {config: localConfig("workshop.test", true), want: withoutCAKeyPairs},
+		"with a secure local config of another domain": {
+			config:    localConfig("test2.educates.test", false),
+			want:      []string{"corporate-ca", "educates-ca", "registry", "test2.educates.test-ca-key-pair", "wildcard-tls"},
+			wantMints: 1,
+		},
 		"with a secure local config": {
-			config:    secureConfig,
+			config:    localConfig("workshop.test", false),
 			want:      []string{"corporate-ca", "educates-ca", "registry", "wildcard-tls", "workshop.test-ca-key-pair"},
 			wantMints: 1,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			dataHome := withDataHome(t)
+			withDataHome(t)
 			stageMixedCache(t)
-			if tc.config != "" {
-				if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(tc.config), 0o600); err != nil {
-					t.Fatal(err)
-				}
-			}
 
-			plan, err := localcerts.ResolveSync()
+			plan, err := localcerts.ResolveSync(tc.config)
 			if err != nil {
 				t.Fatalf("ResolveSync: %v", err)
 			}
@@ -1171,17 +1166,13 @@ func TestResolveSync_UnresolvableCertificates_WarnsAndPushesSecretsWithoutCAKeys
 	// A secure ingress domain with neither a root CA nor a wildcard
 	// certificate for it cached: a deploy fails, but a sync still pushes
 	// what holds no CA key.
-	dataHome := withDataHome(t)
+	withDataHome(t)
 	writeCached(t, secrets.NewCATrustSecret("corporate-ca", testpki.NewRootCA().CertPEM))
 	writeCached(t, secrets.NewDockerRegistrySecret("registry", "registry.test", "user", "pass", ""))
 	alpha := testpki.NewRootCA()
 	writeCached(t, withDomainAnnotation(secrets.NewTLSSecret("workshop.test-ca", alpha.CertPEM, alpha.KeyPEM), "workshop.test"))
-	config := "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ningress:\n  domain: workshop.test\n"
-	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(config), 0o600); err != nil {
-		t.Fatal(err)
-	}
 
-	plan, err := localcerts.ResolveSync()
+	plan, err := localcerts.ResolveSync(localConfig("workshop.test", false))
 	if err != nil {
 		t.Fatalf("ResolveSync: %v", err)
 	}
@@ -1195,16 +1186,6 @@ func TestResolveSync_UnresolvableCertificates_WarnsAndPushesSecretsWithoutCAKeys
 	if len(r.notes) != 1 || !strings.HasPrefix(r.notes[0], "warning: ") ||
 		!strings.Contains(r.notes[0], `no certificate for ingress domain "workshop.test"`) {
 		t.Errorf("Commit printed %q, want one warning carrying why the certificates cannot be resolved", r.notes)
-	}
-}
-
-func TestResolveSync_InvalidLocalConfig_Errors(t *testing.T) {
-	dataHome := withDataHome(t)
-	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte("kind: [not yaml"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := localcerts.ResolveSync(); err == nil || !strings.Contains(err.Error(), "config.yaml") {
-		t.Fatalf("ResolveSync error = %v, want one naming the local config", err)
 	}
 }
 

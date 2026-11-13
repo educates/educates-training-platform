@@ -14,13 +14,12 @@ import (
 	"github.com/moby/moby/client"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/kind/pkg/cmd"
 	"sigs.k8s.io/kind/pkg/log"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 )
 
 // phaseLogger adapts kind's logger interface to a single status
@@ -77,46 +76,47 @@ func cleanKindStatus(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// KindClusterConfig manages the kind cluster of one local cluster, named
+// by its identity.
 type KindClusterConfig struct {
 	Config   ClusterConfig
+	Identity localclusters.Identity
 	provider *cluster.Provider
 }
 
-func NewKindClusterConfig(kubeconfig string) *KindClusterConfig {
-	fallback := ""
-
-	home, err := os.UserHomeDir()
-
-	if err == nil {
-		fallback = filepath.Join(home, clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
-	}
-
+// NewKindClusterConfig manages the kind cluster of the local cluster id,
+// with its context in the kubeconfig file kubeconfig, or in
+// ~/.kube/config when kubeconfig is empty. Config reaches the cluster
+// through that file and the cluster's own context, never the file's
+// current context.
+func NewKindClusterConfig(kubeconfig string, id localclusters.Identity) *KindClusterConfig {
 	provider := cluster.NewProvider(
 		cluster.ProviderWithLogger(cmd.NewLogger()),
 	)
 
-	return &KindClusterConfig{ClusterConfig{KubeconfigPath(kubeconfig, fallback), ""}, provider}
+	return &KindClusterConfig{ClusterConfig{KindKubeconfigPath(kubeconfig), id.Context}, id, provider}
 }
 
 //go:embed kindclusterconfig.yaml.tpl
 var clusterConfigTemplateData string
 
-// ClusterExists reports whether the 'educates' kind cluster currently
-// exists. err is set only when the underlying list call failed; the
-// existence outcome itself is not an error — callers decide whether
-// "exists" or "does not exist" is acceptable for the operation they're
-// performing (CreateCluster wants !exists; Delete/Start/Stop/Status
+// ClusterExists reports whether the local cluster's kind cluster
+// currently exists. err is set only when the underlying list call
+// failed; the existence outcome itself is not an error: callers decide
+// whether "exists" or "does not exist" is acceptable for the operation
+// they're performing (CreateCluster wants !exists; Delete/Start/Stop/Status
 // want exists).
 func (o *KindClusterConfig) ClusterExists() (bool, error) {
 	clusters, err := o.provider.List()
 	if err != nil {
 		return false, errors.Wrap(err, "unable to get list of clusters")
 	}
-	return slices.Contains(clusters, "educates"), nil
+	return slices.Contains(clusters, o.Identity.KindName), nil
 }
 
-// CreateCluster boots the 'educates' kind cluster. By default kind's own
-// status spinner and end-of-create salutation/usage footer are
+// CreateCluster boots the local cluster's kind cluster from the kind
+// config file it writes at the identity's kind config path. By default
+// kind's own status spinner and end-of-create salutation/usage footer are
 // suppressed: each kind phase is forwarded to onPhase (so the caller can
 // render it on one line), and the footer chatter is turned off. When
 // verbose is true kind's full logger is used instead (spinner + detail
@@ -125,7 +125,7 @@ func (o *KindClusterConfig) CreateCluster(input *KindBootstrapInput, image strin
 	if exists, err := o.ClusterExists(); err != nil {
 		return err
 	} else if exists {
-		return errors.New("cluster for Educates already exists")
+		return errors.Errorf("kind cluster %s already exists", o.Identity.KindName)
 	}
 
 	clusterConfigTemplate, err := template.New("kind-cluster-config").Parse(clusterConfigTemplateData)
@@ -144,15 +144,14 @@ func (o *KindClusterConfig) CreateCluster(input *KindBootstrapInput, image strin
 
 	// Save the cluster config to a file
 
-	configFileDir := utils.GetEducatesHomeDir()
+	kindConfigPath := o.Identity.KindConfigPath
 
-	err = os.MkdirAll(configFileDir, os.ModePerm)
+	err = os.MkdirAll(filepath.Dir(kindConfigPath), os.ModePerm)
 
 	if err != nil {
 		return errors.Wrapf(err, "unable to create config directory")
 	}
 
-	kindConfigPath := filepath.Join(configFileDir, "educates-cluster-config.yaml")
 	err = os.WriteFile(kindConfigPath, clusterConfigData.Bytes(), 0644)
 	if err != nil {
 		return errors.Wrap(err, "failed to write cluster config to file")
@@ -170,7 +169,7 @@ func (o *KindClusterConfig) CreateCluster(input *KindBootstrapInput, image strin
 	provider := cluster.NewProvider(cluster.ProviderWithLogger(logger))
 
 	if err := provider.Create(
-		"educates",
+		o.Identity.KindName,
 		cluster.CreateWithRawConfig(clusterConfigData.Bytes()),
 		cluster.CreateWithNodeImage(image),
 		cluster.CreateWithWaitForReady(time.Duration(time.Duration(60)*time.Second)),
@@ -184,31 +183,50 @@ func (o *KindClusterConfig) CreateCluster(input *KindBootstrapInput, image strin
 	return nil
 }
 
+// NotFoundError is the error of an operation on a local cluster whose
+// kind cluster does not exist.
+type NotFoundError struct {
+	// KindName is the name of the kind cluster.
+	KindName string
+}
+
+func (e *NotFoundError) Error() string {
+	return fmt.Sprintf("kind cluster %s does not exist", e.KindName)
+}
+
+// IsNotFound reports whether err is, or wraps, a NotFoundError.
+func IsNotFound(err error) bool {
+	var notFound *NotFoundError
+	return errors.As(err, &notFound)
+}
+
+// DeleteCluster deletes the local cluster's kind cluster, returning a
+// NotFoundError when it does not exist.
 func (o *KindClusterConfig) DeleteCluster() error {
 	if exists, err := o.ClusterExists(); !exists {
 		if err != nil {
 			return err
 		}
-		return errors.New("cluster for Educates does not exist")
+		return &NotFoundError{KindName: o.Identity.KindName}
 	}
 
-	fmt.Println("Deleting cluster educates ...")
+	fmt.Printf("Deleting cluster %s ...\n", o.Identity.KindName)
 
-	if err := o.provider.Delete("educates", o.Config.Kubeconfig); err != nil {
+	if err := o.provider.Delete(o.Identity.KindName, o.Config.Kubeconfig); err != nil {
 		return errors.Wrapf(err, "failed to delete cluster")
 	}
 
 	return nil
 }
 
+// StopCluster stops every running node container of the local cluster,
+// workers before control-plane nodes.
 func (o *KindClusterConfig) StopCluster() error {
 	ctx := context.Background()
 
-	if exists, err := o.ClusterExists(); !exists {
-		if err != nil {
-			return err
-		}
-		return errors.New("cluster for Educates does not exist")
+	observed, err := o.observeExistingCluster(ctx)
+	if err != nil {
+		return err
 	}
 
 	cli, err := docker.NewDockerClient()
@@ -217,37 +235,27 @@ func (o *KindClusterConfig) StopCluster() error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, "educates-control-plane", client.ContainerInspectOptions{})
-
-	if err != nil {
-		return errors.Wrap(err, "no container for Educates cluster")
-	}
-
-	fmt.Println("Stopping cluster educates ...")
+	fmt.Printf("Stopping cluster %s ...\n", o.Identity.KindName)
 
 	timeout := 30
 
-	if _, err := cli.ContainerStop(ctx, "educates-control-plane", client.ContainerStopOptions{Timeout: &timeout}); err != nil {
-		return errors.Wrapf(err, "failed to stop cluster")
+	for _, node := range o.Identity.NodesToStop(observed) {
+		if _, err := cli.ContainerStop(ctx, node, client.ContainerStopOptions{Timeout: &timeout}); err != nil {
+			return errors.Wrapf(err, "failed to stop cluster: node container %s", node)
+		}
 	}
-
-	// timeout := time.Duration(30) * time.Second
-
-	// if err := cli.ContainerStop(ctx, "educates-control-plane", &timeout); err != nil {
-	// 	return errors.Wrapf(err, "failed to stop cluster")
-	// }
 
 	return nil
 }
 
+// StartCluster starts every node container of the local cluster that is
+// not running, control-plane nodes first.
 func (o *KindClusterConfig) StartCluster() error {
 	ctx := context.Background()
 
-	if exists, err := o.ClusterExists(); !exists {
-		if err != nil {
-			return err
-		}
-		return errors.New("cluster for Educates does not exist")
+	observed, err := o.observeExistingCluster(ctx)
+	if err != nil {
+		return err
 	}
 
 	cli, err := docker.NewDockerClient()
@@ -256,51 +264,49 @@ func (o *KindClusterConfig) StartCluster() error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, "educates-control-plane", client.ContainerInspectOptions{})
+	fmt.Printf("Starting cluster %s ...\n", o.Identity.KindName)
 
-	if err != nil {
-		return errors.Wrap(err, "no container for Educates cluster")
-	}
-
-	fmt.Println("Starting cluster educates ...")
-
-	if _, err := cli.ContainerStart(ctx, "educates-control-plane", client.ContainerStartOptions{}); err != nil {
-		return errors.Wrapf(err, "failed to start cluster")
+	for _, node := range o.Identity.NodesToStart(observed) {
+		if _, err := cli.ContainerStart(ctx, node, client.ContainerStartOptions{}); err != nil {
+			return errors.Wrapf(err, "failed to start cluster: node container %s", node)
+		}
 	}
 
 	return nil
 }
 
+// ClusterStatus prints whether the local cluster's node containers are
+// all running, none running, or only some, naming those that are not.
 func (o *KindClusterConfig) ClusterStatus() error {
 	ctx := context.Background()
 
-	if exists, err := o.ClusterExists(); !exists {
-		if err != nil {
-			return err
-		}
-		return errors.New("cluster for Educates does not exist")
-	}
-
-	cli, err := docker.NewDockerClient()
-
+	observed, err := o.observeExistingCluster(ctx)
 	if err != nil {
-		return errors.Wrap(err, "unable to create docker client")
+		return err
 	}
 
-	containerJSON, err := cli.ContainerInspect(ctx, "educates-control-plane", client.ContainerInspectOptions{})
-
-	if err != nil {
-		return errors.Wrap(err, "no container for Educates cluster")
-	}
-
-	if containerJSON.Container.State.Running {
-		fmt.Println("Educates cluster is Running")
-		// if ip, err := config.HostIP(); err == nil {
-		// 	fmt.Println("  Cluster IP: ", ip)
-		// }
-	} else {
-		fmt.Println("Educates cluster is NOT Running")
+	switch o.Identity.State(observed) {
+	case localclusters.Running:
+		fmt.Printf("Educates cluster %s is Running\n", o.Identity.KindName)
+	case localclusters.PartlyRunning:
+		fmt.Printf("Educates cluster %s is %s (not running: %s)\n", o.Identity.KindName,
+			localclusters.PartlyRunning, strings.Join(o.Identity.NodesToStart(observed), ", "))
+	default:
+		fmt.Printf("Educates cluster %s is NOT Running\n", o.Identity.KindName)
 	}
 
 	return nil
+}
+
+// observeExistingCluster returns the kind node containers on the Docker
+// host, or an error when the local cluster does not exist.
+func (o *KindClusterConfig) observeExistingCluster(ctx context.Context) ([]localclusters.NodeContainer, error) {
+	if exists, err := o.ClusterExists(); !exists {
+		if err != nil {
+			return nil, err
+		}
+		return nil, &NotFoundError{KindName: o.Identity.KindName}
+	}
+
+	return ObserveNodeContainers(ctx)
 }

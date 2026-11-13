@@ -5,7 +5,58 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
+
+func TestMarshalLocalConfig(t *testing.T) {
+	local := func(cluster v1alpha1.LocalClusterConfig, ingress v1alpha1.LocalIngressConfig) *v1alpha1.EducatesLocalConfig {
+		return &v1alpha1.EducatesLocalConfig{
+			TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.APIVersion, Kind: v1alpha1.KindEducatesLocalConfig},
+			Cluster:  cluster,
+			Ingress:  ingress,
+		}
+	}
+	const header = "# yaml-language-server: $schema=https://schemas.educates.dev/cli/v1alpha1/EducatesLocalConfig.json\n" +
+		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"
+	cases := []struct {
+		name     string
+		cfg      *v1alpha1.EducatesLocalConfig
+		fromHost bool
+		want     string
+	}{
+		{
+			name:     "the host's IP address, with a comment saying so",
+			cfg:      local(v1alpha1.LocalClusterConfig{ListenAddress: "192.168.50.151"}, v1alpha1.LocalIngressConfig{}),
+			fromHost: true,
+			want: header + "cluster:\n" +
+				"  # This host's IP address when this file was written. An alias such as\n" +
+				"  # 10.10.10.1, added to a network interface, survives network changes.\n" +
+				"  listenAddress: 192.168.50.151\n",
+		},
+		{
+			name: "a listen address and domain given",
+			cfg:  local(v1alpha1.LocalClusterConfig{ListenAddress: "10.10.10.1"}, v1alpha1.LocalIngressConfig{Domain: "educates.test"}),
+			want: header + "cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n",
+		},
+		{
+			name: "no listen address",
+			cfg:  local(v1alpha1.LocalClusterConfig{}, v1alpha1.LocalIngressConfig{}),
+			want: header,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := MarshalLocalConfig(tc.cfg, tc.fromHost)
+			if err != nil {
+				t.Fatalf("MarshalLocalConfig: %v", err)
+			}
+			if string(got) != tc.want {
+				t.Errorf("MarshalLocalConfig =\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestMissingLocalConfigError_V3ValuesPresent(t *testing.T) {
 	dir := t.TempDir()

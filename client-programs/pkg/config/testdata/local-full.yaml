@@ -14,14 +14,8 @@ cluster:
     - hostPath: /tmp/data
       containerPath: /data
       readOnly: true
-  registryMirrors:
-    - mirror: docker.io
-      url: https://my-proxy.local
-      port: "5002"
-      bindIP: 192.168.1.10
 
 resolver:
-  targetAddress: 192.168.1.10
   extraDomains:
     - example.test
     - workshop.test

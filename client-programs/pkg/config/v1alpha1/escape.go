@@ -8,7 +8,7 @@ const KindEducatesConfig = "EducatesConfig"
 // time and applies the result without further transformation.
 //
 // Per the locked design:
-//   - No CLI-inferred defaults (no host-IP nip.io, no auto-injected TLS).
+//   - No CLI-inferred defaults (no nip.io domain, no auto-injected TLS).
 //   - No invariants. Every CRD field is settable.
 //   - Static CRD defaults still apply at apply-time via apiserver defaulting.
 //

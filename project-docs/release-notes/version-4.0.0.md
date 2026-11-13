@@ -105,12 +105,13 @@ New Features
   configuration, with validation against the configuration schemas. The
   ``view`` command prints the effective configuration with all CLI defaults
   filled in, so the values the CLI supplies on your behalf (including the
-  ``<host-IP>.nip.io`` domain and the insecure default it implies) are
-  explicit rather than hidden behind a sparse file; pass ``--raw`` to print
-  the configuration file exactly as written instead. The ``init`` command
-  writes a minimal file by default, or with ``--defaults`` writes the
-  fully-defaulted configuration with those same values materialised into
-  the file.
+  ``nip.io`` name of ``cluster.listenAddress`` as the domain and the
+  insecure default it implies) are explicit rather than hidden behind a
+  sparse file; pass ``--raw`` to print the configuration file exactly as
+  written instead. The ``init`` command writes a minimal file by default,
+  holding the host's IP address as ``cluster.listenAddress``, or with
+  ``--defaults`` writes the fully-defaulted configuration with those same
+  values materialised into the file.
 
 * A new ``educates local config explain`` command describes configuration
   fields from the embedded JSON schema, in the style of ``kubectl explain``,
@@ -237,8 +238,8 @@ New Features
   On the local configuration, setting ``ingress.insecure`` selects a plain
   HTTP install and skips the one-time ``educates local secrets add ca``
   step. A local configuration that sets no ingress domain now defaults to
-  this insecure mode, since the ``<host-IP>.nip.io`` address it falls back
-  to cannot obtain a trusted certificate; set a custom ``ingress.domain``
+  this insecure mode, since the ``nip.io`` name of its listen address it
+  falls back to cannot obtain a trusted certificate; set a custom ``ingress.domain``
   to get the certificate-backed HTTPS install. On the
   ``EducatesGKEConfig``, ``EducatesEKSConfig`` and
   ``EducatesInlineConfig`` kinds, ``externalTLSTermination`` now maps to
@@ -248,7 +249,9 @@ New Features
 * The ``educates local mirror list`` command lists the local image
   registry mirrors that have been deployed, complementing the existing
   ``deploy`` and ``delete`` commands in the ``educates local mirror``
-  group.
+  group. It also lists the mirrors ``mirrors.yaml`` in the CLI data home
+  declares whose container is missing, and says in a ``DECLARED`` column
+  whether the file declares each mirror.
 
 * The ``educates cluster portal export`` command exports a training portal
   and the workshops it references as Kubernetes resource YAML, either to
@@ -269,11 +272,18 @@ New Features
   pinning an arbitrary image.
 
 * The local Kind cluster can now be multi-node. The ``EducatesLocalConfig``
-  ``cluster.nodes`` list declares the cluster's nodes — each with a
-  ``role`` (``control-plane`` or ``worker``), optional Kubernetes node
-  ``labels``, and optional ``taints`` — so a laptop cluster can model node
-  pools for workshops that schedule across several nodes. Leaving
-  ``cluster.nodes`` unset keeps the default single control-plane cluster.
+  ``cluster.nodes`` list declares the cluster's nodes, each with a ``role``
+  (``control-plane`` or ``worker``), optional Kubernetes node ``labels``, and
+  optional ``taints``, so a laptop cluster can model node pools for workshops
+  that schedule across several nodes. Leaving ``cluster.nodes`` unset keeps
+  the default single control-plane cluster. Every node pulls from the local
+  image registry and the local registry mirrors: ``educates local cluster
+  create``, ``educates local registry deploy`` and ``educates local mirror
+  deploy`` configure each node, and ``educates local mirror delete`` removes
+  the mirror's configuration from each node. ``educates local cluster stop``
+  and ``educates local cluster start`` stop and start every node, and
+  ``educates local cluster status`` reports a cluster with only some of its
+  nodes running as partly running, naming the nodes which are not.
 
 * ``educates local cluster status`` now also reports whether Educates is
   installed on the local cluster and whether its platform components are
@@ -283,6 +293,134 @@ New Features
   installed), an installed-but-not-ready cluster (one or more components not
   yet ``Ready``), or a fully installed and ready cluster — making it easy to
   tell a working install from a partial or broken one.
+
+* Several local clusters can now run at the same time. Next to the default
+  local cluster, ``educates local cluster create --local-cluster test2
+  --listen-address 10.10.10.2`` creates the named local cluster ``test2``:
+  the Kind cluster ``educates-test2``, with the kube context
+  ``kind-educates-test2``, publishing ports 80 and 443 on the host IP
+  address ``10.10.10.2``, with Educates installed and reachable at
+  ``10-10-10-2.nip.io``. A named cluster keeps its configuration in
+  ``clusters/<name>/config.yaml`` in the data home, which ``create`` writes
+  from ``--listen-address`` and the optional ``--domain`` when it is
+  missing. Its ``cluster.listenAddress`` must be a specific IP address of
+  the host, neither ``0.0.0.0`` nor a loopback address, as every local
+  cluster's must, and without an ``ingress.domain`` the cluster uses the
+  ``nip.io`` name of that address and is served over plain HTTP. The ``create``, ``delete``, ``start``,
+  ``stop`` and ``status`` commands of ``educates local cluster`` select a
+  cluster with ``--local-cluster``, or for a whole terminal with the
+  ``EDUCATES_LOCAL_CLUSTER`` environment variable, and act on the default
+  cluster without either. The ``init``, ``get``, ``set``, ``view`` and
+  ``edit`` commands of ``educates local config`` select a cluster the same
+  way, so ``educates local config init --local-cluster test2
+  --listen-address 10.10.10.2`` writes the configuration of ``test2``
+  without creating the cluster. The new ``educates local config delete``
+  removes a named cluster's configuration, and refuses while the cluster
+  exists and for the default cluster. Deleting a named cluster keeps its
+  configuration, and every cluster pulls from the one local image registry
+  on ``localhost:5001``. The platform install of ``educates local cluster
+  create`` now always targets the cluster it has just created, whatever
+  ``KUBECONFIG`` or the current kube context say.
+
+  ``educates local cluster list`` shows every local cluster, the default
+  one marked, with its state, listen address, ingress domain, declared or
+  derived as the DNS resolver serves it, and kube context. A Kind cluster
+  named ``educates-<name>`` counts as a local cluster only when its folder
+  ``clusters/<name>/`` exists in the data home, so Kind clusters made by
+  hand are left out of the list and of every check, and ``delete``,
+  ``start``, ``stop`` and ``status`` refuse a ``--local-cluster`` name
+  whose folder the data home does not hold, with an error saying why. Before ``create`` creates a cluster, and before
+  ``start`` starts one, its listen address is checked against every other
+  local cluster, running or stopped: an address another cluster also uses,
+  a cluster on ``0.0.0.0`` beside any other, and an address on no network
+  interface of the host are refused with an error naming the other
+  cluster. ``educates local cluster delete --all`` now deletes the local
+  image registry, the DNS resolver and the registry mirrors only when no
+  other local cluster remains, and otherwise keeps them and names the
+  clusters still using them.
+
+  The ``educates cluster workshop``, ``educates cluster portal`` and
+  ``educates cluster session`` commands and their aliases, ``educates admin
+  platform deploy`` and ``delete``, ``educates admin diagnostics collect``,
+  ``educates admin lookup kubeconfig`` and ``educates local secrets sync``
+  also take ``--local-cluster`` and honour ``EDUCATES_LOCAL_CLUSTER``. With
+  a cluster selected, they act on its kube context, ``kind-educates`` or
+  ``kind-educates-<name>``, looked up in the file ``--kubeconfig`` names or
+  else in ``~/.kube/config``, whatever ``KUBECONFIG`` says, so a terminal
+  set to one cluster stays on it. ``--context`` takes precedence over both,
+  and with neither set the commands use the current context as before.
+  With ``--local-config``, ``educates admin platform deploy`` and
+  ``render`` read the selected cluster's configuration.
+  ``educates local secrets sync`` builds the certificates it copies from
+  the selected cluster's configuration, and copies them into that cluster.
+
+  The one local DNS resolver has no settings of its own: every local
+  cluster contributes its names, its ingress domain and its
+  ``resolver.extraDomains``, which resolve to its listen address. A named
+  cluster on ``test2.educates.test`` therefore resolves to its own IP
+  address while ``educates.test`` still resolves to the default cluster.
+  ``educates local resolver deploy`` and ``update`` configure it for every
+  cluster, creating or deleting a cluster refreshes a running resolver, and
+  two clusters claiming the same domain is an error. A refresh that fails
+  is a warning, since the cluster has been created or deleted by then, and
+  another cluster's configuration that does not load, or that the resolver
+  can't use, is left out with a warning naming its file rather than failing
+  the command for every other cluster. Names that resolve to anything other
+  than a local cluster, such as a virtual machine, go in ``*.conf`` files of
+  your own in ``<data-home>/dnsmasq.d``, which the resolver container mounts
+  and its configuration reads after every cluster's entries, and which the
+  CLI creates but never writes into. A resolver deployed by an earlier
+  release lacks the mount: ``educates local resolver update`` and the
+  refreshes warn to re-create it with ``educates local resolver delete``
+  and ``educates local resolver deploy``. The new ``educates local resolver
+  view`` command shows each cluster the resolver serves with its address,
+  and every name with its cluster, where it
+  comes from and notes, such as a name that wins over another cluster's
+  broader name, one of your files naming a domain a cluster also serves,
+  or, on macOS, a name no ``/etc/resolver`` file forwards. In
+  ``dnsmasq.conf``, each cluster's entries start with a comment naming the
+  cluster, its configuration file and its listen address.
+
+  Every local cluster shares the local image registry and the registry
+  mirrors, so the commands which manage them take no ``--local-cluster``
+  and act on every local cluster. ``educates local registry deploy``
+  configures every node of every cluster to pull from the registry, and
+  points each cluster's ``registry`` Service and ``local-registry-hosting``
+  ConfigMap at it. Registry mirrors are declared once for every local
+  cluster, in ``mirrors.yaml`` in the data home, and no cluster's
+  configuration declares any. Every registry mirror container which exists
+  is linked into every local cluster, the default one included, whether
+  ``mirrors.yaml`` declares it or not. ``educates local mirror deploy``
+  records a mirror in ``mirrors.yaml`` and links it into every node of
+  every running cluster, and ``educates local cluster create`` and
+  ``educates local cluster start`` link every mirror into every node of
+  the cluster, so a cluster created later, or stopped when the mirror was
+  deployed, gets it too.
+  Create and start first create the container of a mirror ``mirrors.yaml``
+  declares when it is missing, and reuse it when it exists. They fail,
+  before creating the Kind cluster or starting its nodes, when
+  ``mirrors.yaml`` does not load, or when a declared mirror's container
+  pulls from another URL or as another username, naming the file, the
+  mirror, the container's values and the declared ones. A different
+  password can't be seen on the container, so it is not detected.
+  ``educates local mirror delete`` removes a mirror from ``mirrors.yaml``
+  and unlinks it from every node of every running cluster, so no cluster
+  created or started later deploys it again. ``educates local mirror
+  list`` says, in a ``DECLARED`` column, whether ``mirrors.yaml`` declares
+  each mirror, and also lists a declared mirror whose container is
+  missing.
+
+  ``educates cluster workshop serve`` can serve one workshop to several
+  local clusters at once, from a terminal for each. When it serves a local
+  cluster, the one selected, or with none selected, the one whose kube
+  context it reaches its cluster through, ``kind-educates`` or
+  ``kind-educates-<name>``, its proxy listens on the cluster's listen
+  address instead of on ``0.0.0.0``, keeping port 10081, and its Hugo
+  server listens on a free port instead of on 1313. Every serve binds the
+  address of the cluster it serves, so two serves share port 10081 on macOS
+  and Linux alike. ``--local-host``, ``--local-port`` and ``--hugo-port``
+  still take precedence, and for any other cluster the command listens as
+  before.
 
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to
@@ -802,8 +940,9 @@ Features Changed
   domain is cached, and prints the commands that generate a root CA,
   register the root CA of ``mkcert``, or cache a ``mkcert`` wildcard
   certificate. A local configuration with no ingress domain set instead
-  defaults to a plain HTTP install on a ``<host-IP>.nip.io`` address and
-  needs no CA, since that address cannot obtain a trusted certificate. Set
+  defaults to a plain HTTP install on the ``nip.io`` name of its listen
+  address and needs no CA, since that address cannot obtain a trusted
+  certificate. Set
   ``ingress.insecure`` to request plain HTTP explicitly for a custom domain.
   See the New Features entry on installing without in-cluster TLS for the
   full picture.
@@ -895,6 +1034,90 @@ Features Changed
   form. Write ``imagePrePuller: {enabled: false}`` in place of
   ``imagePrePuller: false``, and drop ``imagePrePuller: true``, which is the
   default. See [pre-pulling workshop images](pre-pulling-workshop-images).
+
+* The local DNS resolver's ``targetAddress`` setting,
+  ``localDNSResolver.targetAddress`` in a version 3 ``values.yaml``, is
+  gone. A local cluster's names, its ingress domain and
+  ``resolver.extraDomains``, now resolve to its ``cluster.listenAddress``.
+  To have them resolve to an alias added to a network interface, set
+  ``cluster.listenAddress`` to the alias and create the cluster again. Names that resolve to anything other
+  than a local cluster, such as a virtual machine, go in ``*.conf`` files of
+  your own in the ``dnsmasq.d`` folder of the CLI data home, which the
+  resolver reads. The CLI's first-run migration of a version 3
+  ``values.yaml`` drops ``localDNSResolver.targetAddress``, without setting
+  ``cluster.listenAddress`` from it, and its notice says how to keep
+  resolving the cluster at that address. A version 4 configuration that
+  still sets ``resolver.targetAddress``, or ``target.resolver.targetAddress``
+  in an ``EducatesConfig``, fails to load with an error saying what
+  replaces it. See [local DNS resolver](local-dns-resolver).
+
+* Registry mirrors for local clusters are now declared once, for every
+  local cluster, in ``mirrors.yaml`` in the CLI data home, a file of its
+  own of kind ``EducatesLocalMirrors``, where version 3 declared them in
+  ``localKindCluster.registryMirrors`` of ``values.yaml``. Each entry takes
+  the same fields as before, ``mirror``, ``url``, ``username`` and
+  ``password``, except ``port`` and ``bindIP``, which never had any effect,
+  since a mirror's container is published on a port Docker picks on
+  ``127.0.0.1``, and which a ``mirrors.yaml`` entry no longer accepts. The
+  CLI's migration of a version 3 ``values.yaml``, and the move of a
+  configuration's mirrors described below, drop them, saying so for each
+  mirror. ``educates local cluster create`` and
+  ``educates local cluster start`` create any mirror the file declares
+  which does not exist yet, and link every mirror into every node of the
+  cluster. ``educates local mirror deploy`` now records the mirror in
+  ``mirrors.yaml``, creating the file the first time, before it deploys the
+  container, so the mirror stays until it is deleted, where in version 3 a
+  deployed mirror was gone once its container was. It refuses a mirror the
+  file records with another URL or username, or whose container exists
+  with another URL or username, until the mirror is deleted, and given
+  another password for a recorded mirror, it records the new password and
+  warns that the existing container keeps the old one until the mirror is
+  deleted and deployed again. ``educates local mirror delete`` removes the
+  mirror from ``mirrors.yaml`` with its container, removes a mirror the
+  file records that has no container from the file, and fails for a mirror
+  neither recorded nor deployed. Both commands rewrite only the entry of
+  the mirror they act on, keeping the rest of the file and its comments, so
+  the file can also be edited by hand. The CLI's first-run migration of a
+  version 3 ``values.yaml`` writes ``localKindCluster.registryMirrors`` to
+  ``mirrors.yaml``, saying so in its notice. When ``mirrors.yaml`` already
+  exists, the migration leaves it as it is, and the notice names the
+  mirrors to add to it. A configuration in the data home that still
+  declares ``cluster.registryMirrors``, or ``target.cluster.registryMirrors``
+  in an ``EducatesConfig``, has its mirrors moved to ``mirrors.yaml`` the
+  first time a command reads it, keeping the previous configuration as
+  ``config.yaml.bak`` beside it, and a configuration given with
+  ``--config`` from anywhere else fails to load, showing the ``educates
+  local mirror deploy`` commands that record its mirrors. See
+  [declaring mirrors for every cluster](local-mirrors-file).
+
+* Every local cluster now declares the specific IP address of the host it
+  publishes its ports 80 and 443 on, ``cluster.listenAddress``. Version 3
+  left a missing ``localKindCluster.listenAddress`` to Kind, which published
+  the ports on every host address, as ``0.0.0.0`` does. ``educates local
+  config init``, and ``educates local cluster create`` when no configuration
+  exists yet, now write the host's IP address there, with a comment saying
+  that an alias added to a network interface, such as ``10.10.10.1``,
+  survives network changes. The CLI's first-run migration of a version 3
+  ``values.yaml`` sets a missing or ``0.0.0.0`` listen address to the
+  host's IP address, saying so in its notice. A missing listen address,
+  ``0.0.0.0`` and a loopback address such as ``127.0.0.1`` are refused
+  wherever the cluster is used, with an error naming
+  ``cluster.listenAddress``, saying why, and giving the command that sets
+  it, while ``educates local config get``, ``view`` and ``edit`` still open
+  such a configuration so that it can be fixed. A loopback address can't
+  work, since workshop sessions resolve the cluster's ingress domain to it
+  and reach their own pod instead of the host. Without an
+  ``ingress.domain``, the cluster's domain is now the ``nip.io`` name of its
+  listen address, rather than of the host's IP address, and its names in
+  the local DNS resolver resolve to its listen address. ``educates local
+  config init`` and ``educates local cluster create`` take
+  ``--listen-address`` and ``--domain`` to write the default cluster's
+  configuration as they do a named cluster's. On Docker Desktop 4.97 or
+  later, ``educates local cluster create`` and ``start`` refuse to run
+  while "Allow privileged port forwarding to external machines", under
+  **Settings > Advanced**, is off, since Docker Desktop then serves ports
+  below 1024 on loopback addresses only, and warn when they can't read the
+  setting. See [listen address](local-cluster-listen-address).
 
 * The CLI's first-run migration of a version 3 ``values.yaml`` carries
   ``imagePuller`` over to ``imagePrePuller``, so the pre-puller keeps its
@@ -1300,8 +1523,35 @@ Deprecations
   you run your own ``external-dns`` against the cluster, update it to version
   0.22 or later before the older annotation is removed.
 
+* The ``--kubeconfig`` and ``--context`` options of ``educates local registry
+  deploy`` are deprecated, and still work. The command used to create the
+  ``registry`` Service and EndpointSlice in the cluster the options, or the
+  current kube context, named. It now configures every local cluster
+  created by ``educates local cluster create``, each through its own kube
+  context in ``~/.kube/config``, and also creates the
+  ``local-registry-hosting`` ConfigMap in each. When either option is given,
+  the command still creates the ``registry`` Service and EndpointSlice in
+  the cluster they name as well, unless it is one of those local clusters,
+  which is configured once. Without either option, a cluster which is not
+  such a local cluster, such as the one the current kube context names, is
+  no longer configured. A warning is shown when either option is given, and
+  both will be removed in a future version.
+
 Bugs Fixed
 ----------
+
+* Deploying a local image registry mirror could fail with ``network sandbox
+  for container ... not found``, after a warning that Docker refused the
+  mirror's fixed address, and then succeed when run again. The mirror's
+  container was started before it joined its networks, and the registry,
+  which contacts its upstream registry as it starts, could look up the
+  upstream while joining a network made Docker switch the container to its
+  embedded DNS resolver, which did not answer yet. The registry exited,
+  Docker restarted it, and joining the cluster network during the restart
+  failed. A mirror's container now joins its networks before it starts.
+  The warning about a refused fixed address now appears only when Docker
+  refused that address and the mirror joined the network at another one,
+  and gives Docker's reason.
 
 * With Kyverno as the cluster security policy engine, the namespace of a
   workshop environment, in which its workshop session pods run, was given no

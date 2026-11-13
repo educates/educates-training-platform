@@ -13,7 +13,32 @@ To create a local Kubernetes cluster using Kind and deploy Educates, run the com
 educates local cluster create
 ```
 
-If no local configuration file exists yet, this command creates a default one for you, prints where it wrote it, and continues with the default settings, so this single command is all you need to get started. See [custom configuration](custom-configuration) below to view or change that configuration.
+If no local configuration file exists yet, this command creates a default one for you, prints where it wrote it, and continues with the default settings, so this single command is all you need to get started. The configuration it writes sets the cluster's listen address to the IP address of your host, as described in [listen address](local-cluster-listen-address) below. See [custom configuration](custom-configuration) below to view or change that configuration.
+
+(local-cluster-listen-address)=
+Listen address
+--------------
+
+Every local cluster publishes its ports 80 and 443 on its listen address, `cluster.listenAddress` in its configuration, and the cluster's ingress domain resolves to it. It must be a specific IP address of your host:
+
+* It cannot be left out, and it cannot be `0.0.0.0` or `::`, which would claim ports 80 and 443 on every host address and leave none for another cluster.
+
+* It cannot be a loopback address, such as `127.0.0.1`, `127.0.0.2` or `::1`. Workshop sessions resolve the cluster's ingress domain to the listen address, and inside a pod a loopback address reaches the pod itself rather than your host, so the cluster could not reach its own ingress. For the same reason, an alias added to the loopback interface does not work as a listen address.
+
+`educates local config init`, and `educates local cluster create` when the default cluster has no configuration yet, write the IP address of your host as `cluster.listenAddress`, with a comment saying it was your host's IP address when the file was written:
+
+```
+cluster:
+  # This host's IP address when this file was written. An alias such as
+  # 10.10.10.1, added to a network interface, survives network changes.
+  listenAddress: 192.168.1.10
+```
+
+The IP address of a laptop changes when it moves between networks, and the cluster then no longer listens on an address your host has. An alias added to a network interface, such as `10.10.10.1`, survives network changes. [Running several local clusters](multiple-local-clusters) describes how to add one on macOS and Linux. To use it, pass `--listen-address 10.10.10.1` to `educates local config init` or `educates local cluster create`, or set it in an existing configuration with `educates local config set cluster.listenAddress 10.10.10.1`, before you create the cluster. Kind publishes the cluster's ports on the listen address when it creates the cluster, so for a cluster that already exists, delete it and create it again.
+
+When the IP address of your host can't be detected, the configuration is written without a listen address. A command that uses a configuration without a specific listen address, such as `educates local cluster create`, `educates admin platform deploy --local-config` or `educates local secrets sync`, fails with an error naming `cluster.listenAddress`, saying why, and giving the command that sets it. `educates local cluster list` and `educates local resolver view` report such a configuration instead. `educates local config get`, `view` and `edit` still open it, so that you can fix it, while `educates local config set` and `edit` refuse to write a configuration that breaks these rules.
+
+On Docker Desktop 4.97 or later, turn on "Allow privileged port forwarding to external machines", under **Settings > Advanced**. Docker Desktop otherwise serves published ports below 1024 on loopback addresses only, and the cluster's ports 80 and 443 are on a non-loopback address. `educates local cluster create` and `educates local cluster start` refuse to run while the setting is off, and warn when they can't read it.
 
 Deleting the cluster
 --------------------
@@ -32,7 +57,7 @@ If you know you do not intend to recreate the Kubernetes cluster, and so want ev
 educates local cluster delete --all
 ```
 
-This will also delete the local image registry and DNS resolver if deployed.
+This will also delete the local image registry, the DNS resolver and the registry mirrors, if deployed. When you run [several local clusters](multiple-local-clusters), every cluster shares these, so `--all` keeps them while another local cluster remains, and names the clusters still using them.
 
 (custom-configuration)=
 Custom configuration
@@ -52,7 +77,7 @@ You can view the configuration (validating it against the schema) by running:
 educates local config view
 ```
 
-This prints the effective configuration with the CLI defaults filled in, so the values supplied on your behalf are explicit. This includes the `<host-IP>.nip.io` ingress domain and the `ingress.insecure` default it implies when you have not set a domain of your own. To see the configuration file exactly as you wrote it instead, add `--raw`.
+This prints the effective configuration with the CLI defaults filled in, so the values supplied on your behalf are explicit. This includes the `nip.io` name of `cluster.listenAddress` as the ingress domain, and the `ingress.insecure` default it implies, when you have not set a domain of your own. A configuration the local cluster can't use, such as one without a specific `cluster.listenAddress`, is still shown, with a comment saying how to fix it. To see the configuration file exactly as you wrote it instead, add `--raw`.
 
 If you would rather have those defaults written into the file from the start, initialise it with `educates local config init --defaults`, which materialises the fully-defaulted configuration rather than the minimal file `educates local config init` writes by default.
 
@@ -67,7 +92,7 @@ When you run the `educates local cluster create` command to create the local Kub
 
 If you want to use the registry to store other images, you should tag your images with the registry host/port of `localhost:5001`, then push the image to the registry.
 
-If you want to pull images from the registry in Kubernetes deployments created in the Kubernetes cluster, you can also use `localhost:5001` and it will be automatically mapped to the local image registry, with Kubernetes also trusting the local image registry.
+If you want to pull images from the registry in Kubernetes deployments created in the Kubernetes cluster, you can also use `localhost:5001` and it will be automatically mapped to the local image registry, with Kubernetes also trusting the local image registry. This holds on every node of the cluster, including the worker nodes of a cluster that declares them in `cluster.nodes`.
 
 Should you need to pull images from the local image registry from inside of the cluster using tools such as `docker`, `imgpkg`, `oras` or `skopeo`, you will need to use the registry host of `registry.default.svc.cluster.local` instead. This also can be used for Kubernetes deployments as well. Whether you need to tell those tools to trust the image registry will depend on whether they automatically support use of HTTP for access when using `.local` addresses.
 
@@ -85,7 +110,7 @@ To deploy the registry again, you can then run:
 educates local registry deploy
 ```
 
-The local image registry, and any registry mirrors, are given fixed addresses at the top of the subnet of the `kind` Docker network, so that restarting Docker does not change the address `registry.default.svc.cluster.local` maps to. Docker Engine 29.0.0 to 29.0.3 refuse fixed addresses on the `kind` network, as do older versions until Docker is restarted for the first time after the network is created, in which case Docker picks the address instead, a warning is shown, and the address can still change when Docker restarts. If pulls from `registry.default.svc.cluster.local` inside the cluster fail, or reach a registry mirror, after Docker restarts, upgrade Docker or restart it, then run `educates local registry deploy` again. Running the command for a registry which already exists keeps its content, moves it to its fixed address, and points `registry.default.svc.cluster.local` at it.
+The local image registry, and any registry mirrors, are given fixed addresses at the top of the subnet of the `kind` Docker network, so that restarting Docker does not change the address `registry.default.svc.cluster.local` maps to. Docker Engine 29.0.0 to 29.0.3 refuse fixed addresses on the `kind` network, as do older versions until Docker is restarted for the first time after the network is created, in which case Docker picks the address instead, a warning is shown, and the address can still change when Docker restarts. If pulls from `registry.default.svc.cluster.local` inside the cluster fail, or reach a registry mirror, after Docker restarts, upgrade Docker or restart it, then run `educates local registry deploy` again. Running the command for a registry which already exists keeps its content, moves it to its fixed address, and points `registry.default.svc.cluster.local` at it. The command also configures every local cluster to pull from the registry: every one of its nodes pulls `localhost:5001` and `registry.default.svc.cluster.local` from the registry, and inside the cluster, through its own kube context, the `registry` Service and the `local-registry-hosting` ConfigMap point at it. It warns about a cluster which is stopped, and about any node which is not running, and so could not be configured. The `--kubeconfig` and `--context` options of the command are deprecated, since every local cluster is configured through its own kube context, and will be removed in a future version. They still work: given either, the command also creates the `registry` Service and EndpointSlice in the cluster they name, unless it is one of the local clusters, which is configured once.
 
 If you have successively pushed new builds of images to the local image registry using the same image version tag, the registry can blow out in size over time due to unreferenced image layers. To reclaim space consumed by these unreferenced image layers, you can run:
 
@@ -97,7 +122,7 @@ educates local registry prune
 Custom ingress domain
 ---------------------
 
-By default, when deployed to the Kubernetes cluster of the local environment, Educates uses a `nip.io` address for the ingress domain, as a wildcard domain, and serves the cluster over plain HTTP. Because it is not possible to obtain an official trusted TLS certificate for a `nip.io` address, the default install sets `ingress.insecure` automatically, so no certificate authority is needed and the `educates local secrets add ca` step is skipped.
+By default, when deployed to the Kubernetes cluster of the local environment, Educates uses the `nip.io` name of the cluster's listen address for the ingress domain, as a wildcard domain, such as `192-168-1-10.nip.io` for `192.168.1.10`, and serves the cluster over plain HTTP. Because it is not possible to obtain an official trusted TLS certificate for a `nip.io` address, the default install sets `ingress.insecure` automatically, so no certificate authority is needed and the `educates local secrets add ca` step is skipped.
 
 Serving over plain HTTP is convenient for trying Educates out, but because the ingress is not secured, some features of the workshop environment do not work. This includes the inability to use a per session image registry, which requires a secure ingress to be trusted by the Kubernetes cluster and other tools which work with registries.
 
@@ -105,7 +130,7 @@ Instead of relying on a `nip.io` address you can use your own domain that you co
 
 In using your own custom domain name, you could do it with a wildcard TLS certificate issued by a trusted registrar such as Lets Encrypt, or you could create a self signed certificate authority (CA) in order to create your own TLS certificate. If using a self signed CA, you will need to configure your operating system and Educates to use that CA.
 
-If you are using a self signed CA, you could technically still use the `nip.io` domain, which would avoid needing to be able to configure DNS, but the domain name will be bound to the IP address of your machine, which can be an issue for laptops that are moved between networks as the IP address will change.
+If you are using a self signed CA, you could technically still use the `nip.io` domain, which would avoid needing to be able to configure DNS, but the domain name will be bound to the listen address of the cluster, which can be an issue for laptops that are moved between networks when that is the IP address of your machine, as the IP address will change. An alias as the listen address, as described in [listen address](local-cluster-listen-address), avoids that.
 
 To use a custom ingress domain, set it in the local configuration before creating the cluster:
 
@@ -177,6 +202,12 @@ Local DNS resolver
 
 The alternative to setting up a global DNS registry to map the wildcard domain to the IP address of your local host machine, is to run a local DNS resolver for the ingress domain. This requires being able to run `dnsmasq` or equivalent locally and configuring the local DNS resolution to forward lookups for the ingress domain to the local DNS resolver.
 
+The Educates command line tool runs one local DNS resolver, a `dnsmasq` container listening on `127.0.0.1:53`, which every local cluster shares. The resolver has no settings of its own. Each local cluster contributes its names to it, its ingress domain and any domains listed under `resolver.extraDomains` in its configuration, and they resolve to that cluster's `cluster.listenAddress`, the specific IP address of your host it listens on. Each name also covers its subdomains. Names that resolve to anything other than a local cluster, such as a virtual machine, go in configuration files of your own, as described in [names of your own](local-dns-resolver-own-names). To see every name the resolver answers for, which cluster or file each comes from and the address it resolves to, run:
+
+```
+educates local resolver view
+```
+
 If you are on macOS, the Educates command line tool provides the means to run `dnsmasq` for you with the required configuration. To start this run:
 
 ```
@@ -236,11 +267,11 @@ $ curl -v www.educates-local-dev.test
 * Connection #0 to host www.educates-local-dev.test left intact
 ```
 
-The IP address used as the target for addresses resolved by the local DNS resolver will be the IP address of the primary active network interface for the local host. If you want to override the IP address and change it to use an alternate IP, such as that used by an alias applied to a network interface using the ``ifconfig INTERFACE alias`` command, you can edit the local Educates config using the command ``educates local config edit`` and add configuration in the following form before deploying the local DNS resolver.
+The default local cluster's names resolve to its listen address, which `educates local config init` sets to the IP address of your host. To have them resolve to another address of your host instead, such as an alias added to a network interface with the ``ifconfig INTERFACE alias`` command, have the cluster listen on that address: set `cluster.listenAddress` to it in the local Educates config, using the command ``educates local config edit``, before you create the cluster. For a cluster that already exists, delete it and create it again, since Kind publishes the cluster's ports on the listen address when it creates the cluster. The address must exist on your host, as described in [listen address](local-cluster-listen-address).
 
 ```yaml
-resolver:
-  targetAddress: 192.168.168.1
+cluster:
+  listenAddress: 192.168.168.1
 ```
 
 By default the local DNS resolver will only resolve the domain for the Educates ingress domain. If you want it to resolve other domains and also have them directed to the IP address used for accessing the local Educates cluster, you can also add them in the local Educates config.
@@ -250,6 +281,8 @@ resolver:
   extraDomains:
   - example.com
 ```
+
+When you run several local clusters, as described in [Running several local clusters](multiple-local-clusters), the one local DNS resolver serves the names of all of them, each resolving to its own cluster's address. Creating or deleting a local cluster refreshes a running resolver. After changing the `cluster.listenAddress`, `ingress` or `resolver` configuration of a cluster in any other way, or the files of your own described in [names of your own](local-dns-resolver-own-names), run `educates local resolver update` to have the resolver serve it.
 
 Linux systems may already provide a local DNS resolver in which case you can configure it, however how that is done will depend on the Linux distributions.
 
@@ -270,6 +303,40 @@ educates local resolver delete
 You will need to manually remove the file you created under `/etc/resolver`.
 
 Note that when using the local DNS resolver on macOS, for it to work relies on DNS resolution within the local Kind Kubernetes cluster being passed through to the macOS system DNS resolution framework. Although this appears to work for Kubernetes Kind clusters running on macOS Intel architecture, it appears not to currently work for macOS ARM architecture. It is believed this may be because Go application binaries compiled using cross compilation do not link and use the macOS DNS frameworks and instead have a native Go implementation which bypasses the macOS `/etc/resolver` based system. If you are using macOS ARM based machines, you will need to have access to a public DNS registry or server where you can instead configure your domains. Using a DNS server on your local network or embedded in your internet router may also not work as it is also suspected that for macOS ARM acrhitecture, a Kubernetes Kind cluster bypasses local DNS servers and connects direct to a public DNS. The only known way around this at present is to override CoreDNS configuration in the Kubernetes cluster.
+
+(local-dns-resolver-own-names)=
+### Names of your own
+
+Names that resolve to anything other than a local cluster go in `dnsmasq` configuration files of your own, in the folder `dnsmasq.d` of the data home, such as `~/Library/Application Support/educates/dnsmasq.d` on macOS. The resolver container mounts the folder, and reads every file in it whose name ends in `.conf` after the entries of every local cluster. The command line tool creates the folder, empty, when it writes the resolver's configuration, and never writes into it, so creating or deleting a local cluster leaves your files as they are.
+
+For example, to resolve `vm.lab.test`, and every name under it, to a virtual machine on `192.168.64.5`, create the file `dnsmasq.d/lab.conf` in the data home holding:
+
+```
+address=/vm.lab.test/192.168.64.5
+```
+
+Then run `educates local resolver update`, which restarts the resolver so it reads the file. On macOS, a name the resolver serves also needs a file in `/etc/resolver` for it or for a domain it is inside, so for this example create `/etc/resolver/lab.test` with the same entry as for the ingress domain:
+
+```
+sudo sh -c "cat > /etc/resolver/lab.test << EOF
+nameserver 127.0.0.1
+EOF"
+```
+
+`educates local resolver view` lists the names of your files with the cluster column set to `-`, and its notes warn when one of your files names a domain a local cluster also serves, in which case the resolver answers the name with both addresses. On macOS they also say when no file in `/etc/resolver` forwards a name to the resolver. For the default cluster on `educates.test` and `10.10.10.1`, a named cluster `test2` on `10.10.10.2` and the file above, it shows:
+
+```
+CLUSTER     ADDRESS      CONFIG
+(default)   10.10.10.1   config.yaml
+test2       10.10.10.2   clusters/test2/config.yaml
+
+NAME                  CLUSTER     FROM                   NOTE
+educates.test         (default)   ingress.domain         -
+test2.educates.test   test2       ingress.domain         wins over educates.test (default)
+vm.lab.test           -           dnsmasq.d/lab.conf     yours, resolves to 192.168.64.5
+```
+
+A resolver deployed by an earlier release of the command line tool does not mount the folder. `educates local resolver update`, and the refresh when a local cluster is created or deleted, still update its configuration, and warn that you need to run `educates local resolver delete` and then `educates local resolver deploy` for it to read your files.
 
 (local-secrets-cache)=
 Local secrets cache
@@ -380,29 +447,59 @@ Local image mirrors
 -------------------
 A local image mirror acts as a proxy for a remote container registry. When you configure a mirror, images pulled from the remote registry are cached locally, so subsequent pulls are faster and do not consume external bandwidth. This is especially useful for large images, repeated CI/CD runs, or when working in environments with limited or expensive internet access.
 
-Using mirrors when creating a cluster
--------------------------------------
+(local-mirrors-file)=
+Declaring mirrors for every cluster
+-----------------------------------
 
-You can specify registry mirrors in your cluster configuration YAML. When you create a cluster with mirrors configured, Educates will automatically deploy and link the mirrors to your local cluster. This ensures that all image pulls for the mirrored registries are routed through your local mirror, improving speed and reliability.
+The registry mirrors your local clusters use are declared once, in the file `mirrors.yaml` in the data home, such as `~/Library/Application Support/educates/mirrors.yaml` on macOS. The file serves every local cluster: when you create or start a cluster, Educates deploys any mirror the file declares which does not exist yet, and links every mirror to every node of the cluster. This ensures that all image pulls for the mirrored registries are routed through your local mirror, improving speed and reliability. [`educates local mirror deploy`](local-mirror-deploy) records a mirror in the file, creating it the first time, and [`educates local mirror delete`](local-mirror-delete) removes it, so a mirror stays declared until you delete it. A file the commands wrote, or one you wrote yourself, looks like this:
 
 ```yaml
-cluster:
-  listenAddress: 0.0.0.0
-  registryMirrors:
-    - mirror: ghcr.io
-    - mirror: docker.io
-      url: registry-1.docker.io
+# yaml-language-server: $schema=https://schemas.educates.dev/cli/v1alpha1/EducatesLocalMirrors.json
+apiVersion: cli.educates.dev/v1alpha1
+kind: EducatesLocalMirrors
+registryMirrors:
+  - mirror: ghcr.io
+  - mirror: docker.io
+    url: registry-1.docker.io
+    username: my-dockerhub-user
+    password: my-dockerhub-token
 ```
 
-In this example, we're mirroring GitHub Container Registry as well as Docker Hub. Note that Docker Hub has an alternate
-url for the remote registry mirror. We could have provided credentials for Docker Hub to prevent image pull throttling.
+In this example, we're mirroring GitHub Container Registry as well as Docker Hub. Each entry names, in `mirror`, the registry the mirror serves, as image references name it, and the file declares each mirror once. Docker Hub has an alternate `url` for the remote registry the mirror pulls from, which otherwise defaults to the name in `mirror`, and a `username` and `password` for Docker Hub, which prevent image pull throttling. Since the file can hold such credentials, the command line tool writes it readable only by you, and you should keep it that way. The first line points an editor with a YAML language server at the schema of the file, so it validates the file and completes its fields, and `educates local config explain registryMirrors --kind mirrors` describes every field.
+
+You can also edit `mirrors.yaml` by hand, to add a mirror, or to change one before its container exists. The mirror commands rewrite only the entry of the mirror they act on: a new entry goes at the end, and the other entries, their order and your comments are kept as they were. Without the file, no mirror is declared. A file that does not load, such as one with a field the `EducatesLocalMirrors` kind lacks or a mirror declared twice, fails `educates local cluster create`, `educates local cluster start` and the `educates local mirror` commands before they change anything, with an error naming the file and why.
 
 ```
 educates local cluster create
 ```
 
-This will deploy the cluster and all defined mirrors automatically.
+This will deploy the cluster and all declared mirrors automatically. Any other mirror container which already exists, such as one an earlier version of the command line tool deployed without recording it, is linked into the cluster as well. When you run [several local clusters](multiple-local-clusters), they share `mirrors.yaml` and the mirror containers.
 
+(local-mirrors-move)=
+### Mirrors in a cluster's configuration
+
+A cluster's configuration declares no mirrors. When a configuration in the data home, the default cluster's `config.yaml` or a named cluster's `clusters/<name>/config.yaml`, still has `cluster.registryMirrors`, or `target.cluster.registryMirrors` in an `EducatesConfig`, the first command that reads it moves the mirrors to `mirrors.yaml`, once. The command writes the entries into `mirrors.yaml`, creating it when it does not exist yet, then keeps the previous configuration beside it as `config.yaml.bak`, readable only by you since it holds the mirrors' passwords, then removes `cluster.registryMirrors` from the configuration, keeping the rest of the file and its comments. An existing backup is never overwritten: when `config.yaml.bak` exists, the backup is named with the time instead, such as `config.yaml.20261113-214120.bak`. The command prints a note, and goes on with the configuration as moved:
+
+```
+note: moved cluster.registryMirrors of /Users/me/Library/Application Support/educates/config.yaml to /Users/me/Library/Application Support/educates/mirrors.yaml, which declares the registry mirrors of every local cluster: ghcr.io, docker.io. The previous config is kept as /Users/me/Library/Application Support/educates/config.yaml.bak.
+```
+
+A mirror `mirrors.yaml` already records with the same URL and username is left as it is there, password included, and the note says so. A mirror it records with another URL or username stops the move before anything is written, with an error naming the mirror and both values, and the configuration stays as it was until the two agree.
+
+A configuration outside the data home, given with `--config`, is never rewritten. It fails to load with an error showing the `educates local mirror deploy` command that records each of its mirrors, without their passwords:
+
+```
+/Users/me/educates/my-config.yaml: cluster.registryMirrors was removed: registry mirrors are now declared once, for every local cluster, in /Users/me/Library/Application Support/educates/mirrors.yaml, which 'educates local mirror deploy' and 'educates local mirror delete' write. Record the registry mirrors of this config there with:
+
+  educates local mirror deploy ghcr.io
+  educates local mirror deploy docker.io --url registry-1.docker.io --username my-dockerhub-user
+
+adding --password <password> to the command of docker.io, which the config gives a password, and remove cluster.registryMirrors from the config
+```
+
+Run those commands, adding `--password` with the password where the configuration has one, and remove `cluster.registryMirrors` from the configuration.
+
+(local-mirror-deploy)=
 Deploying a local registry mirror
 ---------------------------------
 
@@ -412,14 +509,17 @@ To deploy a local mirror for a remote registry, use the following command:
 educates local mirror deploy ghcr.io
 ```
 
-In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror.
+In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror. The mirror is linked to every node of every local cluster, as described in [running several local clusters](multiple-local-clusters), and a warning names any node which is not running and so could not be linked. A cluster which is stopped gets the mirror when you start it.
 
 Optionally, you can also provide credentials, via `--username` and `--password`, for authenticating to the remote registry. Use these if you are mirroring a private registry, or to provide DockerHub credentials to avoid request throttling.
 
-It is important to note that, when done this way, this mirror's configuration is not persisted in the cluster's configuration, so if you were to recreate the cluster, the mirror would not be configured in the cluster, even if the mirror container still exists.
+The command records the mirror in [`mirrors.yaml`](local-mirrors-file) before it deploys the container, creating the file the first time, with the mirror's name, and its `url`, `username` and `password` when you give them. Every local cluster you create or start later needs the mirrors the file declares, so the mirror stays until you delete it: a cluster created later gets it, and should its container go, the next `educates local cluster create` or `educates local cluster start` deploys it again.
+
+Running the command again for a mirror `mirrors.yaml` records keeps the recorded entry. A mirror the file records with another `--url` or `--username` is refused, with an error saying to run `educates local mirror delete` first, and so is a mirror whose container already exists with another URL or username. The same URL and username with another `--password` records the new password, and the command warns that the mirror's existing container keeps the password it was created with until you delete the mirror and deploy it again. Without `--password`, the recorded password is kept, and is the one a new container gets.
 
 This command is most useful in case you want to clean your existing mirror and delete the mirror, and hence it's contents, and then recreate the mirror.
 
+(local-mirror-delete)=
 Deleting a local registry mirror
 --------------------------------
 
@@ -429,10 +529,235 @@ To delete a local registry mirror, run:
 educates local mirror delete ghcr.io
 ```
 
-This will stop and remove the mirror container and clean up the configuration from the cluster. 
+This will remove the mirror from `mirrors.yaml`, keeping the rest of the file as it was, then stop and remove the mirror container, with the images it cached, and clean up the configuration from every running node of every local cluster. Since the mirror is no longer declared, it stays deleted: no local cluster created or started later deploys it again.
 
-As pointed out earlier, if the mirror configuration exists in the local cluster's configuration, if the Educates local cluster is recreated then the mirror will be recreated as well.
+A mirror `mirrors.yaml` records which has no container, such as one whose container you removed with Docker, is removed from the file, and the command says so:
 
+```
+✓ delete registry mirror ghcr.io: removed registry mirror ghcr.io from /Users/me/Library/Application Support/educates/mirrors.yaml; it had no container
+```
+
+A mirror which `mirrors.yaml` does not record and which has no container is an error.
+
+Listing the local registry mirrors
+----------------------------------
+
+To see the registry mirrors, run:
+
+```
+educates local mirror list
+```
+
+The list has a row for each mirror whose container exists, and for each mirror `mirrors.yaml` declares, and the `DECLARED` column says whether `mirrors.yaml` declares it:
+
+```
+NAME        URL                    USERNAME            STATUS       CONTAINER_NAME                       DECLARED
+docker.io   registry-1.docker.io   my-dockerhub-user   Up 2 hours   educates-registry-mirror-docker.io   yes
+ghcr.io     ghcr.io                                    missing                                           yes
+quay.io     quay.io                                    Up 2 hours   educates-registry-mirror-quay.io     no
+```
+
+A declared mirror whose container is missing, such as `ghcr.io` here, shows the status `missing` with the URL and username `mirrors.yaml` declares, and the next `educates local cluster create` or `educates local cluster start` creates it. A mirror which is not declared, such as `quay.io` here, has a container that `mirrors.yaml` does not record, such as one an earlier version of the command line tool deployed, or one you removed from the file by hand, and is gone once you delete it. Running `educates local mirror deploy` for it, with the URL and username it shows, records it. A `mirrors.yaml` that does not load fails the command, naming the file and why.
+
+(multiple-local-clusters)=
+Running several local clusters
+------------------------------
+
+The cluster `educates local cluster create` makes is the default local cluster. Next to it you can run any number of named local clusters, for example to test two builds of Educates side by side, or one workshop against both. Each named cluster is a Kind cluster of its own, `educates-<name>`, with the kube context `kind-educates-<name>`, its own configuration, and a host IP address of its own on which it publishes ports 80 and 443. Every cluster shares the local image registry on `localhost:5001`, so an image you push there once can be pulled by any of them, and every registry mirror is linked into every cluster, since `mirrors.yaml` in the data home declares the mirrors once for all of them.
+
+To create a named cluster called `test2` on the host IP address `10.10.10.2`, run:
+
+```
+educates local cluster create --local-cluster test2 --listen-address 10.10.10.2
+```
+
+When the named cluster has no configuration yet, this writes one to `clusters/test2/config.yaml` in the data home, declaring `cluster.listenAddress` and, when you add `--domain`, `ingress.domain`. It then creates the Kind cluster `educates-test2` and installs Educates into it, while the default cluster keeps running. The install always targets the cluster just created, through its own kube context, whatever `KUBECONFIG` or the current kube context say. Creating a named cluster with neither a configuration nor `--listen-address` fails, and so does a `--listen-address` or `--domain` that disagrees with an existing configuration: the options only write a missing configuration, and never change one. You can also supply the configuration with `--config`, in which case the file supplies the configuration and `--local-cluster` the name of the cluster. The command then makes the cluster's folder `clusters/test2/` in the data home, so the cluster counts as a local cluster, without copying the file into it.
+
+The `educates local cluster create`, `delete`, `start`, `stop` and `status` commands act on the cluster `--local-cluster` names. To act on one cluster for every command in a terminal, set the `EDUCATES_LOCAL_CLUSTER` environment variable instead:
+
+```
+export EDUCATES_LOCAL_CLUSTER=test2
+educates local cluster status
+```
+
+The `--local-cluster` option takes precedence over the environment variable, and an empty value, as in `--local-cluster=`, selects the default cluster even when the variable is set. With neither, the commands act on the default cluster, as they always have. A cluster name is a lowercase DNS label of at most 31 characters.
+
+Deleting a named cluster with `educates local cluster delete --local-cluster test2` deletes its Kind cluster and keeps its configuration, so you can create it again with just `--local-cluster test2`. The `--all` option also deletes the local image registry, the DNS resolver and the registry mirrors that every cluster shares, but only once no other local cluster remains, running or stopped. While another one does, `--all` deletes the selected cluster, keeps the shared containers and names the clusters still using them, so the containers go with the last cluster you delete with `--all`.
+
+Selecting a cluster also decides which cluster the `educates cluster` and `educates admin` commands act on, as [commands that follow the selected cluster](local-cluster-kube-context) describes.
+
+### The listen address
+
+A named cluster's `cluster.listenAddress` must be a specific IP address of your host, by the rules [listen address](local-cluster-listen-address) describes for every local cluster, and one no other local cluster uses. The default cluster takes the IP address of your host, so give a named cluster an address added for it.
+
+The address has to exist on your host before you create the cluster, and you add it once:
+
+* On macOS, add it as an alias on a network interface, such as the interface which already holds the address of your default cluster, or your primary interface `en0`:
+
+  ```
+  sudo ifconfig en0 alias 10.10.10.2 netmask 255.255.255.255
+  ```
+
+* On Linux, add it to a network interface:
+
+  ```
+  sudo ip address add 10.10.10.2/32 dev eth0
+  ```
+
+Neither command persists the address across a restart of your host, so add it again after one, or configure it permanently through your operating system's network settings.
+
+Docker Desktop 4.97 and later serves published ports below 1024 on loopback addresses only, unless the setting "Allow privileged port forwarding to external machines", under **Settings > Advanced**, is turned on. Every local cluster publishes ports 80 and 443 on a non-loopback address, so `educates local cluster create` and `start` refuse to run while the setting is off.
+
+### Listen addresses that clash
+
+Before `educates local cluster create` creates a cluster, and before `educates local cluster start` starts one, the command line tool checks the cluster's listen address against every other local cluster, running or stopped, as its Kind node containers are configured. It refuses, naming the other cluster, when:
+
+* another local cluster publishes ports 80 and 443 on the same address, since every cluster needs an address of its own;
+* either cluster publishes them on `0.0.0.0`, every host address, which leaves no address for any other cluster;
+* the address is on no network interface of your host, as when an address you added was lost on a restart.
+
+A stopped cluster counts, since it takes its address back when it starts. A cluster whose Kind node container publishes ports 80 and 443 on `0.0.0.0` therefore stops any other cluster from being created or started next to it, and the error tells you to re-create that cluster on a specific IP address: delete it, set `cluster.listenAddress` in its configuration to an address of your host, such as `10.10.10.1`, and create it again.
+
+Once those checks pass, `educates local cluster create` still tries to bind ports 80 and 443 on the address before it creates the Kind cluster, which catches a port held by something other than a local cluster, such as another ingress controller.
+
+### The ingress domain
+
+With no `ingress.domain` in its configuration, a named cluster, like the default cluster, uses the `nip.io` name of its listen address, with dashes, such as `10-10-10-2.nip.io` for `10.10.10.2`, and `ingress.insecure` defaults to true, so the cluster is served over plain HTTP with no certificate authority to manage. As `nip.io` names only IPv4 addresses, a cluster listening on an IPv6 address needs an `ingress.domain` of its own.
+
+To use a domain of your own, pass `--domain` when you create the cluster, or set `ingress.domain` in its configuration. As for the default cluster, a domain of your own is served over HTTPS and needs a CA in the local secrets cache, as described in [custom ingress domain](custom-ingress-domain).
+
+An `EducatesConfig` with `target.provider: kind` can also serve as a named cluster's configuration. Its `target.cluster.listenAddress` must be a specific IP address of your host, by the same rules, and it gets no `nip.io` fallback: its domain is the one its custom resources declare.
+
+### The DNS resolver
+
+One local DNS resolver serves every local cluster, and it has no settings of its own. Each cluster contributes its names, its ingress domain and its `resolver.extraDomains`, which resolve to that cluster's listen address, as described in [Local DNS resolver](local-dns-resolver). Names that resolve to anything other than a local cluster, such as a virtual machine, go in files of your own in the data home's `dnsmasq.d` folder, as described in [names of your own](local-dns-resolver-own-names). The `educates local resolver deploy`, `update` and `view` commands always cover every cluster, and take no `--local-cluster` option. The `--domain` option of `educates local resolver deploy` overrides the domain of the default cluster only.
+
+To see what the resolver serves, run `educates local resolver view`. Its first table has a row for each cluster, with the address its names resolve to, its listen address, and the cluster's configuration file. Its second table has a row for each name, with its cluster and where it comes from: `ingress.domain`, the `nip.io` name of the listen address, `resolver.extraDomains`, or one of your files. Its notes say when a name is covered by a broader name of the same cluster, and when it wins over another cluster's broader name, as `test2.educates.test` does over `educates.test`. In the resolver's configuration file, `dnsmasq.conf` in the data home, each cluster's entries start with a comment naming the cluster, its configuration file and its listen address:
+
+```
+# Default local cluster (config.yaml): 10.10.10.1, its listen address
+address=/educates.test/10.10.10.1
+
+# Local cluster test2 (clusters/test2/config.yaml): 10.10.10.2, its listen address
+address=/test2.educates.test/10.10.10.2
+
+# Your own entries: dnsmasq.d/*.conf
+conf-dir=/etc/dnsmasq.d/,*.conf
+```
+
+A named cluster is served while its Kind cluster exists. Creating or deleting a cluster refreshes a resolver that is already running, adding or removing that cluster's domains, so you don't need to run `educates local resolver update` yourself. When the resolver can't be refreshed, the command warns and still succeeds, since the cluster has been created or deleted by then: fix the cause the warning names and run `educates local resolver update`.
+
+Another cluster's configuration that does not load, such as a named cluster's configuration you edited to a loopback listen address, or that the resolver can't use, is left out with a warning naming its file. It does not stop `educates local cluster create` from creating a different cluster, nor the resolver commands and the refreshes from serving every other cluster. The configuration of the cluster being created, and the default cluster's configuration given to the resolver commands, still fail the command as before.
+
+The resolver answers a name from the most specific domain it serves, so a named cluster can use a subdomain of the default cluster's domain. With the default cluster on `educates.test` and the named cluster `test2` created with `--domain test2.educates.test`, names under `test2.educates.test` resolve to `10.10.10.2`, and every other name under `educates.test` still resolves to the default cluster. Two clusters claiming the same domain is an error that names both. The resolver commands report it, and so does `educates local cluster create`, before it creates anything.
+
+On macOS, the file `/etc/resolver/educates.test` you created for the default cluster's domain also covers its subdomains, so a named cluster on `test2.educates.test` needs no new file. A named cluster on a domain outside the ones you already resolve, such as `workshops.example.test`, needs a file of its own, `/etc/resolver/workshops.example.test`, with the same `nameserver 127.0.0.1` entry. A cluster on its `nip.io` domain needs neither, since `nip.io` names resolve through public DNS.
+
+### The shared registry and mirrors
+
+Every local cluster pulls from the one local image registry and the one set of registry mirror containers, so the commands which manage them take no `--local-cluster` option and act on every local cluster. `educates local registry deploy` configures every node of every cluster to pull from the registry, and inside each cluster, through its own kube context, points the `registry` Service and the `local-registry-hosting` ConfigMap at it. `educates local mirror deploy` records the mirror in `mirrors.yaml` and links it into every node of every running local cluster, and `educates local mirror delete` removes it from `mirrors.yaml` and unlinks it from every one of them. A node which is not running can't be configured, and the deploy commands warn about it. Run `educates local registry deploy` again once its cluster runs. A mirror needs nothing more, since starting the cluster links it.
+
+Every registry mirror container which exists is linked into every local cluster, whether `mirrors.yaml` declares it or not. `educates local cluster create` and `educates local cluster start` link every one of them into every node of the cluster, so a mirror reaches a cluster created later, and a cluster which was stopped when the mirror was deployed gets it when it starts. Linking a mirror which a node already has writes the same configuration again. A mirror which can't be linked into a node is a warning, and that node pulls from the registry directly. A node which has a mirror's configuration tries the mirror first and then the registry the image names, so it still pulls when the mirror's container is stopped or deleted.
+
+Every local cluster needs the mirrors [`mirrors.yaml`](local-mirrors-file) declares. When a declared mirror's container doesn't exist yet, `educates local cluster create` and `educates local cluster start` create it first. When an earlier create or start, or `educates local mirror deploy`, already created it, they reuse that container. The container keeps the URL and username it was created with, so once you edit the mirror in `mirrors.yaml` by hand to another `url` or `username`, `educates local cluster create` fails before the Kind cluster is created, and `educates local cluster start` before the nodes start. The error names `mirrors.yaml`, the mirror, the values its container has, and the values the file declares. Either declare the mirror as its container has it, or delete the mirror with `educates local mirror delete`, which unlinks it from every cluster and removes it from `mirrors.yaml`, then deploy it with the new values with `educates local mirror deploy`. A different `password` can't be seen on the container, so it is not detected, and the mirror keeps the password it was created with until you delete it.
+
+Since `educates local mirror delete` removes the mirror from `mirrors.yaml` as well as its container, a deleted mirror stays deleted: no local cluster created or started later deploys it again, as [deleting a local registry mirror](local-mirror-delete) describes.
+
+### Listing the clusters
+
+To see every local cluster, run:
+
+```
+educates local cluster list
+```
+
+It lists the default cluster, shown as `(default)`, and every named cluster, whatever `--local-cluster` or `EDUCATES_LOCAL_CLUSTER` select. Each row has the cluster's state, the host IP address it publishes ports 80 and 443 on, its ingress domain and its kube context. The state is `running`, `stopped`, or `partly running` when only some nodes of a multi-node cluster run. The domain is the one the DNS resolver serves for the cluster: the domain its configuration declares, or else the `nip.io` name of its listen address. It shows as `-` when the cluster has none, as for an `EducatesConfig` whose custom resources declare no domain. A configuration that does not load, such as one without a specific listen address, leaves the domain as `-` and is reported in a warning after the list.
+
+Only the Kind clusters the command line tool manages are local clusters: the Kind cluster `educates`, and a Kind cluster `educates-<name>` whose folder `clusters/<name>/` exists in the data home. A Kind cluster you created yourself is left out of the list and ignored by every check, even when its name starts with `educates-`. The `educates local cluster delete`, `start`, `stop` and `status` commands also leave it alone: given the name of a cluster whose folder the data home does not hold, such as `--local-cluster foo` beside a Kind cluster `educates-foo` you created, they refuse with an error saying so.
+
+### A named cluster's configuration
+
+To write a named cluster's configuration without creating the cluster, for example to change it before you first create the cluster, run `educates local config init` with the same options:
+
+```
+educates local config init --local-cluster test2 --listen-address 10.10.10.2
+```
+
+A named cluster needs `--listen-address`, and `--domain` is optional. As for the default cluster, `educates local config init` refuses to replace an existing configuration unless you add `--force`. The `--defaults` option writes only the default cluster's configuration, while `educates local config view --local-cluster test2` shows the defaults a named cluster takes.
+
+The `educates local config get`, `set`, `view` and `edit` commands also select a cluster with `--local-cluster` or the `EDUCATES_LOCAL_CLUSTER` environment variable, and act on that cluster's configuration, or on the default cluster's with neither. For example, to give the named cluster `test2` a domain of its own:
+
+```
+educates local config set --local-cluster test2 ingress.domain test2.educates.test
+```
+
+As for the default cluster, `educates local config set` and `edit` refuse a change that breaks the rules for a named cluster's listen address, such as a loopback address, and `educates local config view` shows the `nip.io` name of the listen address as the domain when the configuration sets none.
+
+To remove a named cluster's configuration once you no longer need the cluster, delete the cluster first and then its configuration:
+
+```
+educates local cluster delete --local-cluster test2
+educates local config delete --local-cluster test2
+```
+
+`educates local config delete` removes the folder `clusters/test2` of the data home, which holds the cluster's configuration and its Kind configuration file. It refuses while the Kind cluster `educates-test2` exists, and it never deletes the default cluster's configuration.
+
+(local-cluster-kube-context)=
+### Commands that follow the selected cluster
+
+Kind makes the cluster it created last the current context of your kubeconfig. Without a cluster selected, the commands that act on a cluster through a kube context use the current context, as they always have, so they follow whichever cluster was created last, or whichever context you last switched to with `kubectl config use-context`.
+
+When you select a cluster with `--local-cluster` or `EDUCATES_LOCAL_CLUSTER`, these commands act on that cluster's kube context instead, `kind-educates` for the default cluster and `kind-educates-<name>` for a named one:
+
+* the `educates cluster workshop`, `educates cluster portal` and `educates cluster session` commands, and their aliases such as `educates deploy-workshop` and `educates serve-workshop`;
+* `educates admin platform deploy`, `educates admin platform delete`, `educates admin diagnostics collect` and `educates admin lookup kubeconfig`;
+* `educates local secrets sync`.
+
+So a terminal set to one cluster stays on it, whichever cluster Kind created last. In a terminal where you ran:
+
+```
+export EDUCATES_LOCAL_CLUSTER=test2
+educates cluster workshop deploy
+```
+
+the workshop is deployed to the cluster `educates-test2`, while in a terminal without the variable the same command deploys it to the current context.
+
+The `--context` option takes precedence over both `--local-cluster` and `EDUCATES_LOCAL_CLUSTER`: a command given `--context` acts on the context it names. Selecting a cluster never changes the current context of your kubeconfig, which `kubectl` keeps using.
+
+The context of a selected cluster is looked up in the kubeconfig file `educates local cluster create` writes it into: the file `--kubeconfig` names, and otherwise `~/.kube/config`, whatever the `KUBECONFIG` environment variable says. A terminal whose `KUBECONFIG` leaves out `~/.kube/config` therefore still reaches a selected local cluster. Without a cluster selected, the commands read `KUBECONFIG` as before.
+
+With `--local-config`, `educates admin platform deploy` and `educates admin platform render` read the configuration of the selected cluster: `config.yaml` in the data home for the default cluster, and `clusters/<name>/config.yaml` for a named one. So you can redeploy one cluster from its configuration without touching the others:
+
+```
+educates admin platform deploy --local-config --local-cluster test2
+```
+
+With `--config`, `educates admin platform deploy` installs the file you name into the selected cluster. `educates admin platform render` talks to no cluster, so `--local-cluster` only selects the configuration it renders, and cannot be combined with `--config`. `educates admin platform delete` reads no configuration, so for it `--local-cluster` only selects the cluster to remove Educates from.
+
+`educates local secrets sync` copies into the selected cluster the cached secrets its configuration needs: the CA key pair for its ingress domain when the cluster is served over HTTPS, and no CA key pair for a named cluster on the `nip.io` name of its listen address, which is served over plain HTTP. Without a cluster selected, it reads the default cluster's configuration and copies into the current context, as before.
+
+### Serving a workshop to several clusters
+
+`educates cluster workshop serve` serves a workshop's instructions from your local system to the workshop sessions of a cluster, so that an edit shows in the sessions as you make it. It serves the local cluster you select with `--local-cluster` or `EDUCATES_LOCAL_CLUSTER`, and with none selected, the local cluster whose kube context it reaches its cluster through: the context `--context` names, or else the current context. `kind-educates` is the default cluster's context, and `kind-educates-<name>` the context of the named cluster `<name>`. To serve one workshop to two clusters at once, run the command in two terminals, selecting a cluster in each, the default cluster with an empty `--local-cluster=`:
+
+```
+educates cluster workshop serve --patch-workshop --local-cluster=
+```
+
+```
+educates cluster workshop serve --patch-workshop --local-cluster test2
+```
+
+When the command serves a local cluster, two of its defaults change, so that two serves do not compete for the same ports:
+
+* The proxy that workshop sessions connect to listens on the cluster's listen address, such as `10.10.10.2`, instead of on `0.0.0.0`, every host address. It keeps port 10081, since a cluster's sessions reach your host through a loopback service under the cluster's ingress domain, which resolves to the cluster's own listen address. Every serve binds the address of the cluster it serves, so two serves share port 10081 on macOS and Linux alike.
+* The Hugo server, which renders the instructions, listens on a free port the operating system picks, instead of on port 1313.
+
+The `--local-host`, `--local-port` and `--hugo-port` options still take precedence when you give them. With `--patch-workshop`, both commands use the access token the command line tool keeps in the data home. When the command serves no local cluster, as for a remote cluster or a Kind cluster you created yourself, it listens on `0.0.0.0` and port 1313, as it always has.
+
+### A second data home is not a second cluster
+
+The `EDUCATES_CLI_DATA_HOME` environment variable moves the data home, where the command line tool keeps its configuration and local secrets cache, but it is not a way to run several local clusters. A second data home still creates the Kind cluster `educates`, binds the same host ports, and manages the same registry, resolver and mirror containers as the first, so the two collide. Use named clusters instead, which share one data home.
 
 Customize local pod and service CIDRs
 -------------------------------------

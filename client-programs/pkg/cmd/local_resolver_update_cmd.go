@@ -1,16 +1,21 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/resolver"
 )
 
 var localResolverUpdateExample = `
-  # Update the local DNS resolver from the laptop config:
+  # Update the local DNS resolver from the configs of every local cluster:
   educates local resolver update
 
-  # Update using a specific config file:
+  # Update using a specific config file for the default local cluster:
   educates local resolver update --config config.yaml
 `
 
@@ -19,12 +24,27 @@ type LocalResolverUpdateOptions struct {
 	LocalConfig bool
 }
 
-func (o *LocalResolverUpdateOptions) Run() error {
-	cfg, err := loadResolverInputs(o.Config)
+// Run serves the configs of every local cluster from the running local
+// DNS resolver, and writes to errW a warning for each named local
+// cluster's config it leaves out.
+func (o *LocalResolverUpdateOptions) Run(ctx context.Context, errW io.Writer) error {
+	def, err := defaultResolverConfig(o.Config, "")
 	if err != nil {
 		return err
 	}
-	return resolver.UpdateResolver(cfg.Ingress.Domain, cfg.Resolver.TargetAddress, cfg.Resolver.ExtraDomains)
+	content, leftOut, err := observedResolverConfig(ctx, def)
+	if err != nil {
+		return err
+	}
+	warnLeftOutConfigs(errW, leftOut)
+	includeFolderMounted, err := resolver.UpdateResolver(os.Stdout, content)
+	if err != nil {
+		return err
+	}
+	if !includeFolderMounted {
+		fmt.Fprintf(errW, "Warning: %s\n", resolverWithoutIncludeFolderWarning())
+	}
+	return nil
 }
 
 func (p *ProjectInfo) NewLocalResolverUpdateCmd() *cobra.Command {
@@ -34,11 +54,12 @@ func (p *ProjectInfo) NewLocalResolverUpdateCmd() *cobra.Command {
 		Args:    cobra.NoArgs,
 		Use:     "update",
 		Short:   "Updates the local DNS resolver (macOS)",
+		Long:    "Serves the current configs from the running local DNS resolver, and restarts it.\n\n" + localResolverLong,
 		Example: localResolverUpdateExample,
-		RunE:    func(_ *cobra.Command, _ []string) error { return o.Run() },
+		RunE:    func(cmd *cobra.Command, _ []string) error { return o.Run(cmd.Context(), cmd.ErrOrStderr()) },
 	}
-	c.Flags().StringVarP(&o.Config, "config", "c", "", "path to a CLI config file (any kind)")
-	c.Flags().BoolVar(&o.LocalConfig, "local-config", false, "use <data-home>/config.yaml (default when --config is not given)")
+	c.Flags().StringVarP(&o.Config, "config", "c", "", "path to a CLI config file (any kind) to serve the default local cluster from")
+	c.Flags().BoolVar(&o.LocalConfig, "local-config", false, "serve the default local cluster from <data-home>/config.yaml (default when --config is not given)")
 	c.MarkFlagsMutuallyExclusive("config", "local-config")
 	return c
 }

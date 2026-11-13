@@ -27,11 +27,9 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 
-	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/translator"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
-	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 // Plan is the outcome of resolving the certificates of a local install.
@@ -73,7 +71,7 @@ type Reporter interface {
 // Resolve decides the certificates of a local install from cfg's
 // ingress.domain and ingress.insecure and the local secrets cache. It
 // only reads the cache: a CA key pair it mints is held in the plan until
-// Commit. Host-IP defaulting of ingress.domain must already have run.
+// Commit. The nip.io defaulting of ingress.domain must already have run.
 func Resolve(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 	names, err := secrets.ListCachedSecretNames()
 	if err != nil {
@@ -148,21 +146,17 @@ ingress domain. Remove the root CAs you do not use with:
 }
 
 // ResolveSync resolves what `educates local secrets sync` pushes into the
-// secrets.LocalSecretsSyncNamespace namespace. With a local config at
-// <data-home>/config.yaml that has an ingress.domain, it is the plan
-// Resolve makes for that config. Without one, or for a config whose
-// install derives its domain from the host IP and so serves plain HTTP,
-// no CA key pair is selected and none is pushed. When Resolve cannot
-// decide the certificates of the config, such as a secure domain with
-// nothing usable cached, the sync still pushes every Secret that holds
-// no CA key, and the plan warns why no CA key pair is pushed; a deploy
-// of that config fails until it is fixed. It only reads the cache and
-// the config.
-func ResolveSync() (*Plan, error) {
-	cfg, err := config.LoadLocalConfigIfPresent(utils.GetEducatesHomeDir())
-	if err != nil {
-		return nil, err
-	}
+// secrets.LocalSecretsSyncNamespace namespace for a local cluster whose
+// config is cfg, nil when the cluster has none. For a config that has an
+// ingress.domain, it is the plan Resolve makes for that config. Without
+// a config, or for a config with no ingress.domain, whose install takes
+// the nip.io name of its listen address and so serves plain HTTP, no CA
+// key pair is selected and none is pushed. When Resolve cannot decide the certificates of the config,
+// such as a secure domain with nothing usable cached, the sync still
+// pushes every Secret that holds no CA key, and the plan warns why no CA
+// key pair is pushed; a deploy of that config fails until it is fixed.
+// It only reads the cache.
+func ResolveSync(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 	names, err := secrets.ListCachedSecretNames()
 	if err != nil {
 		return nil, err

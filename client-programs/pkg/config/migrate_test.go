@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
@@ -115,9 +117,6 @@ func TestMaybeMigrateV3_KindProvider_Migrates(t *testing.T) {
 	}
 	if cfg.Cluster.VolumeMounts[0].ReadOnly == nil || !*cfg.Cluster.VolumeMounts[0].ReadOnly {
 		t.Errorf("VolumeMounts[0].ReadOnly = %v, want true", cfg.Cluster.VolumeMounts[0].ReadOnly)
-	}
-	if got, want := cfg.Resolver.TargetAddress, "192.168.1.10"; got != want {
-		t.Errorf("Resolver.TargetAddress = %q, want %q", got, want)
 	}
 	if got := len(cfg.Resolver.ExtraDomains); got != 1 {
 		t.Errorf("ExtraDomains len = %d, want 1", got)
@@ -251,74 +250,6 @@ func TestEnsureLocalConfigFile_NoMigrationNeeded_SurfacesMissingError(t *testing
 	}
 	if !strings.Contains(err.Error(), "config init") {
 		t.Errorf("expected local config init hint, got %q", err)
-	}
-}
-
-func TestEnsureOrInitLocalConfigFile_EmptyDataHome_WritesDefault(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "missing-subdir")
-	created, err := EnsureOrInitLocalConfigFile(dataHome)
-	if err != nil {
-		t.Fatalf("EnsureOrInitLocalConfigFile: %v", err)
-	}
-	if !created {
-		t.Error("expected created=true when writing a fresh default config")
-	}
-	body := readFile(t, filepath.Join(dataHome, "config.yaml"))
-	if string(body) != DefaultLocalConfigYAML {
-		t.Errorf("written config does not match DefaultLocalConfigYAML:\n%s", body)
-	}
-}
-
-func TestEnsureOrInitLocalConfigFile_ConfigPresent_LeavesAlone(t *testing.T) {
-	dataHome := t.TempDir()
-	existing := []byte("# hand-edited config\napiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n")
-	must(t, os.WriteFile(filepath.Join(dataHome, "config.yaml"), existing, 0o644))
-
-	created, err := EnsureOrInitLocalConfigFile(dataHome)
-	if err != nil {
-		t.Fatalf("EnsureOrInitLocalConfigFile: %v", err)
-	}
-	if created {
-		t.Error("expected created=false when config.yaml already exists")
-	}
-	if got := readFile(t, filepath.Join(dataHome, "config.yaml")); string(got) != string(existing) {
-		t.Errorf("existing config was overwritten:\n%s", got)
-	}
-}
-
-func TestEnsureOrInitLocalConfigFile_MigratesV3_NotCreated(t *testing.T) {
-	dataHome := t.TempDir()
-	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte(v3KindValues), 0o644))
-
-	created, err := EnsureOrInitLocalConfigFile(dataHome)
-	if err != nil {
-		t.Fatalf("EnsureOrInitLocalConfigFile: %v", err)
-	}
-	if created {
-		t.Error("expected created=false when a v3 install was migrated")
-	}
-	// Migration should have produced a config carrying the v3 domain, not
-	// the empty default template.
-	body := readFile(t, filepath.Join(dataHome, "config.yaml"))
-	if !strings.Contains(string(body), "educates.test") {
-		t.Errorf("migrated config missing v3 domain:\n%s", body)
-	}
-}
-
-func TestEnsureOrInitLocalConfigFile_NonKindV3_ErrorsNoDefault(t *testing.T) {
-	dataHome := t.TempDir()
-	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"),
-		[]byte("clusterInfrastructure:\n  provider: gke\n"), 0o644))
-
-	created, err := EnsureOrInitLocalConfigFile(dataHome)
-	if err == nil {
-		t.Fatal("expected migration to refuse a non-kind v3 install")
-	}
-	if created {
-		t.Error("expected created=false when migration refuses")
-	}
-	if _, statErr := os.Stat(filepath.Join(dataHome, "config.yaml")); statErr == nil {
-		t.Error("a default config.yaml must not be written over an unmigratable v3 install")
 	}
 }
 
@@ -473,6 +404,215 @@ func TestMaybeMigrateV3_PauseContainerOverride_IsDroppedAndNoted(t *testing.T) {
 	wantLine := "dropped imageVersions entry pause-container: the image pre-puller now runs its own image-puller helper, which a pause container image cannot replace\n"
 	if !strings.Contains(notice, wantLine) {
 		t.Errorf("notice missing %q in:\n%s", wantLine, notice)
+	}
+}
+
+func TestMaybeMigrateV3_ResolverTargetAddress_IsDroppedAndNoted(t *testing.T) {
+	cfg, written, notice := migrateV3Values(t, `localKindCluster:
+  listenAddress: 127.0.0.1
+localDNSResolver:
+  targetAddress: 192.168.1.10
+  extraDomains:
+    - example.test
+`)
+
+	if strings.Contains(written, "targetAddress") {
+		t.Errorf("migrated file sets targetAddress:\n%s", written)
+	}
+	if got, want := cfg.Cluster.ListenAddress, "127.0.0.1"; got != want {
+		t.Errorf("Cluster.ListenAddress = %q, want the v3 listen address %q", got, want)
+	}
+	if !reflect.DeepEqual(cfg.Resolver.ExtraDomains, []string{"example.test"}) {
+		t.Errorf("Resolver.ExtraDomains = %v, want the v3 extra domains", cfg.Resolver.ExtraDomains)
+	}
+	wantLine := "dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to its " +
+		"cluster.listenAddress; set cluster.listenAddress to 192.168.1.10 to keep resolving the cluster there, " +
+		"or for other names " +
+		"add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home\n"
+	if !strings.Contains(notice, wantLine) {
+		t.Errorf("notice missing %q in:\n%s", wantLine, notice)
+	}
+}
+
+const v3RegistryMirrorsValues = `localKindCluster:
+  listenAddress: 10.10.10.1
+  registryMirrors:
+    - mirror: docker.io
+      url: https://registry-1.docker.io
+      username: alice
+      password: secret
+    - mirror: ghcr.io
+      port: "5002"
+      bindIP: 127.0.0.1
+`
+
+func TestMaybeMigrateV3_RegistryMirrors_AreWrittenToMirrorsYAML(t *testing.T) {
+	dataHome := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte(v3RegistryMirrorsValues), 0o644))
+	var notice bytes.Buffer
+
+	if err := MaybeMigrateV3(dataHome, &notice); err != nil {
+		t.Fatalf("MaybeMigrateV3: %v", err)
+	}
+
+	mirrorsPath := filepath.Join(dataHome, "mirrors.yaml")
+	got, err := LoadLocalMirrors(dataHome)
+	if err != nil {
+		t.Fatalf("LoadLocalMirrors on the migrated mirrors.yaml: %v\n%s", err, readFile(t, mirrorsPath))
+	}
+	want := []v1alpha1.RegistryMirror{
+		{Mirror: "docker.io", URL: "https://registry-1.docker.io", Username: "alice", Password: "secret"},
+		{Mirror: "ghcr.io"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("migrated registry mirrors = %+v, want %+v", got, want)
+	}
+	// A v3 mirror's port and bindIP never had any effect, so they go.
+	if wantLine := "port and bindIP of registry mirror ghcr.io were dropped: they never had any effect\n"; !strings.Contains(notice.String(), wantLine) {
+		t.Errorf("notice does not say %q:\n%s", wantLine, notice.String())
+	}
+	if strings.Contains(notice.String(), "of registry mirror docker.io") {
+		t.Errorf("notice says something was dropped of docker.io, which has no port or bindIP:\n%s", notice.String())
+	}
+	if body := string(readFile(t, mirrorsPath)); !strings.HasPrefix(body, LocalMirrorsModeline+"\n") {
+		t.Errorf("mirrors.yaml does not start with the schema modeline:\n%s", body)
+	}
+	if written := string(readFile(t, filepath.Join(dataHome, "config.yaml"))); strings.Contains(written, "registryMirrors") {
+		t.Errorf("the migrated config declares registry mirrors:\n%s", written)
+	}
+	for _, want := range []string{"moved localKindCluster.registryMirrors to " + mirrorsPath, "every local cluster",
+		"docker.io", "ghcr.io"} {
+		if !strings.Contains(notice.String(), want) {
+			t.Errorf("notice does not mention %q:\n%s", want, notice.String())
+		}
+	}
+	if strings.Contains(notice.String(), "secret") {
+		t.Errorf("notice gives a mirror's password:\n%s", notice.String())
+	}
+}
+
+func TestMaybeMigrateV3_RegistryMirrors_WithAMirrorsYAML_LeaveItAndSayWhatToAdd(t *testing.T) {
+	dataHome := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte(v3RegistryMirrorsValues), 0o644))
+	mirrorsPath := filepath.Join(dataHome, "mirrors.yaml")
+	const existing = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalMirrors\nregistryMirrors:\n- mirror: quay.io\n"
+	must(t, os.WriteFile(mirrorsPath, []byte(existing), 0o644))
+	var notice bytes.Buffer
+
+	if err := MaybeMigrateV3(dataHome, &notice); err != nil {
+		t.Fatalf("MaybeMigrateV3: %v", err)
+	}
+
+	if body := string(readFile(t, mirrorsPath)); body != existing {
+		t.Errorf("mirrors.yaml was overwritten:\n%s", body)
+	}
+	if written := string(readFile(t, filepath.Join(dataHome, "config.yaml"))); strings.Contains(written, "registryMirrors") {
+		t.Errorf("the migrated config declares registry mirrors:\n%s", written)
+	}
+	for _, want := range []string{mirrorsPath + " already exists", "docker.io, ghcr.io", "by hand",
+		"localKindCluster.registryMirrors", filepath.Join(dataHome, "values.yaml.v3-backup")} {
+		if !strings.Contains(notice.String(), want) {
+			t.Errorf("notice does not mention %q:\n%s", want, notice.String())
+		}
+	}
+	if strings.Contains(notice.String(), "secret") {
+		t.Errorf("notice gives a mirror's password:\n%s", notice.String())
+	}
+}
+
+func TestMaybeMigrateV3_NoRegistryMirrors_WritesNoMirrorsYAML(t *testing.T) {
+	dataHome := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte("localKindCluster:\n  listenAddress: 10.10.10.1\n"), 0o644))
+	var notice bytes.Buffer
+
+	if err := MaybeMigrateV3(dataHome, &notice); err != nil {
+		t.Fatalf("MaybeMigrateV3: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dataHome, "mirrors.yaml")); err == nil {
+		t.Error("mirrors.yaml was written for a v3 file without registry mirrors")
+	}
+	if strings.Contains(notice.String(), "registryMirrors") {
+		t.Errorf("notice mentions registry mirrors for a file without any:\n%s", notice.String())
+	}
+}
+
+// stubHostIP makes host IP detection report ip for the rest of the test
+// t, or fail when ip is empty.
+func stubHostIP(t *testing.T, ip string) {
+	t.Helper()
+	detect := hostinfo.DetectHostIP
+	t.Cleanup(func() { hostinfo.DetectHostIP = detect })
+	hostinfo.DetectHostIP = func() (string, error) {
+		if ip == "" {
+			return "", errors.New("no route to the outside world")
+		}
+		return ip, nil
+	}
+}
+
+func TestMaybeMigrateV3_ListenAddressOnEveryHostAddress_BecomesTheHostIP(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		values string
+		was    string
+	}{
+		{name: "missing", values: "clusterIngress:\n  domain: educates.test\n", was: "was not set"},
+		{name: "0.0.0.0", values: "localKindCluster:\n  listenAddress: 0.0.0.0\n", was: "was 0.0.0.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubHostIP(t, "192.168.50.151")
+
+			cfg, _, notice := migrateV3Values(t, tc.values)
+
+			if got, want := cfg.Cluster.ListenAddress, "192.168.50.151"; got != want {
+				t.Errorf("Cluster.ListenAddress = %q, want the host's IP address %q", got, want)
+			}
+			for _, want := range []string{"set cluster.listenAddress to 192.168.50.151, this host's IP address",
+				"localKindCluster.listenAddress " + tc.was, "every host address", "specific IP address",
+				"An alias such as 10.10.10.1", "survives network changes"} {
+				if !strings.Contains(notice, want) {
+					t.Errorf("notice does not mention %q:\n%s", want, notice)
+				}
+			}
+		})
+	}
+}
+
+func TestMaybeMigrateV3_ListenAddressOnEveryHostAddress_WithNoHostIP_SaysToSetIt(t *testing.T) {
+	stubHostIP(t, "")
+
+	cfg, _, notice := migrateV3Values(t, "clusterIngress:\n  domain: educates.test\n")
+
+	if cfg.Cluster.ListenAddress != "" {
+		t.Errorf("Cluster.ListenAddress = %q, want none with no host IP address detected", cfg.Cluster.ListenAddress)
+	}
+	for _, want := range []string{"left cluster.listenAddress unset", "no IP address of this host was detected",
+		"educates local config set cluster.listenAddress <ip>"} {
+		if !strings.Contains(notice, want) {
+			t.Errorf("notice does not mention %q:\n%s", want, notice)
+		}
+	}
+}
+
+func TestMaybeMigrateV3_SpecificListenAddress_IsKeptWithoutANote(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
+
+	cfg, _, notice := migrateV3Values(t, "localKindCluster:\n  listenAddress: 10.10.10.1\n")
+
+	if got, want := cfg.Cluster.ListenAddress, "10.10.10.1"; got != want {
+		t.Errorf("Cluster.ListenAddress = %q, want the v3 listen address %q", got, want)
+	}
+	if strings.Contains(notice, "listenAddress") {
+		t.Errorf("notice mentions the listen address it kept:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_NoResolverTargetAddress_NoNote(t *testing.T) {
+	_, _, notice := migrateV3Values(t, "localDNSResolver:\n  extraDomains:\n    - example.test\n")
+
+	if strings.Contains(notice, "targetAddress") {
+		t.Errorf("notice mentions targetAddress for a file without one:\n%s", notice)
 	}
 }
 

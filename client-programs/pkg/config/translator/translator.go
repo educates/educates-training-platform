@@ -6,7 +6,7 @@
 // serialises Output to YAML.
 //
 // Defaulting of environment-dependent fields (e.g. ingress.domain from
-// host IP, operator.image.tag from CLI binary version) does NOT happen
+// cluster.listenAddress, operator.image.tag from CLI binary version) does NOT happen
 // here. Translate consumes whatever the loader produced + any caller-side
 // pre-translate defaulting. This keeps the translator deterministic and
 // unit-testable.

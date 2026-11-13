@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -27,10 +30,13 @@ const localConfigEditHeader = `## Edit the Educates local configuration below.
 var localConfigEditExample = `
   # Edit the local configuration in $EDITOR, validating on save:
   educates local config edit
+
+  # Edit the config of the named local cluster test2:
+  educates local config edit --local-cluster test2
 `
 
 func (p *ProjectInfo) NewLocalConfigEditCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Args:  cobra.NoArgs,
 		Use:   "edit",
 		Short: "Open <data-home>/config.yaml in $EDITOR; validate against the schema on save",
@@ -39,20 +45,38 @@ copy. On editor exit the temp copy is validated against the
 EducatesLocalConfig schema. A passing validation atomically replaces the
 canonical file. A failing validation reopens the editor with the error
 shown inline (kubectl-edit style), preserving your in-progress changes,
-until the configuration is valid or you abort.`,
+until the configuration is valid or you abort. On save it is also
+validated against the rules of a local cluster's config, such as a
+cluster.listenAddress that is a specific IP address of the host.
+
+--local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, edits the config of a
+named local cluster instead, <data-home>/clusters/<name>/config.yaml,
+which 'educates local config init --local-cluster <name>' writes first.`,
 		Example: localConfigEditExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runLocalConfigEdit()
+			id, err := selectedLocalCluster(cmd)
+			if err != nil {
+				return err
+			}
+			return runLocalConfigEdit(id)
 		},
 	}
+	addLocalClusterFlag(c)
+	return c
 }
 
-func runLocalConfigEdit() error {
+// runLocalConfigEdit edits the config of the local cluster id in the
+// user's editor. A named local cluster's config must exist already: it is
+// written with 'local config init', which takes its listen address.
+func runLocalConfigEdit(id localclusters.Identity) error {
+	if err := checkNamedConfigExists(id); err != nil {
+		return err
+	}
 	dataHome := utils.GetEducatesHomeDir()
 	if err := os.MkdirAll(dataHome, 0o755); err != nil {
 		return fmt.Errorf("create data home %q: %w", dataHome, err)
 	}
-	canonical := config.LocalConfigPath(dataHome)
+	canonical := id.ConfigPath
 	tmp := fmt.Sprintf("%s.%d", canonical, os.Getpid())
 
 	// Keep the temp file on exit only when we abort after the user has made
@@ -69,12 +93,14 @@ func runLocalConfigEdit() error {
 
 	// Seed with current contents, or the minimal init stub when no canonical
 	// file exists yet — so 'edit' on a pristine data home is a working flow.
-	seed, err := os.ReadFile(canonical)
+	seed, err := config.ReadConfigFile(canonical)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("read %s: %w", canonical, err)
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
 		}
-		seed = []byte(defaultLocalConfigYAML)
+		if seed, err = localclusters.ConfigYAML(id, localclusters.ConfigFlags{}); err != nil {
+			return err
+		}
 	}
 
 	editorPath, err := resolveEditor()
@@ -137,7 +163,7 @@ func runLocalConfigEdit() error {
 			return fmt.Errorf("write temp file: %w", err)
 		}
 
-		if _, verr := config.LoadLocal(tmp); verr != nil {
+		if verr := validateEditedConfig(id, tmp); verr != nil {
 			// Reopen with the (possibly multi-line) error inline. Each error
 			// line is '## '-prefixed so it can't be parsed as YAML and is
 			// stripped on the next save.
@@ -153,6 +179,24 @@ func runLocalConfigEdit() error {
 		fmt.Println("Configuration updated successfully.")
 		return nil
 	}
+}
+
+// validateEditedConfig checks that the edited config at path loads as the
+// config of the local cluster id, following the rules of a local
+// cluster's config, and for the default local cluster, that it is an
+// EducatesLocalConfig. A rule it breaks is reported against the cluster's
+// config, which the edit replaces.
+func validateEditedConfig(id localclusters.Identity, path string) error {
+	if id.IsDefault() {
+		if _, err := config.LoadLocal(path); err != nil {
+			return err
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return localclusters.CheckConfig(id, data, id.ConfigPath)
 }
 
 // resolveEditor picks $VISUAL, then $EDITOR, then vi, and resolves it on PATH.

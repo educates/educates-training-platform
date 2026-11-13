@@ -29,6 +29,7 @@ func (p *ProjectInfo) NewLocalClusterCmdGroup() *cobra.Command {
 				p.NewLocalClusterStopCmd(),
 				p.NewLocalClusterDeleteCmd(),
 				p.NewLocalClusterStatusCmd(),
+				p.NewLocalClusterListCmd(),
 			},
 		},
 	}

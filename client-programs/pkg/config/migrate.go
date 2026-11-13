@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
@@ -18,7 +19,8 @@ import (
 //  1. dataHome has no values.yaml — nothing to migrate (first-time user).
 //  2. dataHome has config.yaml — already migrated (or never had v3).
 //  3. dataHome has values.yaml + provider ∈ {"", "kind"} — migration
-//     ran successfully (config.yaml written, values.yaml renamed to
+//     ran successfully (config.yaml written, the registry mirrors written
+//     to mirrors.yaml unless it exists, values.yaml renamed to
 //     values.yaml.v3-backup).
 //
 // Returns a user-actionable error when values.yaml is present without
@@ -82,6 +84,18 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 	}
 
 	cfg, notes := translateV3ToV4(v3raw)
+	// v4 declares registry mirrors for every local cluster in a file of
+	// their own, written before the config, so a mirror is never lost: a
+	// migration that fails here leaves the v3 values.yaml in place.
+	mirrors, droppedNotes := translateV3RegistryMirrors(v3raw)
+	mirrorsNote, err := migrateV3RegistryMirrors(dataHome, mirrors, backupPath)
+	if err != nil {
+		return err
+	}
+	if mirrorsNote != "" {
+		notes = append(notes, mirrorsNote)
+	}
+	notes = append(notes, droppedNotes...)
 	out, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("marshal v4 config: %w", err)
@@ -193,7 +207,11 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 	}
 
 	// cluster
-	cfg.Cluster.ListenAddress = strV3Path(v3, "localKindCluster", "listenAddress")
+	var note string
+	cfg.Cluster.ListenAddress, note = migrateV3ListenAddress(strV3Path(v3, "localKindCluster", "listenAddress"))
+	if note != "" {
+		notes = append(notes, note)
+	}
 	cfg.Cluster.ApiServer.Address = strV3Path(v3, "localKindCluster", "apiServer", "address")
 	cfg.Cluster.ApiServer.Port = intV3Path(v3, "localKindCluster", "apiServer", "port")
 	cfg.Cluster.Networking.ServiceSubnet = strV3Path(v3, "localKindCluster", "networking", "serviceSubnet")
@@ -209,20 +227,16 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		}
 		cfg.Cluster.VolumeMounts = append(cfg.Cluster.VolumeMounts, vm)
 	}
-	for _, m := range listV3Path(v3, "localKindCluster", "registryMirrors") {
-		entry := asMap(m)
-		cfg.Cluster.RegistryMirrors = append(cfg.Cluster.RegistryMirrors, v1alpha1.RegistryMirror{
-			Mirror:   strMap(entry, "mirror"),
-			URL:      strMap(entry, "url"),
-			Username: strMap(entry, "username"),
-			Password: strMap(entry, "password"),
-			Port:     strMap(entry, "port"),
-			BindIP:   strMap(entry, "bindIP"),
-		})
+	// resolver. A local cluster's names now resolve to its listen address,
+	// so targetAddress goes. Setting the listen address from it instead
+	// would change where kind publishes the cluster's ports, so the notice
+	// says how to do that.
+	if target := strV3Path(v3, "localDNSResolver", "targetAddress"); target != "" {
+		notes = append(notes, fmt.Sprintf("dropped localDNSResolver.targetAddress %[1]s: a local cluster's names "+
+			"now resolve to its cluster.listenAddress; set cluster.listenAddress to %[1]s to keep resolving the "+
+			"cluster there, or for other names add address=/<name>/%[1]s to a *.conf file in the dnsmasq.d "+
+			"folder of the data home", target))
 	}
-
-	// resolver
-	cfg.Resolver.TargetAddress = strV3Path(v3, "localDNSResolver", "targetAddress")
 	for _, d := range listV3Path(v3, "localDNSResolver", "extraDomains") {
 		if s, ok := d.(string); ok {
 			cfg.Resolver.ExtraDomains = append(cfg.Resolver.ExtraDomains, s)
@@ -266,6 +280,118 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 	}
 
 	return cfg, notes
+}
+
+// translateV3RegistryMirrors returns the registry mirrors of a v3 values
+// map, its localKindCluster.registryMirrors, which v4 declares for every
+// local cluster in the registry mirrors file of the data home, with a
+// line of the migration notice for each mirror whose port or bindIP it
+// dropped, since they never had any effect.
+func translateV3RegistryMirrors(v3 map[string]interface{}) ([]v1alpha1.RegistryMirror, []string) {
+	var mirrors []v1alpha1.RegistryMirror
+	var notes []string
+	for _, m := range listV3Path(v3, "localKindCluster", "registryMirrors") {
+		entry := asMap(m)
+		mirror := v1alpha1.RegistryMirror{
+			Mirror:   strMap(entry, "mirror"),
+			URL:      strMap(entry, "url"),
+			Username: strMap(entry, "username"),
+			Password: strMap(entry, "password"),
+		}
+		mirrors = append(mirrors, mirror)
+		var dropped []string
+		for _, field := range ineffectiveMirrorFields {
+			if _, set := entry[field]; set {
+				dropped = append(dropped, field)
+			}
+		}
+		if note := droppedMirrorFieldsNote(mirror.Mirror, dropped); note != "" {
+			notes = append(notes, note)
+		}
+	}
+	return mirrors, notes
+}
+
+// ineffectiveMirrorFields are the fields a registry mirror took in
+// version 3, and in pre-releases of version 4, that never had any effect:
+// a mirror's container is published on a port of the loopback address
+// Docker picks.
+var ineffectiveMirrorFields = []string{"port", "bindIP"}
+
+// droppedMirrorFieldsNote says that fields, among ineffectiveMirrorFields,
+// of the registry mirror mirror were dropped, since they never had any
+// effect, or is empty when fields is.
+func droppedMirrorFieldsNote(mirror string, fields []string) string {
+	switch len(fields) {
+	case 0:
+		return ""
+	case 1:
+		return fmt.Sprintf("%s of registry mirror %s was dropped: it never had any effect", fields[0], mirror)
+	default:
+		return fmt.Sprintf("%s of registry mirror %s were dropped: they never had any effect",
+			strings.Join(fields, " and "), mirror)
+	}
+}
+
+// migrateV3RegistryMirrors writes mirrors, the registry mirrors of a v3
+// values.yaml, to the registry mirrors file of the data home dataHome,
+// and returns the line of the migration notice that says so. A file that
+// already exists is left as it is, and the line names the mirrors to add
+// to it by hand, from backupPath, where the v3 values.yaml is kept. With
+// no mirrors, it writes nothing and returns no line.
+func migrateV3RegistryMirrors(dataHome string, mirrors []v1alpha1.RegistryMirror, backupPath string) (string, error) {
+	if len(mirrors) == 0 {
+		return "", nil
+	}
+	names := make([]string, 0, len(mirrors))
+	for _, m := range mirrors {
+		names = append(names, m.Mirror)
+	}
+	path := LocalMirrorsPath(dataHome)
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Sprintf("left localKindCluster.registryMirrors out, since %s already exists and is left as it is: "+
+			"add the registry mirrors %s to it by hand, from localKindCluster.registryMirrors in %s",
+			path, strings.Join(names, ", "), backupPath), nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("check for %s: %w", path, err)
+	}
+	for _, m := range mirrors {
+		if err := RecordLocalMirror(dataHome, m); err != nil {
+			return "", err
+		}
+	}
+	return fmt.Sprintf("moved localKindCluster.registryMirrors to %s, where the registry mirrors every local "+
+		"cluster needs are declared: %s", path, strings.Join(names, ", ")), nil
+}
+
+// migrateV3ListenAddress returns the cluster.listenAddress of the
+// migrated config for the v3 localKindCluster.listenAddress listenAddress,
+// with the line of the migration notice that says why it changed, empty
+// when it did not.
+//
+// v3 left a missing listen address to kind, which publishes the cluster's
+// ports on every host address, as 0.0.0.0 does, and every local cluster
+// now publishes them on a specific IP address of the host. Either becomes
+// the host's IP address, and with none detected, stays unset for the user
+// to set. Any other address is kept as it is.
+func migrateV3ListenAddress(listenAddress string) (string, string) {
+	if listenAddress != "" && listenAddress != "0.0.0.0" {
+		return listenAddress, ""
+	}
+	was := "was not set"
+	if listenAddress != "" {
+		was = "was " + listenAddress
+	}
+	why := fmt.Sprintf("localKindCluster.listenAddress %s, so the cluster published its ports 80 and 443 on every "+
+		"host address, and every local cluster now publishes them on a specific IP address of the host", was)
+	hostIP, err := hostinfo.DetectHostIP()
+	if err != nil || hostIP == "" {
+		return "", fmt.Sprintf("left cluster.listenAddress unset: %s, and no IP address of this host was detected. "+
+			"Set it with 'educates local config set cluster.listenAddress <ip>' before using the cluster", why)
+	}
+	return hostIP, fmt.Sprintf("set cluster.listenAddress to %s, this host's IP address: %s. An alias such as "+
+		"10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not",
+		hostIP, why)
 }
 
 // translateV3ImagePuller fills the image pre-puller block from a v3

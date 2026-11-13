@@ -93,6 +93,7 @@ func (p *ProjectInfo) NewClusterPortalListCmd() *cobra.Command {
 		"",
 		"Context to use from Kubeconfig",
 	)
+	addLocalClusterContextFlag(c, &o.KubeconfigOptions)
 
 	return c
 }

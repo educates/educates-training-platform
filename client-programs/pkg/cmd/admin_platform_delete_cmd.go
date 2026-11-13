@@ -28,12 +28,11 @@ const adminPlatformDeleteExample = `
 `
 
 type PlatformDeleteOptions struct {
-	Kubeconfig string
-	Context    string
-	Timeout    time.Duration
-	Verbose    bool
-	Yes        bool
-	Purge      bool
+	KubeconfigOptions
+	Timeout time.Duration
+	Verbose bool
+	Yes     bool
+	Purge   bool
 }
 
 func (p *ProjectInfo) NewAdminPlatformDeleteCmd() *cobra.Command {
@@ -75,7 +74,12 @@ piping).
 
 Unlike deploy, this command takes no --config / --local-config — the
 resources are always the four CRs at metadata.name=cluster plus the
-educates-installer release.`,
+educates-installer release.
+
+--local-cluster or EDUCATES_LOCAL_CLUSTER selects a local cluster, and
+unless --context names another, the uninstall acts on that cluster's kube
+context, kind-educates or kind-educates-<name>. With neither set, it acts
+on the current context.`,
 		Example: adminPlatformDeleteExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return p.runDelete(cmd.Context(), cmd.OutOrStdout(), &o)
@@ -84,6 +88,7 @@ educates-installer release.`,
 
 	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file (defaults to $KUBECONFIG / ~/.kube/config)")
 	c.Flags().StringVar(&o.Context, "context", "", "context name to use within the kubeconfig")
+	addLocalClusterContextFlag(c, &o.KubeconfigOptions)
 	c.Flags().DurationVar(&o.Timeout, "timeout", deployer.DefaultTimeout, "per-CR finalizer-drain wait timeout")
 	c.Flags().BoolVar(&o.Verbose, "verbose", false, "show helm SDK debug output on stderr")
 	c.Flags().BoolVarP(&o.Yes, "yes", "y", false, "skip the confirmation prompt")

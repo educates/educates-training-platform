@@ -19,6 +19,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
@@ -65,19 +66,19 @@ func warn(p Progress, msg string) {
 }
 
 const (
-	RegistryImageV3               = "docker.io/library/registry:3"
-	RegistryConfigTargetPath      = "/etc/distribution/config.yml"
-	EducatesNetworkName           = "educates"
-	ClusterNetworkName            = "kind"
-	EducatesRegistryContainer     = "educates-registry"
-	EducatesControlPlaneContainer = "educates-control-plane"
+	RegistryImageV3           = "docker.io/library/registry:3"
+	RegistryConfigTargetPath  = "/etc/distribution/config.yml"
+	EducatesNetworkName       = "educates"
+	ClusterNetworkName        = "kind"
+	EducatesRegistryContainer = "educates-registry"
 )
 
 /**
  * This function is used to deploy the registry and link it to the cluster.
- * It is used when creating a new local cluster.
+ * It is used when creating a new local cluster. nodes names the cluster's
+ * node containers that get the registry's containerd host config.
  */
-func DeployRegistryAndLinkToCluster(bindIP string, client *kubernetes.Clientset, p Progress) error {
+func DeployRegistryAndLinkToCluster(bindIP string, nodes []string, client *kubernetes.Clientset, p Progress) error {
 
 	err := createRegistryContainer(bindIP, p)
 	if err != nil {
@@ -86,16 +87,31 @@ func DeployRegistryAndLinkToCluster(bindIP string, client *kubernetes.Clientset,
 
 	// This is needed to make containerd use the local registry
 
-	if err = addRegistryConfigToKindNodes("localhost:5001", fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer), p); err != nil {
-		return errors.Wrap(err, "failed to add registry config to kind nodes")
-	}
-	if err = addRegistryConfigToKindNodes("registry.default.svc.cluster.local", fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer), p); err != nil {
-		return errors.Wrap(err, "failed to add registry config to kind nodes")
+	if err = LinkRegistryToKindNodes(nodes, p); err != nil {
+		return err
 	}
 
 	// This is needed so that kubernetes nodes can pull images from the local registry
-	if err = documentLocalRegistry(client); err != nil {
+	if err = DocumentLocalRegistry(client); err != nil {
 		return errors.Wrap(err, "failed to document registry config in cluster")
+	}
+
+	return nil
+}
+
+/**
+ * This function writes the local registry's containerd host config, for
+ * localhost:5001 and registry.default.svc.cluster.local, into the node
+ * containers nodes, so that containerd on each node pulls those names from
+ * the registry container. Each node must be running.
+ */
+func LinkRegistryToKindNodes(nodes []string, p Progress) error {
+	content := fmt.Sprintf(hostRegistryTomlTemplate, EducatesRegistryContainer)
+
+	for _, repositoryName := range []string{"localhost:5001", "registry.default.svc.cluster.local"} {
+		if err := addRegistryConfigToKindNodes(repositoryName, content, nodes, p); err != nil {
+			return errors.Wrap(err, "failed to add registry config to kind nodes")
+		}
 	}
 
 	return nil
@@ -202,7 +218,7 @@ func createRegistryContainer(bindIP string, p Progress) error {
 		constants.EducatesContainersRoleLabelKey: constants.EducatesContainersRegistryRoleLabel,
 	}
 
-	resp, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+	_, err = cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image: RegistryImageV3,
 			Tty:   false,
@@ -219,44 +235,37 @@ func createRegistryContainer(bindIP string, p Progress) error {
 		return errors.Wrap(err, "cannot create registry container")
 	}
 
-	if _, err := cli.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
-		return errors.Wrap(err, "unable to start registry")
-	}
-
-	cli.NetworkDisconnect(ctx, EducatesNetworkName, client.NetworkDisconnectOptions{Container: EducatesRegistryContainer})
-
-	_, err = cli.NetworkConnect(ctx, EducatesNetworkName, client.NetworkConnectOptions{
-		Container:      EducatesRegistryContainer,
-		EndpointConfig: &network.EndpointSettings{},
-	})
-
-	if err != nil {
-		return errors.Wrap(err, "unable to connect registry to educates network")
-	}
-
-	if err = linkToClusterNetwork(EducatesRegistryContainer, registryFixedAddress, p); err != nil {
-		return errors.Wrap(err, "failed to link registry to cluster")
-	}
-
-	return nil
+	return startOnNetworks(ctx, cli, EducatesRegistryContainer, "registry", registryFixedAddress, p)
 }
 
 /**
  * This function is used to deploy a registry mirror and link it to the cluster.
- * It is used when creating a new local registry mirror.
+ * It is used when creating a new local registry mirror, and when creating
+ * or starting a local cluster. nodes names the node containers that get the
+ * mirror's containerd host config: those of the local cluster being created
+ * or started, or of every local cluster. An existing mirror container is
+ * reused as it is. Linking is idempotent: a node that already has the host
+ * config gets it written again. The host config names only the mirror
+ * container, so containerd falls back to the registry's own host for the
+ * namespace when the mirror can't be reached.
  */
-func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, p Progress) error {
+func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, nodes []string, p Progress) error {
 	err := createMirrorContainer(mirrorConfig, p)
 
 	if err != nil {
 		return errors.Wrap(err, "failed to deploy registry mirror "+mirrorConfig.Mirror)
 	}
 
+	if len(nodes) == 0 {
+		warn(p, "mirror not added to kind nodes: no local cluster found")
+		return nil
+	}
+
 	content := fmt.Sprintf(hostMirrorTomlTemplate, registryMirrorContainerName(mirrorConfig))
-	err = addRegistryConfigToKindNodes(mirrorConfig.Mirror, content, p)
+	err = addRegistryConfigToKindNodes(mirrorConfig.Mirror, content, nodes, p)
 
 	if err != nil {
-		warn(p, "mirror not added to kind nodes")
+		warn(p, "mirror not added to kind nodes: "+err.Error())
 	}
 
 	return nil
@@ -329,7 +338,6 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 			network.MustParsePort("5000/tcp"): []network.PortBinding{
 				{
 					HostIP: netip.MustParseAddr("127.0.0.1"),
-					// HostPort: mirrorConfig.Port,
 				},
 			},
 		},
@@ -346,7 +354,7 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 		constants.EducatesContainersUsernameLabelKey: mirrorConfig.Username,
 	}
 
-	resp, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+	_, err = cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image: RegistryImageV3,
 			Tty:   false,
@@ -364,23 +372,46 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 		return errors.Wrap(err, "cannot create local registry mirror container")
 	}
 
-	if _, err := cli.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
-		return errors.Wrap(err, "unable to start local registry mirror")
+	return startOnNetworks(ctx, cli, mirrorContainerName, "local registry mirror", mirrorFixedAddressFor, p)
+}
+
+// startOnNetworks connects the created container containerName to the
+// educates network, links it to the cluster network, and only then starts
+// it; what names the container in errors.
+//
+// A container joins its networks before it starts. A network joined while
+// it runs switches its DNS to Docker's embedded resolver before that
+// resolver answers, and a registry mirror, which contacts its upstream as
+// it starts, then fails its lookup, exits and is restarted by Docker, which
+// refuses any network change meanwhile. A container that fails to join is
+// removed, so that deploying again starts afresh.
+func startOnNetworks(ctx context.Context, cli *client.Client, containerName, what string, fixedAddress func(clusterNetwork) (netip.Addr, error), p Progress) error {
+	if err := joinNetworks(ctx, cli, containerName, what, fixedAddress, p); err != nil {
+		cli.ContainerRemove(ctx, containerName, client.ContainerRemoveOptions{Force: true})
+		return err
 	}
 
-	cli.NetworkDisconnect(ctx, EducatesNetworkName, client.NetworkDisconnectOptions{Container: mirrorContainerName})
+	if _, err := cli.ContainerStart(ctx, containerName, client.ContainerStartOptions{}); err != nil {
+		return errors.Wrapf(err, "unable to start %s", what)
+	}
 
-	_, err = cli.NetworkConnect(ctx, EducatesNetworkName, client.NetworkConnectOptions{
-		Container:      mirrorContainerName,
+	return nil
+}
+
+// joinNetworks connects the container containerName to the educates
+// network and links it to the cluster network; what names it in errors.
+func joinNetworks(ctx context.Context, cli *client.Client, containerName, what string, fixedAddress func(clusterNetwork) (netip.Addr, error), p Progress) error {
+	_, err := cli.NetworkConnect(ctx, EducatesNetworkName, client.NetworkConnectOptions{
+		Container:      containerName,
 		EndpointConfig: &network.EndpointSettings{},
 	})
 
 	if err != nil {
-		return errors.Wrap(err, "unable to connect local registry mirror to educates network")
+		return errors.Wrapf(err, "unable to connect %s to educates network", what)
 	}
 
-	if err = linkToClusterNetwork(mirrorContainerName, mirrorFixedAddressFor, p); err != nil {
-		return errors.Wrap(err, "failed to link local registry mirror to cluster")
+	if err := linkToClusterNetwork(containerName, fixedAddress, p); err != nil {
+		return errors.Wrapf(err, "failed to link %s to cluster", what)
 	}
 
 	return nil
@@ -389,8 +420,11 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 /**
  * This function is used to add the registry config to the kind nodes.
  * It is used when creating a new local registry or registry mirror.
+ * nodes names the node containers to add it to. A node that is not running
+ * can't take it: every other node still gets it, and the error names each
+ * node that didn't.
  */
-func addRegistryConfigToKindNodes(repositoryName string, content string, p Progress) error {
+func addRegistryConfigToKindNodes(repositoryName string, content string, nodes []string, p Progress) error {
 	ctx := context.Background()
 
 	report(p, fmt.Sprintf("adding registry config (%s) to kind nodes", repositoryName))
@@ -401,8 +435,30 @@ func addRegistryConfigToKindNodes(repositoryName string, content string, p Progr
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	containerID, _ := getContainerInfo(EducatesControlPlaneContainer)
+	var failed []string
+	for _, node := range nodes {
+		containerID := runningContainerID(ctx, cli, node)
+		if containerID == "" {
+			failed = append(failed, node+" is not running")
+			continue
+		}
+		if err := addRegistryConfigToKindNode(ctx, cli, containerID, repositoryName, content); err != nil {
+			failed = append(failed, fmt.Sprintf("%s: %v", node, err))
+		}
+	}
 
+	if len(failed) > 0 {
+		return errors.Errorf("node containers not configured: %s", strings.Join(failed, "; "))
+	}
+
+	return nil
+}
+
+/**
+ * This function writes the registry config into the node container
+ * containerID.
+ */
+func addRegistryConfigToKindNode(ctx context.Context, cli *client.Client, containerID, repositoryName, content string) error {
 	registryDir := "/etc/containerd/certs.d/" + repositoryName
 
 	cmdStatement := []string{"mkdir", "-p", registryDir}
@@ -428,7 +484,7 @@ func addRegistryConfigToKindNodes(repositoryName string, content string, p Progr
 	if err != nil {
 		return err
 	}
-	_, err = cli.CopyToContainer(context.Background(),
+	_, err = cli.CopyToContainer(ctx,
 		containerID,
 		client.CopyToContainerOptions{
 			DestinationPath:           "/",
@@ -444,9 +500,10 @@ func addRegistryConfigToKindNodes(repositoryName string, content string, p Progr
 
 /**
  * This function is used to remove the registry config from the kind nodes.
- * It is used when deleting a local registry mirror.
+ * It is used when deleting a local registry mirror. nodes names the node
+ * containers to remove it from; one that is not running is skipped.
  */
-func removeRegistryConfigFromKindNodes(repositoryName string, p Progress) error {
+func removeRegistryConfigFromKindNodes(repositoryName string, nodes []string, p Progress) error {
 	ctx := context.Background()
 
 	report(p, fmt.Sprintf("removing registry config (%s) from kind nodes", repositoryName))
@@ -457,12 +514,24 @@ func removeRegistryConfigFromKindNodes(repositoryName string, p Progress) error 
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	containerID, _ := getContainerInfo(EducatesControlPlaneContainer)
-
-	if containerID == "" {
-		return nil
+	for _, node := range nodes {
+		containerID := runningContainerID(ctx, cli, node)
+		if containerID == "" {
+			continue
+		}
+		if err := removeRegistryConfigFromKindNode(ctx, cli, containerID, repositoryName); err != nil {
+			return err
+		}
 	}
 
+	return nil
+}
+
+/**
+ * This function removes the registry config from the node container
+ * containerID.
+ */
+func removeRegistryConfigFromKindNode(ctx context.Context, cli *client.Client, containerID, repositoryName string) error {
 	registryDir := "/etc/containerd/certs.d/" + repositoryName
 
 	cmdStatement := []string{"rm", "-rf", registryDir}
@@ -489,10 +558,11 @@ func removeRegistryConfigFromKindNodes(repositoryName string, p Progress) error 
 }
 
 /**
- * This function is used to document the local registry in the cluster.
- * It is used when creating a new local registry.
+ * This function documents the local registry in the cluster, through the
+ * kube-public/local-registry-hosting ConfigMap. It is used when creating
+ * a local cluster or deploying the local registry.
  */
-func documentLocalRegistry(client *kubernetes.Clientset) error {
+func DocumentLocalRegistry(client *kubernetes.Clientset) error {
 	yamlBytes, err := yaml.Marshal(`host: "localhost:5001"`)
 	if err != nil {
 		return err
@@ -570,9 +640,11 @@ func DeleteRegistry(p Progress) error {
 
 /**
  * This function is used to delete a local registry mirror and unlink it from the cluster.
- * It is used when deleting a local registry mirror.
+ * It is used when deleting a local registry mirror. nodes names the node
+ * containers, of every local cluster, to remove the mirror's containerd
+ * host config from.
  */
-func DeleteMirrorAndUnlinkFromCluster(mirrorConfig *MirrorConfig, p Progress) error {
+func DeleteMirrorAndUnlinkFromCluster(mirrorConfig *MirrorConfig, nodes []string, p Progress) error {
 	ctx := context.Background()
 
 	report(p, "deleting mirror container")
@@ -609,7 +681,7 @@ func DeleteMirrorAndUnlinkFromCluster(mirrorConfig *MirrorConfig, p Progress) er
 	}
 
 	// Remove the registry config from the kind nodes
-	err = removeRegistryConfigFromKindNodes(mirrorConfig.Mirror, p)
+	err = removeRegistryConfigFromKindNodes(mirrorConfig.Mirror, nodes, p)
 
 	if err != nil {
 		return errors.Wrap(err, "unable to remove registry config from kind nodes")
@@ -676,6 +748,35 @@ func registryMirrorLabelFilters() client.Filters {
 	return client.Filters{}.
 		Add("label", constants.EducatesContainersRoleLabelKey+"="+constants.EducatesContainersMirrorRoleLabel).
 		Add("label", constants.EducatesContainersAppLabelKey+"="+constants.EducatesContainersAppLabel)
+}
+
+// ObserveMirrorContainers returns every registry mirror container on the
+// Docker host, running or stopped, found by the labels createMirrorContainer
+// puts on it, with the mirror, remote registry URL and username those
+// labels name.
+func ObserveMirrorContainers(ctx context.Context) ([]localclusters.MirrorContainer, error) {
+	cli, err := docker.NewDockerClient()
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to create docker client")
+	}
+
+	list, err := cli.ContainerList(ctx, client.ContainerListOptions{
+		All:     true,
+		Filters: registryMirrorLabelFilters(),
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to list registry mirrors")
+	}
+
+	mirrors := make([]localclusters.MirrorContainer, 0, len(list.Items))
+	for _, item := range list.Items {
+		mirrors = append(mirrors, localclusters.MirrorContainer{
+			Mirror:   item.Labels[constants.EducatesContainersMirrorLabelKey],
+			URL:      item.Labels[constants.EducatesContainersURLLabelKey],
+			Username: item.Labels[constants.EducatesContainersUsernameLabelKey],
+		})
+	}
+	return mirrors, nil
 }
 
 // ListRegistryMirrors returns the deployed local registry mirrors, sorted
@@ -879,6 +980,20 @@ func PruneRegistry(p Progress) error {
  */
 func registryMirrorContainerName(mirrorConfig *MirrorConfig) string {
 	return fmt.Sprintf("%s-mirror-%s", EducatesRegistryContainer, mirrorConfig.Mirror)
+}
+
+/**
+ * This function returns the ID of the running container named exactly
+ * name, or an empty string when no such container runs. Unlike a Docker
+ * name filter, which matches substrings, it never picks another cluster's
+ * node whose name contains this one.
+ */
+func runningContainerID(ctx context.Context, cli *client.Client, name string) string {
+	info, err := cli.ContainerInspect(ctx, name, client.ContainerInspectOptions{})
+	if err != nil || info.Container.State == nil || !info.Container.State.Running {
+		return ""
+	}
+	return info.Container.ID
 }
 
 /**

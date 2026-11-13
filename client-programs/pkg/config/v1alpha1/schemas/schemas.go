@@ -20,3 +20,6 @@ var EducatesGKEConfig []byte
 
 //go:embed EducatesEKSConfig.schema.json
 var EducatesEKSConfig []byte
+
+//go:embed EducatesLocalMirrors.schema.json
+var EducatesLocalMirrors []byte

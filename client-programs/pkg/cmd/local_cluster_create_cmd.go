@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localcerts"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
@@ -28,19 +30,27 @@ var localClusterCreateExample = `
 
   # Create only the kind cluster + registry, skipping the platform install:
   educates local cluster create --cluster-only
+
+  # Create the named local cluster test2 beside the default one, on a host
+  # IP of its own, writing its config when it has none:
+  educates local cluster create --local-cluster test2 --listen-address 10.10.10.2
 `
 
 type LocalClusterCreateOptions struct {
 	Config            string
 	LocalConfig       bool
 	Kubeconfig        string
-	Context           string
 	ClusterImage      string
 	KubernetesVersion string
 	ClusterOnly       bool
 	RegistryBindIP    string
 	Timeout           time.Duration
 	Verbose           bool
+
+	// ListenAddress and Domain write a named local cluster's missing
+	// config.
+	ListenAddress string
+	Domain        string
 }
 
 func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
@@ -53,17 +63,44 @@ func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
 		Long: `Lays down a full laptop install in one command:
 
   1. Loads EducatesLocalConfig (or EducatesConfig with target.provider=kind).
-  2. Creates the 'educates' kind cluster.
+  2. Creates the local cluster's kind cluster: 'educates' for the default
+     local cluster, 'educates-<name>' for a named one.
   3. Brings up the always-on localhost:5001 registry.
   4. Sets up the loopback service for 'educates serve-workshop'.
   5. Tail-calls into the platform deploy pipeline
-     (helm install operator + apply 4 platform CRs + wait Ready).
+     (helm install operator + apply 4 platform CRs + wait Ready), always
+     against the cluster just created, through its own kube context.
 
 An EducatesConfig creates the kind cluster from target.cluster and deploys
-its custom resources as declared, with no CLI defaulting: no
-<host-IP>.nip.io domain, and no certificates or Secrets taken from the
-local secrets cache. Any Secret the custom resources reference has to be
-created in the cluster before the deploy can become ready.
+its custom resources as declared, with no CLI defaulting: no nip.io
+domain, and no certificates or Secrets taken from the local secrets
+cache. Any Secret the custom resources reference has to be created in the
+cluster before the deploy can become ready.
+
+Every local cluster's cluster.listenAddress must be a specific IP address
+of the host, neither 0.0.0.0 nor a loopback address, and with no
+ingress.domain the cluster takes the nip.io name of that address and is
+served over plain HTTP. When the local cluster's config is missing,
+create writes it from --listen-address and the optional --domain, and
+without --listen-address the default local cluster takes the host's IP
+address.
+On Docker Desktop 4.97 or later, create refuses to run while "Allow
+privileged port forwarding to external machines" is off, in Settings >
+Advanced, since ports 80 and 443 on a non-loopback address need it.
+
+--local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, creates a named local
+cluster beside the default one. Its config lives in
+<data-home>/clusters/<name>/config.yaml. --config with --local-cluster
+takes the config from the file and the cluster's name from the flag, and
+makes the cluster's folder <data-home>/clusters/<name>/ without copying
+the file into it.
+
+Every registry mirror container that exists is linked into each node of
+the new cluster, whichever command created it. A mirror the registry
+mirrors file, mirrors.yaml in the data home, declares is created first
+when it is missing. Create refuses to run when that file does not load,
+or when a declared mirror's container exists with another URL or
+username.
 
 --cluster-only stops after step 4 — useful for testing the platform
 deploy against a hand-prepared cluster.`,
@@ -88,14 +125,20 @@ deploy against a hand-prepared cluster.`,
 				}
 			}
 
-			return p.runLocalClusterCreate(cmd.Context(), cmd.OutOrStdout(), &o)
+			id, err := selectedLocalCluster(cmd)
+			if err != nil {
+				return err
+			}
+			return p.runLocalClusterCreate(cmd.Context(), cmd.OutOrStdout(), &o, id)
 		},
 	}
 
 	c.Flags().StringVarP(&o.Config, "config", "c", "", "path to a CLI config file (any kind)")
-	c.Flags().BoolVar(&o.LocalConfig, "local-config", false, "use <data-home>/config.yaml (default when --config is not given)")
-	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file (defaults to $KUBECONFIG / ~/.kube/config)")
-	c.Flags().StringVar(&o.Context, "context", "", "context name to use within the kubeconfig (for the platform deploy tail-call)")
+	c.Flags().BoolVar(&o.LocalConfig, "local-config", false, "use the local cluster's config in the data home (default when --config is not given)")
+	addLocalClusterFlag(c)
+	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP the local cluster publishes ports 80 and 443 on, written to its config when it has none (default: this host's IP address for the default local cluster; required for a named one)")
+	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to the local cluster's config when it has none (default: the nip.io name of the listen address)")
+	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file kind writes the cluster's context into, and the platform deploy uses (defaults to ~/.kube/config)")
 	c.Flags().StringVar(&o.ClusterImage, "kind-cluster-image", "", "docker image to use when booting the kind cluster (overrides --kubernetes-version)")
 	c.Flags().StringVar(&o.KubernetesVersion, "kubernetes-version", constants.DefaultKubernetesVersion, fmt.Sprintf("Kubernetes version for the kind cluster (supported: %v)", constants.SupportedKubernetesVersions()))
 	c.Flags().BoolVar(&o.ClusterOnly, "cluster-only", false, "create kind cluster + registry; skip the platform deploy")
@@ -107,32 +150,81 @@ deploy against a hand-prepared cluster.`,
 	return c
 }
 
-func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o *LocalClusterCreateOptions) error {
-	cfg, configPath, createdConfig, err := loadLocalConfig(o)
+func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o *LocalClusterCreateOptions, id localclusters.Identity) error {
+	cfg, configPath, createdConfig, err := loadLocalConfig(o, id)
 	if err != nil {
 		return err
 	}
-	if createdConfig {
+	switch {
+	case createdConfig && id.IsDefault():
 		fmt.Fprintf(w, "No local config found — wrote a default EducatesLocalConfig to %s\n", configPath)
 		fmt.Fprintf(w, "Continuing with defaults; view or edit it with 'educates local config view' / 'educates local config edit'.\n\n")
+	case createdConfig:
+		fmt.Fprintf(w, "Local cluster %q had no config; wrote one from --%s to %s\n\n", id.Name, localclusters.ListenAddressFlagName, configPath)
 	}
 
 	// 0. Preflight: fail fast (before any docker / kind / k8s mutation)
-	//    when the cluster already exists, host 80/443 are bound, or a
-	//    secure install has no certificate source. The host-port case is
-	//    the v3 busybox probe; kind itself fails later with a much less
-	//    actionable error if Envoy can't publish. The certificate case is
-	//    the one the deploy resolves later: without this check it would
-	//    only fail after the kind cluster and registry already exist.
+	//    when the cluster already exists, its listen address clashes with
+	//    another Educates cluster or is on no host interface, the registry
+	//    mirrors file does not load or a mirror it declares has a
+	//    container with other values, Docker
+	//    Desktop's privileged port setting is off, host 80/443 are bound,
+	//    or a secure install has no certificate source. The clash check
+	//    reads every Educates cluster's configured bindings, so a stopped
+	//    cluster counts too. The host-port case comes last, for holders
+	//    that are not Educates clusters: a probe container tries to
+	//    publish ports 80 and 443 on the listen address, since kind would
+	//    otherwise fail later with a much less actionable error when Envoy
+	//    can't publish them. The certificate case is the one the deploy
+	//    resolves later: without this check it would only fail after the
+	//    kind cluster and registry already exist.
 	in, err := p.prepareLocalCreate(cfg)
 	if err != nil {
 		return err
 	}
-	clusterConfig := cluster.NewKindClusterConfig(o.Kubeconfig)
+	clusterConfig := cluster.NewKindClusterConfig(o.Kubeconfig, id)
 	if exists, err := clusterConfig.ClusterExists(); err != nil {
 		return err
 	} else if exists {
-		return fmt.Errorf("kind cluster 'educates' already exists; run 'educates local cluster delete' first or use the existing cluster directly")
+		return fmt.Errorf("kind cluster '%s' already exists; run 'educates local cluster delete%s' first or use the existing cluster directly", id.KindName, localClusterFlagArg(id))
+	}
+	inventory, err := localClusterInventory(ctx)
+	if err != nil {
+		return err
+	}
+	if err := inventory.CheckCreate(id, in.Cluster.ListenAddress); err != nil {
+		return err
+	}
+	// Every local cluster needs the registry mirrors the registry mirrors
+	// file declares, and shares one container for each of them, which
+	// step 4 reuses as it is. A file that does not load, or a declared
+	// mirror whose container pulls from another URL or as another
+	// username, is refused here rather than silently pulled through.
+	declaredMirrors, err := config.LoadLocalMirrors(utils.GetEducatesHomeDir())
+	if err != nil {
+		return err
+	}
+	if err := inventory.CheckMirrors(declaredMirrors); err != nil {
+		return err
+	}
+	// The local DNS resolver serves the domains of every local cluster,
+	// so a domain another cluster claims is refused here, whether or not
+	// the resolver runs. Another cluster's config that the resolver can't
+	// use is that cluster's problem, so it is only a warning. A running
+	// resolver serves this same configuration once the kind cluster
+	// exists.
+	resolverConfig, leftOut, err := inventory.ResolverConfig(localclusters.ResolverInput{
+		LoadedConfig: localclusters.LoadedConfig{Identity: id, Config: in.Deploy, Source: configPath},
+	})
+	if err != nil {
+		return err
+	}
+	warnLeftOutConfigs(w, leftOut)
+	// Docker Desktop 4.97 and later publishes ports 80 and 443 on the
+	// listen address, a non-loopback address, only with its privileged
+	// port setting on.
+	if err := checkDockerDesktopPrivilegedPorts(ctx, w); err != nil {
+		return err
 	}
 	if err := checkHostPortsAvailable(ctx, in.Cluster.ListenAddress, o.Verbose, w); err != nil {
 		return err
@@ -154,7 +246,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	//    own full logger (spinner + detail), so the step's committed
 	//    header/footer simply frame kind's output.
 	bootstrap := kindBootstrapFromConfig(in.Cluster)
-	if err := runStep(rep, "creating kind cluster 'educates'", "ready", func(s progress.Step) error {
+	if err := runStep(rep, fmt.Sprintf("creating kind cluster '%s'", id.KindName), "ready", func(s progress.Step) error {
 		onPhase := s.Update
 		if o.Verbose {
 			onPhase = nil
@@ -163,14 +255,25 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	}); err != nil {
 		return err
 	}
+	// The cluster exists now, so a resolver that can't be refreshed is
+	// only a warning.
+	refreshLocalResolver(rep, func() ([]byte, []error, error) { return resolverConfig, nil, nil })
+	// The registry, loopback and mirror steps talk to the cluster just
+	// created, through its own context in the kubeconfig kind wrote it in.
 	client, err := clusterConfig.Config.GetClient()
+	if err != nil {
+		return err
+	}
+	// Every node of the new cluster gets the registry and mirror config,
+	// so pods scheduled on any node can pull through them.
+	nodes, err := registryNodes(ctx, id)
 	if err != nil {
 		return err
 	}
 
 	// 2. always-on local registry + k8s Service for imgpkg pulls.
 	if err := runStep(rep, "bringing up localhost:5001 registry", "ready", func(s progress.Step) error {
-		if err := registry.DeployRegistryAndLinkToCluster(o.RegistryBindIP, client, s); err != nil {
+		if err := registry.DeployRegistryAndLinkToCluster(o.RegistryBindIP, nodes, client, s); err != nil {
 			return err
 		}
 		s.Update("registering cluster service")
@@ -190,18 +293,11 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return fmt.Errorf("loopback service: %w", err)
 	}
 
-	// 4. registry mirrors declared in config (pull-through caches).
-	for _, m := range in.Cluster.RegistryMirrors {
-		label := "registry mirror " + m.Mirror
-		if m.URL != "" {
-			label += " → " + m.URL
-		}
-		mc := registryMirrorFromConfig(m)
-		if err := runStep(rep, label, "ready", func(s progress.Step) error {
-			return registry.DeployMirrorAndLinkToCluster(&mc, s)
-		}); err != nil {
-			return fmt.Errorf("mirror %s: %w", m.Mirror, err)
-		}
+	// 4. registry mirrors (pull-through caches): every mirror container
+	//    that exists, whichever command created it, and every mirror the
+	//    registry mirrors file declares, created first when missing.
+	if err := linkRegistryMirrors(rep, inventory.MirrorsToLink(declaredMirrors), nodes); err != nil {
+		return err
 	}
 
 	if o.ClusterOnly {
@@ -209,39 +305,57 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return nil
 	}
 
-	// 5. tail-call the v4 deploy. We have the loaded config; rather
-	//    than re-loading it inside runDeploy (which would re-do
-	//    the host-IP fallback non-deterministically against a freshly
-	//    started cluster's IP), translate here and call deployer.Deploy
-	//    directly.
-	return tailCallDeploy(ctx, w, in.Deploy, in.Plan, o)
+	// 5. tail-call the v4 deploy. We have the loaded config, so rather
+	//    than re-loading it inside runDeploy, translate here and call
+	//    deployer.Deploy directly.
+	return tailCallDeploy(ctx, w, in.Deploy, in.Plan, createDeployFlags(o, clusterConfig.Config.Kubeconfig, id))
 }
 
-// loadLocalConfig returns the loaded v4 config + the path it came from
-// (used by error messages) + whether it just wrote a default config in
-// place of a missing one (so the caller can tell the user). Accepts
-// EducatesLocalConfig directly or EducatesConfig with target.provider=kind;
-// everything else errors.
-func loadLocalConfig(o *LocalClusterCreateOptions) (v1alpha1.Config, string, bool, error) {
-	var path string
-	var created bool
-	// --local-config is the default for laptop create — matches v3
-	// behaviour where running the command with no flags pointed at
-	// <data-home>/config.yaml. --config still wins when set.
+// loadLocalConfig returns the loaded v4 config of the local cluster id +
+// the path it came from (used by error messages) + whether it just wrote
+// a config in place of a missing one (so the caller can tell the user).
+// Accepts EducatesLocalConfig directly or EducatesConfig with
+// target.provider=kind; everything else errors.
+//
+// The config comes from --config when given, and otherwise from the
+// cluster's config in the data home, written from --listen-address and
+// --domain when missing, as localclusters.EnsureConfig writes it: the
+// default local cluster's takes the host's IP address without
+// --listen-address. A v3 install of the default local cluster is
+// migrated first. Either way the config follows the rules of
+// localclusters.LoadConfigFile, and a named cluster's folder exists once
+// it loads: --config makes it, without copying the file into it.
+func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v1alpha1.Config, string, bool, error) {
+	flags := localclusters.ConfigFlags{ListenAddress: o.ListenAddress, Domain: o.Domain}
+	path, created := id.ConfigPath, false
 	if o.Config != "" {
 		path = o.Config
-	} else {
-		path = config.LocalConfigPath(utils.GetEducatesHomeDir())
-		// Unlike render/deploy, a first-time laptop create shouldn't dead-end
-		// on "run config init first"; write a minimal default in place and
-		// carry on. Migration of an existing v3 install still takes priority.
-		didInit, err := config.EnsureOrInitLocalConfigFile(utils.GetEducatesHomeDir())
-		if err != nil {
-			return nil, "", false, err
+		if !flags.IsZero() {
+			return nil, path, false, fmt.Errorf("--%s and --%s write a missing config in the data home, so they can't be combined with --config",
+				localclusters.ListenAddressFlagName, localclusters.DomainFlagName)
 		}
-		created = didInit
+		// The config stays in the file, but a named cluster's folder in
+		// the data home is what makes its kind cluster an Educates
+		// cluster.
+		if err := localclusters.MakeClusterFolder(id); err != nil {
+			return nil, path, false, err
+		}
+	} else {
+		// Unlike render/deploy, a first-time laptop create shouldn't
+		// dead-end on "run config init first", so a missing config is
+		// written in place. Migration of an existing v3 install still
+		// takes priority, and an unmigratable one refuses.
+		if id.IsDefault() {
+			if err := config.MaybeMigrateV3(utils.GetEducatesHomeDir(), os.Stderr); err != nil {
+				return nil, path, false, err
+			}
+		}
+		var err error
+		if created, err = localclusters.EnsureConfig(id, flags); err != nil {
+			return nil, path, false, err
+		}
 	}
-	cfg, err := config.Load(path)
+	cfg, err := localclusters.LoadConfigFile(id, path)
 	if err != nil {
 		return nil, path, created, err
 	}
@@ -264,7 +378,7 @@ type localCreateInputs struct {
 	// Deploy is the config the platform deploy tail-call translates.
 	Deploy v1alpha1.Config
 
-	// Cluster declares the kind cluster and its registry mirrors.
+	// Cluster declares the kind cluster.
 	Cluster v1alpha1.LocalClusterConfig
 
 	// Domain is the ingress domain the loopback service resolves under.
@@ -279,25 +393,23 @@ type localCreateInputs struct {
 // prepareLocalCreate defaults the loaded config and takes from it what
 // the create flow needs, checking it before anything is created.
 //
-// An EducatesLocalConfig gets the CLI defaults, the <host-IP>.nip.io
-// fallback and the local certificate plan. An EducatesConfig gets none of
-// them: its custom resources are deployed as declared and translated by
-// TranslateEscape, so the CLI neither decides its certificates nor syncs
-// cached Secrets for it. Only its target.cluster, which is CLI input and
-// not a custom resource, gets the local kind's cluster defaults.
+// An EducatesLocalConfig, whose ingress.domain the local cluster rules
+// have already defaulted, gets the CLI defaults and the local certificate
+// plan. An EducatesConfig gets neither: its custom resources are deployed
+// as declared and translated by TranslateEscape, so the CLI neither
+// decides its certificates nor syncs cached Secrets for it.
 func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInputs, error) {
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
-		if err := applyLocalDefaults(c, p); err != nil {
-			return nil, err
-		}
+		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
 		if err := validateClusterNodes(c.Cluster.Nodes); err != nil {
 			return nil, err
 		}
 		// A secure install (the default; ingress.insecure not set)
 		// serves HTTPS from a cached wildcard TLS certificate or a cached
-		// root CA. Defaults have already run, so an empty domain has
-		// become a <host-IP>.nip.io insecure install that needs neither;
+		// root CA. The local cluster rules have already run, so an empty
+		// domain has become the insecure install on the nip.io name of the
+		// listen address, which needs neither;
 		// only a domain with insecure left false requires one. Resolving
 		// the local certificates is a pure local-cache read, so a missing
 		// certificate source is reported, naming the generated root and
@@ -315,7 +427,6 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInput
 		}, nil
 	case *v1alpha1.EducatesConfig:
 		clusterCfg := c.Target.Cluster
-		clusterCfg.WithDefaults()
 		if err := validateClusterNodes(clusterCfg.Nodes); err != nil {
 			return nil, err
 		}
@@ -327,19 +438,6 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInput
 	default:
 		return nil, fmt.Errorf("unsupported kind %q for local cluster create", cfg.GetKind())
 	}
-}
-
-// applyLocalDefaults mirrors what render/deploy do before translation:
-// CLI-binary defaults for operator.image, host-IP nip.io for ingress.domain
-// when empty.
-func applyLocalDefaults(cfg *v1alpha1.EducatesLocalConfig, p *ProjectInfo) error {
-	cfg.ApplyCLIDefaults(p.Version, p.ImageRepository)
-	// Fills <host-IP>.nip.io and defaults ingress.insecure when the
-	// domain was left empty; no-op when the user set one.
-	if _, err := maybeApplyHostDomain(cfg); err != nil {
-		return err
-	}
-	return nil
 }
 
 // validateClusterNodes checks a user-declared cluster.nodes list: when set,
@@ -414,14 +512,33 @@ func kindBootstrapFromConfig(clusterCfg v1alpha1.LocalClusterConfig) *cluster.Ki
 	}
 }
 
+// linkRegistryMirrors links each of mirrors into the node containers
+// nodes of a local cluster, one step each, creating first a mirror whose
+// container is missing. A mirror that can't be linked into a node is a
+// warning; one whose container can't be created or joined to the cluster
+// network is an error.
+func linkRegistryMirrors(rep progress.Reporter, mirrors []v1alpha1.RegistryMirror, nodes []string) error {
+	for _, m := range mirrors {
+		label := "registry mirror " + m.Mirror
+		if m.URL != "" {
+			label += " → " + m.URL
+		}
+		mc := registryMirrorFromConfig(m)
+		if err := runStep(rep, label, "ready", func(s progress.Step) error {
+			return registry.DeployMirrorAndLinkToCluster(&mc, nodes, s)
+		}); err != nil {
+			return fmt.Errorf("mirror %s: %w", m.Mirror, err)
+		}
+	}
+	return nil
+}
+
 func registryMirrorFromConfig(m v1alpha1.RegistryMirror) registry.MirrorConfig {
 	return registry.MirrorConfig{
 		Mirror:   m.Mirror,
 		URL:      m.URL,
 		Username: m.Username,
 		Password: m.Password,
-		Port:     m.Port,
-		BindIP:   m.BindIP,
 	}
 }
 
@@ -430,11 +547,21 @@ func registryMirrorFromConfig(m v1alpha1.RegistryMirror) registry.MirrorConfig {
 // runLocalClusterCreate resolved, which is nil for an EducatesConfig.
 // Shares the translate → deploy plumbing with runDeploy via
 // translateAndDeploy.
-func tailCallDeploy(ctx context.Context, w io.Writer, cfg v1alpha1.Config, plan *localcerts.Plan, o *LocalClusterCreateOptions) error {
-	return translateAndDeploy(ctx, w, cfg, plan, deployPipelineFlags{
-		Kubeconfig: o.Kubeconfig,
-		Context:    o.Context,
+func tailCallDeploy(ctx context.Context, w io.Writer, cfg v1alpha1.Config, plan *localcerts.Plan, flags deployPipelineFlags) error {
+	return translateAndDeploy(ctx, w, cfg, plan, flags)
+}
+
+// createDeployFlags returns the connection flags of create's platform
+// deploy into the local cluster id, which kind created with its context
+// in the kubeconfig file kubeconfig. The deploy goes through that file
+// and the cluster's own context, whatever KUBECONFIG or the file's
+// current context say, so it always lands in the cluster create just
+// made.
+func createDeployFlags(o *LocalClusterCreateOptions, kubeconfig string, id localclusters.Identity) deployPipelineFlags {
+	return deployPipelineFlags{
+		Kubeconfig: kubeconfig,
+		Context:    id.Context,
 		Timeout:    o.Timeout,
 		Verbose:    o.Verbose,
-	})
+	}
 }

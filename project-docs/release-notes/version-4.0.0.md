@@ -311,7 +311,7 @@ New Features
   configuration, and every cluster pulls from the one local image registry
   on ``localhost:5001``. The platform install of ``educates local cluster
   create`` now always targets the cluster it has just created, whatever
-  ``--context`` or ``KUBECONFIG`` say.
+  ``KUBECONFIG`` or the current kube context say.
 
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to

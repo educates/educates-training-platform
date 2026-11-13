@@ -39,7 +39,6 @@ type LocalClusterCreateOptions struct {
 	Config            string
 	LocalConfig       bool
 	Kubeconfig        string
-	Context           string
 	ClusterImage      string
 	KubernetesVersion string
 	ClusterOnly       bool
@@ -124,7 +123,6 @@ deploy against a hand-prepared cluster.`,
 	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP a named local cluster publishes ports 80 and 443 on, written to its config when it has none")
 	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to a named local cluster's config when it has none (default: the nip.io name of the listen address)")
 	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file kind writes the cluster's context into, and the platform deploy uses (defaults to ~/.kube/config)")
-	c.Flags().StringVar(&o.Context, "context", "", "context name to use within the kubeconfig (for the platform deploy tail-call)")
 	c.Flags().StringVar(&o.ClusterImage, "kind-cluster-image", "", "docker image to use when booting the kind cluster (overrides --kubernetes-version)")
 	c.Flags().StringVar(&o.KubernetesVersion, "kubernetes-version", constants.DefaultKubernetesVersion, fmt.Sprintf("Kubernetes version for the kind cluster (supported: %v)", constants.SupportedKubernetesVersions()))
 	c.Flags().BoolVar(&o.ClusterOnly, "cluster-only", false, "create kind cluster + registry; skip the platform deploy")
@@ -510,9 +508,9 @@ func tailCallDeploy(ctx context.Context, w io.Writer, cfg v1alpha1.Config, plan 
 // createDeployFlags returns the connection flags of create's platform
 // deploy into the local cluster id, which kind created with its context
 // in the kubeconfig file kubeconfig. The deploy goes through that file
-// and the cluster's own context, whatever --context, KUBECONFIG or the
-// file's current context say, so it always lands in the cluster create
-// just made.
+// and the cluster's own context, whatever KUBECONFIG or the file's
+// current context say, so it always lands in the cluster create just
+// made.
 func createDeployFlags(o *LocalClusterCreateOptions, kubeconfig string, id localclusters.Identity) deployPipelineFlags {
 	return deployPipelineFlags{
 		Kubeconfig: kubeconfig,

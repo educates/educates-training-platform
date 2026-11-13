@@ -15,13 +15,10 @@ import (
 // cluster from def.
 func renderWithDefault(t *testing.T, def localclusters.ClusterConfig) string {
 	t.Helper()
-	content, err := localclusters.RenderResolverConfig(localclusters.ResolverInputs{
-		DataHome: utils.GetEducatesHomeDir(),
-		HostIP:   "192.168.1.10",
-		Given:    []localclusters.ClusterConfig{def},
-	})
+	inv := localclusters.NewInventory(localclusters.Observed{}, utils.GetEducatesHomeDir())
+	content, err := inv.ResolverConfig("192.168.1.10", def)
 	if err != nil {
-		t.Fatalf("RenderResolverConfig: %v", err)
+		t.Fatalf("ResolverConfig: %v", err)
 	}
 	return string(content)
 }

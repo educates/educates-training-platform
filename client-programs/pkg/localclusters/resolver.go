@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -13,31 +12,8 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
-// ResolverInputs is what the configuration of the local DNS resolver is
-// rendered from.
-type ResolverInputs struct {
-	// DataHome is the data home whose local clusters the resolver serves.
-	DataHome string
-
-	// HostIP is the host's IP address, empty when it is not known. The
-	// default local cluster's target address and nip.io domain default
-	// to it.
-	HostIP string
-
-	// Observed are the kind node containers on the host, running or
-	// stopped. A named local cluster is served while it has node
-	// containers, so from its create to its delete.
-	Observed []NodeContainer
-
-	// Given are configs that local clusters are served from in place of
-	// the ones in the data home, whether or not the clusters have node
-	// containers: the config of a cluster being created, or the default
-	// local cluster's config as the resolver commands are given it.
-	Given []ClusterConfig
-}
-
 // ClusterConfig is the config of a local cluster, as a caller of
-// RenderResolverConfig gives it.
+// Inventory.ResolverConfig gives it.
 type ClusterConfig struct {
 	// ID is the local cluster's identity.
 	ID Identity
@@ -54,16 +30,19 @@ type ClusterConfig struct {
 	Domain string
 }
 
-// RenderResolverConfig returns the dnsmasq configuration of the local DNS
+// ResolverConfig returns the dnsmasq configuration of the local DNS
 // resolver, which serves the domains of every local cluster, each
 // pointing at its own cluster's target address, or the error that two
-// clusters claim the same domain.
+// clusters claim the same domain. hostIP is the host's IP address, empty
+// when it is not known.
 //
 // The local clusters served are the default local cluster, when the data
-// home holds its config, every named local cluster that has a config in
-// the data home and node containers among the observed ones, and every
-// cluster a config is given for. A named cluster's config follows the
-// rules of LoadNamedConfig.
+// home holds its config, every named Educates cluster that has a config
+// in the data home, so from its create to its delete, and every cluster
+// given holds a config for. A config given replaces the one in the data
+// home: it is the config of a cluster being created, or the default local
+// cluster's config as the resolver commands are given it. A named
+// cluster's config follows the rules of LoadNamedConfig.
 //
 // Each cluster's ingress domain, declared or derived, and its
 // resolver.extraDomains point at its target address. The default local
@@ -72,14 +51,14 @@ type ClusterConfig struct {
 // resolver.targetAddress, or else the host's IP address, or else
 // 127.0.0.1. A named local cluster's target address is
 // resolver.targetAddress, or else its listen address.
-func RenderResolverConfig(in ResolverInputs) ([]byte, error) {
-	configs, err := servedConfigs(in)
+func (inv Inventory) ResolverConfig(hostIP string, given ...ClusterConfig) ([]byte, error) {
+	configs, err := inv.servedConfigs(given)
 	if err != nil {
 		return nil, err
 	}
 	clusters := make([]resolverCluster, 0, len(configs))
 	for _, c := range configs {
-		rc, err := newResolverCluster(c, in.HostIP)
+		rc, err := newResolverCluster(c, hostIP)
 		if err != nil {
 			return nil, err
 		}
@@ -92,57 +71,64 @@ func RenderResolverConfig(in ResolverInputs) ([]byte, error) {
 }
 
 // servedConfigs returns the configs of the local clusters the resolver
-// serves, as RenderResolverConfig says, the default local cluster first
-// and the named ones in name order.
-func servedConfigs(in ResolverInputs) ([]ClusterConfig, error) {
-	given := map[string]ClusterConfig{}
-	for _, c := range in.Given {
-		given[c.ID.Name] = c
+// serves, as ResolverConfig says, with the configs of given in place of
+// the data home's: the default local cluster first and the named ones in
+// name order.
+func (inv Inventory) servedConfigs(given []ClusterConfig) ([]ClusterConfig, error) {
+	byName := map[string]ClusterConfig{}
+	for _, c := range given {
+		byName[c.ID.Name] = c
 	}
 
-	var configs []ClusterConfig
-	def := Default(in.DataHome)
-	if c, ok := given[def.Name]; ok {
-		configs = append(configs, c)
-	} else if _, err := os.Stat(def.ConfigPath); err == nil {
-		cfg, err := config.Load(def.ConfigPath)
-		if err != nil {
-			return nil, err
-		}
-		configs = append(configs, ClusterConfig{ID: def, Config: cfg, Source: def.ConfigPath})
-	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("check for the config of the default local cluster: %w", err)
-	}
-
-	withConfig, err := namedClustersWithConfig(in.DataHome)
-	if err != nil {
-		return nil, err
-	}
 	named := map[string]Identity{}
-	for _, id := range withConfig {
-		named[id.Name] = id
+	for _, id := range inv.clusters {
+		if !id.IsDefault() {
+			named[id.Name] = id
+		}
 	}
-	for _, c := range in.Given {
+	for _, c := range given {
 		if !c.ID.IsDefault() {
 			named[c.ID.Name] = c.ID
 		}
 	}
-	for _, name := range slices.Sorted(maps.Keys(named)) {
-		if c, ok := given[name]; ok {
+
+	var configs []ClusterConfig
+	ids := append([]Identity{Default(inv.dataHome)}, slices.Collect(maps.Values(named))...)
+	slices.SortFunc(ids, func(a, b Identity) int { return cmp.Compare(a.Name, b.Name) })
+	for _, id := range ids {
+		if c, ok := byName[id.Name]; ok {
 			configs = append(configs, c)
 			continue
 		}
-		id := named[name]
-		if len(id.nodes(in.Observed)) == 0 {
-			continue
-		}
-		cfg, err := LoadNamedConfig(id.ConfigPath)
+		c, ok, err := dataHomeConfig(id)
 		if err != nil {
 			return nil, err
 		}
-		configs = append(configs, ClusterConfig{ID: id, Config: cfg, Source: id.ConfigPath})
+		if ok {
+			configs = append(configs, c)
+		}
 	}
 	return configs, nil
+}
+
+// dataHomeConfig loads the config of the local cluster id from the data
+// home, and reports whether it has one there. A named cluster's follows
+// the rules of LoadNamedConfig.
+func dataHomeConfig(id Identity) (ClusterConfig, bool, error) {
+	if _, err := os.Stat(id.ConfigPath); os.IsNotExist(err) {
+		return ClusterConfig{}, false, nil
+	} else if err != nil {
+		return ClusterConfig{}, false, fmt.Errorf("check for the config of %s: %w", id.Description(), err)
+	}
+	load := LoadNamedConfig
+	if id.IsDefault() {
+		load = config.Load
+	}
+	cfg, err := load(id.ConfigPath)
+	if err != nil {
+		return ClusterConfig{}, false, err
+	}
+	return ClusterConfig{ID: id, Config: cfg, Source: id.ConfigPath}, true, nil
 }
 
 // checkDomainsClaimedOnce checks that no two of clusters serve the same
@@ -161,39 +147,12 @@ func checkDomainsClaimedOnce(clusters []resolverCluster) error {
 			if first, ok := claims[key]; ok {
 				return fmt.Errorf("%s and %s both claim the domain %q, which the local DNS resolver can point at one "+
 					"local cluster only: change the ingress.domain or resolver.extraDomains of one of them",
-					describeCluster(first.id), describeCluster(c.id), first.domain)
+					first.id.Description(), c.id.Description(), first.domain)
 			}
 			claims[key] = claim{id: c.id, domain: domain}
 		}
 	}
 	return nil
-}
-
-// namedClustersWithConfig returns the identities of the named local
-// clusters that have a config in the data home dataHome.
-func namedClustersWithConfig(dataHome string) ([]Identity, error) {
-	dir := filepath.Join(dataHome, "clusters")
-	entries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
-		return nil, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("read the local clusters in %s: %w", dir, err)
-	}
-	var ids []Identity
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		id, err := Named(entry.Name(), dataHome)
-		if err != nil {
-			continue
-		}
-		if _, err := os.Stat(id.ConfigPath); err != nil {
-			continue
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil
 }
 
 // resolverCluster is what the local DNS resolver serves for one local
@@ -303,12 +262,4 @@ func renderDnsmasqConfig(clusters []resolverCluster) []byte {
 		}
 	}
 	return []byte(b.String())
-}
-
-// describeCluster names the local cluster id in a sentence.
-func describeCluster(id Identity) string {
-	if id.IsDefault() {
-		return "the default local cluster"
-	}
-	return fmt.Sprintf("local cluster %q", id.Name)
 }

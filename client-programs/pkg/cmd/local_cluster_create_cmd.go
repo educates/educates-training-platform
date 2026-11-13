@@ -179,7 +179,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	// so a domain another cluster claims is refused here, whether or not
 	// the resolver runs. A running resolver serves this same
 	// configuration once the kind cluster exists.
-	resolverConfig, err := localResolverConfig(ctx, localclusters.ClusterConfig{ID: id, Config: in.Deploy, Source: configPath})
+	resolverConfig, err := localResolverConfig(inventory, localclusters.ClusterConfig{ID: id, Config: in.Deploy, Source: configPath})
 	if err != nil {
 		return err
 	}

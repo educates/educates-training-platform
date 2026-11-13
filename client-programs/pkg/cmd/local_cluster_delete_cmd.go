@@ -87,7 +87,7 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 func refreshResolverAfterDelete(ctx context.Context) error {
 	rep := progress.New(os.Stdout, 0, isStdoutTTY(os.Stdout))
 	if err := refreshLocalResolver(rep, func() ([]byte, error) {
-		return localResolverConfig(ctx)
+		return observedResolverConfig(ctx)
 	}); err != nil {
 		return fmt.Errorf("local DNS resolver: %w", err)
 	}

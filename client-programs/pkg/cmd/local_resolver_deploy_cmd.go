@@ -49,7 +49,7 @@ func (o *LocalResolverDeployOptions) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	content, err := localResolverConfig(ctx, def)
+	content, err := observedResolverConfig(ctx, def)
 	if err != nil {
 		return err
 	}

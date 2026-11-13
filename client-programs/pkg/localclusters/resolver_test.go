@@ -23,13 +23,27 @@ func writeDataHomeConfig(t *testing.T, dataHome, rel, body string) {
 	}
 }
 
+// resolverInputs is what a test renders the resolver config from.
+type resolverInputs struct {
+	DataHome string
+	HostIP   string
+	Observed []NodeContainer
+	Given    []ClusterConfig
+}
+
+// renderResolver renders the resolver config of the inventory of in's
+// data home and observed node containers.
+func renderResolver(in resolverInputs) ([]byte, error) {
+	return NewInventory(Observed{Nodes: in.Observed}, in.DataHome).ResolverConfig(in.HostIP, in.Given...)
+}
+
 // renderAddresses renders the resolver config from in and returns its
 // address lines, in order.
-func renderAddresses(t *testing.T, in ResolverInputs) []string {
+func renderAddresses(t *testing.T, in resolverInputs) []string {
 	t.Helper()
-	content, err := RenderResolverConfig(in)
+	content, err := renderResolver(in)
 	if err != nil {
-		t.Fatalf("RenderResolverConfig: %v", err)
+		t.Fatalf("ResolverConfig: %v", err)
 	}
 	var lines []string
 	for _, line := range strings.Split(string(content), "\n") {
@@ -47,14 +61,14 @@ func wantAddresses(t *testing.T, got []string, want ...string) {
 	}
 }
 
-func TestRenderResolverConfigServesTheDefaultClusterDomainAtItsTargetAddress(t *testing.T) {
+func TestResolverConfigServesTheDefaultClusterDomainAtItsTargetAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
 		"ingress:\n  domain: educates.test\nresolver:\n  targetAddress: 10.10.10.1\n")
 
-	content, err := RenderResolverConfig(ResolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
+	content, err := renderResolver(resolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
 	if err != nil {
-		t.Fatalf("RenderResolverConfig: %v", err)
+		t.Fatalf("ResolverConfig: %v", err)
 	}
 
 	want := `#log-queries
@@ -71,45 +85,45 @@ address=/educates.test/10.10.10.1
 	}
 }
 
-func TestRenderResolverConfigPointsTheDefaultClusterAtTheHostIPByDefault(t *testing.T) {
+func TestResolverConfigPointsTheDefaultClusterAtTheHostIPByDefault(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
 
-	got := renderAddresses(t, ResolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
+	got := renderAddresses(t, resolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
 
 	wantAddresses(t, got, "address=/educates.test/192.168.1.10")
 }
 
-func TestRenderResolverConfigServesTheDefaultClusterHostIPNipDomainWhenItDeclaresNone(t *testing.T) {
+func TestResolverConfigServesTheDefaultClusterHostIPNipDomainWhenItDeclaresNone(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"resolver:\n  targetAddress: 10.10.10.1\n")
 
-	got := renderAddresses(t, ResolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
+	got := renderAddresses(t, resolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
 
 	wantAddresses(t, got, "address=/192-168-1-10.nip.io/10.10.10.1")
 }
 
-func TestRenderResolverConfigPointsTheDefaultClusterAtLoopbackWithoutAHostIP(t *testing.T) {
+func TestResolverConfigPointsTheDefaultClusterAtLoopbackWithoutAHostIP(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
 		"ingress:\n  domain: educates.test\nresolver:\n  extraDomains:\n  - example.test\n")
 
-	got := renderAddresses(t, ResolverInputs{DataHome: dataHome})
+	got := renderAddresses(t, resolverInputs{DataHome: dataHome})
 
 	wantAddresses(t, got, "address=/educates.test/127.0.0.1", "address=/example.test/127.0.0.1")
 }
 
-func TestRenderResolverConfigServesNoDomainForADefaultClusterWithNoneAndNoHostIP(t *testing.T) {
+func TestResolverConfigServesNoDomainForADefaultClusterWithNoneAndNoHostIP(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
 		"resolver:\n  extraDomains:\n  - example.test\n")
 
-	got := renderAddresses(t, ResolverInputs{DataHome: dataHome})
+	got := renderAddresses(t, resolverInputs{DataHome: dataHome})
 
 	wantAddresses(t, got, "address=/example.test/127.0.0.1")
 }
 
-func TestRenderResolverConfigServesEveryClusterAtItsOwnTargetAddress(t *testing.T) {
+func TestResolverConfigServesEveryClusterAtItsOwnTargetAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
 		"ingress:\n  domain: educates.test\nresolver:\n  targetAddress: 10.10.10.1\n")
@@ -119,7 +133,7 @@ func TestRenderResolverConfigServesEveryClusterAtItsOwnTargetAddress(t *testing.
 		"cluster:\n  listenAddress: 10.10.10.3\ningress:\n  domain: test3.example.test\n"+
 		"resolver:\n  targetAddress: 192.168.50.3\n")
 
-	got := renderAddresses(t, ResolverInputs{
+	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
 		Observed: []NodeContainer{
@@ -136,12 +150,12 @@ func TestRenderResolverConfigServesEveryClusterAtItsOwnTargetAddress(t *testing.
 	)
 }
 
-func TestRenderResolverConfigServesANamedClusterNipDomainWhenItDeclaresNone(t *testing.T) {
+func TestResolverConfigServesANamedClusterNipDomainWhenItDeclaresNone(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\n")
 
-	got := renderAddresses(t, ResolverInputs{
+	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
@@ -150,14 +164,14 @@ func TestRenderResolverConfigServesANamedClusterNipDomainWhenItDeclaresNone(t *t
 	wantAddresses(t, got, "address=/10-10-10-2.nip.io/10.10.10.2")
 }
 
-func TestRenderResolverConfigLeavesOutNamedClustersThatDoNotExist(t *testing.T) {
+func TestResolverConfigLeavesOutNamedClustersThatDoNotExist(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test3/educates-cluster-config.yaml", "kind: Cluster\n")
 
-	got := renderAddresses(t, ResolverInputs{
+	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
 		Observed: []NodeContainer{
@@ -169,7 +183,7 @@ func TestRenderResolverConfigLeavesOutNamedClustersThatDoNotExist(t *testing.T) 
 	wantAddresses(t, got, "address=/educates.test/192.168.1.10")
 }
 
-func TestRenderResolverConfigRefusesADomainTwoClustersClaim(t *testing.T) {
+func TestResolverConfigRefusesADomainTwoClustersClaim(t *testing.T) {
 	cases := []struct {
 		name          string
 		defaultConfig string
@@ -213,7 +227,7 @@ func TestRenderResolverConfigRefusesADomainTwoClustersClaim(t *testing.T) {
 				}
 			}
 
-			_, err := RenderResolverConfig(ResolverInputs{
+			_, err := renderResolver(resolverInputs{
 				DataHome: dataHome,
 				HostIP:   "192.168.1.10",
 				Observed: []NodeContainer{
@@ -227,13 +241,13 @@ func TestRenderResolverConfigRefusesADomainTwoClustersClaim(t *testing.T) {
 	}
 }
 
-func TestRenderResolverConfigServesExtraDomainsOncePerCluster(t *testing.T) {
+func TestResolverConfigServesExtraDomainsOncePerCluster(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n"+
 		"resolver:\n  extraDomains:\n  - example.test\n  - test2.educates.test\n  - Example.Test\n  - other.test\n")
 
-	got := renderAddresses(t, ResolverInputs{
+	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
 	})
@@ -259,7 +273,7 @@ func escapeConfig(target, domain string) string {
 		"    certificates:\n      provider: None\n"
 }
 
-func TestRenderResolverConfigServesTheDomainAnEducatesConfigDeclares(t *testing.T) {
+func TestResolverConfigServesTheDomainAnEducatesConfigDeclares(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", escapeConfig(
 		"  resolver:\n    extraDomains:\n    - extra.example.test\n", "workshops.example.test"))
@@ -268,7 +282,7 @@ func TestRenderResolverConfigServesTheDomainAnEducatesConfigDeclares(t *testing.
 	writeDataHomeConfig(t, dataHome, "clusters/test3/config.yaml", escapeConfig(
 		"  cluster:\n    listenAddress: 10.10.10.3\n  resolver:\n    targetAddress: 192.168.50.3\n", "test3.example.test"))
 
-	got := renderAddresses(t, ResolverInputs{
+	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true), controlPlane("educates-test3", "10.10.10.3", true)},
@@ -282,13 +296,13 @@ func TestRenderResolverConfigServesTheDomainAnEducatesConfigDeclares(t *testing.
 	)
 }
 
-func TestRenderResolverConfigServesNoDomainForAnEducatesConfigThatDeclaresNone(t *testing.T) {
+func TestResolverConfigServesNoDomainForAnEducatesConfigThatDeclaresNone(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", escapeConfig("", ""))
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", escapeConfig(
 		"  cluster:\n    listenAddress: 10.10.10.2\n  resolver:\n    extraDomains:\n    - extra.example.test\n", ""))
 
-	got := renderAddresses(t, ResolverInputs{
+	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
@@ -297,7 +311,7 @@ func TestRenderResolverConfigServesNoDomainForAnEducatesConfigThatDeclaresNone(t
 	wantAddresses(t, got, "address=/extra.example.test/10.10.10.2")
 }
 
-func TestRenderResolverConfigRefusesADefaultConfigItCannotServe(t *testing.T) {
+func TestResolverConfigRefusesADefaultConfigItCannotServe(t *testing.T) {
 	cases := []struct {
 		name   string
 		body   string
@@ -322,7 +336,7 @@ func TestRenderResolverConfigRefusesADefaultConfigItCannotServe(t *testing.T) {
 			dataHome := t.TempDir()
 			writeDataHomeConfig(t, dataHome, "config.yaml", tc.body)
 
-			_, err := RenderResolverConfig(ResolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
+			_, err := renderResolver(resolverInputs{DataHome: dataHome, HostIP: "192.168.1.10"})
 
 			wantErrorMentioning(t, err, filepath.Join(dataHome, "config.yaml"), tc.reason)
 		})
@@ -358,13 +372,13 @@ func namedID(t *testing.T, name, dataHome string) Identity {
 	return id
 }
 
-func TestRenderResolverConfigServesAClusterBeingCreatedFromItsGivenConfig(t *testing.T) {
+func TestResolverConfigServesAClusterBeingCreatedFromItsGivenConfig(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: old.educates.test\n")
 
-	got := renderAddresses(t, ResolverInputs{
+	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
 		Given: []ClusterConfig{givenConfig(t, namedID(t, "test2", dataHome), localConfigHeader+
@@ -377,12 +391,12 @@ func TestRenderResolverConfigServesAClusterBeingCreatedFromItsGivenConfig(t *tes
 	)
 }
 
-func TestRenderResolverConfigRefusesCreatingAClusterOnADomainAnotherClaims(t *testing.T) {
+func TestResolverConfigRefusesCreatingAClusterOnADomainAnotherClaims(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")
 
-	_, err := RenderResolverConfig(ResolverInputs{
+	_, err := renderResolver(resolverInputs{
 		DataHome: dataHome,
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", false)},
 		Given: []ClusterConfig{givenConfig(t, namedID(t, "test3", dataHome), localConfigHeader+
@@ -392,7 +406,7 @@ func TestRenderResolverConfigRefusesCreatingAClusterOnADomainAnotherClaims(t *te
 	wantErrorMentioning(t, err, `local cluster "test2"`, `local cluster "test3"`, `"test2.educates.test"`)
 }
 
-func TestRenderResolverConfigOverridesOnlyTheDefaultClusterDomain(t *testing.T) {
+func TestResolverConfigOverridesOnlyTheDefaultClusterDomain(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
@@ -401,7 +415,7 @@ func TestRenderResolverConfigOverridesOnlyTheDefaultClusterDomain(t *testing.T) 
 		"ingress:\n  domain: given.test\nresolver:\n  extraDomains:\n  - override.test\n  - extra.test\n")
 	def.Domain = "override.test"
 
-	got := renderAddresses(t, ResolverInputs{
+	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
 		HostIP:   "192.168.1.10",
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
@@ -415,8 +429,8 @@ func TestRenderResolverConfigOverridesOnlyTheDefaultClusterDomain(t *testing.T) 
 	)
 }
 
-func TestRenderResolverConfigServesNothingForADataHomeWithNoConfig(t *testing.T) {
-	got := renderAddresses(t, ResolverInputs{DataHome: t.TempDir(), HostIP: "192.168.1.10"})
+func TestResolverConfigServesNothingForADataHomeWithNoConfig(t *testing.T) {
+	got := renderAddresses(t, resolverInputs{DataHome: t.TempDir(), HostIP: "192.168.1.10"})
 
 	wantAddresses(t, got)
 }

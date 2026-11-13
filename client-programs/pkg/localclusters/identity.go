@@ -1,11 +1,14 @@
 // Package localclusters holds the rules about the local kind clusters the
 // CLI manages: which local cluster a command means, what that cluster is
-// called in kind, in Docker, in the kubeconfig and in the data home, and
-// what a named local cluster's config must declare.
+// called in kind, in Docker, in the kubeconfig and in the data home, what
+// a named local cluster's config must declare, and, from an observed
+// state of the host, which Educates clusters exist and whether they clash
+// with one another.
 //
-// It takes everything as plain values, the data home included. Besides
-// the cluster configs it loads and writes, it reads neither files, the
-// environment nor Docker, so callers decide where the inputs come from.
+// It takes everything as plain values, the data home and the observed
+// state included. Besides the cluster configs and folders of the data
+// home, it reads neither files, the environment nor Docker, so callers
+// decide where the inputs come from.
 package localclusters
 
 import (
@@ -105,6 +108,15 @@ func Named(name, dataHome string) (Identity, error) {
 // IsDefault reports whether the identity is the default local cluster's.
 func (id Identity) IsDefault() bool {
 	return id.Name == ""
+}
+
+// Description names the local cluster in a message: the default local
+// cluster, or local cluster "<name>".
+func (id Identity) Description() string {
+	if id.IsDefault() {
+		return "the default local cluster"
+	}
+	return fmt.Sprintf("local cluster %q", id.Name)
 }
 
 // ControlPlaneNode is the name of the node container kind creates for the

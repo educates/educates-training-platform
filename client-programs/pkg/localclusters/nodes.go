@@ -2,6 +2,7 @@ package localclusters
 
 import (
 	"cmp"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,6 +26,22 @@ type NodeContainer struct {
 
 	// Running reports whether the container is running.
 	Running bool
+
+	// PortBindings are the host ports the container is configured to
+	// publish, whether it runs or not. Only a control-plane node's are
+	// read, and an observation may leave other nodes' out.
+	PortBindings []PortBinding
+}
+
+// PortBinding is a host address and port a node container is configured
+// to publish one of its ports on.
+type PortBinding struct {
+	// HostIP is the host address. The unspecified address, or none,
+	// means every host address.
+	HostIP netip.Addr
+
+	// HostPort is the host port.
+	HostPort uint16
 }
 
 // State is whether a local cluster's node containers run, as local

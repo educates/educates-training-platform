@@ -8,9 +8,10 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
-// localClusterInventory observes the kind node containers on the Docker
-// host and the host's network interfaces, and returns the inventory of
-// the Educates clusters of the data home in that state.
+// localClusterInventory observes the kind node containers and the
+// registry mirror containers on the Docker host and the host's network
+// interfaces, and returns the inventory of the Educates clusters of the
+// data home in that state.
 func localClusterInventory(ctx context.Context) (localclusters.Inventory, error) {
 	observed, err := cluster.ObserveLocalClusters(ctx)
 	if err != nil {

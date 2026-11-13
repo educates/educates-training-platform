@@ -77,8 +77,8 @@ func linkRegistryToLocalCluster(t localclusters.RegistryTarget, s progress.Step)
 		s.Warn(fmt.Sprintf("registry not added to the kind nodes of %s: %v", desc, err))
 	}
 
-	clusterConfig := cluster.NewKindClusterConfig("", t.Identity).Config
-	if err := cluster.IsClusterAvailableCheck(&clusterConfig); err != nil {
+	clusterConfig := cluster.NewClusterConfig(cluster.KindKubeconfigPath(""), t.Identity.Context)
+	if err := cluster.IsClusterAvailableCheck(clusterConfig); err != nil {
 		s.Warn(fmt.Sprintf("%s not updated with the registry service: %v", desc, err))
 		return nil
 	}

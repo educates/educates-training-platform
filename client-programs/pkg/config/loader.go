@@ -33,6 +33,28 @@ func Load(path string) (v1alpha1.Config, error) {
 // json.Decoder.DisallowUnknownFields, which is the json equivalent of
 // yaml.UnmarshalStrict's behaviour around unknown fields).
 func LoadBytes(data []byte, source string) (v1alpha1.Config, error) {
+	cfg, err := LoadBytesWithoutDefaults(data, source)
+	if err != nil {
+		return nil, err
+	}
+	return ApplyDefaults(cfg), nil
+}
+
+// LoadWithoutDefaults is Load without the per-kind static defaults: the
+// config holds only what the file declares, so a caller can tell a field
+// left out from one set to its default value. ApplyDefaults then gives it
+// the defaults Load would have.
+func LoadWithoutDefaults(path string) (v1alpha1.Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return LoadBytesWithoutDefaults(data, path)
+}
+
+// LoadBytesWithoutDefaults is LoadBytes without the per-kind static
+// defaults, as LoadWithoutDefaults is to Load.
+func LoadBytesWithoutDefaults(data []byte, source string) (v1alpha1.Config, error) {
 	jsonData, raw, err := yamlToJSON(data, source)
 	if err != nil {
 		return nil, err
@@ -48,19 +70,19 @@ func LoadBytes(data []byte, source string) (v1alpha1.Config, error) {
 
 	switch kind {
 	case v1alpha1.KindEducatesLocalConfig:
-		return decodeAndDefault(jsonData, schemas.EducatesLocalConfig, source, &v1alpha1.EducatesLocalConfig{}, true)
+		return decode(jsonData, schemas.EducatesLocalConfig, source, &v1alpha1.EducatesLocalConfig{}, true)
 	case v1alpha1.KindEducatesConfig:
 		// Escape-hatch: CR-spec fields are untyped maps; don't reject
 		// unknown fields inside them (the typed struct only declares
 		// the envelope; the CR specs are map[string]interface{} that
 		// json's strict mode would happily accept any keys for anyway).
-		return decodeAndDefault(jsonData, schemas.EducatesConfig, source, &v1alpha1.EducatesConfig{}, false)
+		return decode(jsonData, schemas.EducatesConfig, source, &v1alpha1.EducatesConfig{}, false)
 	case v1alpha1.KindEducatesInlineConfig:
-		return decodeAndDefault(jsonData, schemas.EducatesInlineConfig, source, &v1alpha1.EducatesInlineConfig{}, true)
+		return decode(jsonData, schemas.EducatesInlineConfig, source, &v1alpha1.EducatesInlineConfig{}, true)
 	case v1alpha1.KindEducatesGKEConfig:
-		return decodeAndDefault(jsonData, schemas.EducatesGKEConfig, source, &v1alpha1.EducatesGKEConfig{}, true)
+		return decode(jsonData, schemas.EducatesGKEConfig, source, &v1alpha1.EducatesGKEConfig{}, true)
 	case v1alpha1.KindEducatesEKSConfig:
-		return decodeAndDefault(jsonData, schemas.EducatesEKSConfig, source, &v1alpha1.EducatesEKSConfig{}, true)
+		return decode(jsonData, schemas.EducatesEKSConfig, source, &v1alpha1.EducatesEKSConfig{}, true)
 	default:
 		return nil, fmt.Errorf("%s: unknown kind %q for apiVersion %q", source, kind, apiVersion)
 	}
@@ -105,10 +127,9 @@ func yamlToJSON(data []byte, source string) ([]byte, map[string]interface{}, err
 	return jsonBytes, rootMap, nil
 }
 
-// decodeAndDefault validates jsonData against schemaBytes, strict-decodes
-// (or loose for the escape kind which holds untyped maps), then applies
-// any per-kind WithDefaults.
-func decodeAndDefault(
+// decode validates jsonData against schemaBytes, then strict-decodes it
+// into target (or loose for the escape kind which holds untyped maps).
+func decode(
 	jsonData []byte,
 	schemaBytes []byte,
 	source string,
@@ -125,7 +146,13 @@ func decodeAndDefault(
 	if err := dec.Decode(target); err != nil {
 		return nil, fmt.Errorf("%s: %w", source, err)
 	}
-	switch t := target.(type) {
+	return target, nil
+}
+
+// ApplyDefaults applies the per-kind static defaults Load gives a config
+// to cfg, and returns it. An EducatesConfig gets none.
+func ApplyDefaults(cfg v1alpha1.Config) v1alpha1.Config {
+	switch t := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
 		t.WithDefaults()
 	case *v1alpha1.EducatesInlineConfig:
@@ -137,7 +164,7 @@ func decodeAndDefault(
 	case *v1alpha1.EducatesConfig:
 		// Escape kind: verbatim passthrough, no defaulting.
 	}
-	return target, nil
+	return cfg
 }
 
 // validateAgainstSchema runs gojsonschema against the already-marshalled

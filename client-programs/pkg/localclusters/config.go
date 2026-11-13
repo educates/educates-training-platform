@@ -13,7 +13,8 @@ import (
 // ValidateListenAddress checks that address can be a named local
 // cluster's listen address, the host address its ports 80 and 443 are
 // published on: a specific IP address, neither the unspecified address
-// that means every host address nor a loopback address. The error gives
+// that means every host address nor a loopback address. An IPv4-mapped
+// IPv6 address is checked as the IPv4 address it maps. The error gives
 // the reason, without naming where the address came from.
 func ValidateListenAddress(address string) error {
 	if address == "" {
@@ -24,6 +25,7 @@ func ValidateListenAddress(address string) error {
 	if err != nil {
 		return fmt.Errorf("%q is not an IP address", address)
 	}
+	ip = ip.Unmap()
 	if ip.IsUnspecified() {
 		return fmt.Errorf("%s means every host address, and a named local cluster needs a specific IP "+
 			"address of the host of its own to publish its ports 80 and 443 on", address)

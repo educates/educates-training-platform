@@ -51,6 +51,7 @@ func TestLoadNamedConfigRefusesAListenAddressThatIsNotASpecificIP(t *testing.T) 
 	}{
 		{address: "0.0.0.0", reason: []string{"every host address", "specific IP"}},
 		{address: "::", reason: []string{"every host address", "specific IP"}},
+		{address: "::ffff:0.0.0.0", reason: []string{"every host address", "specific IP"}},
 		{address: "127.0.0.1", reason: []string{"loopback", "pods resolve the cluster's ingress domain to it"}},
 		{address: "127.10.10.2", reason: []string{"loopback", "pods resolve the cluster's ingress domain to it"}},
 		{address: "::1", reason: []string{"loopback", "pods resolve the cluster's ingress domain to it"}},

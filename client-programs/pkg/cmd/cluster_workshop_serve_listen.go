@@ -98,17 +98,15 @@ func freeLoopbackPort() (int, error) {
 
 // specificListenHost returns the host part of a listen address on the
 // IP address address, and reports whether address is a specific IP
-// address: neither one meaning every address nor a loopback address. An
-// IPv6 address is bracketed, as a host joined with a port needs it to be.
+// address, as localclusters.ValidateListenAddress accepts one: neither
+// one meaning every address nor a loopback address. An IPv4-mapped IPv6
+// address is given as IPv4, and an IPv6 address is bracketed, as a host
+// joined with a port needs it to be.
 func specificListenHost(address string) (string, bool) {
-	ip, err := netip.ParseAddr(address)
-	if err != nil {
+	if localclusters.ValidateListenAddress(address) != nil {
 		return "", false
 	}
-	ip = ip.Unmap()
-	if ip.IsUnspecified() || ip.IsLoopback() {
-		return "", false
-	}
+	ip := netip.MustParseAddr(address).Unmap()
 	if ip.Is6() {
 		return "[" + ip.String() + "]", true
 	}

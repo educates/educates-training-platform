@@ -54,6 +54,17 @@ type ResolverInput struct {
 // gives it from the cluster's listen address and the observed host IP
 // address. The same rule holds for the default and the named clusters.
 func (inv Inventory) ResolverConfig(given ...ResolverInput) ([]byte, []error, error) {
+	clusters, leftOut, err := inv.resolverClusters(given)
+	if err != nil {
+		return nil, nil, err
+	}
+	return renderDnsmasqConfig(clusters), leftOut, nil
+}
+
+// resolverClusters returns what the local DNS resolver serves for each
+// local cluster it serves, in the order ResolverConfig renders them, and
+// the configs it leaves out, as ResolverConfig says.
+func (inv Inventory) resolverClusters(given []ResolverInput) ([]resolverCluster, []error, error) {
 	byName := map[string]ResolverInput{}
 	for _, c := range given {
 		byName[c.Identity.Name] = c
@@ -87,7 +98,7 @@ func (inv Inventory) ResolverConfig(given ...ResolverInput) ([]byte, []error, er
 	if err := checkDomainsClaimedOnce(clusters); err != nil {
 		return nil, nil, err
 	}
-	return renderDnsmasqConfig(clusters), leftOut, nil
+	return clusters, leftOut, nil
 }
 
 // servedClusters returns the local clusters the resolver serves, as
@@ -129,28 +140,32 @@ func checkDomainsClaimedOnce(clusters []resolverCluster) error {
 	}
 	claims := map[string]claim{}
 	for _, c := range clusters {
-		for _, domain := range c.domains {
-			key := domainKey(domain)
+		for _, name := range c.names {
+			key := domainKey(name.domain)
 			if first, ok := claims[key]; ok {
 				return fmt.Errorf("%s and %s both claim the domain %q, which the local DNS resolver can point at one "+
 					"local cluster only: change the ingress.domain or resolver.extraDomains of one of them",
 					first.id.Description(), c.id.Description(), first.domain)
 			}
-			claims[key] = claim{id: c.id, domain: domain}
+			claims[key] = claim{id: c.id, domain: name.domain}
 		}
 	}
 	return nil
 }
 
 // resolverCluster is what the local DNS resolver serves for one local
-// cluster: the domains that point at the cluster's address.
+// cluster: the names that point at the cluster's address.
 type resolverCluster struct {
 	id      Identity
-	domains []string
+	names   []servedName
 	address string
 
 	// addressSource is where address comes from.
 	addressSource AddressSource
+
+	// listenAddress is the listen address the cluster's config declares,
+	// from which address comes, empty when it declares none.
+	listenAddress string
 
 	// config names the cluster's config: its path relative to the data
 	// home when it is the cluster's config there, and otherwise the path
@@ -179,10 +194,12 @@ func newResolverCluster(given ResolverInput, hostIP, dataHome string) (resolverC
 	address, addressSource := resolverAddress(fields.listenAddress, hostIP)
 	domain := cmp.Or(given.ResolverDomainOverride, given.Domain(hostIP))
 	return resolverCluster{
-		id:            id,
-		domains:       servedDomains(domain, fields.resolver.ExtraDomains),
+		id: id,
+		names: servedNames(domain, ingressDomainFrom(given, fields, domain),
+			fields.resolver.ExtraDomains, fields.extraDomainsField),
 		address:       address,
 		addressSource: addressSource,
+		listenAddress: fields.listenAddress,
 		config:        configName(id, source, dataHome),
 	}, nil
 }
@@ -224,21 +241,56 @@ var headingAddressSources = map[AddressSource]string{
 	AddressFromLoopback:      "the loopback address as the host's IP is unknown",
 }
 
-// servedDomains returns the domains a local cluster's entries point at its
-// address: its ingress domain, when it has one, then its extra domains,
-// each once, leaving out empty ones.
-func servedDomains(domain string, extraDomains []string) []string {
-	var domains []string
+// servedName is a name a local cluster's entries point at its address,
+// with where it comes from.
+type servedName struct {
+	domain string
+
+	// from says where domain comes from: the field of the cluster's
+	// config that declares it, the nip.io name of an address, or the
+	// option that overrides it.
+	from string
+}
+
+// servedNames returns the names a local cluster's entries point at its
+// address: its ingress domain, when it has one, coming from domainFrom,
+// then its extra domains, coming from the field extraDomainsField, each
+// once, leaving out empty ones.
+func servedNames(domain, domainFrom string, extraDomains []string, extraDomainsField string) []servedName {
+	var names []servedName
 	seen := map[string]bool{}
-	for _, d := range append([]string{domain}, extraDomains...) {
+	add := func(d, from string) {
 		key := domainKey(d)
 		if key == "" || seen[key] {
-			continue
+			return
 		}
 		seen[key] = true
-		domains = append(domains, d)
+		names = append(names, servedName{domain: d, from: from})
 	}
-	return domains
+	add(domain, domainFrom)
+	for _, d := range extraDomains {
+		add(d, extraDomainsField)
+	}
+	return names
+}
+
+// ingressDomainFrom says where domain, the ingress domain the local DNS
+// resolver serves for the cluster of the config given, comes from.
+func ingressDomainFrom(given ResolverInput, fields clusterFields, domain string) string {
+	switch {
+	case given.ResolverDomainOverride != "":
+		return "--domain"
+	case fields.domain == "" && given.Identity.IsDefault():
+		return "nip.io name of the host IP"
+	case fields.domain == "":
+		return "nip.io name of the listen address"
+	}
+	// LoadNamedConfig writes the nip.io name it derives from a named
+	// cluster's listen address into its ingress.domain.
+	if nip, ok := nipDomain(fields.listenAddress); ok && fields.derivesDomain && !given.Identity.IsDefault() && domainKey(domain) == nip {
+		return "nip.io name of the listen address"
+	}
+	return fields.domainField
 }
 
 // domainKey is the form of domain two domains are compared in: DNS names
@@ -274,8 +326,8 @@ func renderDnsmasqConfig(clusters []resolverCluster) []byte {
 	b.WriteString(dnsmasqHeader)
 	for _, c := range clusters {
 		fmt.Fprintf(&b, "\n%s\n", c.heading())
-		for _, domain := range c.domains {
-			fmt.Fprintf(&b, "address=/%s/%s\n", domain, c.address)
+		for _, name := range c.names {
+			fmt.Fprintf(&b, "address=/%s/%s\n", name.domain, c.address)
 		}
 	}
 	b.WriteString(includeSection)

@@ -134,8 +134,16 @@ type clusterFields struct {
 	// domain is the declared ingress domain, empty when none is.
 	domain string
 
+	// domainField is the path of the field that declares the ingress
+	// domain.
+	domainField string
+
 	// resolver is what the config declares about the local DNS resolver.
 	resolver v1alpha1.LocalResolverConfig
+
+	// extraDomainsField is the path of the field that declares the
+	// cluster's extra domains in the local DNS resolver.
+	extraDomainsField string
 
 	// derivesDomain reports whether a cluster whose config declares no
 	// ingress domain takes the nip.io name of its address: an
@@ -156,17 +164,23 @@ func clusterFieldsOf(cfg v1alpha1.Config) (clusterFields, bool) {
 			listenAddressField: "cluster.listenAddress",
 			listenAddress:      c.Cluster.ListenAddress,
 			domain:             c.Ingress.Domain,
+			domainField:        "ingress.domain",
 			resolver:           c.Resolver,
+			extraDomainsField:  "resolver.extraDomains",
 			derivesDomain:      true,
 		}, true
 	case *v1alpha1.EducatesConfig:
-		fields := clusterFields{domain: c.IngressDomain()}
+		fields := clusterFields{domain: c.IngressDomain(), domainField: "educatesClusterConfig.ingress.domain"}
+		if mode, _ := c.EducatesClusterConfig["mode"].(string); mode == "Inline" {
+			fields.domainField = "educatesClusterConfig.inline.ingress.domain"
+		}
 		if c.Target == nil {
 			return fields, false
 		}
 		fields.listenAddressField = "target.cluster.listenAddress"
 		fields.listenAddress = c.Target.Cluster.ListenAddress
 		fields.resolver = c.Target.Resolver
+		fields.extraDomainsField = "target.resolver.extraDomains"
 		return fields, true
 	default:
 		return clusterFields{}, false

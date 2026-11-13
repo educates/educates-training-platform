@@ -85,7 +85,7 @@ To deploy the registry again, you can then run:
 educates local registry deploy
 ```
 
-The local image registry, and any registry mirrors, are given fixed addresses at the top of the subnet of the `kind` Docker network, so that restarting Docker does not change the address `registry.default.svc.cluster.local` maps to. Docker Engine 29.0.0 to 29.0.3 refuse fixed addresses on the `kind` network, as do older versions until Docker is restarted for the first time after the network is created, in which case Docker picks the address instead, a warning is shown, and the address can still change when Docker restarts. If pulls from `registry.default.svc.cluster.local` inside the cluster fail, or reach a registry mirror, after Docker restarts, upgrade Docker or restart it, then run `educates local registry deploy` again. Running the command for a registry which already exists keeps its content, moves it to its fixed address, and points `registry.default.svc.cluster.local` at it. When the local cluster exists, the command also configures every one of its nodes to pull `localhost:5001` and `registry.default.svc.cluster.local` from the registry, and warns about any node which is not running and so could not be configured.
+The local image registry, and any registry mirrors, are given fixed addresses at the top of the subnet of the `kind` Docker network, so that restarting Docker does not change the address `registry.default.svc.cluster.local` maps to. Docker Engine 29.0.0 to 29.0.3 refuse fixed addresses on the `kind` network, as do older versions until Docker is restarted for the first time after the network is created, in which case Docker picks the address instead, a warning is shown, and the address can still change when Docker restarts. If pulls from `registry.default.svc.cluster.local` inside the cluster fail, or reach a registry mirror, after Docker restarts, upgrade Docker or restart it, then run `educates local registry deploy` again. Running the command for a registry which already exists keeps its content, moves it to its fixed address, and points `registry.default.svc.cluster.local` at it. The command also configures every local cluster to pull from the registry: every one of its nodes pulls `localhost:5001` and `registry.default.svc.cluster.local` from the registry, and inside the cluster, through its own kube context, the `registry` Service and the `local-registry-hosting` ConfigMap point at it. It warns about a cluster which is stopped, and about any node which is not running, and so could not be configured. The `--kubeconfig` and `--context` options of the command are deprecated and ignored, since every local cluster is configured through its own kube context.
 
 If you have successively pushed new builds of images to the local image registry using the same image version tag, the registry can blow out in size over time due to unreferenced image layers. To reclaim space consumed by these unreferenced image layers, you can run:
 
@@ -401,7 +401,7 @@ url for the remote registry mirror. We could have provided credentials for Docke
 educates local cluster create
 ```
 
-This will deploy the cluster and all defined mirrors automatically.
+This will deploy the cluster and all defined mirrors automatically. When you run [several local clusters](multiple-local-clusters), they share the mirror containers, and a cluster's configuration has to declare a mirror with the same URL and username as the container another cluster already created.
 
 Deploying a local registry mirror
 ---------------------------------
@@ -412,7 +412,7 @@ To deploy a local mirror for a remote registry, use the following command:
 educates local mirror deploy ghcr.io
 ```
 
-In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror. When the local cluster exists, the mirror is linked to every one of its nodes, and a warning names any node which is not running and so could not be linked.
+In this example we are creating a mirror to GitHub Container Registry (ghcr.io). The mirror name will also used as the remote registry URL, but you can specify an alternate `--url` remote registry URL to mirror. The mirror is linked to every node of every local cluster, as described in [running several local clusters](multiple-local-clusters), and a warning names any node which is not running and so could not be linked.
 
 Optionally, you can also provide credentials, via `--username` and `--password`, for authenticating to the remote registry. Use these if you are mirroring a private registry, or to provide DockerHub credentials to avoid request throttling.
 
@@ -429,7 +429,7 @@ To delete a local registry mirror, run:
 educates local mirror delete ghcr.io
 ```
 
-This will stop and remove the mirror container and clean up the configuration from every running node of the cluster.
+This will stop and remove the mirror container and clean up the configuration from every running node of every local cluster.
 
 As pointed out earlier, if the mirror configuration exists in the local cluster's configuration, if the Educates local cluster is recreated then the mirror will be recreated as well.
 
@@ -437,7 +437,7 @@ As pointed out earlier, if the mirror configuration exists in the local cluster'
 Running several local clusters
 ------------------------------
 
-The cluster `educates local cluster create` makes is the default local cluster. Next to it you can run any number of named local clusters, for example to test two builds of Educates side by side, or one workshop against both. Each named cluster is a Kind cluster of its own, `educates-<name>`, with the kube context `kind-educates-<name>`, its own configuration, and a host IP address of its own on which it publishes ports 80 and 443. Every cluster shares the local image registry on `localhost:5001`, so an image you push there once can be pulled by any of them, and the registry mirrors a cluster's configuration declares share their containers with any other cluster that declares them. The `educates local registry deploy`, `educates local mirror deploy` and `educates local mirror delete` commands configure the nodes of the default cluster only.
+The cluster `educates local cluster create` makes is the default local cluster. Next to it you can run any number of named local clusters, for example to test two builds of Educates side by side, or one workshop against both. Each named cluster is a Kind cluster of its own, `educates-<name>`, with the kube context `kind-educates-<name>`, its own configuration, and a host IP address of its own on which it publishes ports 80 and 443. Every cluster shares the local image registry on `localhost:5001`, so an image you push there once can be pulled by any of them, and the registry mirrors a cluster's configuration declares share their containers with any other cluster that declares them.
 
 To create a named cluster called `test2` on the host IP address `10.10.10.2`, run:
 
@@ -513,6 +513,12 @@ educates local cluster list
 It lists the default cluster, shown as `(default)`, and every named cluster, whatever `--local-cluster` or `EDUCATES_LOCAL_CLUSTER` select. Each row has the cluster's state, the host IP address it publishes ports 80 and 443 on, its ingress domain and its kube context. The state is `running`, `stopped`, or `partly running` when only some nodes of a multi-node cluster run. The domain is the one the cluster's configuration declares, or for a named cluster the `nip.io` name of its listen address, and shows as `-` when there is none, as for a default cluster that falls back to the `nip.io` name of your host's IP address.
 
 Only the Kind clusters the command line tool manages are local clusters: the Kind cluster `educates`, and a Kind cluster `educates-<name>` whose folder `clusters/<name>/` exists in the data home. A Kind cluster you created yourself is left out of the list and ignored by every check, even when its name starts with `educates-`.
+
+### The shared registry and mirrors
+
+Every local cluster pulls from the one local image registry and the one set of registry mirror containers, so the commands which manage them take no `--local-cluster` option and act on every local cluster. `educates local registry deploy` configures every node of every cluster to pull from the registry, and inside each cluster, through its own kube context, points the `registry` Service and the `local-registry-hosting` ConfigMap at it. `educates local mirror deploy` links the mirror into every node of every local cluster, and `educates local mirror delete` unlinks it from every one of them. A node which is not running can't be configured, and the deploy commands warn about it, so run the command again once its cluster runs.
+
+When a cluster's configuration declares a mirror in `cluster.registryMirrors` whose container another cluster already created, `educates local cluster create` reuses that container and links it into every node of the new cluster. The container keeps the URL and username it was created with, so creating a cluster whose configuration declares the mirror with another `url` or `username` fails before the Kind cluster is created. The error names the mirror, the values its container has, and the values the configuration declares. Either declare the mirror as its container has it, or delete the mirror with `educates local mirror delete`, which unlinks it from every cluster, and create the cluster again, which creates the mirror with the new values. Every cluster which declares the mirror then needs those values too. A different `password` can't be seen on the container, so it is not detected, and the mirror keeps the password it was created with until you delete it.
 
 ### A second data home is not a second cluster
 

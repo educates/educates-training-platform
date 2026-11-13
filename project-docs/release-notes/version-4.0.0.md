@@ -328,6 +328,21 @@ New Features
   remains, and otherwise keeps them and names the clusters still using
   them.
 
+  Every local cluster shares the local image registry and the registry
+  mirrors, so the commands which manage them take no ``--local-cluster``
+  and act on every local cluster. ``educates local registry deploy``
+  configures every node of every cluster to pull from the registry, and
+  points each cluster's ``registry`` Service and ``local-registry-hosting``
+  ConfigMap at it. ``educates local mirror deploy`` links a mirror into
+  every node of every cluster, and ``educates local mirror delete`` unlinks
+  it from all of them. A cluster whose configuration declares a registry
+  mirror reuses the mirror's container when another cluster created it,
+  and ``educates local cluster create`` fails before creating the Kind
+  cluster when that container pulls from another URL or as another
+  username, naming the mirror, the container's values and the declared
+  ones. A different password can't be seen on the container, so it is not
+  detected.
+
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to
   a tagged image reference instead of listing ``files``. The two are mutually
@@ -1343,6 +1358,16 @@ Deprecations
   record for the ingress domain, and will be removed in a future release. If
   you run your own ``external-dns`` against the cluster, update it to version
   0.22 or later before the older annotation is removed.
+
+* The ``--kubeconfig`` and ``--context`` options of ``educates local registry
+  deploy`` are deprecated, and are ignored. The command used to create the
+  ``registry`` Service and EndpointSlice in the cluster the options, or the
+  current kube context, named. It now configures every local cluster
+  created by ``educates local cluster create``, each through its own kube
+  context in ``~/.kube/config``, and also creates the
+  ``local-registry-hosting`` ConfigMap in each, so a cluster which is not
+  such a local cluster is no longer configured. A warning is shown when
+  either option is given, and both will be removed in a future version.
 
 Bugs Fixed
 ----------

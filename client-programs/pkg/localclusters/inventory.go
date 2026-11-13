@@ -207,6 +207,20 @@ func CheckEducatesCluster(id Identity) error {
 		id.Name, filepath.Dir(id.ConfigPath), id.KindName, SelectionFlagName, id.Name)
 }
 
+// MakeClusterFolder makes the folder clusters/<name>/ of the named local
+// cluster id in the data home, when it is missing, so its kind cluster is
+// an Educates cluster from the moment it exists. The folder holds the
+// cluster's config and kind config file.
+func MakeClusterFolder(id Identity) error {
+	if id.IsDefault() {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(id.ConfigPath), 0o755); err != nil {
+		return fmt.Errorf("create the folder of local cluster %q: %w", id.Name, err)
+	}
+	return nil
+}
+
 // hasClusterFolder reports whether the data home holds the folder of the
 // named local cluster id, clusters/<name>/, which makes its kind cluster
 // an Educates cluster.

@@ -163,6 +163,23 @@ func TestLoadLocalConfig_NamedClusterWithConfigFlag_TakesTheConfigFromTheFile(t 
 	}
 }
 
+func TestLoadLocalConfig_NamedClusterWithConfigFlag_MakesTheClusterFolder(t *testing.T) {
+	_, id := namedClusterForTest(t)
+	path := writeFixture(t, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
+		"cluster:\n  listenAddress: 10.10.10.2\n")
+
+	if _, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path}, id); err != nil {
+		t.Fatalf("loadLocalConfig: %v", err)
+	}
+
+	if err := localclusters.CheckEducatesCluster(id); err != nil {
+		t.Errorf("the created cluster is not an Educates cluster: %v", err)
+	}
+	if _, err := os.Stat(id.ConfigPath); !os.IsNotExist(err) {
+		t.Errorf("the config was copied into the cluster's folder: stat err = %v", err)
+	}
+}
+
 func TestLoadLocalConfig_NamedClusterWithConfigFlag_AppliesTheNamedClusterRules(t *testing.T) {
 	_, id := namedClusterForTest(t)
 	path := writeFixture(t, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n")

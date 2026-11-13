@@ -84,7 +84,8 @@ cluster's cluster.listenAddress must be a specific IP address of the host,
 neither 0.0.0.0 nor a loopback address, and with no ingress.domain the
 cluster takes the nip.io name of that address and is served over plain
 HTTP. --config with --local-cluster takes the config from the file and the
-cluster's name from the flag.
+cluster's name from the flag, and makes the cluster's folder
+<data-home>/clusters/<name>/ without copying the file into it.
 
 --cluster-only stops after step 4 — useful for testing the platform
 deploy against a hand-prepared cluster.`,
@@ -297,8 +298,10 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 // A named local cluster's config comes from --config when given, and
 // otherwise from the cluster's folder in the data home, written from
 // --listen-address and --domain when missing. Either way it follows the
-// named-cluster rules of localclusters.LoadNamedConfig. The default
-// local cluster takes neither flag.
+// named-cluster rules of localclusters.LoadNamedConfig, and the
+// cluster's folder exists once it loads: --config makes it, without
+// copying the file into it. The default local cluster takes neither
+// flag.
 func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v1alpha1.Config, string, bool, error) {
 	flags := localclusters.NamedConfigFlags{ListenAddress: o.ListenAddress, Domain: o.Domain}
 	if !id.IsDefault() {
@@ -351,7 +354,12 @@ func loadNamedLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identit
 				localclusters.ListenAddressFlagName, localclusters.DomainFlagName)
 		}
 		cfg, err := localclusters.LoadNamedConfig(o.Config)
-		return cfg, o.Config, false, err
+		if err != nil {
+			return nil, o.Config, false, err
+		}
+		// The config stays in the file, but the cluster's folder in the
+		// data home is what makes its kind cluster an Educates cluster.
+		return cfg, o.Config, false, localclusters.MakeClusterFolder(id)
 	}
 	created, err := localclusters.EnsureNamedConfig(id, flags)
 	if err != nil {

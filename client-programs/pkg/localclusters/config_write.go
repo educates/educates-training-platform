@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"net/netip"
 	"os"
-	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 
@@ -102,8 +101,8 @@ func WriteNamedConfig(id Identity, flags NamedConfigFlags) error {
 	if _, err := parseNamedConfig(body, id.ConfigPath); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(id.ConfigPath), 0o755); err != nil {
-		return fmt.Errorf("create the folder of local cluster %q: %w", id.Name, err)
+	if err := MakeClusterFolder(id); err != nil {
+		return err
 	}
 	if err := os.WriteFile(id.ConfigPath, body, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", id.ConfigPath, err)

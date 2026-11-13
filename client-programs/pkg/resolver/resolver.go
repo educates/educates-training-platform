@@ -160,17 +160,36 @@ func DeleteResolver() error {
 
 // UpdateResolver replaces the configuration of the local DNS resolver
 // with the dnsmasq configuration content and restarts its container, so
-// it serves it. It fails when the container does not exist.
-func UpdateResolver(content []byte) error {
-	fmt.Println("Updating local DNS resolver configuration")
+// it serves it, and reports what it does to w: io.Discard for a command
+// that reports its own progress. It fails when the container does not
+// exist.
+func UpdateResolver(w io.Writer, content []byte) error {
+	fmt.Fprintln(w, "Updating local DNS resolver configuration")
 
-	configFileName, err := refreshResolver(content)
+	ctx := context.Background()
+
+	cli, err := docker.NewDockerClient()
+	if err != nil {
+		return errors.Wrap(err, "unable to create docker client")
+	}
+
+	_, err = cli.ContainerInspect(ctx, resolverContainerName, client.ContainerInspectOptions{})
+	if err != nil {
+		return errors.Wrap(err, "resolver container not found")
+	}
+
+	configFileName, err := writeConfig(content)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Local DNS resolver configuration updated and reloaded")
-	fmt.Println("Local DNS resolver configuration in", configFileName)
+	_, err = cli.ContainerRestart(ctx, resolverContainerName, client.ContainerRestartOptions{})
+	if err != nil {
+		return errors.Wrap(err, "failed to restart resolver")
+	}
+
+	fmt.Fprintln(w, "Local DNS resolver configuration updated and reloaded")
+	fmt.Fprintln(w, "Local DNS resolver configuration in", configFileName)
 
 	return nil
 }
@@ -192,42 +211,6 @@ func ResolverExists() (bool, error) {
 	default:
 		return false, errors.Wrap(err, "unable to inspect DNS resolver container")
 	}
-}
-
-// RefreshResolver is UpdateResolver printing nothing, for commands that
-// report their own progress.
-func RefreshResolver(content []byte) error {
-	_, err := refreshResolver(content)
-	return err
-}
-
-// refreshResolver writes the dnsmasq configuration content for the local
-// DNS resolver and restarts its container, and returns the path of the
-// configuration file. It fails when the container does not exist.
-func refreshResolver(content []byte) (string, error) {
-	ctx := context.Background()
-
-	cli, err := docker.NewDockerClient()
-	if err != nil {
-		return "", errors.Wrap(err, "unable to create docker client")
-	}
-
-	_, err = cli.ContainerInspect(ctx, resolverContainerName, client.ContainerInspectOptions{})
-	if err != nil {
-		return "", errors.Wrap(err, "resolver container not found")
-	}
-
-	configFileName, err := writeConfig(content)
-	if err != nil {
-		return "", err
-	}
-
-	_, err = cli.ContainerRestart(ctx, resolverContainerName, client.ContainerRestartOptions{})
-	if err != nil {
-		return "", errors.Wrap(err, "failed to restart resolver")
-	}
-
-	return configFileName, nil
 }
 
 // writeConfig writes the dnsmasq configuration content to dnsmasq.conf in

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"io"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
@@ -49,7 +50,7 @@ func refreshLocalResolver(rep progress.Reporter, render func() ([]byte, error)) 
 		if err != nil {
 			return err
 		}
-		return resolver.RefreshResolver(content)
+		return resolver.UpdateResolver(io.Discard, content)
 	})
 }
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -30,7 +31,7 @@ func (o *LocalResolverUpdateOptions) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return resolver.UpdateResolver(content)
+	return resolver.UpdateResolver(os.Stdout, content)
 }
 
 func (p *ProjectInfo) NewLocalResolverUpdateCmd() *cobra.Command {

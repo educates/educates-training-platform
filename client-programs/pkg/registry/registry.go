@@ -218,7 +218,7 @@ func createRegistryContainer(bindIP string, p Progress) error {
 		constants.EducatesContainersRoleLabelKey: constants.EducatesContainersRegistryRoleLabel,
 	}
 
-	resp, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+	_, err = cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image: RegistryImageV3,
 			Tty:   false,
@@ -235,26 +235,7 @@ func createRegistryContainer(bindIP string, p Progress) error {
 		return errors.Wrap(err, "cannot create registry container")
 	}
 
-	if _, err := cli.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
-		return errors.Wrap(err, "unable to start registry")
-	}
-
-	cli.NetworkDisconnect(ctx, EducatesNetworkName, client.NetworkDisconnectOptions{Container: EducatesRegistryContainer})
-
-	_, err = cli.NetworkConnect(ctx, EducatesNetworkName, client.NetworkConnectOptions{
-		Container:      EducatesRegistryContainer,
-		EndpointConfig: &network.EndpointSettings{},
-	})
-
-	if err != nil {
-		return errors.Wrap(err, "unable to connect registry to educates network")
-	}
-
-	if err = linkToClusterNetwork(EducatesRegistryContainer, registryFixedAddress, p); err != nil {
-		return errors.Wrap(err, "failed to link registry to cluster")
-	}
-
-	return nil
+	return startOnNetworks(ctx, cli, EducatesRegistryContainer, "registry", registryFixedAddress, p)
 }
 
 /**
@@ -373,7 +354,7 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 		constants.EducatesContainersUsernameLabelKey: mirrorConfig.Username,
 	}
 
-	resp, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+	_, err = cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image: RegistryImageV3,
 			Tty:   false,
@@ -391,38 +372,46 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 		return errors.Wrap(err, "cannot create local registry mirror container")
 	}
 
-	// The container joins its networks before it starts. The registry
-	// contacts its upstream as it starts, and a network joined while it
-	// runs switches its DNS to Docker's embedded resolver before that
-	// resolver answers: the lookup fails, the registry exits, and Docker
-	// restarts it, refusing any network change meanwhile. A container that
-	// fails to join is removed, so that deploying again starts afresh.
-	if err := joinMirrorNetworks(ctx, cli, mirrorContainerName, mirrorFixedAddressFor, p); err != nil {
-		cli.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
+	return startOnNetworks(ctx, cli, mirrorContainerName, "local registry mirror", mirrorFixedAddressFor, p)
+}
+
+// startOnNetworks connects the created container containerName to the
+// educates network, links it to the cluster network, and only then starts
+// it; what names the container in errors.
+//
+// A container joins its networks before it starts. A network joined while
+// it runs switches its DNS to Docker's embedded resolver before that
+// resolver answers, and a registry mirror, which contacts its upstream as
+// it starts, then fails its lookup, exits and is restarted by Docker, which
+// refuses any network change meanwhile. A container that fails to join is
+// removed, so that deploying again starts afresh.
+func startOnNetworks(ctx context.Context, cli *client.Client, containerName, what string, fixedAddress func(clusterNetwork) (netip.Addr, error), p Progress) error {
+	if err := joinNetworks(ctx, cli, containerName, what, fixedAddress, p); err != nil {
+		cli.ContainerRemove(ctx, containerName, client.ContainerRemoveOptions{Force: true})
 		return err
 	}
 
-	if _, err := cli.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
-		return errors.Wrap(err, "unable to start local registry mirror")
+	if _, err := cli.ContainerStart(ctx, containerName, client.ContainerStartOptions{}); err != nil {
+		return errors.Wrapf(err, "unable to start %s", what)
 	}
 
 	return nil
 }
 
-// joinMirrorNetworks connects the mirror container containerName to the
-// educates network and links it to the cluster network.
-func joinMirrorNetworks(ctx context.Context, cli *client.Client, containerName string, fixedAddress func(clusterNetwork) (netip.Addr, error), p Progress) error {
+// joinNetworks connects the container containerName to the educates
+// network and links it to the cluster network; what names it in errors.
+func joinNetworks(ctx context.Context, cli *client.Client, containerName, what string, fixedAddress func(clusterNetwork) (netip.Addr, error), p Progress) error {
 	_, err := cli.NetworkConnect(ctx, EducatesNetworkName, client.NetworkConnectOptions{
 		Container:      containerName,
 		EndpointConfig: &network.EndpointSettings{},
 	})
 
 	if err != nil {
-		return errors.Wrap(err, "unable to connect local registry mirror to educates network")
+		return errors.Wrapf(err, "unable to connect %s to educates network", what)
 	}
 
 	if err := linkToClusterNetwork(containerName, fixedAddress, p); err != nil {
-		return errors.Wrap(err, "failed to link local registry mirror to cluster")
+		return errors.Wrapf(err, "failed to link %s to cluster", what)
 	}
 
 	return nil

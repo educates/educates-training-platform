@@ -48,6 +48,13 @@ func resolveKubeContext(flags KubeconfigOptions, sel localclusters.Selection, da
 	return KubeconfigOptions{Kubeconfig: localClusterKubeconfig(flags.Kubeconfig), Context: id.Context}, nil
 }
 
+// localClusterKubeconfig returns the kubeconfig file that holds the kube
+// context of a local cluster, given the value of --kubeconfig: the file
+// local cluster create writes the context into, which is --kubeconfig
+// when given and otherwise ~/.kube/config, whatever $KUBECONFIG says. It
+// is the one place the commands decide which file to look a selected
+// local cluster's context up in, and local registry deploy every local
+// cluster's.
 func localClusterKubeconfig(kubeconfigFlag string) string {
 	return cluster.KindKubeconfigPath(kubeconfigFlag)
 }

@@ -358,7 +358,11 @@ New Features
   ``educates.test`` still resolves to the default cluster. ``educates local
   resolver deploy`` and ``update`` configure it for every cluster, creating
   or deleting a cluster refreshes a running resolver, and two clusters
-  claiming the same domain is an error.
+  claiming the same domain is an error. A refresh that fails is a warning,
+  since the cluster has been created or deleted by then, and another
+  cluster's configuration that does not load, or that the resolver can't
+  use, is left out with a warning naming its file rather than failing the
+  command for every other cluster.
 
   Every local cluster shares the local image registry and the registry
   mirrors, so the commands which manage them take no ``--local-cluster``

@@ -140,20 +140,32 @@ Replace that entry with the image's full reference as an ``image`` entry, or
 remove it. A version 3 file without ``imagePuller`` leaves
 ``imagePrePuller`` unset, so the pre-puller is on with its default images.
 
+Version 3 left a missing ``localKindCluster.listenAddress`` to Kind, which
+published the cluster's ports 80 and 443 on every host address, as ``0.0.0.0``
+does. Every local cluster now publishes them on a specific IP address of the
+host, as described in [listen address](local-cluster-listen-address), so the
+migration sets a missing or ``0.0.0.0`` listen address to your host's IP
+address, with a line of the notice saying so. An alias added to a network
+interface, such as ``10.10.10.1``, survives network changes, where the host's
+IP address may not, so you may want to set ``cluster.listenAddress`` to one
+instead. When the host's IP address can't be detected, the migration leaves
+``cluster.listenAddress`` unset, and the notice says to set it. Any other
+listen address is kept as it was.
+
 The migration also drops ``localDNSResolver.targetAddress``. A local cluster's
-names now resolve to its ``cluster.listenAddress`` when that is a specific IP
-address, and otherwise to your host's IP address. The migration leaves
-``cluster.listenAddress`` as it was, since setting it changes where Kind
-publishes the cluster's ports. To keep resolving the cluster at the old target
-address, set ``cluster.listenAddress`` to it and create the cluster again. Names
-that resolve elsewhere go in files of your own in the data home's ``dnsmasq.d``
-folder, as described in [names of your own](local-dns-resolver-own-names).
+names now resolve to its ``cluster.listenAddress``. The migration does not set
+``cluster.listenAddress`` from the target address, since setting it changes
+where Kind publishes the cluster's ports. To keep resolving the cluster at the
+old target address, set ``cluster.listenAddress`` to it and create the cluster
+again. Names that resolve elsewhere go in files of your own in the data home's
+``dnsmasq.d`` folder, as described in [names of your own](local-dns-resolver-own-names).
 
 The notice says what was carried over and what was dropped, with lines such
 as:
 
 ```
-dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to its cluster.listenAddress when that is a specific IP address, and otherwise to the host's IP address; set cluster.listenAddress to 192.168.1.10 to keep resolving the cluster there, or for other names add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home
+set cluster.listenAddress to 192.168.1.20, this host's IP address: localKindCluster.listenAddress was not set, so the cluster published its ports 80 and 443 on every host address, and every local cluster now publishes them on a specific IP address of the host. An alias such as 10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not
+dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to its cluster.listenAddress; set cluster.listenAddress to 192.168.1.10 to keep resolving the cluster there, or for other names add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home
 dropped imageVersions entry pause-container: the image pre-puller now runs its own image-puller helper, which a pause container image cannot replace
 carried imagePuller over to imagePrePuller: enabled: true, images: jdk17-environment
 dropped imagePuller.prePullImages names the v4 image inventory does not hold: session-manager; to pull one, add its full reference to imagePrePuller.images as an image entry

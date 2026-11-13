@@ -15,13 +15,13 @@ To deploy Educates on your local machine using the Educates command line tool th
 
 * You need to be running macOS or Linux. If using Windows you will need WSL (Windows subsystem for Linux). The Educates command line tool has primarily been tested on macOS.
 
-* You need to have a working `docker` environment. The Educates command line tool has primarily been tested with [Docker Desktop](https://www.docker.com/products/docker-desktop/) but you can use [Colima](https://github.com/abiosoft/colima) if you are running on macOS.
+* You need to have a working `docker` environment. The Educates command line tool has been tested with [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 * You need to have sufficient memory and disk resources allocated to the `docker` environment to run Kubernetes, Educates etc.
 
 * You cannot be running an existing Kubernetes cluster created using Kind.
 
-* You cannot be using port 80 (HTTP) and 443 (HTTPS) on the local machine as these will be required by the Kubernetes ingress controller.
+* You cannot be using port 80 (HTTP) and 443 (HTTPS) on the IP address of the local machine the cluster listens on, as these will be required by the Kubernetes ingress controller.
 
 * You need to have port 53 (DNS) available on the local machine when using macOS if you want to enable a local DNS resolver.
 
@@ -33,17 +33,11 @@ If you are using [Docker Desktop](https://www.docker.com/products/docker-desktop
 
 * Allow privileged port mapping (Settings->Advanced).
 
+* Allow privileged port forwarding to external machines (Settings->Advanced), on Docker Desktop 4.97 or later. The cluster serves ports 80 and 443 on an IP address of your machine that is not a loopback address, and without this setting Docker Desktop serves ports below 1024 on loopback addresses only. `educates local cluster create` and `educates local cluster start` refuse to run while it is off.
+
 Depending on the Docker Desktop version you are running, you may also need to enable/disable:
 
 * Use kernel networking for UDP (Settings->Resources->Network).
-
-In case you are using [Colima](https://github.com/abiosoft/colima), you need to add the following lines to the educates configuration file:
-
-```
-$ educates local config edit
-cluster:
-  listenAddress: 0.0.0.0
-```
 
 Downloading the CLI
 -------------------
@@ -108,7 +102,9 @@ Default ingress domain
 
 Educates requires a valid fully qualified domain name (FQDN) to use with Kubernetes ingresses which it creates.
 
-By default, the `educates` CLI when creating a cluster will automatically use a `nip.io` address which consists of the IP address of your local machine as the ingress domain. For example `192-168-1-1.nip.io`.
+The cluster listens on an IP address of your local machine, the `cluster.listenAddress` of the local configuration. `educates local config init`, or `educates local cluster create` when no local configuration exists yet, writes the IP address of your local machine there, with a comment saying so. By default, the `educates` CLI then uses the `nip.io` name of that address as the ingress domain. For example `192-168-1-1.nip.io`.
+
+The IP address of your local machine can change when you move between networks, and the cluster then no longer listens on it. An alias such as `10.10.10.1`, added to a network interface as [Running several local clusters](multiple-local-clusters) describes, survives network changes. Write it with `educates local config init --listen-address 10.10.10.1`, or set it in an existing configuration with `educates local config set cluster.listenAddress 10.10.10.1`, before creating the cluster. A loopback address such as `127.0.0.1` can't be used, since pods inside the cluster would resolve the ingress domain to themselves, and neither can `0.0.0.0`.
 
 If a `nip.io` address is relied upon, some features of Educates may not be able to be used. This is because those features require that you also have access to a wildcard TLS certificate for the ingress domain. Since you don't control the `nip.io` domain, there is no way for you to generate the required TLS certificate using a service such as LetsEncrypt. You could however using your own self signed certificate authority (CA) create a wildcard TLS certificate for the `nip.io` domain but you will need to configure macOS to use the CA, as well as configure Educates to know about the CA.
 
@@ -125,7 +121,7 @@ To create a local Kubernetes cluster using Kind and deploy Educates, run the com
 educates local cluster create
 ```
 
-If no local configuration file exists yet, this command creates a default one for you, prints where it wrote it, and continues with the default settings, so you do not need to initialise anything first. To view or change that configuration afterwards use `educates local config view` or `educates local config edit`; to write it out ahead of time (for example to customise it before the first install) run `educates local config init`.
+If no local configuration file exists yet, this command creates a default one for you, with the IP address of your local machine as `cluster.listenAddress`, prints where it wrote it, and continues with the default settings, so you do not need to initialise anything first. If it can't detect the IP address of your local machine, it writes the file without one and stops, saying what to set. To view or change that configuration afterwards use `educates local config view` or `educates local config edit`; to write it out ahead of time (for example to customise it before the first install) run `educates local config init`.
 
 With the default configuration the cluster is served over plain HTTP using a `nip.io` ingress domain, so no TLS certificate or certificate authority is needed and the cluster comes up ready to use. This is the quickest way to start experimenting. Some browser features that require a secure context, such as clipboard access, may be limited over plain HTTP, and a few Educates features such as the per session image registry require a trusted secure ingress. When you want trusted HTTPS, see [Serving workshops over HTTPS](serving-workshops-over-https) below.
 

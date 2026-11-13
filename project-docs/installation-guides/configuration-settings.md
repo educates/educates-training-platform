@@ -24,15 +24,15 @@ The argument is a dotted field path; with no argument the top-level fields are l
 EducatesLocalConfig
 -------------------
 
-The laptop scenario: a local kind cluster with operator-managed cluster services and a self-signed CA. This is the only kind that lives at a fixed location (`<data-home>/config.yaml` for the default local cluster, and `<data-home>/clusters/<name>/config.yaml` for a named local cluster, where `<data-home>` is `$XDG_DATA_HOME/educates`, overridable via `EDUCATES_CLI_DATA_HOME`) and is managed with the `educates local config` commands rather than edited as a project file. A named local cluster's `cluster.listenAddress` must be a specific IP address of the host, as described in [running several local clusters](multiple-local-clusters). See [local environment](local-environment).
+The laptop scenario: a local kind cluster with operator-managed cluster services and a self-signed CA. This is the only kind that lives at a fixed location (`<data-home>/config.yaml` for the default local cluster, and `<data-home>/clusters/<name>/config.yaml` for a named local cluster, where `<data-home>` is `$XDG_DATA_HOME/educates`, overridable via `EDUCATES_CLI_DATA_HOME`) and is managed with the `educates local config` commands rather than edited as a project file. Every local cluster's `cluster.listenAddress`, the default cluster's included, must be a specific IP address of the host, as described in [listen address](local-cluster-listen-address). See [local environment](local-environment).
 
 ```yaml
 apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
 ingress:
-  domain: workshops.educates.test    # empty = <host-IP>.nip.io fallback
+  domain: workshops.educates.test    # empty = nip.io name of cluster.listenAddress
 cluster:
-  listenAddress: 127.0.0.1
+  listenAddress: 10.10.10.1          # required: a specific IP address of the host
 lookupService: true                  # default true
 clusterAdmin: true                   # default true
 imagePrePuller:
@@ -41,10 +41,11 @@ operator:
   logLevel: info
 ```
 
-Key fields (all optional — an `apiVersion` + `kind` stub is a valid config):
+Key fields (all optional but `cluster.listenAddress`: an `apiVersion` + `kind` stub validates against the schema, but a local cluster can't use it until `cluster.listenAddress` is set, which `educates local config init` writes):
 
-* `ingress.domain` — wildcard ingress domain. When empty and deploying with `--local-config`, the CLI falls back to `<host-IP>.nip.io`.
-* `cluster.*` — kind cluster shape: `listenAddress`, API server overrides, pod/service subnets, host volume mounts, registry pull-through mirrors.
+* `ingress.domain`: wildcard ingress domain. When empty, for a local cluster's configuration, the CLI falls back to the `nip.io` name of `cluster.listenAddress`, such as `10-10-10-1.nip.io`.
+* `cluster.listenAddress`: the specific IP address of the host the cluster publishes its ports 80 and 443 on: neither `0.0.0.0` nor a loopback address. `educates local config init` writes the IP address of the host.
+* `cluster.*`: kind cluster shape: API server overrides, pod/service subnets, host volume mounts, registry pull-through mirrors.
 * `resolver.*` — local DNS resolver settings (macOS `*.educates.test` style resolution).
 * `clusterAdmin`, `lookupService` — component toggles (both default `true`).
 * ``imagePrePuller``: the image pre-puller, which pulls the training portal
@@ -189,7 +190,7 @@ lookupService:              # omit the block entirely to not deploy the componen
 sessionManager: {}
 ```
 
-The `target` block only drives side effects of the CLI, and `kind` is its only `provider`. With `provider: kind`, `educates local cluster create --config <file>` creates the local kind cluster from `target.cluster`, which takes the same fields as the `cluster` block of `EducatesLocalConfig`, and then deploys the custom resources as the file declares them. None of the defaults of `EducatesLocalConfig` apply to the custom resources: the ingress domain is not derived from the host IP address, no certificate is chosen from the local secrets cache, and the lookup service is deployed only when the `lookupService` block is present, which must then set `ingress.prefix`, as the other kinds do with `lookup`. The loopback service that `educates serve-workshop` relies on resolves under the ingress domain of the `educatesClusterConfig` block. `target.resolver` takes the same fields as the `resolver` block of `EducatesLocalConfig`, and `educates local resolver deploy --config <file>` sets up the local DNS resolver for that same ingress domain.
+The `target` block only drives side effects of the CLI, and `kind` is its only `provider`. With `provider: kind`, `educates local cluster create --config <file>` creates the local kind cluster from `target.cluster`, which takes the same fields as the `cluster` block of `EducatesLocalConfig`, so `target.cluster.listenAddress` must be a specific IP address of the host, and then deploys the custom resources as the file declares them. None of the defaults of `EducatesLocalConfig` apply to the custom resources: the ingress domain is not derived from the listen address, no certificate is chosen from the local secrets cache, and the lookup service is deployed only when the `lookupService` block is present, which must then set `ingress.prefix`, as the other kinds do with `lookup`. The loopback service that `educates serve-workshop` relies on resolves under the ingress domain of the `educatesClusterConfig` block. `target.resolver` takes the same fields as the `resolver` block of `EducatesLocalConfig`, and `educates local resolver deploy --config <file>` sets up the local DNS resolver for that same ingress domain.
 
 The CLI copies no Secrets from its local secrets cache into the cluster for an `EducatesConfig`, so you create any Secret the custom resources reference, such as a CA key pair or a wildcard certificate, in the cluster yourself. To create them before Educates is deployed, run `educates local cluster create --cluster-only --config <file>`, create the Secrets, and then run `educates admin platform deploy --config <file>`.
 

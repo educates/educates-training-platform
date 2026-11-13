@@ -105,12 +105,13 @@ New Features
   configuration, with validation against the configuration schemas. The
   ``view`` command prints the effective configuration with all CLI defaults
   filled in, so the values the CLI supplies on your behalf (including the
-  ``<host-IP>.nip.io`` domain and the insecure default it implies) are
-  explicit rather than hidden behind a sparse file; pass ``--raw`` to print
-  the configuration file exactly as written instead. The ``init`` command
-  writes a minimal file by default, or with ``--defaults`` writes the
-  fully-defaulted configuration with those same values materialised into
-  the file.
+  ``nip.io`` name of ``cluster.listenAddress`` as the domain and the
+  insecure default it implies) are explicit rather than hidden behind a
+  sparse file; pass ``--raw`` to print the configuration file exactly as
+  written instead. The ``init`` command writes a minimal file by default,
+  holding the host's IP address as ``cluster.listenAddress``, or with
+  ``--defaults`` writes the fully-defaulted configuration with those same
+  values materialised into the file.
 
 * A new ``educates local config explain`` command describes configuration
   fields from the embedded JSON schema, in the style of ``kubectl explain``,
@@ -237,8 +238,8 @@ New Features
   On the local configuration, setting ``ingress.insecure`` selects a plain
   HTTP install and skips the one-time ``educates local secrets add ca``
   step. A local configuration that sets no ingress domain now defaults to
-  this insecure mode, since the ``<host-IP>.nip.io`` address it falls back
-  to cannot obtain a trusted certificate; set a custom ``ingress.domain``
+  this insecure mode, since the ``nip.io`` name of its listen address it
+  falls back to cannot obtain a trusted certificate; set a custom ``ingress.domain``
   to get the certificate-backed HTTPS install. On the
   ``EducatesGKEConfig``, ``EducatesEKSConfig`` and
   ``EducatesInlineConfig`` kinds, ``externalTLSTermination`` now maps to
@@ -301,9 +302,9 @@ New Features
   ``clusters/<name>/config.yaml`` in the data home, which ``create`` writes
   from ``--listen-address`` and the optional ``--domain`` when it is
   missing. Its ``cluster.listenAddress`` must be a specific IP address of
-  the host, neither ``0.0.0.0`` nor a loopback address, and without an
-  ``ingress.domain`` the cluster uses the ``nip.io`` name of that address
-  and is served over plain HTTP. The ``create``, ``delete``, ``start``,
+  the host, neither ``0.0.0.0`` nor a loopback address, as every local
+  cluster's must, and without an ``ingress.domain`` the cluster uses the
+  ``nip.io`` name of that address and is served over plain HTTP. The ``create``, ``delete``, ``start``,
   ``stop`` and ``status`` commands of ``educates local cluster`` select a
   cluster with ``--local-cluster``, or for a whole terminal with the
   ``EDUCATES_LOCAL_CLUSTER`` environment variable, and act on the default
@@ -353,8 +354,7 @@ New Features
 
   The one local DNS resolver has no settings of its own: every local
   cluster contributes its names, its ingress domain and its
-  ``resolver.extraDomains``, which resolve to its listen address when that
-  is a specific IP address, and otherwise to the host's IP address. A named
+  ``resolver.extraDomains``, which resolve to its listen address. A named
   cluster on ``test2.educates.test`` therefore resolves to its own IP
   address while ``educates.test`` still resolves to the default cluster.
   ``educates local resolver deploy`` and ``update`` configure it for every
@@ -371,13 +371,13 @@ New Features
   release lacks the mount: ``educates local resolver update`` and the
   refreshes warn to re-create it with ``educates local resolver delete``
   and ``educates local resolver deploy``. The new ``educates local resolver
-  view`` command shows each cluster the resolver serves with its address
-  and where that comes from, and every name with its cluster, where it
+  view`` command shows each cluster the resolver serves with its address,
+  and every name with its cluster, where it
   comes from and notes, such as a name that wins over another cluster's
   broader name, one of your files naming a domain a cluster also serves,
   or, on macOS, a name no ``/etc/resolver`` file forwards. In
   ``dnsmasq.conf``, each cluster's entries start with a comment naming the
-  cluster, its configuration file and where its address comes from.
+  cluster, its configuration file and its listen address.
 
   Every local cluster shares the local image registry and the registry
   mirrors, so the commands which manage them take no ``--local-cluster``
@@ -920,8 +920,9 @@ Features Changed
   domain is cached, and prints the commands that generate a root CA,
   register the root CA of ``mkcert``, or cache a ``mkcert`` wildcard
   certificate. A local configuration with no ingress domain set instead
-  defaults to a plain HTTP install on a ``<host-IP>.nip.io`` address and
-  needs no CA, since that address cannot obtain a trusted certificate. Set
+  defaults to a plain HTTP install on the ``nip.io`` name of its listen
+  address and needs no CA, since that address cannot obtain a trusted
+  certificate. Set
   ``ingress.insecure`` to request plain HTTP explicitly for a custom domain.
   See the New Features entry on installing without in-cluster TLS for the
   full picture.
@@ -1017,20 +1018,47 @@ Features Changed
 * The local DNS resolver's ``targetAddress`` setting,
   ``localDNSResolver.targetAddress`` in a version 3 ``values.yaml``, is
   gone. A local cluster's names, its ingress domain and
-  ``resolver.extraDomains``, now resolve to its
-  ``cluster.listenAddress`` when that is a specific IP address, and
-  otherwise to the host's IP address, as before. To have them resolve to an
-  alias added to a network interface, set ``cluster.listenAddress`` to the
-  alias and create the cluster again. Names that resolve to anything other
+  ``resolver.extraDomains``, now resolve to its ``cluster.listenAddress``.
+  To have them resolve to an alias added to a network interface, set
+  ``cluster.listenAddress`` to the alias and create the cluster again. Names that resolve to anything other
   than a local cluster, such as a virtual machine, go in ``*.conf`` files of
   your own in the ``dnsmasq.d`` folder of the CLI data home, which the
   resolver reads. The CLI's first-run migration of a version 3
-  ``values.yaml`` drops ``localDNSResolver.targetAddress``, leaving
-  ``cluster.listenAddress`` as it was, and its notice says how to keep
+  ``values.yaml`` drops ``localDNSResolver.targetAddress``, without setting
+  ``cluster.listenAddress`` from it, and its notice says how to keep
   resolving the cluster at that address. A version 4 configuration that
   still sets ``resolver.targetAddress``, or ``target.resolver.targetAddress``
   in an ``EducatesConfig``, fails to load with an error saying what
   replaces it. See [local DNS resolver](local-dns-resolver).
+
+* Every local cluster now declares the specific IP address of the host it
+  publishes its ports 80 and 443 on, ``cluster.listenAddress``. Version 3
+  left a missing ``localKindCluster.listenAddress`` to Kind, which published
+  the ports on every host address, as ``0.0.0.0`` does. ``educates local
+  config init``, and ``educates local cluster create`` when no configuration
+  exists yet, now write the host's IP address there, with a comment saying
+  that an alias added to a network interface, such as ``10.10.10.1``,
+  survives network changes. The CLI's first-run migration of a version 3
+  ``values.yaml`` sets a missing or ``0.0.0.0`` listen address to the
+  host's IP address, saying so in its notice. A missing listen address,
+  ``0.0.0.0`` and a loopback address such as ``127.0.0.1`` are refused
+  wherever the cluster is used, with an error naming
+  ``cluster.listenAddress``, saying why, and giving the command that sets
+  it, while ``educates local config get``, ``view`` and ``edit`` still open
+  such a configuration so that it can be fixed. A loopback address can't
+  work, since workshop sessions resolve the cluster's ingress domain to it
+  and reach their own pod instead of the host. Without an
+  ``ingress.domain``, the cluster's domain is now the ``nip.io`` name of its
+  listen address, rather than of the host's IP address, and its names in
+  the local DNS resolver resolve to its listen address. ``educates local
+  config init`` and ``educates local cluster create`` take
+  ``--listen-address`` and ``--domain`` to write the default cluster's
+  configuration as they do a named cluster's. On Docker Desktop 4.97 or
+  later, ``educates local cluster create`` and ``start`` refuse to run
+  while "Allow privileged port forwarding to external machines", under
+  **Settings > Advanced**, is off, since Docker Desktop then serves ports
+  below 1024 on loopback addresses only, and warn when they can't read the
+  setting. See [listen address](local-cluster-listen-address).
 
 * The CLI's first-run migration of a version 3 ``values.yaml`` carries
   ``imagePuller`` over to ``imagePrePuller``, so the pre-puller keeps its

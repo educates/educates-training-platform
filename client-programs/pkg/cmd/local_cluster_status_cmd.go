@@ -14,6 +14,9 @@ import (
 var localClusterStatusExample = `
   # Show the status of the local cluster:
   educates local cluster status
+
+  # Show the status of the named local cluster test2:
+  educates local cluster status --local-cluster test2
 `
 
 func (p *ProjectInfo) NewLocalClusterStatusCmd() *cobra.Command {
@@ -23,7 +26,11 @@ func (p *ProjectInfo) NewLocalClusterStatusCmd() *cobra.Command {
 		Short:   "Status of the local Kubernetes cluster",
 		Example: localClusterStatusExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			kindConfig := cluster.NewKindClusterConfig("", defaultLocalCluster())
+			id, err := selectedLocalCluster(cmd)
+			if err != nil {
+				return err
+			}
+			kindConfig := cluster.NewKindClusterConfig("", id)
 
 			if err := kindConfig.ClusterStatus(); err != nil {
 				return err
@@ -34,6 +41,8 @@ func (p *ProjectInfo) NewLocalClusterStatusCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	addLocalClusterFlag(c)
 
 	return c
 }

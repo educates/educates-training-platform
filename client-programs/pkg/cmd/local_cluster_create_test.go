@@ -37,7 +37,7 @@ sessionManager: {}
 // CLI defaulting would show in the result.
 func prepareForTest(t *testing.T, path string) *localCreateInputs {
 	t.Helper()
-	cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path})
+	cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
 	if err != nil {
 		t.Fatalf("loadLocalConfig: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestLoadLocalConfig_EscapeTargetProvider(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			path := writeFixture(t, escapeMinimal+tc.target)
-			cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path})
+			cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("err = %v, want an error containing %q", err, tc.wantErr)

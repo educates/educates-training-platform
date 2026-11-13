@@ -5,6 +5,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 	"github.com/educates/educates-training-platform/client-programs/pkg/resolver"
 )
@@ -12,6 +13,9 @@ import (
 var localClusterDeleteExample = `
   # Delete the local cluster:
   educates local cluster delete
+
+  # Delete the named local cluster test2, keeping its config:
+  educates local cluster delete --local-cluster test2
 
   # Delete the local cluster along with the registry, resolver, and mirrors:
   educates local cluster delete --all
@@ -22,8 +26,10 @@ type LocalClusterDeleteOptions struct {
 	AllComponents bool
 }
 
-func (o *LocalClusterDeleteOptions) Run() error {
-	c := cluster.NewKindClusterConfig("", defaultLocalCluster())
+// Run deletes the kind cluster of the local cluster id. The cluster's
+// config stays in the data home.
+func (o *LocalClusterDeleteOptions) Run(id localclusters.Identity) error {
+	c := cluster.NewKindClusterConfig("", id)
 
 	if o.AllComponents {
 		// Best-effort cleanup: surface each as a step but don't abort the
@@ -48,7 +54,13 @@ func (p *ProjectInfo) NewLocalClusterDeleteCmd() *cobra.Command {
 		Use:     "delete",
 		Short:   "Deletes the local Kubernetes cluster",
 		Example: localClusterDeleteExample,
-		RunE:    func(_ *cobra.Command, _ []string) error { return o.Run() },
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			id, err := selectedLocalCluster(cmd)
+			if err != nil {
+				return err
+			}
+			return o.Run(id)
+		},
 	}
 
 	c.Flags().BoolVar(
@@ -57,6 +69,7 @@ func (p *ProjectInfo) NewLocalClusterDeleteCmd() *cobra.Command {
 		false,
 		"delete everything, including image registry and resolver",
 	)
+	addLocalClusterFlag(c)
 
 	return c
 }

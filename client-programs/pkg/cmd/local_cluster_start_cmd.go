@@ -9,6 +9,9 @@ import (
 var localClusterStartExample = `
   # Start a stopped local cluster:
   educates local cluster start
+
+  # Start the stopped named local cluster test2:
+  educates local cluster start --local-cluster test2
 `
 
 func (p *ProjectInfo) NewLocalClusterStartCmd() *cobra.Command {
@@ -17,12 +20,16 @@ func (p *ProjectInfo) NewLocalClusterStartCmd() *cobra.Command {
 		Use:     "start",
 		Short:   "Start the local Kubernetes cluster",
 		Example: localClusterStartExample,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			c := cluster.NewKindClusterConfig("", defaultLocalCluster())
-
-			return c.StartCluster()
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			id, err := selectedLocalCluster(cmd)
+			if err != nil {
+				return err
+			}
+			return cluster.NewKindClusterConfig("", id).StartCluster()
 		},
 	}
+
+	addLocalClusterFlag(c)
 
 	return c
 }

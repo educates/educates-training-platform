@@ -307,7 +307,13 @@ New Features
   ``stop`` and ``status`` commands of ``educates local cluster`` select a
   cluster with ``--local-cluster``, or for a whole terminal with the
   ``EDUCATES_LOCAL_CLUSTER`` environment variable, and act on the default
-  cluster without either. Deleting a named cluster keeps its
+  cluster without either. The ``init``, ``get``, ``set``, ``view`` and
+  ``edit`` commands of ``educates local config`` select a cluster the same
+  way, so ``educates local config init --local-cluster test2
+  --listen-address 10.10.10.2`` writes the configuration of ``test2``
+  without creating the cluster. The new ``educates local config delete``
+  removes a named cluster's configuration, and refuses while the cluster
+  exists and for the default cluster. Deleting a named cluster keeps its
   configuration, and every cluster pulls from the one local image registry
   on ``localhost:5001``. The platform install of ``educates local cluster
   create`` now always targets the cluster it has just created, whatever
@@ -327,6 +333,30 @@ New Features
   resolver and the registry mirrors only when no other local cluster
   remains, and otherwise keeps them and names the clusters still using
   them.
+
+  The ``educates cluster workshop``, ``educates cluster portal`` and
+  ``educates cluster session`` commands and their aliases, ``educates admin
+  platform deploy`` and ``delete``, ``educates admin diagnostics collect``,
+  ``educates admin lookup kubeconfig`` and ``educates local secrets sync``
+  also take ``--local-cluster`` and honour ``EDUCATES_LOCAL_CLUSTER``. With
+  a cluster selected, they act on its kube context, ``kind-educates`` or
+  ``kind-educates-<name>``, looked up in the file ``--kubeconfig`` names or
+  else in ``~/.kube/config``, whatever ``KUBECONFIG`` says, so a terminal
+  set to one cluster stays on it. ``--context`` takes precedence over both,
+  and with neither set the commands use the current context as before.
+  With ``--local-config``, ``educates admin platform deploy`` and
+  ``render`` read the selected cluster's configuration.
+  ``educates local secrets sync`` builds the certificates it copies from
+  the selected cluster's configuration, and copies them into that cluster.
+
+  The one local DNS resolver serves the domains of every local cluster,
+  each pointing at its own cluster's ``resolver.targetAddress``, which for
+  a named cluster defaults to its listen address, so a named cluster on
+  ``test2.educates.test`` resolves to its own IP address while
+  ``educates.test`` still resolves to the default cluster. ``educates local
+  resolver deploy`` and ``update`` configure it for every cluster, creating
+  or deleting a cluster refreshes a running resolver, and two clusters
+  claiming the same domain is an error.
 
   Every local cluster shares the local image registry and the registry
   mirrors, so the commands which manage them take no ``--local-cluster``

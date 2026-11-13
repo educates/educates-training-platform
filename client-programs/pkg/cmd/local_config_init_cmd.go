@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -29,11 +30,19 @@ var localConfigInitExample = `
 
   # Write the fully-defaulted configuration:
   educates local config init --defaults
+
+  # Write the config of the named local cluster test2, on the host IP
+  # address 10.10.10.2:
+  educates local config init --local-cluster test2 --listen-address 10.10.10.2
 `
 
 type LocalConfigInitOptions struct {
 	Force    bool
 	Defaults bool
+
+	// ListenAddress and Domain write a named local cluster's config.
+	ListenAddress string
+	Domain        string
 }
 
 func (p *ProjectInfo) NewLocalConfigInitCmd() *cobra.Command {
@@ -51,26 +60,50 @@ registry and version, and the <host-IP>.nip.io domain (and the insecure
 default it implies) materialised into the file. Errors if the file
 already exists unless --force.
 
+--local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, writes the config of
+a named local cluster instead, to <data-home>/clusters/<name>/config.yaml.
+It declares cluster.listenAddress from --listen-address, which a named
+cluster needs, and ingress.domain from the optional --domain. The listen
+address must be a specific IP address of the host, neither 0.0.0.0 nor a
+loopback address, and with no domain the cluster takes the nip.io name of
+its listen address. --defaults writes only the default local cluster's
+config.
+
 <data-home> is $EDUCATES_CLI_DATA_HOME if set, otherwise
 $XDG_DATA_HOME/educates.`,
 		Example: localConfigInitExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return p.runLocalConfigInit(&o, cmd.OutOrStdout())
+			id, err := selectedLocalCluster(cmd)
+			if err != nil {
+				return err
+			}
+			return p.runLocalConfigInit(&o, id, cmd.OutOrStdout())
 		},
 	}
 	c.Flags().BoolVar(&o.Force, "force", false, "overwrite existing config.yaml")
 	c.Flags().BoolVar(&o.Defaults, "defaults", false, "write the fully-defaulted configuration instead of a minimal file")
+	addLocalClusterFlag(c)
+	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP a named local cluster publishes ports 80 and 443 on (required for a named local cluster)")
+	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain of a named local cluster (default: the nip.io name of the listen address)")
 	return c
 }
 
-func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, w interface{ Write([]byte) (int, error) }) error {
+// runLocalConfigInit writes the config of the local cluster id.
+func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclusters.Identity, w io.Writer) error {
+	if !id.IsDefault() {
+		return runNamedLocalConfigInit(o, id, w)
+	}
+	if o.ListenAddress != "" || o.Domain != "" {
+		return localclusters.ConfigFlagsOnDefaultClusterError()
+	}
+
 	dataHome := utils.GetEducatesHomeDir()
 	if err := os.MkdirAll(dataHome, 0o755); err != nil {
 		return fmt.Errorf("create data home %q: %w", dataHome, err)
 	}
-	path := localclusters.Default(dataHome).ConfigPath
-	if _, err := os.Stat(path); err == nil && !o.Force {
-		return fmt.Errorf("%s already exists (use --force to overwrite)", path)
+	path := id.ConfigPath
+	if err := refuseExistingConfig(path, o.Force); err != nil {
+		return err
 	}
 
 	body := []byte(defaultLocalConfigYAML)
@@ -95,6 +128,36 @@ func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, w interface{
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	fmt.Fprintf(w, "wrote %s\n", path)
+	return nil
+}
+
+// runNamedLocalConfigInit writes the config of the named local cluster
+// id from --listen-address and --domain. It writes only what they
+// declare, so it takes no --defaults: 'local config view' shows the
+// defaults the cluster gets.
+func runNamedLocalConfigInit(o *LocalConfigInitOptions, id localclusters.Identity, w io.Writer) error {
+	if o.Defaults {
+		return fmt.Errorf("--defaults writes the default local cluster's config only; a named local cluster's config "+
+			"declares what --%s and --%s give, and 'educates local config view%s' shows the defaults it gets",
+			localclusters.ListenAddressFlagName, localclusters.DomainFlagName, localClusterFlagArg(id))
+	}
+	if err := refuseExistingConfig(id.ConfigPath, o.Force); err != nil {
+		return err
+	}
+	flags := localclusters.NamedConfigFlags{ListenAddress: o.ListenAddress, Domain: o.Domain}
+	if err := localclusters.WriteNamedConfig(id, flags); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "wrote %s\n", id.ConfigPath)
+	return nil
+}
+
+// refuseExistingConfig returns an error when a config already exists at
+// path, unless force allows init to overwrite it.
+func refuseExistingConfig(path string, force bool) error {
+	if _, err := os.Stat(path); err == nil && !force {
+		return fmt.Errorf("%s already exists (use --force to overwrite)", path)
+	}
 	return nil
 }
 

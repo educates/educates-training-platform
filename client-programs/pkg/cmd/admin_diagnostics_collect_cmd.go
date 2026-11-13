@@ -60,6 +60,7 @@ func (p *ProjectInfo) NewAdminDiagnosticsCollectCmd() *cobra.Command {
 		"",
 		"Context to use from Kubeconfig",
 	)
+	addLocalClusterContextFlag(c, &o.KubeconfigOptions)
 
 	c.Flags().StringVar(
 		&o.Dest,

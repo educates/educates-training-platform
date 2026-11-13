@@ -56,6 +56,14 @@ func LoadNamedConfig(path string) (v1alpha1.Config, error) {
 	return parseNamedConfig(data, path)
 }
 
+// CheckNamedConfig checks that data, a named local cluster's config read
+// from or to be written to source, follows the rules LoadNamedConfig
+// applies, so a change to a config is refused before it is written.
+func CheckNamedConfig(data []byte, source string) error {
+	_, err := parseNamedConfig(data, source)
+	return err
+}
+
 // parseNamedConfig is LoadNamedConfig for the config data, read from
 // source.
 func parseNamedConfig(data []byte, source string) (v1alpha1.Config, error) {

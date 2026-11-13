@@ -183,6 +183,14 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	if err := inventory.CheckMirrors(id, in.Cluster.RegistryMirrors); err != nil {
 		return err
 	}
+	// The local DNS resolver serves the domains of every local cluster,
+	// so a domain another cluster claims is refused here, whether or not
+	// the resolver runs. A running resolver serves this same
+	// configuration once the kind cluster exists.
+	resolverConfig, err := localResolverConfig(inventory, localclusters.ClusterConfig{ID: id, Config: in.Deploy, Source: configPath})
+	if err != nil {
+		return err
+	}
 	if err := checkHostPortsAvailable(ctx, in.Cluster.ListenAddress, o.Verbose, w); err != nil {
 		return err
 	}
@@ -211,6 +219,9 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return clusterConfig.CreateCluster(bootstrap, o.ClusterImage, onPhase, o.Verbose)
 	}); err != nil {
 		return err
+	}
+	if err := refreshLocalResolver(rep, func() ([]byte, error) { return resolverConfig, nil }); err != nil {
+		return fmt.Errorf("local DNS resolver: %w", err)
 	}
 	// The registry, loopback and mirror steps talk to the cluster just
 	// created, through its own context in the kubeconfig kind wrote it in.
@@ -291,8 +302,7 @@ func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v
 		return loadNamedLocalConfig(o, id, flags)
 	}
 	if !flags.IsZero() {
-		return nil, "", false, fmt.Errorf("--%s and --%s write the config of a named local cluster; select one with --%s or %s",
-			localclusters.ListenAddressFlagName, localclusters.DomainFlagName, localclusters.FlagName, localclusters.SelectionEnvVar)
+		return nil, "", false, localclusters.ConfigFlagsOnDefaultClusterError()
 	}
 
 	var path string

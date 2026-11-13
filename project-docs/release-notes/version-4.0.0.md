@@ -1404,14 +1404,18 @@ Deprecations
   0.22 or later before the older annotation is removed.
 
 * The ``--kubeconfig`` and ``--context`` options of ``educates local registry
-  deploy`` are deprecated, and are ignored. The command used to create the
+  deploy`` are deprecated, and still work. The command used to create the
   ``registry`` Service and EndpointSlice in the cluster the options, or the
   current kube context, named. It now configures every local cluster
   created by ``educates local cluster create``, each through its own kube
   context in ``~/.kube/config``, and also creates the
-  ``local-registry-hosting`` ConfigMap in each, so a cluster which is not
-  such a local cluster is no longer configured. A warning is shown when
-  either option is given, and both will be removed in a future version.
+  ``local-registry-hosting`` ConfigMap in each. When either option is given,
+  the command still creates the ``registry`` Service and EndpointSlice in
+  the cluster they name as well, unless it is one of those local clusters,
+  which is configured once. Without either option, a cluster which is not
+  such a local cluster, such as the one the current kube context names, is
+  no longer configured. A warning is shown when either option is given, and
+  both will be removed in a future version.
 
 Bugs Fixed
 ----------

@@ -251,6 +251,8 @@ resolver:
   - example.com
 ```
 
+When you run several local clusters, as described in [Running several local clusters](multiple-local-clusters), the one local DNS resolver serves the domains of all of them, each pointing at its own cluster's address. Creating or deleting a local cluster refreshes a running resolver. After changing the `ingress` or `resolver` configuration of a cluster in any other way, run `educates local resolver update` to have the resolver serve it.
+
 Linux systems may already provide a local DNS resolver in which case you can configure it, however how that is done will depend on the Linux distributions.
 
 If the Linux distribution uses a `dnsmasq` server as the local DNS resolver, it should be configured with an entry like the following:
@@ -489,6 +491,16 @@ With no `ingress.domain` in its configuration, a named cluster uses the `nip.io`
 To use a domain of your own, pass `--domain` when you create the cluster, or set `ingress.domain` in its configuration. As for the default cluster, a domain of your own is served over HTTPS and needs a CA in the local secrets cache, as described in [custom ingress domain](custom-ingress-domain).
 
 An `EducatesConfig` with `target.provider: kind` can also serve as a named cluster's configuration. Its `target.cluster.listenAddress` must be a specific IP address of your host, by the same rules, and it gets no `nip.io` fallback: its domain is the one its custom resources declare.
+
+### The DNS resolver
+
+One local DNS resolver serves every local cluster. It points the ingress domain and the `resolver.extraDomains` of each cluster at that cluster's own address, its `resolver.targetAddress`, which defaults to your host's IP address for the default cluster, as described in [Local DNS resolver](local-dns-resolver), and to the listen address for a named cluster. The `educates local resolver deploy` and `educates local resolver update` commands always configure it for every cluster, and take no `--local-cluster` option. The `--domain` option of `educates local resolver deploy` overrides the domain of the default cluster only.
+
+A named cluster is served while its Kind cluster exists. Creating or deleting a cluster refreshes a resolver that is already running, adding or removing that cluster's domains, so you don't need to run `educates local resolver update` yourself.
+
+The resolver answers a name from the most specific domain it serves, so a named cluster can use a subdomain of the default cluster's domain. With the default cluster on `educates.test` and the named cluster `test2` created with `--domain test2.educates.test`, names under `test2.educates.test` resolve to `10.10.10.2`, and every other name under `educates.test` still resolves to the default cluster. Two clusters claiming the same domain is an error that names both. The resolver commands report it, and so does `educates local cluster create`, before it creates anything.
+
+On macOS, the file `/etc/resolver/educates.test` you created for the default cluster's domain also covers its subdomains, so a named cluster on `test2.educates.test` needs no new file. A named cluster on a domain outside the ones you already resolve, such as `workshops.example.test`, needs a file of its own, `/etc/resolver/workshops.example.test`, with the same `nameserver 127.0.0.1` entry. A cluster on its `nip.io` domain needs neither, since `nip.io` names resolve through public DNS.
 
 ### A second data home is not a second cluster
 

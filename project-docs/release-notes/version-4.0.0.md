@@ -311,7 +311,14 @@ New Features
   configuration, and every cluster pulls from the one local image registry
   on ``localhost:5001``. The platform install of ``educates local cluster
   create`` now always targets the cluster it has just created, whatever
-  ``--context`` or ``KUBECONFIG`` say.
+  ``--context`` or ``KUBECONFIG`` say. The one local DNS resolver serves
+  the domains of every local cluster, each pointing at its own cluster's
+  ``resolver.targetAddress``, which for a named cluster defaults to its
+  listen address, so a named cluster on ``test2.educates.test`` resolves to
+  its own IP address while ``educates.test`` still resolves to the default
+  cluster. ``educates local resolver deploy`` and ``update`` configure it
+  for every cluster, creating or deleting a cluster refreshes a running
+  resolver, and two clusters claiming the same domain is an error.
 
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to

@@ -35,6 +35,12 @@ func (p *ProjectInfo) NewLocalClusterStartCmd() *cobra.Command {
 			if err := inventory.CheckStart(id); err != nil {
 				return err
 			}
+			// Docker Desktop 4.97 and later publishes ports 80 and 443 on
+			// a non-loopback address only with its privileged port
+			// setting on.
+			if err := checkDockerDesktopPrivilegedPorts(cmd.Context(), cmd.ErrOrStderr()); err != nil {
+				return err
+			}
 			return cluster.NewKindClusterConfig("", id).StartCluster()
 		},
 	}

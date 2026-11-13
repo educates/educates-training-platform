@@ -84,6 +84,9 @@ served over plain HTTP. When the local cluster's config is missing,
 create writes it from --listen-address and the optional --domain, and
 without --listen-address the default local cluster takes the host's IP
 address.
+On Docker Desktop 4.97 or later, create refuses to run while "Allow
+privileged port forwarding to external machines" is off, in Settings >
+Advanced, since ports 80 and 443 on a non-loopback address need it.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, creates a named local
 cluster beside the default one. Its config lives in
@@ -156,16 +159,17 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	// 0. Preflight: fail fast (before any docker / kind / k8s mutation)
 	//    when the cluster already exists, its listen address clashes with
 	//    another Educates cluster or is on no host interface, a declared
-	//    registry mirror's container exists with other values, host 80/443
-	//    are bound, or a secure install has no certificate source. The
-	//    clash check reads every Educates cluster's configured bindings,
-	//    so a stopped cluster counts too. The host-port case comes last,
-	//    for holders that are not Educates clusters: a probe container
-	//    tries to publish ports 80 and 443 on the listen address, since
-	//    kind would otherwise fail later with a much less actionable
-	//    error when Envoy can't publish them. The certificate case is the
-	//    one the deploy resolves later: without this check it would only
-	//    fail after the kind cluster and registry already exist.
+	//    registry mirror's container exists with other values, Docker
+	//    Desktop's privileged port setting is off, host 80/443 are bound,
+	//    or a secure install has no certificate source. The clash check
+	//    reads every Educates cluster's configured bindings, so a stopped
+	//    cluster counts too. The host-port case comes last, for holders
+	//    that are not Educates clusters: a probe container tries to
+	//    publish ports 80 and 443 on the listen address, since kind would
+	//    otherwise fail later with a much less actionable error when Envoy
+	//    can't publish them. The certificate case is the one the deploy
+	//    resolves later: without this check it would only fail after the
+	//    kind cluster and registry already exist.
 	in, err := p.prepareLocalCreate(cfg)
 	if err != nil {
 		return err
@@ -203,6 +207,12 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return err
 	}
 	warnLeftOutConfigs(w, leftOut)
+	// Docker Desktop 4.97 and later publishes ports 80 and 443 on the
+	// listen address, a non-loopback address, only with its privileged
+	// port setting on.
+	if err := checkDockerDesktopPrivilegedPorts(ctx, w); err != nil {
+		return err
+	}
 	if err := checkHostPortsAvailable(ctx, in.Cluster.ListenAddress, o.Verbose, w); err != nil {
 		return err
 	}

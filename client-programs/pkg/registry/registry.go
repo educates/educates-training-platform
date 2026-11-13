@@ -260,7 +260,9 @@ func createRegistryContainer(bindIP string, p Progress) error {
 /**
  * This function is used to deploy a registry mirror and link it to the cluster.
  * It is used when creating a new local registry mirror. nodes names the
- * cluster's node containers that get the mirror's containerd host config.
+ * node containers that get the mirror's containerd host config: those of
+ * the local cluster being created, or of every local cluster. An existing
+ * mirror container is reused as it is.
  */
 func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, nodes []string, p Progress) error {
 	err := createMirrorContainer(mirrorConfig, p)
@@ -270,7 +272,7 @@ func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, nodes []string, p 
 	}
 
 	if len(nodes) == 0 {
-		warn(p, "mirror not added to kind nodes: no node containers of the local cluster found")
+		warn(p, "mirror not added to kind nodes: no local cluster found")
 		return nil
 	}
 
@@ -630,8 +632,9 @@ func DeleteRegistry(p Progress) error {
 
 /**
  * This function is used to delete a local registry mirror and unlink it from the cluster.
- * It is used when deleting a local registry mirror. nodes names the
- * cluster's node containers to remove the mirror's containerd host config from.
+ * It is used when deleting a local registry mirror. nodes names the node
+ * containers, of every local cluster, to remove the mirror's containerd
+ * host config from.
  */
 func DeleteMirrorAndUnlinkFromCluster(mirrorConfig *MirrorConfig, nodes []string, p Progress) error {
 	ctx := context.Background()

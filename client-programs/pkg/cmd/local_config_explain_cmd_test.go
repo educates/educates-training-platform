@@ -21,6 +21,8 @@ func TestExplainSchemaForKind(t *testing.T) {
 		{"inline", schemas.EducatesInlineConfig},
 		{"escape", schemas.EducatesConfig},
 		{"EducatesConfig", schemas.EducatesConfig},
+		{"mirrors", schemas.EducatesLocalMirrors},
+		{"EducatesLocalMirrors", schemas.EducatesLocalMirrors},
 	}
 	for _, tc := range cases {
 		sch, err := explainSchemaForKind(tc.kind)
@@ -85,6 +87,24 @@ func TestLocalConfigExplain_Resolver_ExplainsTheSharedResolver(t *testing.T) {
 				t.Errorf("explain %s still mentions targetAddress:\n%s", tc.path, buf.String())
 			}
 		})
+	}
+}
+
+// The registry mirrors file's kind explains the mirrors every local
+// cluster shares.
+func TestLocalConfigExplain_MirrorsKind_ExplainsTheRegistryMirrors(t *testing.T) {
+	p := ProjectInfo{}
+	cmd := p.NewLocalConfigExplainCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"registryMirrors", "--kind", "mirrors"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	for _, want := range []string{"FIELD:    registryMirrors <[]Object>", "every local cluster", "mirror", "password"} {
+		if !bytes.Contains(buf.Bytes(), []byte(want)) {
+			t.Errorf("explain registryMirrors --kind mirrors does not mention %q:\n%s", want, buf.String())
+		}
 	}
 }
 

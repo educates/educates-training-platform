@@ -16,6 +16,11 @@ import (
 // completion and validation.
 const DefaultLocalConfigModeline = `# yaml-language-server: $schema=` + v1alpha1.SchemaBaseURL + v1alpha1.KindEducatesLocalConfig + `.json`
 
+// LocalMirrorsModeline is the yaml-language-server modeline that points
+// editors at the published EducatesLocalMirrors schema of the registry
+// mirrors file for completion and validation.
+const LocalMirrorsModeline = `# yaml-language-server: $schema=` + v1alpha1.SchemaBaseURL + v1alpha1.KindEducatesLocalMirrors + `.json`
+
 // hostIPListenAddressComment is the comment above a cluster.listenAddress
 // the CLI wrote from the host's detected IP address.
 const hostIPListenAddressComment = `  # This host's IP address when this file was written. An alias such as
@@ -70,6 +75,15 @@ func LocalConfigPath(dataHome string) string {
 // empty when it is missing, and never writes into it.
 func DnsmasqIncludeDir(dataHome string) string {
 	return filepath.Join(dataHome, "dnsmasq.d")
+}
+
+// LocalMirrorsPath is the path of the registry mirrors file in the data
+// home dataHome: <data-home>/mirrors.yaml. It declares, as an
+// EducatesLocalMirrors, the registry mirrors every local cluster needs.
+// The CLI reads it and never writes it, except the migration of a v3
+// values.yaml.
+func LocalMirrorsPath(dataHome string) string {
+	return filepath.Join(dataHome, "mirrors.yaml")
 }
 
 // LoadLocalConfigIfPresent loads the local config of the data home

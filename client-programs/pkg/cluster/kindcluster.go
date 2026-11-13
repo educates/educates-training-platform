@@ -207,100 +207,94 @@ func (o *KindClusterConfig) DeleteCluster() error {
 	return nil
 }
 
+// StopCluster stops every running node container of the local cluster,
+// workers before control-plane nodes.
 func (o *KindClusterConfig) StopCluster() error {
 	ctx := context.Background()
 
-	if exists, err := o.ClusterExists(); !exists {
-		if err != nil {
-			return err
-		}
-		return errors.New("cluster for Educates does not exist")
+	observed, err := o.observeExistingCluster(ctx)
+	if err != nil {
+		return err
 	}
 
 	cli, err := docker.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
-	}
-
-	_, err = cli.ContainerInspect(ctx, o.Identity.ControlPlaneNode(), client.ContainerInspectOptions{})
-
-	if err != nil {
-		return errors.Wrap(err, "no container for Educates cluster")
 	}
 
 	fmt.Printf("Stopping cluster %s ...\n", o.Identity.KindName)
 
 	timeout := 30
 
-	if _, err := cli.ContainerStop(ctx, o.Identity.ControlPlaneNode(), client.ContainerStopOptions{Timeout: &timeout}); err != nil {
-		return errors.Wrapf(err, "failed to stop cluster")
+	for _, node := range o.Identity.NodesToStop(observed) {
+		if _, err := cli.ContainerStop(ctx, node, client.ContainerStopOptions{Timeout: &timeout}); err != nil {
+			return errors.Wrapf(err, "failed to stop cluster: node container %s", node)
+		}
 	}
 
 	return nil
 }
 
+// StartCluster starts every node container of the local cluster that is
+// not running, control-plane nodes first.
 func (o *KindClusterConfig) StartCluster() error {
 	ctx := context.Background()
 
-	if exists, err := o.ClusterExists(); !exists {
-		if err != nil {
-			return err
-		}
-		return errors.New("cluster for Educates does not exist")
+	observed, err := o.observeExistingCluster(ctx)
+	if err != nil {
+		return err
 	}
 
 	cli, err := docker.NewDockerClient()
 
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
-	}
-
-	_, err = cli.ContainerInspect(ctx, o.Identity.ControlPlaneNode(), client.ContainerInspectOptions{})
-
-	if err != nil {
-		return errors.Wrap(err, "no container for Educates cluster")
 	}
 
 	fmt.Printf("Starting cluster %s ...\n", o.Identity.KindName)
 
-	if _, err := cli.ContainerStart(ctx, o.Identity.ControlPlaneNode(), client.ContainerStartOptions{}); err != nil {
-		return errors.Wrapf(err, "failed to start cluster")
+	for _, node := range o.Identity.NodesToStart(observed) {
+		if _, err := cli.ContainerStart(ctx, node, client.ContainerStartOptions{}); err != nil {
+			return errors.Wrapf(err, "failed to start cluster: node container %s", node)
+		}
 	}
 
 	return nil
 }
 
+// ClusterStatus prints whether the local cluster's node containers are
+// all running, none running, or only some, naming those that are not.
 func (o *KindClusterConfig) ClusterStatus() error {
 	ctx := context.Background()
 
-	if exists, err := o.ClusterExists(); !exists {
-		if err != nil {
-			return err
-		}
-		return errors.New("cluster for Educates does not exist")
-	}
-
-	cli, err := docker.NewDockerClient()
-
+	observed, err := o.observeExistingCluster(ctx)
 	if err != nil {
-		return errors.Wrap(err, "unable to create docker client")
+		return err
 	}
 
-	containerJSON, err := cli.ContainerInspect(ctx, o.Identity.ControlPlaneNode(), client.ContainerInspectOptions{})
-
-	if err != nil {
-		return errors.Wrap(err, "no container for Educates cluster")
-	}
-
-	if containerJSON.Container.State.Running {
+	switch o.Identity.State(observed) {
+	case localclusters.Running:
 		fmt.Println("Educates cluster is Running")
-		// if ip, err := config.HostIP(); err == nil {
-		// 	fmt.Println("  Cluster IP: ", ip)
-		// }
-	} else {
+	case localclusters.PartlyRunning:
+		fmt.Printf("Educates cluster is %s (not running: %s)\n",
+			localclusters.PartlyRunning, strings.Join(o.Identity.NodesToStart(observed), ", "))
+	default:
 		fmt.Println("Educates cluster is NOT Running")
 	}
 
 	return nil
+}
+
+// observeExistingCluster returns the kind node containers on the Docker
+// host, or an error when the local cluster does not exist.
+func (o *KindClusterConfig) observeExistingCluster(ctx context.Context) ([]localclusters.NodeContainer, error) {
+	if exists, err := o.ClusterExists(); !exists {
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.New("cluster for Educates does not exist")
+	}
+
+	return ObserveNodeContainers(ctx)
 }

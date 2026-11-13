@@ -92,7 +92,7 @@ func DeployRegistryAndLinkToCluster(bindIP string, nodes []string, client *kuber
 	}
 
 	// This is needed so that kubernetes nodes can pull images from the local registry
-	if err = documentLocalRegistry(client); err != nil {
+	if err = DocumentLocalRegistry(client); err != nil {
 		return errors.Wrap(err, "failed to document registry config in cluster")
 	}
 
@@ -551,10 +551,11 @@ func removeRegistryConfigFromKindNode(ctx context.Context, cli *client.Client, c
 }
 
 /**
- * This function is used to document the local registry in the cluster.
- * It is used when creating a new local registry.
+ * This function documents the local registry in the cluster, through the
+ * kube-public/local-registry-hosting ConfigMap. It is used when creating
+ * a local cluster or deploying the local registry.
  */
-func documentLocalRegistry(client *kubernetes.Clientset) error {
+func DocumentLocalRegistry(client *kubernetes.Clientset) error {
 	yamlBytes, err := yaml.Marshal(`host: "localhost:5001"`)
 	if err != nil {
 		return err

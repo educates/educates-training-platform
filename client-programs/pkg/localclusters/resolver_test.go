@@ -34,7 +34,7 @@ type resolverInputs struct {
 // renderResolver renders the resolver config of the inventory of in's
 // data home and observed node containers.
 func renderResolver(in resolverInputs) ([]byte, error) {
-	return NewInventory(Observed{Nodes: in.Observed}, in.DataHome).ResolverConfig(in.HostIP, in.Given...)
+	return NewInventory(Observed{Nodes: in.Observed, HostIP: in.HostIP}, in.DataHome).ResolverConfig(in.Given...)
 }
 
 // renderAddresses renders the resolver config from in and returns its

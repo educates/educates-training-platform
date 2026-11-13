@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
-	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/resolver"
@@ -17,13 +16,7 @@ import (
 // with the local clusters of given served from the configs given for
 // them. It fails when two clusters claim the same domain.
 func localResolverConfig(inv localclusters.Inventory, given ...localclusters.ResolverInput) ([]byte, error) {
-	// Without a host IP address, the default local cluster is served at
-	// the loopback address and gets no nip.io domain.
-	hostIP, err := hostinfo.DetectHostIP()
-	if err != nil {
-		hostIP = ""
-	}
-	return inv.ResolverConfig(hostIP, given...)
+	return inv.ResolverConfig(given...)
 }
 
 // observedResolverConfig is localResolverConfig for the local clusters

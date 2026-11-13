@@ -30,8 +30,7 @@ type ResolverInput struct {
 // ResolverConfig returns the dnsmasq configuration of the local DNS
 // resolver, which serves the domains of every local cluster, each
 // pointing at its own cluster's target address, or the error that two
-// clusters claim the same domain. hostIP is the host's IP address, empty
-// when it is not known.
+// clusters claim the same domain.
 //
 // The local clusters served are the default local cluster, when the data
 // home holds its config, every named Educates cluster that has a config
@@ -41,21 +40,20 @@ type ResolverInput struct {
 // cluster's config as the resolver commands are given it. A named
 // cluster's config follows the rules of LoadNamedConfig.
 //
-// Each cluster's ingress domain, declared or derived, and its
-// resolver.extraDomains point at its target address. The default local
-// cluster's domain, when its EducatesLocalConfig declares none, is the
-// nip.io name of the host's IP address, and its target address is
-// resolver.targetAddress, or else the host's IP address, or else
-// 127.0.0.1. A named local cluster's target address is
-// resolver.targetAddress, or else its listen address.
-func (inv Inventory) ResolverConfig(hostIP string, given ...ResolverInput) ([]byte, error) {
+// Each cluster's ingress domain, declared or derived as
+// LoadedConfig.Domain gives it with the observed host IP address, and
+// its resolver.extraDomains point at its target address. The default
+// local cluster's target address is resolver.targetAddress, or else the
+// observed host IP address, or else 127.0.0.1. A named local cluster's
+// target address is resolver.targetAddress, or else its listen address.
+func (inv Inventory) ResolverConfig(given ...ResolverInput) ([]byte, error) {
 	configs, err := inv.servedConfigs(given)
 	if err != nil {
 		return nil, err
 	}
 	clusters := make([]resolverCluster, 0, len(configs))
 	for _, c := range configs {
-		rc, err := newResolverCluster(c, hostIP)
+		rc, err := newResolverCluster(c, inv.observed.HostIP)
 		if err != nil {
 			return nil, err
 		}

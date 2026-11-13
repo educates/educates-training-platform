@@ -15,8 +15,8 @@ import (
 // cluster from def.
 func renderWithDefault(t *testing.T, def localclusters.ResolverInput) string {
 	t.Helper()
-	inv := localclusters.NewInventory(localclusters.Observed{}, utils.GetEducatesHomeDir())
-	content, err := inv.ResolverConfig("192.168.1.10", def)
+	inv := localclusters.NewInventory(localclusters.Observed{HostIP: "192.168.1.10"}, utils.GetEducatesHomeDir())
+	content, err := inv.ResolverConfig(def)
 	if err != nil {
 		t.Fatalf("ResolverConfig: %v", err)
 	}

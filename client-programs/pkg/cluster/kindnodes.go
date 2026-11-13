@@ -10,6 +10,7 @@ import (
 	"github.com/moby/moby/client"
 	"github.com/pkg/errors"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
@@ -89,7 +90,14 @@ func ObserveLocalClusters(ctx context.Context) (localclusters.Observed, error) {
 		return localclusters.Observed{}, err
 	}
 
-	return localclusters.Observed{Nodes: nodes, InterfaceAddresses: interfaces, Mirrors: mirrors}, nil
+	// Without a host IP address, the default local cluster gets no
+	// nip.io domain, and the resolver points it at the loopback address.
+	hostIP, err := hostinfo.DetectHostIP()
+	if err != nil {
+		hostIP = ""
+	}
+
+	return localclusters.Observed{Nodes: nodes, InterfaceAddresses: interfaces, Mirrors: mirrors, HostIP: hostIP}, nil
 }
 
 // ObserveNodeContainers returns every kind node container on the Docker

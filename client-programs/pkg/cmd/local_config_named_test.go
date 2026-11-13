@@ -123,13 +123,33 @@ func TestLocalConfigInit_NamedCluster_Force_Overwrites(t *testing.T) {
 	}
 }
 
-func TestLocalConfigInit_DefaultCluster_RefusesTheNamedClusterFlags(t *testing.T) {
-	for _, o := range []*LocalConfigInitOptions{{ListenAddress: "10.10.10.2"}, {Domain: "educates.test"}} {
+func TestLocalConfigInit_DefaultCluster_WritesTheListenAddressAndDomainGiven(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
+	dataHome, _ := namedClusterForTest(t)
+
+	err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{ListenAddress: "10.10.10.1", Domain: "educates.test"},
+		localclusters.Default(dataHome), io.Discard)
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	written := declaredConfig(t, config.LocalConfigPath(dataHome))
+	if written.Cluster.ListenAddress != "10.10.10.1" || written.Ingress.Domain != "educates.test" {
+		t.Errorf("written cluster.listenAddress, ingress.domain = %q, %q, want 10.10.10.1, educates.test",
+			written.Cluster.ListenAddress, written.Ingress.Domain)
+	}
+	if body, _ := os.ReadFile(config.LocalConfigPath(dataHome)); strings.Contains(string(body), "This host's IP address") {
+		t.Errorf("a listen address given is commented as the host's IP address:\n%s", body)
+	}
+}
+
+func TestLocalConfigInit_DefaultCluster_RefusesAListenAddressTheRulesReject(t *testing.T) {
+	for _, address := range []string{"0.0.0.0", "127.0.0.1"} {
 		dataHome, _ := namedClusterForTest(t)
 
-		err := (&ProjectInfo{}).runLocalConfigInit(o, localclusters.Default(dataHome), io.Discard)
+		err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{ListenAddress: address}, localclusters.Default(dataHome), io.Discard)
 
-		wantError(t, err, "named local cluster", "--local-cluster", "EDUCATES_LOCAL_CLUSTER")
+		wantError(t, err, "--listen-address", address)
 		if _, err := os.Stat(config.LocalConfigPath(dataHome)); !os.IsNotExist(err) {
 			t.Errorf("the default cluster's config was written: stat err = %v", err)
 		}

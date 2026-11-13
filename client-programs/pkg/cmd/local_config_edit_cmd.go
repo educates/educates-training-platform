@@ -96,7 +96,9 @@ func runLocalConfigEdit(id localclusters.Identity) error {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("read %s: %w", canonical, err)
 		}
-		seed = []byte(defaultLocalConfigYAML)
+		if seed, err = localclusters.ConfigYAML(id, localclusters.ConfigFlags{}); err != nil {
+			return err
+		}
 	}
 
 	editorPath, err := resolveEditor()

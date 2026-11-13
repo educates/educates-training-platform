@@ -98,9 +98,11 @@ func (p *ProjectInfo) runLocalConfigView(o *LocalConfigViewOptions, id localclus
 	// one without a specific listen address, is shown all the same, with
 	// why, so that it can be fixed.
 	ruleErr := localclusters.CheckConfig(id, body, cfgPath)
-	effective, _, err := p.renderDefaultedLocalConfig(declared)
+	// ruleErr says why when the domain can't be derived.
+	_ = p.applyLocalConfigDefaults(declared)
+	effective, err := yaml.Marshal(declared)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal effective configuration: %w", err)
 	}
 
 	if _, err := io.WriteString(w, localConfigSchemaModeline+"\n"); err != nil {

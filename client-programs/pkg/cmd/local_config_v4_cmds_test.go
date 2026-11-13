@@ -10,6 +10,7 @@ import (
 )
 
 func TestLocalConfigInit_WritesDefault(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	t.Setenv("EDUCATES_CLI_DATA_HOME", t.TempDir())
 
 	o := &LocalConfigInitOptions{}
@@ -25,6 +26,75 @@ func TestLocalConfigInit_WritesDefault(t *testing.T) {
 	for _, want := range []string{"apiVersion: cli.educates.dev/v1alpha1", "kind: EducatesLocalConfig"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("init output missing %q:\n%s", want, s)
+		}
+	}
+}
+
+// hostIPLocalConfig is the config local config init writes on a host
+// whose IP address is 192.168.50.151.
+const hostIPLocalConfig = minimalLocalConfigYAML +
+	"cluster:\n" +
+	"  # This host's IP address when this file was written. An alias such as\n" +
+	"  # 10.10.10.1, added to a network interface, survives network changes.\n" +
+	"  listenAddress: 192.168.50.151\n"
+
+func TestLocalConfigInit_WritesTheHostIPAsTheListenAddress(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+
+	var out bytes.Buffer
+	if err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{}, defaultLocalCluster(), &out); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	if body, _ := os.ReadFile(filepath.Join(dataHome, "config.yaml")); string(body) != hostIPLocalConfig {
+		t.Errorf("init wrote:\n%s\nwant:\n%s", body, hostIPLocalConfig)
+	}
+	if strings.Contains(out.String(), "note:") {
+		t.Errorf("init of a config the cluster can use printed a note:\n%s", out.String())
+	}
+}
+
+func TestLocalConfigInit_WithNoHostIP_WritesNoListenAddressAndSaysWhatToSet(t *testing.T) {
+	stubHostIP(t, "")
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+
+	var out bytes.Buffer
+	if err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{}, defaultLocalCluster(), &out); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	if body, _ := os.ReadFile(filepath.Join(dataHome, "config.yaml")); string(body) != minimalLocalConfigYAML {
+		t.Errorf("init wrote:\n%s\nwant:\n%s", body, minimalLocalConfigYAML)
+	}
+	for _, want := range []string{"note:", "cluster.listenAddress", "educates local config set cluster.listenAddress <ip>"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("init output does not mention %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestLocalConfigInit_Defaults_WritesTheHostIPAndItsNipDomain(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+
+	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
+	if err := p.runLocalConfigInit(&LocalConfigInitOptions{Defaults: true}, defaultLocalCluster(), io.Discard); err != nil {
+		t.Fatalf("init --defaults: %v", err)
+	}
+
+	body, _ := os.ReadFile(filepath.Join(dataHome, "config.yaml"))
+	for _, want := range []string{
+		"cluster:\n  # This host's IP address when this file was written.",
+		"  listenAddress: 192.168.50.151\n",
+		"domain: 192-168-50-151.nip.io",
+		"insecure: true",
+	} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("init --defaults output missing %q:\n%s", want, body)
 		}
 	}
 }
@@ -47,6 +117,7 @@ func TestLocalConfigInit_ExistingFile_ErrorsWithoutForce(t *testing.T) {
 }
 
 func TestLocalConfigInit_Force_Overwrites(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte("old"), 0o644); err != nil {
@@ -188,7 +259,7 @@ func TestLocalConfigCommands_DefaultClusterWithoutAListenAddress_OpenItToFixIt(t
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	path := filepath.Join(dataHome, "config.yaml")
-	if err := os.WriteFile(path, []byte(defaultLocalConfigYAML+"ingress:\n  domain: educates.test\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(minimalLocalConfigYAML+"ingress:\n  domain: educates.test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	setIt := "educates local config set cluster.listenAddress 192.168.50.151"
@@ -216,8 +287,8 @@ func TestLocalConfigCommands_DefaultClusterWithoutAListenAddress_OpenItToFixIt(t
 
 func TestRunLocalConfigEdit_DefaultCluster_ReopensOnAListenAddressTheRulesReject(t *testing.T) {
 	dataHome := stageInitConfig(t)
-	everyAddress := defaultLocalConfigYAML + "cluster:\n  listenAddress: 0.0.0.0\n"
-	valid := defaultLocalConfigYAML + "cluster:\n  listenAddress: 10.10.10.1\n# edited-marker\n"
+	everyAddress := minimalLocalConfigYAML + "cluster:\n  listenAddress: 0.0.0.0\n"
+	valid := minimalLocalConfigYAML + "cluster:\n  listenAddress: 10.10.10.1\n# edited-marker\n"
 	stateDir := stageFakeEditor(t, everyAddress, valid)
 
 	if err := runLocalConfigEdit(defaultLocalCluster()); err != nil {
@@ -401,7 +472,7 @@ func stageInitConfig(t *testing.T) string {
 	t.Helper()
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
-	body := defaultLocalConfigYAML + "cluster:\n  listenAddress: 10.10.10.1\n"
+	body := minimalLocalConfigYAML + "cluster:\n  listenAddress: 10.10.10.1\n"
 	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}

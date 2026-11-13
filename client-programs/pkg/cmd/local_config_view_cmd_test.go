@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
@@ -80,15 +81,18 @@ func TestLocalConfigView_FullyDefaulted_SkipsComment(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
-	defaulted, domainErr, err := p.renderDefaultedLocalConfig(&v1alpha1.EducatesLocalConfig{
+	cfg := &v1alpha1.EducatesLocalConfig{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.APIVersion, Kind: v1alpha1.KindEducatesLocalConfig},
 		Cluster:  v1alpha1.LocalClusterConfig{ListenAddress: "10.10.10.1"},
-	})
-	if err != nil || domainErr != nil {
-		t.Fatalf("renderDefaultedLocalConfig: %v, domain: %v", err, domainErr)
 	}
-	body := localConfigSchemaModeline + "\n" + string(defaulted)
-	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(body), 0o644); err != nil {
+	if err := p.applyLocalConfigDefaults(cfg); err != nil {
+		t.Fatalf("applyLocalConfigDefaults: %v", err)
+	}
+	body, err := config.MarshalLocalConfig(cfg, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), body, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -112,6 +116,7 @@ func TestLocalConfigView_FullyDefaulted_SkipsComment(t *testing.T) {
 // writes a fully-defaulted, schema-valid file carrying the modeline and
 // the static defaults.
 func TestLocalConfigInit_Defaults_WritesEffective(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 

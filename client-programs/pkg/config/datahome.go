@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
@@ -13,14 +16,46 @@ import (
 // completion and validation.
 const DefaultLocalConfigModeline = `# yaml-language-server: $schema=` + v1alpha1.SchemaBaseURL + v1alpha1.KindEducatesLocalConfig + `.json`
 
-// DefaultLocalConfigYAML is the minimal EducatesLocalConfig — modeline,
-// apiVersion and kind only — written by `local config init` and by
-// `local cluster create` when no config exists yet. Every other field
-// takes its default at deploy time.
-const DefaultLocalConfigYAML = DefaultLocalConfigModeline + `
-apiVersion: ` + v1alpha1.APIVersion + `
-kind: ` + v1alpha1.KindEducatesLocalConfig + `
+// hostIPListenAddressComment is the comment above a cluster.listenAddress
+// the CLI wrote from the host's detected IP address.
+const hostIPListenAddressComment = `  # This host's IP address when this file was written. An alias such as
+  # 10.10.10.1, added to a network interface, survives network changes.
 `
+
+// MarshalLocalConfig returns cfg as the CLI writes an EducatesLocalConfig
+// into the data home: the yaml-language-server modeline, then cfg. When
+// listenAddressIsHostIP is set, cfg's cluster.listenAddress is the host's
+// IP address the CLI detected, and a comment above it says so, and that
+// an alias such as 10.10.10.1 survives network changes.
+func MarshalLocalConfig(cfg *v1alpha1.EducatesLocalConfig, listenAddressIsHostIP bool) ([]byte, error) {
+	body, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal the local config: %w", err)
+	}
+	if listenAddressIsHostIP {
+		body = commentListenAddress(body, hostIPListenAddressComment)
+	}
+	return append([]byte(DefaultLocalConfigModeline+"\n"), body...), nil
+}
+
+// commentListenAddress returns body, an EducatesLocalConfig as
+// yaml.Marshal writes it, with comment above the line of its
+// cluster.listenAddress.
+func commentListenAddress(body []byte, comment string) []byte {
+	lines := strings.SplitAfter(string(body), "\n")
+	inCluster := false
+	for i, line := range lines {
+		switch {
+		case line == "cluster:\n":
+			inCluster = true
+		case inCluster && strings.HasPrefix(line, "  listenAddress:"):
+			return []byte(strings.Join(lines[:i], "") + comment + strings.Join(lines[i:], ""))
+		case !strings.HasPrefix(line, " "):
+			inCluster = false
+		}
+	}
+	return body
+}
 
 // LocalConfigPath is the path of the local config in the data home
 // dataHome: <data-home>/config.yaml.
@@ -76,38 +111,6 @@ func EnsureLocalConfigFile(dataHome string) error {
 		return nil
 	}
 	return MissingLocalConfigError(dataHome)
-}
-
-// EnsureOrInitLocalConfigFile is the cluster-create counterpart to
-// EnsureLocalConfigFile: where the latter returns MissingLocalConfigError
-// for a first-time user, this one writes the minimal default
-// EducatesLocalConfig in its place so `local cluster create` runs
-// end-to-end without a preceding `local config init`. It reports whether
-// it created the file so the caller can tell the user.
-//
-// The v3 → v4 migration still runs first and still wins: a laptop-kind v3
-// values.yaml is migrated (created=false), and a non-laptop v3 values.yaml
-// still errors out of MaybeMigrateV3 — we never write a default over a
-// real, if unmigratable, v3 install. The write below is reached only when
-// there is genuinely no prior config to honour.
-func EnsureOrInitLocalConfigFile(dataHome string) (created bool, err error) {
-	configPath := LocalConfigPath(dataHome)
-	if _, err := os.Stat(configPath); err == nil {
-		return false, nil
-	}
-	if err := MaybeMigrateV3(dataHome, os.Stderr); err != nil {
-		return false, err
-	}
-	if _, err := os.Stat(configPath); err == nil {
-		return false, nil
-	}
-	if err := os.MkdirAll(dataHome, 0o755); err != nil {
-		return false, fmt.Errorf("create data home %q: %w", dataHome, err)
-	}
-	if err := os.WriteFile(configPath, []byte(DefaultLocalConfigYAML), 0o644); err != nil {
-		return false, fmt.Errorf("write %s: %w", configPath, err)
-	}
-	return true, nil
 }
 
 // MissingLocalConfigError diagnoses why <data-home>/config.yaml is missing

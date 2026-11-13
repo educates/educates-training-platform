@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -73,20 +74,23 @@ func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
 An EducatesConfig creates the kind cluster from target.cluster and deploys
 its custom resources as declared, with no CLI defaulting: no nip.io
 domain, and no certificates or Secrets taken from the local secrets
-cache. Any Secret the custom resources reference has to be
-created in the cluster before the deploy can become ready.
-
---local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, creates a named local
-cluster beside the default one. Its config lives in
-<data-home>/clusters/<name>/config.yaml, and when it is missing, create
-writes it from --listen-address and the optional --domain.
+cache. Any Secret the custom resources reference has to be created in the
+cluster before the deploy can become ready.
 
 Every local cluster's cluster.listenAddress must be a specific IP address
 of the host, neither 0.0.0.0 nor a loopback address, and with no
 ingress.domain the cluster takes the nip.io name of that address and is
-served over plain HTTP. --config with --local-cluster takes the config from the file and the
-cluster's name from the flag, and makes the cluster's folder
-<data-home>/clusters/<name>/ without copying the file into it.
+served over plain HTTP. When the local cluster's config is missing,
+create writes it from --listen-address and the optional --domain, and
+without --listen-address the default local cluster takes the host's IP
+address.
+
+--local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, creates a named local
+cluster beside the default one. Its config lives in
+<data-home>/clusters/<name>/config.yaml. --config with --local-cluster
+takes the config from the file and the cluster's name from the flag, and
+makes the cluster's folder <data-home>/clusters/<name>/ without copying
+the file into it.
 
 --cluster-only stops after step 4 — useful for testing the platform
 deploy against a hand-prepared cluster.`,
@@ -122,8 +126,8 @@ deploy against a hand-prepared cluster.`,
 	c.Flags().StringVarP(&o.Config, "config", "c", "", "path to a CLI config file (any kind)")
 	c.Flags().BoolVar(&o.LocalConfig, "local-config", false, "use the local cluster's config in the data home (default when --config is not given)")
 	addLocalClusterFlag(c)
-	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP a named local cluster publishes ports 80 and 443 on, written to its config when it has none")
-	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to a named local cluster's config when it has none (default: the nip.io name of the listen address)")
+	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP the local cluster publishes ports 80 and 443 on, written to its config when it has none (default: this host's IP address for the default local cluster; required for a named one)")
+	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to the local cluster's config when it has none (default: the nip.io name of the listen address)")
 	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file kind writes the cluster's context into, and the platform deploy uses (defaults to ~/.kube/config)")
 	c.Flags().StringVar(&o.ClusterImage, "kind-cluster-image", "", "docker image to use when booting the kind cluster (overrides --kubernetes-version)")
 	c.Flags().StringVar(&o.KubernetesVersion, "kubernetes-version", constants.DefaultKubernetesVersion, fmt.Sprintf("Kubernetes version for the kind cluster (supported: %v)", constants.SupportedKubernetesVersions()))
@@ -297,39 +301,43 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 // Accepts EducatesLocalConfig directly or EducatesConfig with
 // target.provider=kind; everything else errors.
 //
-// A named local cluster's config comes from --config when given, and
-// otherwise from the cluster's folder in the data home, written from
-// --listen-address and --domain when missing. Either way it follows the
-// rules of localclusters.LoadConfigFile, and the cluster's folder exists
-// once it loads: --config makes it, without copying the file into it.
-// The default local cluster's config follows the same rules, and takes
-// neither flag.
+// The config comes from --config when given, and otherwise from the
+// cluster's config in the data home, written from --listen-address and
+// --domain when missing, as localclusters.EnsureConfig writes it: the
+// default local cluster's takes the host's IP address without
+// --listen-address. A v3 install of the default local cluster is
+// migrated first. Either way the config follows the rules of
+// localclusters.LoadConfigFile, and a named cluster's folder exists once
+// it loads: --config makes it, without copying the file into it.
 func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v1alpha1.Config, string, bool, error) {
-	flags := localclusters.NamedConfigFlags{ListenAddress: o.ListenAddress, Domain: o.Domain}
-	if !id.IsDefault() {
-		return loadNamedLocalConfig(o, id, flags)
-	}
-	if !flags.IsZero() {
-		return nil, "", false, localclusters.ConfigFlagsOnDefaultClusterError()
-	}
-
-	var path string
-	var created bool
-	// --local-config is the default for laptop create — matches v3
-	// behaviour where running the command with no flags pointed at
-	// <data-home>/config.yaml. --config still wins when set.
+	flags := localclusters.ConfigFlags{ListenAddress: o.ListenAddress, Domain: o.Domain}
+	path, created := id.ConfigPath, false
 	if o.Config != "" {
 		path = o.Config
-	} else {
-		path = id.ConfigPath
-		// Unlike render/deploy, a first-time laptop create shouldn't dead-end
-		// on "run config init first"; write a minimal default in place and
-		// carry on. Migration of an existing v3 install still takes priority.
-		didInit, err := config.EnsureOrInitLocalConfigFile(utils.GetEducatesHomeDir())
-		if err != nil {
-			return nil, "", false, err
+		if !flags.IsZero() {
+			return nil, path, false, fmt.Errorf("--%s and --%s write a missing config in the data home, so they can't be combined with --config",
+				localclusters.ListenAddressFlagName, localclusters.DomainFlagName)
 		}
-		created = didInit
+		// The config stays in the file, but a named cluster's folder in
+		// the data home is what makes its kind cluster an Educates
+		// cluster.
+		if err := localclusters.MakeClusterFolder(id); err != nil {
+			return nil, path, false, err
+		}
+	} else {
+		// Unlike render/deploy, a first-time laptop create shouldn't
+		// dead-end on "run config init first", so a missing config is
+		// written in place. Migration of an existing v3 install still
+		// takes priority, and an unmigratable one refuses.
+		if id.IsDefault() {
+			if err := config.MaybeMigrateV3(utils.GetEducatesHomeDir(), os.Stderr); err != nil {
+				return nil, path, false, err
+			}
+		}
+		var err error
+		if created, err = localclusters.EnsureConfig(id, flags); err != nil {
+			return nil, path, false, err
+		}
 	}
 	cfg, err := localclusters.LoadConfigFile(id, path)
 	if err != nil {
@@ -346,29 +354,6 @@ func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v
 	default:
 		return nil, path, created, fmt.Errorf("%s: unsupported kind %q for local cluster create", path, cfg.GetKind())
 	}
-}
-
-// loadNamedLocalConfig is loadLocalConfig for the named local cluster id.
-func loadNamedLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity, flags localclusters.NamedConfigFlags) (v1alpha1.Config, string, bool, error) {
-	if o.Config != "" {
-		if !flags.IsZero() {
-			return nil, o.Config, false, fmt.Errorf("--%s and --%s write a missing config in the data home, so they can't be combined with --config",
-				localclusters.ListenAddressFlagName, localclusters.DomainFlagName)
-		}
-		cfg, err := localclusters.LoadConfigFile(id, o.Config)
-		if err != nil {
-			return nil, o.Config, false, err
-		}
-		// The config stays in the file, but the cluster's folder in the
-		// data home is what makes its kind cluster an Educates cluster.
-		return cfg, o.Config, false, localclusters.MakeClusterFolder(id)
-	}
-	created, err := localclusters.EnsureNamedConfig(id, flags)
-	if err != nil {
-		return nil, id.ConfigPath, false, err
-	}
-	cfg, err := localclusters.LoadConfigFile(id, id.ConfigPath)
-	return cfg, id.ConfigPath, created, err
 }
 
 // localCreateInputs is what local cluster create takes from the loaded

@@ -105,6 +105,12 @@ func wantError(t *testing.T, err error, parts ...string) {
 	}
 }
 
+// minimalLocalConfigYAML is the EducatesLocalConfig the CLI writes for the
+// default local cluster on a host whose IP address it can't detect:
+// the modeline, apiVersion and kind.
+const minimalLocalConfigYAML = config.DefaultLocalConfigModeline + "\n" +
+	"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"
+
 // stubHostIP makes host IP detection report ip for the rest of the test
 // t, or fail when ip is empty.
 func stubHostIP(t *testing.T, ip string) {
@@ -205,16 +211,15 @@ func TestLoadLocalConfig_NamedClusterWithConfigFlag_AppliesTheNamedClusterRules(
 	wantError(t, err, path, "cluster.listenAddress")
 }
 
-func TestLoadLocalConfig_ConfigWritingFlagsNeedANamedClusterAndNoConfigFlag(t *testing.T) {
+func TestLoadLocalConfig_ConfigWritingFlagsNeedNoConfigFlag(t *testing.T) {
 	dataHome, id := namedClusterForTest(t)
-
-	_, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{ListenAddress: "10.10.10.2"}, localclusters.Default(dataHome))
-	wantError(t, err, "--listen-address", "named local cluster", "--local-cluster", "EDUCATES_LOCAL_CLUSTER")
-
 	path := writeFixture(t, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
 		"cluster:\n  listenAddress: 10.10.10.2\n")
-	_, _, _, err = loadLocalConfig(&LocalClusterCreateOptions{Config: path, Domain: "test2.educates.test"}, id)
-	wantError(t, err, "--domain", "--config")
+
+	for _, target := range []localclusters.Identity{id, localclusters.Default(dataHome)} {
+		_, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path, Domain: "test2.educates.test"}, target)
+		wantError(t, err, "--domain", "--config")
+	}
 }
 
 func TestCreateDeployFlags_TargetTheCreatedCluster(t *testing.T) {
@@ -296,5 +301,132 @@ func TestLoadLocalConfig_NamedCluster_FlagsThatAgreeWithTheConfigAreAccepted(t *
 	}
 	if got := cfg.(*v1alpha1.EducatesLocalConfig).Ingress.Domain; got != "test2.educates.test" {
 		t.Errorf("ingress.domain = %q, want test2.educates.test", got)
+	}
+}
+
+// defaultClusterForTest sets a temporary data home, which does not exist
+// yet, and returns it with the identity of its default local cluster.
+func defaultClusterForTest(t *testing.T) (string, localclusters.Identity) {
+	t.Helper()
+	dataHome := filepath.Join(t.TempDir(), "educates")
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	return dataHome, localclusters.Default(dataHome)
+}
+
+func TestLoadLocalConfig_DefaultCluster_WritesTheHostIPWhenItHasNoConfig(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
+	_, id := defaultClusterForTest(t)
+
+	cfg, path, created, err := loadLocalConfig(&LocalClusterCreateOptions{}, id)
+	if err != nil {
+		t.Fatalf("loadLocalConfig: %v", err)
+	}
+
+	if !created || path != id.ConfigPath {
+		t.Errorf("created, path = %t, %q, want true, %q", created, path, id.ConfigPath)
+	}
+	if body, _ := os.ReadFile(id.ConfigPath); string(body) != hostIPLocalConfig {
+		t.Errorf("create wrote:\n%s\nwant:\n%s", body, hostIPLocalConfig)
+	}
+	if got := cfg.(*v1alpha1.EducatesLocalConfig).Ingress.Domain; got != "192-168-50-151.nip.io" {
+		t.Errorf("ingress.domain = %q, want the nip.io name of the host's IP address", got)
+	}
+}
+
+func TestLoadLocalConfig_DefaultCluster_WithNoHostIPWritesTheConfigAndFailsSayingWhatToSet(t *testing.T) {
+	stubHostIP(t, "")
+	_, id := defaultClusterForTest(t)
+
+	_, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{}, id)
+
+	wantError(t, err, "cluster.listenAddress", "must be set", "educates local config set cluster.listenAddress <ip>")
+	if body, _ := os.ReadFile(id.ConfigPath); string(body) != minimalLocalConfigYAML {
+		t.Errorf("create wrote:\n%s\nwant:\n%s", body, minimalLocalConfigYAML)
+	}
+}
+
+func TestLoadLocalConfig_DefaultCluster_WritesTheListenAddressAndDomainGiven(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
+	_, id := defaultClusterForTest(t)
+
+	cfg, _, created, err := loadLocalConfig(&LocalClusterCreateOptions{ListenAddress: "10.10.10.1", Domain: "educates.test"}, id)
+	if err != nil {
+		t.Fatalf("loadLocalConfig: %v", err)
+	}
+
+	written := declaredConfig(t, id.ConfigPath)
+	if !created || written.Cluster.ListenAddress != "10.10.10.1" || written.Ingress.Domain != "educates.test" {
+		t.Errorf("created %t, wrote cluster.listenAddress %q, ingress.domain %q; want true, 10.10.10.1, educates.test",
+			created, written.Cluster.ListenAddress, written.Ingress.Domain)
+	}
+	if got := cfg.(*v1alpha1.EducatesLocalConfig).Ingress.Domain; got != "educates.test" {
+		t.Errorf("ingress.domain = %q, want educates.test", got)
+	}
+}
+
+func TestLoadLocalConfig_DefaultCluster_RefusesAListenAddressFlagTheRulesReject(t *testing.T) {
+	_, id := defaultClusterForTest(t)
+
+	_, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{ListenAddress: "127.0.0.1"}, id)
+
+	wantError(t, err, "--listen-address", "127.0.0.1", "loopback")
+	if _, err := os.Stat(id.ConfigPath); !os.IsNotExist(err) {
+		t.Errorf("a config was written: stat err = %v", err)
+	}
+}
+
+func TestLoadLocalConfig_DefaultCluster_KeepsAnExistingConfig(t *testing.T) {
+	_, id := defaultClusterForTest(t)
+	existing := "# hand-edited config\napiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
+		"cluster:\n  listenAddress: 10.10.10.1\n"
+	writeNamedConfig(t, id, existing)
+
+	_, _, created, err := loadLocalConfig(&LocalClusterCreateOptions{}, id)
+	if err != nil {
+		t.Fatalf("loadLocalConfig: %v", err)
+	}
+	if created {
+		t.Errorf("created = true, want false for an existing config")
+	}
+	if body, _ := os.ReadFile(id.ConfigPath); string(body) != existing {
+		t.Errorf("the existing config was overwritten:\n%s", body)
+	}
+
+	_, _, _, err = loadLocalConfig(&LocalClusterCreateOptions{ListenAddress: "10.10.10.9"}, id)
+	wantError(t, err, "--listen-address 10.10.10.9", "disagrees", "cluster.listenAddress 10.10.10.1")
+}
+
+func TestLoadLocalConfig_DefaultCluster_MigratesAV3InstallInsteadOfWritingOne(t *testing.T) {
+	dataHome, id := defaultClusterForTest(t)
+	writeLocalClusterListFile(t, filepath.Join(dataHome, "values.yaml"),
+		"clusterInfrastructure:\n  provider: kind\nclusterIngress:\n  domain: educates.test\n"+
+			"localKindCluster:\n  listenAddress: 10.10.10.1\n")
+
+	cfg, _, created, err := loadLocalConfig(&LocalClusterCreateOptions{}, id)
+	if err != nil {
+		t.Fatalf("loadLocalConfig: %v", err)
+	}
+
+	if created {
+		t.Errorf("created = true, want false for a migrated v3 install")
+	}
+	if got := cfg.(*v1alpha1.EducatesLocalConfig).Ingress.Domain; got != "educates.test" {
+		t.Errorf("ingress.domain = %q, want the v3 domain educates.test", got)
+	}
+}
+
+func TestLoadLocalConfig_DefaultCluster_NonKindV3InstallRefusesWithoutWritingOne(t *testing.T) {
+	dataHome, id := defaultClusterForTest(t)
+	writeLocalClusterListFile(t, filepath.Join(dataHome, "values.yaml"),
+		"clusterInfrastructure:\n  provider: gke\n")
+
+	_, _, created, err := loadLocalConfig(&LocalClusterCreateOptions{}, id)
+
+	wantError(t, err, "provider")
+	if created {
+		t.Errorf("created = true, want false when the migration refuses")
+	}
+	if _, err := os.Stat(id.ConfigPath); !os.IsNotExist(err) {
+		t.Errorf("a default config was written over an unmigratable v3 install: stat err = %v", err)
 	}
 }

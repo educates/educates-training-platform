@@ -90,11 +90,80 @@ server=1.0.0.1
 server=1.1.1.1
 strict-order
 
-# Default local cluster
+# Default local cluster (config.yaml): 10.10.10.1, its listen address
 address=/educates.test/10.10.10.1
 `
 	if got := string(content); got != want {
 		t.Errorf("rendered config:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// renderHeadings renders the resolver config from in and returns its
+// cluster headings, in order.
+func renderHeadings(t *testing.T, in resolverInputs) []string {
+	t.Helper()
+	content, err := renderResolver(in)
+	if err != nil {
+		t.Fatalf("ResolverConfig: %v", err)
+	}
+	var headings []string
+	for _, line := range strings.Split(string(content), "\n") {
+		if strings.HasPrefix(line, "# Default local cluster") || strings.HasPrefix(line, "# Local cluster") {
+			headings = append(headings, line)
+		}
+	}
+	return headings
+}
+
+func TestResolverConfigHeadingsNameEachClusterConfigAndAddressSource(t *testing.T) {
+	dataHome := t.TempDir()
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
+		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")
+	observed := []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)}
+
+	for _, tc := range []struct {
+		name   string
+		hostIP string
+		want   []string
+	}{
+		{
+			name:   "with the host's IP known",
+			hostIP: "192.168.50.151",
+			want: []string{
+				"# Default local cluster (config.yaml): 192.168.50.151, the host's IP",
+				"# Local cluster test2 (clusters/test2/config.yaml): 10.10.10.2, its listen address",
+			},
+		},
+		{
+			name: "with the host's IP unknown",
+			want: []string{
+				"# Default local cluster (config.yaml): 127.0.0.1, the loopback address as the host's IP is unknown",
+				"# Local cluster test2 (clusters/test2/config.yaml): 10.10.10.2, its listen address",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := renderHeadings(t, resolverInputs{DataHome: dataHome, HostIP: tc.hostIP, Observed: observed})
+
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("headings:\n got  %q\n want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolverConfigHeadingNamesAGivenConfigByThePathGiven(t *testing.T) {
+	dataHome := t.TempDir()
+	def := givenConfig(t, Default(dataHome), localConfigHeader+
+		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
+	def.Source = "my-config.yaml"
+
+	got := renderHeadings(t, resolverInputs{DataHome: dataHome, HostIP: "192.168.1.10", Given: []ResolverInput{def}})
+
+	want := []string{"# Default local cluster (my-config.yaml): 10.10.10.1, its listen address"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("headings:\n got  %q\n want %q", got, want)
 	}
 }
 

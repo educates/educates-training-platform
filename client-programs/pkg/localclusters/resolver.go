@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -73,7 +74,7 @@ func (inv Inventory) ResolverConfig(given ...ResolverInput) ([]byte, []error, er
 			}
 			in = ResolverInput{LoadedConfig: loaded}
 		}
-		rc, err := newResolverCluster(in, inv.observed.HostIP)
+		rc, err := newResolverCluster(in, inv.observed.HostIP, inv.dataHome)
 		if err != nil {
 			if isGiven {
 				return nil, nil, err
@@ -147,16 +148,25 @@ type resolverCluster struct {
 	id      Identity
 	domains []string
 	address string
+
+	// addressSource is where address comes from.
+	addressSource AddressSource
+
+	// config names the cluster's config: its path relative to the data
+	// home when it is the cluster's config there, and otherwise the path
+	// it was given by.
+	config string
 }
 
 // newResolverCluster returns what the resolver serves for the local
-// cluster of the config given, on the host with the IP address hostIP.
+// cluster of the config given, on the host with the IP address hostIP,
+// of the data home dataHome.
 //
 // The config is an EducatesLocalConfig, or an EducatesConfig with a
 // target block. Only an EducatesLocalConfig that declares no ingress
 // domain gets a nip.io one: an EducatesConfig gets no CLI defaults, so
 // its domain is the one its custom resources declare, if any.
-func newResolverCluster(given ResolverInput, hostIP string) (resolverCluster, error) {
+func newResolverCluster(given ResolverInput, hostIP, dataHome string) (resolverCluster, error) {
 	id, source := given.Identity, given.Source
 	fields, ok := clusterFieldsOf(given.Config)
 	if !ok {
@@ -166,13 +176,52 @@ func newResolverCluster(given ResolverInput, hostIP string) (resolverCluster, er
 		return resolverCluster{}, fmt.Errorf("%s: unsupported kind %q for the local DNS resolver", source, given.Config.GetKind())
 	}
 
-	address, _ := resolverAddress(fields.listenAddress, hostIP)
+	address, addressSource := resolverAddress(fields.listenAddress, hostIP)
 	domain := cmp.Or(given.ResolverDomainOverride, given.Domain(hostIP))
 	return resolverCluster{
-		id:      id,
-		domains: servedDomains(domain, fields.resolver.ExtraDomains),
-		address: address,
+		id:            id,
+		domains:       servedDomains(domain, fields.resolver.ExtraDomains),
+		address:       address,
+		addressSource: addressSource,
+		config:        configName(id, source, dataHome),
 	}, nil
+}
+
+// configName names the config of the local cluster id, loaded from
+// source, of the data home dataHome: by its path relative to the data
+// home when it is the cluster's config there, and otherwise by source,
+// the path it was given by.
+func configName(id Identity, source, dataHome string) string {
+	if source != id.ConfigPath {
+		return source
+	}
+	if rel, err := filepath.Rel(dataHome, source); err == nil {
+		return rel
+	}
+	return source
+}
+
+// heading is the comment that starts the cluster's entries in the
+// resolver's configuration. It names the cluster, its config, its address
+// and where that comes from, in one of these forms, which tools may
+// parse:
+//
+//	# Default local cluster (config.yaml): 10.10.10.1, its listen address
+//	# Local cluster test2 (clusters/test2/config.yaml): 192.168.1.10, the host's IP
+func (c resolverCluster) heading() string {
+	cluster := "Default local cluster"
+	if !c.id.IsDefault() {
+		cluster = "Local cluster " + c.id.Name
+	}
+	return fmt.Sprintf("# %s (%s): %s, %s", cluster, c.config, c.address, headingAddressSources[c.addressSource])
+}
+
+// headingAddressSources say in a heading where a cluster's address comes
+// from.
+var headingAddressSources = map[AddressSource]string{
+	AddressFromListenAddress: "its listen address",
+	AddressFromHostIP:        "the host's IP",
+	AddressFromLoopback:      "the loopback address as the host's IP is unknown",
 }
 
 // servedDomains returns the domains a local cluster's entries point at its
@@ -213,11 +262,7 @@ func renderDnsmasqConfig(clusters []resolverCluster) []byte {
 	var b strings.Builder
 	b.WriteString(dnsmasqHeader)
 	for _, c := range clusters {
-		heading := "Default local cluster"
-		if !c.id.IsDefault() {
-			heading = "Local cluster " + c.id.Name
-		}
-		fmt.Fprintf(&b, "\n# %s\n", heading)
+		fmt.Fprintf(&b, "\n%s\n", c.heading())
 		for _, domain := range c.domains {
 			fmt.Fprintf(&b, "address=/%s/%s\n", domain, c.address)
 		}

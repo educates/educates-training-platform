@@ -320,13 +320,13 @@ New Features
   ``KUBECONFIG`` or the current kube context say.
 
   ``educates local cluster list`` shows every local cluster, the default
-  one marked, with its state, listen address, ingress domain and kube
-  context. A Kind cluster named ``educates-<name>`` counts as a local
-  cluster only when its folder ``clusters/<name>/`` exists in the data
-  home, so Kind clusters made by hand are left out of the list and of every
-  check, and ``delete``, ``start``, ``stop`` and ``status`` refuse a
-  ``--local-cluster`` name whose folder the data home does not hold, with
-  an error saying why. Before ``create`` creates a cluster, and before
+  one marked, with its state, listen address, ingress domain, declared or
+  derived as the DNS resolver serves it, and kube context. A Kind cluster
+  named ``educates-<name>`` counts as a local cluster only when its folder
+  ``clusters/<name>/`` exists in the data home, so Kind clusters made by
+  hand are left out of the list and of every check, and ``delete``,
+  ``start``, ``stop`` and ``status`` refuse a ``--local-cluster`` name
+  whose folder the data home does not hold, with an error saying why. Before ``create`` creates a cluster, and before
   ``start`` starts one, its listen address is checked against every other
   local cluster, running or stopped: an address another cluster also uses,
   a cluster on ``0.0.0.0`` beside any other, and an address on no network

@@ -32,7 +32,7 @@ If you know you do not intend to recreate the Kubernetes cluster, and so want ev
 educates local cluster delete --all
 ```
 
-This will also delete the local image registry and DNS resolver if deployed.
+This will also delete the local image registry, the DNS resolver and the registry mirrors, if deployed. When you run [several local clusters](multiple-local-clusters), every cluster shares these, so `--all` keeps them while another local cluster remains, and names the clusters still using them.
 
 (custom-configuration)=
 Custom configuration
@@ -445,7 +445,7 @@ To create a named cluster called `test2` on the host IP address `10.10.10.2`, ru
 educates local cluster create --local-cluster test2 --listen-address 10.10.10.2
 ```
 
-When the named cluster has no configuration yet, this writes one to `clusters/test2/config.yaml` in the data home, declaring `cluster.listenAddress` and, when you add `--domain`, `ingress.domain`. It then creates the Kind cluster `educates-test2` and installs Educates into it, while the default cluster keeps running. The install always targets the cluster just created, through its own kube context, whatever `--context` or `KUBECONFIG` say. Creating a named cluster with neither a configuration nor `--listen-address` fails, and so does a `--listen-address` or `--domain` that disagrees with an existing configuration: the options only write a missing configuration, and never change one. You can also supply the configuration with `--config`, in which case the file supplies the configuration and `--local-cluster` the name of the cluster.
+When the named cluster has no configuration yet, this writes one to `clusters/test2/config.yaml` in the data home, declaring `cluster.listenAddress` and, when you add `--domain`, `ingress.domain`. It then creates the Kind cluster `educates-test2` and installs Educates into it, while the default cluster keeps running. The install always targets the cluster just created, through its own kube context, whatever `KUBECONFIG` or the current kube context say. Creating a named cluster with neither a configuration nor `--listen-address` fails, and so does a `--listen-address` or `--domain` that disagrees with an existing configuration: the options only write a missing configuration, and never change one. You can also supply the configuration with `--config`, in which case the file supplies the configuration and `--local-cluster` the name of the cluster.
 
 The `educates local cluster create`, `delete`, `start`, `stop` and `status` commands act on the cluster `--local-cluster` names. To act on one cluster for every command in a terminal, set the `EDUCATES_LOCAL_CLUSTER` environment variable instead:
 
@@ -456,7 +456,7 @@ educates local cluster status
 
 The `--local-cluster` option takes precedence over the environment variable, and an empty value, as in `--local-cluster=`, selects the default cluster even when the variable is set. With neither, the commands act on the default cluster, as they always have. A cluster name is a lowercase DNS label of at most 31 characters.
 
-Deleting a named cluster with `educates local cluster delete --local-cluster test2` deletes its Kind cluster and keeps its configuration, so you can create it again with just `--local-cluster test2`. The `--all` option also deletes the local image registry, the DNS resolver and the registry mirrors that every cluster shares, so use it only when deleting the last cluster.
+Deleting a named cluster with `educates local cluster delete --local-cluster test2` deletes its Kind cluster and keeps its configuration, so you can create it again with just `--local-cluster test2`. The `--all` option also deletes the local image registry, the DNS resolver and the registry mirrors that every cluster shares, but only once no other local cluster remains, running or stopped. While another one does, `--all` deletes the selected cluster, keeps the shared containers and names the clusters still using them, so the containers go with the last cluster you delete with `--all`.
 
 Kind makes the cluster it created last the current context of your kubeconfig, and commands that act on a cluster through the current context, such as `educates cluster workshop deploy`, follow it. Switch between clusters with `kubectl config use-context`, for example `kubectl config use-context kind-educates` for the default cluster.
 
@@ -482,6 +482,18 @@ Neither command persists the address across a restart of your host, so add it ag
 
 Docker Desktop 4.97 and later serves published ports below 1024 on loopback addresses only, unless the setting "Allow privileged port forwarding to external machines", under **Settings > Advanced**, is turned on. A named cluster publishes ports 80 and 443 on a non-loopback address, so turn this setting on before creating one.
 
+### Listen addresses that clash
+
+Before `educates local cluster create` creates a cluster, and before `educates local cluster start` starts one, the command line tool checks the cluster's listen address against every other local cluster, running or stopped, as its Kind node containers are configured. It refuses, naming the other cluster, when:
+
+* another local cluster publishes ports 80 and 443 on the same address, since every cluster needs an address of its own;
+* either cluster publishes them on `0.0.0.0`, every host address, which leaves no address for any other cluster;
+* the address is on no network interface of your host, as when an address you added was lost on a restart.
+
+A stopped cluster counts, since it takes its address back when it starts. A default cluster created on `0.0.0.0` therefore stops any named cluster from being created next to it, and the error tells you to re-create the default cluster on a specific IP address: delete it, set `cluster.listenAddress` in its configuration to an address of your host, such as `10.10.10.1`, and create it again.
+
+Once those checks pass, `educates local cluster create` still tries to bind ports 80 and 443 on the address before it creates the Kind cluster, which catches a port held by something other than a local cluster, such as another ingress controller.
+
 ### The ingress domain
 
 With no `ingress.domain` in its configuration, a named cluster uses the `nip.io` name of its listen address, with dashes, such as `10-10-10-2.nip.io` for `10.10.10.2`, and `ingress.insecure` defaults to true, so the cluster is served over plain HTTP with no certificate authority to manage. This mirrors the default cluster, which falls back to the `nip.io` name of your host's IP address. As `nip.io` names only IPv4 addresses, a cluster listening on an IPv6 address needs an `ingress.domain` of its own.
@@ -489,6 +501,18 @@ With no `ingress.domain` in its configuration, a named cluster uses the `nip.io`
 To use a domain of your own, pass `--domain` when you create the cluster, or set `ingress.domain` in its configuration. As for the default cluster, a domain of your own is served over HTTPS and needs a CA in the local secrets cache, as described in [custom ingress domain](custom-ingress-domain).
 
 An `EducatesConfig` with `target.provider: kind` can also serve as a named cluster's configuration. Its `target.cluster.listenAddress` must be a specific IP address of your host, by the same rules, and it gets no `nip.io` fallback: its domain is the one its custom resources declare.
+
+### Listing the clusters
+
+To see every local cluster, run:
+
+```
+educates local cluster list
+```
+
+It lists the default cluster, shown as `(default)`, and every named cluster, whatever `--local-cluster` or `EDUCATES_LOCAL_CLUSTER` select. Each row has the cluster's state, the host IP address it publishes ports 80 and 443 on, its ingress domain and its kube context. The state is `running`, `stopped`, or `partly running` when only some nodes of a multi-node cluster run. The domain is the one the cluster's configuration declares, or for a named cluster the `nip.io` name of its listen address, and shows as `-` when there is none, as for a default cluster that falls back to the `nip.io` name of your host's IP address.
+
+Only the Kind clusters the command line tool manages are local clusters: the Kind cluster `educates`, and a Kind cluster `educates-<name>` whose folder `clusters/<name>/` exists in the data home. A Kind cluster you created yourself is left out of the list and ignored by every check, even when its name starts with `educates-`.
 
 ### A named cluster's configuration
 

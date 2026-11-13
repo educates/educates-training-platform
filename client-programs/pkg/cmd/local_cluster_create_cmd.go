@@ -39,7 +39,6 @@ type LocalClusterCreateOptions struct {
 	Config            string
 	LocalConfig       bool
 	Kubeconfig        string
-	Context           string
 	ClusterImage      string
 	KubernetesVersion string
 	ClusterOnly       bool
@@ -124,7 +123,6 @@ deploy against a hand-prepared cluster.`,
 	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP a named local cluster publishes ports 80 and 443 on, written to its config when it has none")
 	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to a named local cluster's config when it has none (default: the nip.io name of the listen address)")
 	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file kind writes the cluster's context into, and the platform deploy uses (defaults to ~/.kube/config)")
-	c.Flags().StringVar(&o.Context, "context", "", "context name to use within the kubeconfig (for the platform deploy tail-call)")
 	c.Flags().StringVar(&o.ClusterImage, "kind-cluster-image", "", "docker image to use when booting the kind cluster (overrides --kubernetes-version)")
 	c.Flags().StringVar(&o.KubernetesVersion, "kubernetes-version", constants.DefaultKubernetesVersion, fmt.Sprintf("Kubernetes version for the kind cluster (supported: %v)", constants.SupportedKubernetesVersions()))
 	c.Flags().BoolVar(&o.ClusterOnly, "cluster-only", false, "create kind cluster + registry; skip the platform deploy")
@@ -150,12 +148,16 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	}
 
 	// 0. Preflight: fail fast (before any docker / kind / k8s mutation)
-	//    when the cluster already exists, host 80/443 are bound, or a
-	//    secure install has no certificate source. The host-port case is
-	//    the v3 busybox probe; kind itself fails later with a much less
-	//    actionable error if Envoy can't publish. The certificate case is
-	//    the one the deploy resolves later: without this check it would
-	//    only fail after the kind cluster and registry already exist.
+	//    when the cluster already exists, its listen address clashes with
+	//    another Educates cluster or is on no host interface, host 80/443
+	//    are bound, or a secure install has no certificate source. The
+	//    clash check reads every Educates cluster's configured bindings,
+	//    so a stopped cluster counts too. The host-port case is the v3
+	//    busybox probe, last, for holders that are not Educates clusters;
+	//    kind itself fails later with a much less actionable error if
+	//    Envoy can't publish. The certificate case is the one the deploy
+	//    resolves later: without this check it would only fail after the
+	//    kind cluster and registry already exist.
 	in, err := p.prepareLocalCreate(cfg)
 	if err != nil {
 		return err
@@ -165,6 +167,13 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return err
 	} else if exists {
 		return fmt.Errorf("kind cluster '%s' already exists; run 'educates local cluster delete%s' first or use the existing cluster directly", id.KindName, localClusterFlagArg(id))
+	}
+	inventory, err := localClusterInventory(ctx)
+	if err != nil {
+		return err
+	}
+	if err := inventory.CheckCreate(id, in.Cluster.ListenAddress); err != nil {
+		return err
 	}
 	if err := checkHostPortsAvailable(ctx, in.Cluster.ListenAddress, o.Verbose, w); err != nil {
 		return err
@@ -509,9 +518,9 @@ func tailCallDeploy(ctx context.Context, w io.Writer, cfg v1alpha1.Config, plan 
 // createDeployFlags returns the connection flags of create's platform
 // deploy into the local cluster id, which kind created with its context
 // in the kubeconfig file kubeconfig. The deploy goes through that file
-// and the cluster's own context, whatever --context, KUBECONFIG or the
-// file's current context say, so it always lands in the cluster create
-// just made.
+// and the cluster's own context, whatever KUBECONFIG or the file's
+// current context say, so it always lands in the cluster create just
+// made.
 func createDeployFlags(o *LocalClusterCreateOptions, kubeconfig string, id localclusters.Identity) deployPipelineFlags {
 	return deployPipelineFlags{
 		Kubeconfig: kubeconfig,

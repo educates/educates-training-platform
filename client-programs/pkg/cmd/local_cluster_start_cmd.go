@@ -25,6 +25,16 @@ func (p *ProjectInfo) NewLocalClusterStartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Refuse to start a cluster whose listen address another
+			// Educates cluster, running or stopped, also binds, or that
+			// is on no host interface.
+			inventory, err := localClusterInventory(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if err := inventory.CheckStart(id); err != nil {
+				return err
+			}
 			return cluster.NewKindClusterConfig("", id).StartCluster()
 		},
 	}

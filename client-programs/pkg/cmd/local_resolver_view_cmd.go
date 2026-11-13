@@ -31,14 +31,14 @@ from: the default local cluster's config in the data home, and the config
 of every named local cluster whose kind cluster exists.
 
 The first table has a row for each local cluster, with the address its
-names resolve to, where that address comes from, its listen address or the
-host's IP address, and its config. The second has a row for each name, with
-its cluster and where it comes from: the ingress domain, the nip.io name of
-an address, resolver.extraDomains, or an address= line of a *.conf file of
-your own in <data-home>/dnsmasq.d. Its notes say when a name is covered by
-a broader name of the same cluster, when it wins over another cluster's
-broader name, when one of your files names a domain a cluster also serves,
-and, on macOS, when no /etc/resolver file forwards it to the resolver.
+names resolve to, its listen address, and its config. The second has a
+row for each name, with its cluster and where it comes from: the ingress
+domain, the nip.io name of the listen address, resolver.extraDomains, or
+an address= line of a *.conf file of your own in <data-home>/dnsmasq.d.
+Its notes say when a name is covered by a broader name of the same
+cluster, when it wins over another cluster's broader name, when one of
+your files names a domain a cluster also serves, and, on macOS, when no
+/etc/resolver file forwards it to the resolver.
 
 Configs the resolver leaves out are listed after the tables.`,
 		Example: localResolverViewExample,
@@ -108,9 +108,9 @@ func etcResolverFileExists() func(domain string) bool {
 func printLocalResolverView(w, errW io.Writer, view localclusters.ResolverView) {
 	clusters := make([][]string, 0, len(view.Clusters))
 	for _, r := range view.Clusters {
-		clusters = append(clusters, []string{r.Cluster, r.Address, r.AddressFrom, r.Config})
+		clusters = append(clusters, []string{r.Cluster, r.Address, r.Config})
 	}
-	fmt.Fprintln(w, utils.PrintTable([]string{"CLUSTER", "ADDRESS", "ADDRESS FROM", "CONFIG"}, clusters))
+	fmt.Fprintln(w, utils.PrintTable([]string{"CLUSTER", "ADDRESS", "CONFIG"}, clusters))
 	fmt.Fprintln(w)
 
 	names := make([][]string, 0, len(view.Names))

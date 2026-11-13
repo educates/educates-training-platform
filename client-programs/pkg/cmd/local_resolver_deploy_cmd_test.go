@@ -15,7 +15,7 @@ import (
 // cluster from def.
 func renderWithDefault(t *testing.T, def localclusters.ResolverInput) string {
 	t.Helper()
-	inv := localclusters.NewInventory(localclusters.Observed{HostIP: "192.168.1.10"}, utils.GetEducatesHomeDir())
+	inv := localclusters.NewInventory(localclusters.Observed{}, utils.GetEducatesHomeDir())
 	content, _, err := inv.ResolverConfig(def)
 	if err != nil {
 		t.Fatalf("ResolverConfig: %v", err)
@@ -68,7 +68,7 @@ func TestDefaultResolverConfig_Domain_OverridesTheDataHomeConfigDomain(t *testin
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(
-		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ningress:\n  domain: educates.test\n"), 0o644); err != nil {
+		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -78,7 +78,7 @@ func TestDefaultResolverConfig_Domain_OverridesTheDataHomeConfigDomain(t *testin
 	}
 
 	content := renderWithDefault(t, def)
-	wantLines(t, content, "address=/mydomain.test/192.168.1.10")
+	wantLines(t, content, "address=/mydomain.test/10.10.10.1")
 	if strings.Contains(content, "educates.test") {
 		t.Errorf("resolver config still serves the overridden domain:\n%s", content)
 	}

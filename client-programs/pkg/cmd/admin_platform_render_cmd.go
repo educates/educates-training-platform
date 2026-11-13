@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
-	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/translator"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localcerts"
@@ -22,10 +21,9 @@ const adminPlatformRenderExample = `
   #   - ingress.domain MUST be set in the config; render errors if empty.
   educates admin platform render --config env.yaml > install.yaml
 
-  # Render the install for laptop convenience (uses ~/.educates/config.yaml
-  # or $EDUCATES_CLI_DATA_HOME/config.yaml). When ingress.domain is empty,
-  # falls back to <host-IP>.nip.io with a comment header noting the
-  # derivation.
+  # Render the install for laptop convenience (uses the default local
+  # cluster's <data-home>/config.yaml). When ingress.domain is empty, it
+  # falls back to the nip.io name of cluster.listenAddress.
   educates admin platform render --local-config
 
   # Render the install of the named local cluster test2 from its own config:
@@ -60,15 +58,14 @@ Defaulting is flag-driven:
                     this CLI binary; ingress.domain MUST be set in the
                     config. Render is deterministic for a given (input,
                     CLI version) pair.
-  --local-config    Laptop convenience mode. Same defaults, plus a
-                    <host-IP>.nip.io fallback for ingress.domain when
-                    empty. Output is host-specific.
+  --local-config    Laptop convenience mode. Same defaults, plus the
+                    rules of a local cluster's config: a specific
+                    cluster.listenAddress, and its nip.io name as the
+                    ingress.domain fallback when empty.
 
 --local-config reads the config of the local cluster that --local-cluster
 or EDUCATES_LOCAL_CLUSTER selects: <data-home>/config.yaml for the default
-local cluster, <data-home>/clusters/<name>/config.yaml for a named one. A
-named cluster's config with no ingress.domain takes the nip.io name of its
-cluster.listenAddress instead of the host IP's.`,
+local cluster, <data-home>/clusters/<name>/config.yaml for a named one.`,
 		Example: adminPlatformRenderExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.LocalCluster = localClusterSelection(cmd)
@@ -98,16 +95,12 @@ func (p *ProjectInfo) runRender(w io.Writer, o *PlatformRenderOptions) error {
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
 		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
-		var hostNote string
-		if o.LocalConfig {
-			hostNote, err = maybeApplyHostDomain(c)
-			if err != nil {
-				return err
-			}
-		} else if c.Ingress.Domain == "" {
+		// The local cluster rules of --local-config have already given
+		// an empty ingress.domain the nip.io name of the listen address.
+		if !o.LocalConfig && c.Ingress.Domain == "" {
 			return fmt.Errorf(`ingress.domain is required when using --config.
-Set it explicitly in %s, or use --local-config to derive a <host-IP>.nip.io
-fallback (output becomes host-specific and unsuitable for GitOps).`, path)
+Set it explicitly in %s, or use --local-config to fall back to the nip.io
+name of cluster.listenAddress.`, path)
 		}
 		// The certificates come from the local certificate resolution
 		// step. Failing here (before any rendering) gives the user a
@@ -121,7 +114,7 @@ fallback (output becomes host-specific and unsuitable for GitOps).`, path)
 		opts = plan.TranslatorOptions()
 		var notes yamlComments
 		plan.Report(&notes)
-		header = hostNote + notes.String()
+		header = notes.String()
 	case *v1alpha1.EducatesConfig:
 		// Escape-hatch: pure passthrough. No CLI-side defaults. User owns
 		// the full surface; missing required fields are caught by the
@@ -176,35 +169,6 @@ func loadPlatformConfig(configFile string, localConfig bool, sel localclusters.S
 	}
 	loaded, err := localclusters.LoadConfig(id)
 	return loaded.Config, id.ConfigPath, err
-}
-
-// maybeApplyHostDomain applies <host-IP>.nip.io to ingress.domain when
-// empty, and in that case also defaults ingress.insecure to true: a
-// nip.io address cannot obtain a trusted TLS certificate, so the
-// last-resort laptop fallback is a plain-HTTP cluster that needs no CA.
-// A user-set domain is left untouched (and keeps the secure CustomCA
-// path unless ingress.insecure is set explicitly). Returns the header
-// comment block to emit at the top of the rendered output (empty when no
-// defaulting was needed).
-func maybeApplyHostDomain(c *v1alpha1.EducatesLocalConfig) (string, error) {
-	if c.Ingress.Domain != "" {
-		return "", nil
-	}
-	ip, err := hostinfo.DetectHostIP()
-	if err != nil {
-		return "", fmt.Errorf("auto-detect host IP for ingress.domain default: %w", err)
-	}
-	c.Ingress.Domain = hostinfo.NipDomain(ip)
-	c.Ingress.Insecure = true
-	return fmt.Sprintf(`# NOTE: ingress.domain was auto-derived from host IP %s as a last-resort
-# nip.io fallback, and ingress.insecure was defaulted to true so the
-# cluster is served over plain HTTP with no CA to manage (a nip.io
-# address cannot obtain a trusted TLS certificate). For a secure install
-# portable across networks, set ingress.domain to a fixed name like
-# 'workshop.test', which the local DNS resolver resolves to
-# cluster.listenAddress when that is a specific IP address, and add a CA
-# with 'educates local secrets add ca'.
-`, ip), nil
 }
 
 // writeRender emits the rendered install plan in deploy order:

@@ -58,13 +58,16 @@ VALUE is coerced based on its raw form:
 
 The full config is re-validated against the EducatesLocalConfig schema
 after the change. The write only happens when validation passes, so
-type / enum errors are caught up front with the offending field path.
+type / enum errors are caught up front with the offending field path. The
+config must also keep following the rules of a local cluster's config,
+such as a cluster.listenAddress that is a specific IP address of the
+host: a config without one takes
+'educates local config set cluster.listenAddress <ip>' before any other
+change.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, sets a field in the
 config of a named local cluster instead,
-<data-home>/clusters/<name>/config.yaml. That config must also keep
-following the rules of a named local cluster's config, such as a
-cluster.listenAddress that is a specific IP address of the host.`,
+<data-home>/clusters/<name>/config.yaml.`,
 		Example: localConfigSetExample,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := selectedLocalCluster(cmd)
@@ -138,13 +141,10 @@ func runLocalConfigSet(w io.Writer, id localclusters.Identity, path, rawValue st
 	if err := enc.Close(); err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	// A named local cluster's config also follows the rules every named
-	// cluster's config does, such as a specific, non-loopback listen
-	// address.
-	if !id.IsDefault() {
-		if err := localclusters.CheckNamedConfig(buf.Bytes(), cfgPath); err != nil {
-			return fmt.Errorf("set %q rejected: %w", path, err)
-		}
+	// The config also follows the rules every local cluster's config does,
+	// such as a specific, non-loopback listen address.
+	if err := localclusters.CheckConfig(id, buf.Bytes(), cfgPath); err != nil {
+		return fmt.Errorf("set %q rejected: %w", path, err)
 	}
 	if err := os.WriteFile(cfgPath, buf.Bytes(), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", cfgPath, err)

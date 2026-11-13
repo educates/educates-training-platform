@@ -4,7 +4,7 @@ kind: EducatesConfig
 target:
   provider: kind
   cluster:
-    listenAddress: 127.0.0.1
+    listenAddress: 10.10.10.1
 
 operator:
   image:

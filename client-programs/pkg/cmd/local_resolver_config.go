@@ -109,8 +109,9 @@ func resolverWithoutIncludeFolderWarning() string {
 }
 
 // defaultResolverConfig loads the default local cluster's config as the
-// local resolver commands take it: from configPath when it is set, and
-// otherwise from the data home, which must hold one. domain, when set,
+// local resolver commands take it, by the rules of a local cluster's
+// config: from configPath when it is set, and otherwise from the data
+// home, which must hold one. domain, when set,
 // is served in place of the config's ingress domain.
 func defaultResolverConfig(configPath, domain string) (localclusters.ResolverInput, error) {
 	id := defaultLocalCluster()
@@ -121,7 +122,7 @@ func defaultResolverConfig(configPath, domain string) (localclusters.ResolverInp
 			return localclusters.ResolverInput{}, err
 		}
 	}
-	cfg, err := config.Load(path)
+	cfg, err := localclusters.LoadConfigFile(id, path)
 	if err != nil {
 		return localclusters.ResolverInput{}, err
 	}

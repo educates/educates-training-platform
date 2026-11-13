@@ -492,8 +492,8 @@ localDNSResolver:
 		t.Errorf("Resolver.ExtraDomains = %v, want the v3 extra domains", cfg.Resolver.ExtraDomains)
 	}
 	wantLine := "dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to its " +
-		"cluster.listenAddress when that is a specific IP address, and otherwise to the host's IP address; " +
-		"set cluster.listenAddress to 192.168.1.10 to keep resolving the cluster there, or for other names " +
+		"cluster.listenAddress; set cluster.listenAddress to 192.168.1.10 to keep resolving the cluster there, " +
+		"or for other names " +
 		"add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home\n"
 	if !strings.Contains(notice, wantLine) {
 		t.Errorf("notice missing %q in:\n%s", wantLine, notice)

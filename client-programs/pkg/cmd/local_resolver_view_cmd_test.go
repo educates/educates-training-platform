@@ -14,8 +14,7 @@ import (
 // twoClusterDataHome writes a data home with a default cluster on
 // 10.10.10.1 with two extra domains, a named cluster test2 on 10.10.10.2
 // and an include file with one address= line, and returns it with the
-// inventory of both clusters running, on a host whose IP is
-// 192.168.50.151.
+// inventory of both clusters running.
 func twoClusterDataHome(t *testing.T) (string, localclusters.Inventory) {
 	t.Helper()
 	dataHome := t.TempDir()
@@ -29,7 +28,6 @@ func twoClusterDataHome(t *testing.T) (string, localclusters.Inventory) {
 	writeLocalClusterListFile(t, filepath.Join(config.DnsmasqIncludeDir(dataHome), "vm.conf"),
 		"# The lab VM\naddress=/vm.lab.test/192.168.64.5\n")
 	inventory := localclusters.NewInventory(localclusters.Observed{
-		HostIP: "192.168.50.151",
 		Nodes: []localclusters.NodeContainer{
 			listControlPlane("educates", "10.10.10.1", true),
 			listControlPlane("educates-test2", "10.10.10.2", true),
@@ -54,9 +52,9 @@ func TestLocalResolverViewPrintsTheClustersAndTheNames(t *testing.T) {
 
 	t.Logf("local resolver view:\n%s", out.String())
 	wantTables := [][]string{
-		{"CLUSTER", "ADDRESS", "ADDRESS FROM", "CONFIG"},
-		{"(default)", "10.10.10.1", "listen address", "config.yaml"},
-		{"test2", "10.10.10.2", "listen address", "clusters/test2/config.yaml"},
+		{"CLUSTER", "ADDRESS", "CONFIG"},
+		{"(default)", "10.10.10.1", "config.yaml"},
+		{"test2", "10.10.10.2", "clusters/test2/config.yaml"},
 		{},
 		{"NAME", "CLUSTER", "FROM", "NOTE"},
 		{"educates.test", "(default)", "ingress.domain", "-"},

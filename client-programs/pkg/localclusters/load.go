@@ -18,9 +18,8 @@ type LoadedConfig struct {
 	// Identity is the local cluster's identity.
 	Identity Identity
 
-	// Config is the cluster's config. A named local cluster's follows the
-	// rules of LoadNamedConfig, and the default local cluster's has the
-	// static defaults config.Load gives it.
+	// Config is the cluster's config, which follows the rules of
+	// LoadConfigFile.
 	Config v1alpha1.Config
 
 	// Source is the file the config was loaded from, named in errors.
@@ -28,9 +27,7 @@ type LoadedConfig struct {
 }
 
 // LoadConfig loads the config of the local cluster id from its file in
-// the data home: a named local cluster's by the rules of LoadNamedConfig,
-// and the default local cluster's with config.Load, which gives it its
-// static defaults.
+// the data home, by the rules of LoadConfigFile.
 //
 // A cluster with no config there is an error that says how to write one
 // and wraps fs.ErrNotExist, so a caller to which a missing config is no
@@ -41,11 +38,7 @@ func LoadConfig(id Identity) (LoadedConfig, error) {
 	if err := CheckConfigExists(id); err != nil {
 		return LoadedConfig{}, err
 	}
-	load := LoadNamedConfig
-	if id.IsDefault() {
-		load = config.Load
-	}
-	cfg, err := load(id.ConfigPath)
+	cfg, err := LoadConfigFile(id, id.ConfigPath)
 	if err != nil {
 		return LoadedConfig{}, err
 	}
@@ -95,29 +88,14 @@ func (c LoadedConfig) ListenAddress() string {
 	return fields.listenAddress
 }
 
-// Domain returns the cluster's ingress domain, declared or derived, on
-// the host with the IP address hostIP: the ingress domain the config
-// declares, or for an EducatesLocalConfig that declares none, the nip.io
-// name of the address the cluster is reached at. That is a named local
-// cluster's listen address, from which LoadNamedConfig derives its domain,
-// and the default local cluster's host IP address, from which the deploy
-// derives it. An EducatesConfig gets no CLI defaults, so its domain is the
-// one its custom resources declare.
-//
-// It is empty when the cluster has none: an EducatesConfig that declares
-// none, or the default local cluster with no declared domain and hostIP
-// empty, when the host's IP address is not known.
-func (c LoadedConfig) Domain(hostIP string) string {
+// Domain returns the cluster's ingress domain, declared or derived: the
+// ingress domain the config declares, which for an EducatesLocalConfig
+// that declares none LoadConfigFile sets to the nip.io name of its listen
+// address. An EducatesConfig gets no CLI defaults, so its domain is the
+// one its custom resources declare, and empty when they declare none.
+func (c LoadedConfig) Domain() string {
 	fields, _ := clusterFieldsOf(c.Config)
-	if fields.domain != "" || !fields.derivesDomain {
-		return fields.domain
-	}
-	address := fields.listenAddress
-	if c.Identity.IsDefault() {
-		address = hostIP
-	}
-	domain, _ := nipDomain(address)
-	return domain
+	return fields.domain
 }
 
 // clusterFields is what a local cluster's config declares about the

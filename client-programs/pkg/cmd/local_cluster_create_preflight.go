@@ -19,12 +19,7 @@ import (
 // otherwise comes up successfully but Envoy can't publish 80/443 and
 // the install hangs at IngressReady, leaving users to debug "cluster
 // created but nothing reachable".
-//
-// listenAddress="" defaults to 127.0.0.1 (matches the kind template).
 func checkHostPortsAvailable(ctx context.Context, listenAddress string, verbose bool, w io.Writer) error {
-	if listenAddress == "" {
-		listenAddress = "127.0.0.1"
-	}
 
 	const busyboxImage = "docker.io/library/busybox:latest"
 

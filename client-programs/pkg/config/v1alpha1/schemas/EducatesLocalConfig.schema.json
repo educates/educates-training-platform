@@ -15,7 +15,7 @@
       "additionalProperties": false,
       "description": "Settings for the local Kind cluster the CLI creates.",
       "properties": {
-        "listenAddress":         { "type": "string", "default": "127.0.0.1", "description": "Host address the cluster ingress is published on. Defaults to 127.0.0.1; set to 0.0.0.0 when the Docker daemon runs in a VM such as Colima so the cluster is reachable." },
+        "listenAddress":         { "type": "string", "description": "A specific IP address of the host that the cluster publishes its ports 80 and 443 on, and that its names, its ingress domain and resolver.extraDomains, resolve to. Every local cluster needs one of its own: not 0.0.0.0, which means every host address, and not a loopback address such as 127.0.0.1, at which pods reach themselves instead of the host. 'educates local config init' writes the host's IP address. An alias such as 10.10.10.1, added to a network interface, survives network changes. On Docker Desktop 4.97 or later, ports 80 and 443 on it need \"Allow privileged port forwarding to external machines\" on, in Settings > Advanced." },
         "registryListenAddress": { "type": "string", "description": "Host address the local image registry is published on. Defaults to the cluster listenAddress." },
         "apiServer": {
           "type": "object",
@@ -99,7 +99,7 @@
     "resolver": {
       "type": "object",
       "additionalProperties": false,
-      "description": "This cluster's entries in the local DNS resolver every local cluster shares, which has no settings of its own. This cluster's names, its ingress domain always plus extraDomains, resolve to its cluster.listenAddress when that is a specific IP address, and otherwise to the host's IP address. Names that resolve anywhere else, such as a VM, go in dnsmasq configuration files of your own, <data-home>/dnsmasq.d/*.conf, which the resolver also reads. 'educates local resolver view' shows every name it answers for.",
+      "description": "This cluster's entries in the local DNS resolver every local cluster shares, which has no settings of its own. This cluster's names, its ingress domain always plus extraDomains, resolve to its cluster.listenAddress. Names that resolve anywhere else, such as a VM, go in dnsmasq configuration files of your own, <data-home>/dnsmasq.d/*.conf, which the resolver also reads. 'educates local resolver view' shows every name it answers for.",
       "properties": {
         "extraDomains":  { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "More names that resolve to this cluster's address, as its ingress domain does, each with its subdomains. A name another local cluster also claims is an error." }
       }
@@ -110,7 +110,7 @@
       "additionalProperties": false,
       "description": "Ingress domain and TLS settings for the cluster.",
       "properties": {
-        "domain": { "type": "string", "description": "Wildcard ingress domain Educates serves workshops under. When left empty the CLI derives a <host-IP>.nip.io domain and serves the cluster insecurely over plain HTTP." },
+        "domain": { "type": "string", "description": "Wildcard ingress domain Educates serves workshops under. When left empty the cluster takes the nip.io name of its cluster.listenAddress, such as 10-10-10-1.nip.io, and is served insecurely over plain HTTP." },
         "insecure": {
           "type": "boolean",
           "default": false,

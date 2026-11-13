@@ -11,7 +11,6 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 
 	"github.com/educates/educates-training-platform/client-programs/internal/testpki"
-	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 )
 
@@ -19,8 +18,15 @@ const (
 	emptyLocal = `apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
 `
+	localWithListenAddress = `apiVersion: cli.educates.dev/v1alpha1
+kind: EducatesLocalConfig
+cluster:
+  listenAddress: 10.10.10.1
+`
 	localWithDomain = `apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
+cluster:
+  listenAddress: 10.10.10.1
 ingress:
   domain: workshop.test
 operator:
@@ -146,20 +152,16 @@ ingress:
 	}
 }
 
-func TestRender_LocalConfig_AutoDomain_DefaultsInsecure(t *testing.T) {
+func TestRender_LocalConfig_NipDomainOfTheListenAddress_DefaultsInsecure(t *testing.T) {
 	// Point --local-config at a temp data home so the test doesn't touch
 	// the user's actual data home.
 	dataHome := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(emptyLocal), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(localWithListenAddress), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// No CA is staged: an empty local config falls back to a nip.io
-	// domain, which defaults to an insecure plain-HTTP install needing no
-	// CA. maybeApplyHostDomain needs a detectable host IP to fill the
-	// domain.
-	if _, err := hostinfo.DetectHostIP(); err != nil {
-		t.Skipf("no host IP detectable: %v", err)
-	}
+	// No CA is staged: a local config with no domain falls back to the
+	// nip.io name of its listen address, which defaults to an insecure
+	// plain-HTTP install needing no CA.
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
@@ -170,38 +172,26 @@ func TestRender_LocalConfig_AutoDomain_DefaultsInsecure(t *testing.T) {
 		t.Fatalf("runRender: %v", err)
 	}
 	s := buf.String()
-	if !strings.Contains(s, "auto-derived from host IP") {
-		t.Errorf("--local-config with empty domain should emit host-defaulting note:\n%s", s)
-	}
-	if !strings.Contains(s, ".nip.io") {
-		t.Errorf("--local-config with empty domain should produce a nip.io domain:\n%s", s)
-	}
-	if !strings.Contains(s, "provider: None") {
-		t.Errorf("--local-config with empty domain should default to the None certificates provider:\n%s", s)
-	}
-	if !strings.Contains(s, "protocol: http") {
-		t.Errorf("--local-config with empty domain should default to http protocol:\n%s", s)
+	for _, want := range []string{"domain: 10-10-10-1.nip.io", "provider: None", "protocol: http"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("--local-config with no domain should render %q:\n%s", want, s)
+		}
 	}
 }
 
-func TestRender_LocalConfig_UserDomain_NoHeader(t *testing.T) {
+func TestRender_LocalConfig_RefusesADefaultConfigWithoutAListenAddress(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	dataHome := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(localWithDomain), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(emptyLocal), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
-	stageRootCA(t)
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
-	o := &PlatformRenderOptions{LocalConfig: true}
+	err := p.runRender(&bytes.Buffer{}, &PlatformRenderOptions{LocalConfig: true})
 
-	var buf bytes.Buffer
-	if err := p.runRender(&buf, o); err != nil {
-		t.Fatalf("runRender: %v", err)
-	}
-	if strings.Contains(buf.String(), "auto-derived from host IP") {
-		t.Errorf("--local-config with explicit domain should not emit host-defaulting note:\n%s", buf.String())
-	}
+	wantError(t, err, "cluster.listenAddress", "must be set",
+		"educates local config set cluster.listenAddress 192.168.50.151")
 }
 
 func TestRender_RootCA_ReferencesTheDomainCAKeyPairWithoutWritingIt(t *testing.T) {

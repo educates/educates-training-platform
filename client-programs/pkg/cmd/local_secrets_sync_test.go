@@ -10,7 +10,7 @@ import (
 )
 
 func TestSecretsSync_BuildsThePlanFromTheSelectedLocalClustersConfig(t *testing.T) {
-	const defaultConfig = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ningress:\n  domain: workshop.test\n"
+	const defaultConfig = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: workshop.test\n"
 	cases := []struct {
 		name          string
 		defaultConfig string

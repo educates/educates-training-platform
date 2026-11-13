@@ -28,13 +28,12 @@ import (
 // (ingress.protocol http).
 //
 // Static field defaults (clusterAdmin true, lookupService true,
-// imagePrePuller.enabled true, operator.logLevel info,
-// cluster.listenAddress 127.0.0.1) have already been applied by
-// EducatesLocalConfig.WithDefaults() at load time.
+// imagePrePuller.enabled true, operator.logLevel info) have already been
+// applied by EducatesLocalConfig.WithDefaults() at load time.
 //
 // Environment-dependent defaults are NOT applied here:
-//   - ingress.domain stays empty unless the caller set it (host-IP nip.io
-//     defaulting belongs upstream of the translator).
+//   - ingress.domain stays empty unless the caller set it (the nip.io
+//     name of cluster.listenAddress belongs upstream of the translator).
 //   - operator.image.tag stays as-is (CLI-binary-version defaulting
 //     belongs in command code that has access to the build info).
 func TranslateLocal(cfg *v1alpha1.EducatesLocalConfig, opts Options) (*Output, error) {

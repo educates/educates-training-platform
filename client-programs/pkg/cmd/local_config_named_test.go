@@ -245,13 +245,21 @@ func TestLocalConfigView_NamedCluster_Raw(t *testing.T) {
 	}
 }
 
-func TestLocalConfigView_NamedCluster_RefusesAConfigTheNamedClusterRulesReject(t *testing.T) {
+func TestLocalConfigView_NamedCluster_ShowsAConfigTheRulesRejectWithWhy(t *testing.T) {
 	_, id := namedClusterForTest(t)
 	writeNamedConfig(t, id, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n")
 
-	err := (&ProjectInfo{}).runLocalConfigView(&LocalConfigViewOptions{}, id, io.Discard)
+	var out bytes.Buffer
+	if err := (&ProjectInfo{}).runLocalConfigView(&LocalConfigViewOptions{}, id, &out); err != nil {
+		t.Fatalf("view: %v", err)
+	}
 
-	wantError(t, err, id.ConfigPath, "cluster.listenAddress")
+	for _, want := range []string{"# The local cluster can't use this config until it is fixed:",
+		"cluster.listenAddress: must be set", "educates local config set --local-cluster test2 cluster.listenAddress <ip>"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("view output does not contain %q:\n%s", want, out.String())
+		}
+	}
 }
 
 func TestLocalConfigView_NamedClusterWithoutConfig_NamesTheInitCommand(t *testing.T) {

@@ -71,19 +71,20 @@ func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
      against the cluster just created, through its own kube context.
 
 An EducatesConfig creates the kind cluster from target.cluster and deploys
-its custom resources as declared, with no CLI defaulting: no
-<host-IP>.nip.io domain, and no certificates or Secrets taken from the
-local secrets cache. Any Secret the custom resources reference has to be
+its custom resources as declared, with no CLI defaulting: no nip.io
+domain, and no certificates or Secrets taken from the local secrets
+cache. Any Secret the custom resources reference has to be
 created in the cluster before the deploy can become ready.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, creates a named local
 cluster beside the default one. Its config lives in
 <data-home>/clusters/<name>/config.yaml, and when it is missing, create
-writes it from --listen-address and the optional --domain. A named
-cluster's cluster.listenAddress must be a specific IP address of the host,
-neither 0.0.0.0 nor a loopback address, and with no ingress.domain the
-cluster takes the nip.io name of that address and is served over plain
-HTTP. --config with --local-cluster takes the config from the file and the
+writes it from --listen-address and the optional --domain.
+
+Every local cluster's cluster.listenAddress must be a specific IP address
+of the host, neither 0.0.0.0 nor a loopback address, and with no
+ingress.domain the cluster takes the nip.io name of that address and is
+served over plain HTTP. --config with --local-cluster takes the config from the file and the
 cluster's name from the flag, and makes the cluster's folder
 <data-home>/clusters/<name>/ without copying the file into it.
 
@@ -284,11 +285,9 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return nil
 	}
 
-	// 5. tail-call the v4 deploy. We have the loaded config; rather
-	//    than re-loading it inside runDeploy (which would re-do
-	//    the host-IP fallback non-deterministically against a freshly
-	//    started cluster's IP), translate here and call deployer.Deploy
-	//    directly.
+	// 5. tail-call the v4 deploy. We have the loaded config, so rather
+	//    than re-loading it inside runDeploy, translate here and call
+	//    deployer.Deploy directly.
 	return tailCallDeploy(ctx, w, in.Deploy, in.Plan, createDeployFlags(o, clusterConfig.Config.Kubeconfig, id))
 }
 
@@ -301,10 +300,10 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 // A named local cluster's config comes from --config when given, and
 // otherwise from the cluster's folder in the data home, written from
 // --listen-address and --domain when missing. Either way it follows the
-// named-cluster rules of localclusters.LoadNamedConfig, and the
-// cluster's folder exists once it loads: --config makes it, without
-// copying the file into it. The default local cluster takes neither
-// flag.
+// rules of localclusters.LoadConfigFile, and the cluster's folder exists
+// once it loads: --config makes it, without copying the file into it.
+// The default local cluster's config follows the same rules, and takes
+// neither flag.
 func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v1alpha1.Config, string, bool, error) {
 	flags := localclusters.NamedConfigFlags{ListenAddress: o.ListenAddress, Domain: o.Domain}
 	if !id.IsDefault() {
@@ -322,7 +321,7 @@ func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v
 	if o.Config != "" {
 		path = o.Config
 	} else {
-		path = defaultLocalCluster().ConfigPath
+		path = id.ConfigPath
 		// Unlike render/deploy, a first-time laptop create shouldn't dead-end
 		// on "run config init first"; write a minimal default in place and
 		// carry on. Migration of an existing v3 install still takes priority.
@@ -332,7 +331,7 @@ func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v
 		}
 		created = didInit
 	}
-	cfg, err := config.Load(path)
+	cfg, err := localclusters.LoadConfigFile(id, path)
 	if err != nil {
 		return nil, path, created, err
 	}
@@ -356,7 +355,7 @@ func loadNamedLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identit
 			return nil, o.Config, false, fmt.Errorf("--%s and --%s write a missing config in the data home, so they can't be combined with --config",
 				localclusters.ListenAddressFlagName, localclusters.DomainFlagName)
 		}
-		cfg, err := localclusters.LoadNamedConfig(o.Config)
+		cfg, err := localclusters.LoadConfigFile(id, o.Config)
 		if err != nil {
 			return nil, o.Config, false, err
 		}
@@ -368,7 +367,7 @@ func loadNamedLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identit
 	if err != nil {
 		return nil, id.ConfigPath, false, err
 	}
-	cfg, err := localclusters.LoadNamedConfig(id.ConfigPath)
+	cfg, err := localclusters.LoadConfigFile(id, id.ConfigPath)
 	return cfg, id.ConfigPath, created, err
 }
 
@@ -393,25 +392,23 @@ type localCreateInputs struct {
 // prepareLocalCreate defaults the loaded config and takes from it what
 // the create flow needs, checking it before anything is created.
 //
-// An EducatesLocalConfig gets the CLI defaults, the <host-IP>.nip.io
-// fallback and the local certificate plan. An EducatesConfig gets none of
-// them: its custom resources are deployed as declared and translated by
-// TranslateEscape, so the CLI neither decides its certificates nor syncs
-// cached Secrets for it. Only its target.cluster, which is CLI input and
-// not a custom resource, gets the local kind's cluster defaults.
+// An EducatesLocalConfig, whose ingress.domain the local cluster rules
+// have already defaulted, gets the CLI defaults and the local certificate
+// plan. An EducatesConfig gets neither: its custom resources are deployed
+// as declared and translated by TranslateEscape, so the CLI neither
+// decides its certificates nor syncs cached Secrets for it.
 func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInputs, error) {
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
-		if err := applyLocalDefaults(c, p); err != nil {
-			return nil, err
-		}
+		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
 		if err := validateClusterNodes(c.Cluster.Nodes); err != nil {
 			return nil, err
 		}
 		// A secure install (the default; ingress.insecure not set)
 		// serves HTTPS from a cached wildcard TLS certificate or a cached
-		// root CA. Defaults have already run, so an empty domain has
-		// become a <host-IP>.nip.io insecure install that needs neither;
+		// root CA. The local cluster rules have already run, so an empty
+		// domain has become the insecure install on the nip.io name of the
+		// listen address, which needs neither;
 		// only a domain with insecure left false requires one. Resolving
 		// the local certificates is a pure local-cache read, so a missing
 		// certificate source is reported, naming the generated root and
@@ -429,7 +426,6 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInput
 		}, nil
 	case *v1alpha1.EducatesConfig:
 		clusterCfg := c.Target.Cluster
-		clusterCfg.WithDefaults()
 		if err := validateClusterNodes(clusterCfg.Nodes); err != nil {
 			return nil, err
 		}
@@ -441,19 +437,6 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInput
 	default:
 		return nil, fmt.Errorf("unsupported kind %q for local cluster create", cfg.GetKind())
 	}
-}
-
-// applyLocalDefaults mirrors what render/deploy do before translation:
-// CLI-binary defaults for operator.image, host-IP nip.io for ingress.domain
-// when empty.
-func applyLocalDefaults(cfg *v1alpha1.EducatesLocalConfig, p *ProjectInfo) error {
-	cfg.ApplyCLIDefaults(p.Version, p.ImageRepository)
-	// Fills <host-IP>.nip.io and defaults ingress.insecure when the
-	// domain was left empty; no-op when the user set one.
-	if _, err := maybeApplyHostDomain(cfg); err != nil {
-		return err
-	}
-	return nil
 }
 
 // validateClusterNodes checks a user-declared cluster.nodes list: when set,

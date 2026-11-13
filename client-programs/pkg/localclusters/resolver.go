@@ -18,7 +18,7 @@ import (
 // the data home.
 type ResolverInput struct {
 	// LoadedConfig is the cluster's config. A named local cluster's has
-	// been loaded with LoadNamedConfig.
+	// been loaded with LoadConfigFile.
 	LoadedConfig
 
 	// ResolverDomainOverride, when set, is the domain the local DNS
@@ -38,8 +38,8 @@ type ResolverInput struct {
 // in the data home, so from its create to its delete, and every cluster
 // given holds a config for. A config given replaces the one in the data
 // home: it is the config of a cluster being created, or the default local
-// cluster's config as the resolver commands are given it. A named
-// cluster's config follows the rules of LoadNamedConfig.
+// cluster's config as the resolver commands are given it. Every config
+// follows the rules of LoadConfigFile.
 //
 // A config given that the resolver can't serve is an error. A config in
 // the data home that does not load, or that the resolver can't serve, is
@@ -49,10 +49,10 @@ type ResolverInput struct {
 // warn about.
 //
 // Each cluster's ingress domain, declared or derived as
-// LoadedConfig.Domain gives it with the observed host IP address, and
-// its resolver.extraDomains point at its address, as resolverAddress
-// gives it from the cluster's listen address and the observed host IP
-// address. The same rule holds for the default and the named clusters.
+// LoadedConfig.Domain gives it, and its resolver.extraDomains point at its
+// listen address, a specific IP address of the host that its ports 80
+// and 443 are published on. The same rule holds for the default and the
+// named clusters.
 func (inv Inventory) ResolverConfig(given ...ResolverInput) ([]byte, []error, error) {
 	clusters, leftOut, err := inv.resolverClusters(given)
 	if err != nil {
@@ -85,7 +85,7 @@ func (inv Inventory) resolverClusters(given []ResolverInput) ([]resolverCluster,
 			}
 			in = ResolverInput{LoadedConfig: loaded}
 		}
-		rc, err := newResolverCluster(in, inv.observed.HostIP, inv.dataHome)
+		rc, err := newResolverCluster(in, inv.dataHome)
 		if err != nil {
 			if isGiven {
 				return nil, nil, err
@@ -154,18 +154,12 @@ func checkDomainsClaimedOnce(clusters []resolverCluster) error {
 }
 
 // resolverCluster is what the local DNS resolver serves for one local
-// cluster: the names that point at the cluster's address.
+// cluster: the names that point at the cluster's address, its listen
+// address.
 type resolverCluster struct {
 	id      Identity
 	names   []servedName
 	address string
-
-	// addressSource is where address comes from.
-	addressSource AddressSource
-
-	// listenAddress is the listen address the cluster's config declares,
-	// from which address comes, empty when it declares none.
-	listenAddress string
 
 	// config names the cluster's config: its path relative to the data
 	// home when it is the cluster's config there, and otherwise the path
@@ -174,14 +168,13 @@ type resolverCluster struct {
 }
 
 // newResolverCluster returns what the resolver serves for the local
-// cluster of the config given, on the host with the IP address hostIP,
-// of the data home dataHome.
+// cluster of the config given, of the data home dataHome.
 //
 // The config is an EducatesLocalConfig, or an EducatesConfig with a
 // target block. Only an EducatesLocalConfig that declares no ingress
 // domain gets a nip.io one: an EducatesConfig gets no CLI defaults, so
 // its domain is the one its custom resources declare, if any.
-func newResolverCluster(given ResolverInput, hostIP, dataHome string) (resolverCluster, error) {
+func newResolverCluster(given ResolverInput, dataHome string) (resolverCluster, error) {
 	id, source := given.Identity, given.Source
 	fields, ok := clusterFieldsOf(given.Config)
 	if !ok {
@@ -191,16 +184,13 @@ func newResolverCluster(given ResolverInput, hostIP, dataHome string) (resolverC
 		return resolverCluster{}, fmt.Errorf("%s: unsupported kind %q for the local DNS resolver", source, given.Config.GetKind())
 	}
 
-	address, addressSource := resolverAddress(fields.listenAddress, hostIP)
-	domain := cmp.Or(given.ResolverDomainOverride, given.Domain(hostIP))
+	domain := cmp.Or(given.ResolverDomainOverride, given.Domain())
 	return resolverCluster{
 		id: id,
 		names: servedNames(domain, ingressDomainFrom(given, fields, domain),
 			fields.resolver.ExtraDomains, fields.extraDomainsField),
-		address:       address,
-		addressSource: addressSource,
-		listenAddress: fields.listenAddress,
-		config:        configName(id, source, dataHome),
+		address: fields.listenAddress,
+		config:  configName(id, source, dataHome),
 	}, nil
 }
 
@@ -219,26 +209,17 @@ func configName(id Identity, source, dataHome string) string {
 }
 
 // heading is the comment that starts the cluster's entries in the
-// resolver's configuration. It names the cluster, its config, its address
-// and where that comes from, in one of these forms, which tools may
-// parse:
+// resolver's configuration. It names the cluster, its config and its
+// address, its listen address, in this form, which tools may parse:
 //
 //	# Default local cluster (config.yaml): 10.10.10.1, its listen address
-//	# Local cluster test2 (clusters/test2/config.yaml): 192.168.1.10, the host's IP
+//	# Local cluster test2 (clusters/test2/config.yaml): 10.10.10.2, its listen address
 func (c resolverCluster) heading() string {
 	cluster := "Default local cluster"
 	if !c.id.IsDefault() {
 		cluster = "Local cluster " + c.id.Name
 	}
-	return fmt.Sprintf("# %s (%s): %s, %s", cluster, c.config, c.address, headingAddressSources[c.addressSource])
-}
-
-// headingAddressSources say in a heading where a cluster's address comes
-// from.
-var headingAddressSources = map[AddressSource]string{
-	AddressFromListenAddress: "its listen address",
-	AddressFromHostIP:        "the host's IP",
-	AddressFromLoopback:      "the loopback address as the host's IP is unknown",
+	return fmt.Sprintf("# %s (%s): %s, its listen address", cluster, c.config, c.address)
 }
 
 // servedName is a name a local cluster's entries point at its address,
@@ -277,17 +258,12 @@ func servedNames(domain, domainFrom string, extraDomains []string, extraDomainsF
 // ingressDomainFrom says where domain, the ingress domain the local DNS
 // resolver serves for the cluster of the config given, comes from.
 func ingressDomainFrom(given ResolverInput, fields clusterFields, domain string) string {
-	switch {
-	case given.ResolverDomainOverride != "":
+	if given.ResolverDomainOverride != "" {
 		return "--domain"
-	case fields.domain == "" && given.Identity.IsDefault():
-		return "nip.io name of the host IP"
-	case fields.domain == "":
-		return "nip.io name of the listen address"
 	}
-	// LoadNamedConfig writes the nip.io name it derives from a named
-	// cluster's listen address into its ingress.domain.
-	if nip, ok := nipDomain(fields.listenAddress); ok && fields.derivesDomain && !given.Identity.IsDefault() && domainKey(domain) == nip {
+	// LoadConfigFile writes the nip.io name it derives from an
+	// EducatesLocalConfig's listen address into its ingress.domain.
+	if nip, ok := nipDomain(fields.listenAddress); ok && fields.derivesDomain && domainKey(domain) == nip {
 		return "nip.io name of the listen address"
 	}
 	return fields.domainField

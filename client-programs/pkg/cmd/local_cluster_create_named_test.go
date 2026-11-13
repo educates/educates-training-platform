@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 )
@@ -100,6 +102,20 @@ func wantError(t *testing.T, err error, parts ...string) {
 		if !strings.Contains(err.Error(), part) {
 			t.Errorf("error %q does not mention %q", err, part)
 		}
+	}
+}
+
+// stubHostIP makes host IP detection report ip for the rest of the test
+// t, or fail when ip is empty.
+func stubHostIP(t *testing.T, ip string) {
+	t.Helper()
+	detect := hostinfo.DetectHostIP
+	t.Cleanup(func() { hostinfo.DetectHostIP = detect })
+	hostinfo.DetectHostIP = func() (string, error) {
+		if ip == "" {
+			return "", errors.New("no route to the outside world")
+		}
+		return ip, nil
 	}
 }
 

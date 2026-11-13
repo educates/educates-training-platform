@@ -31,13 +31,9 @@ type ResolverClusterRow struct {
 	// cluster.
 	Cluster string
 
-	// Address is the address the cluster's names resolve to.
+	// Address is the address the cluster's names resolve to, its listen
+	// address.
 	Address string
-
-	// AddressFrom says where Address comes from: the listen address, the
-	// host's IP address, or the loopback address with the host's IP
-	// address unknown, and for the last two, the listen address.
-	AddressFrom string
 
 	// Config names the cluster's config, as the heading of its entries in
 	// the resolver's configuration does.
@@ -93,10 +89,9 @@ func (inv Inventory) ResolverView(includes []IncludeFile, resolverFileExists fun
 	var names []viewName
 	for _, c := range clusters {
 		view.Clusters = append(view.Clusters, ResolverClusterRow{
-			Cluster:     clusterLabel(c.id),
-			Address:     c.address,
-			AddressFrom: addressFrom(c.addressSource, c.listenAddress),
-			Config:      c.config,
+			Cluster: clusterLabel(c.id),
+			Address: c.address,
+			Config:  c.config,
 		})
 		owner, ownerDescription := c.id.Name, "cluster "+c.id.Name
 		if c.id.IsDefault() {
@@ -299,21 +294,4 @@ func clusterLabel(id Identity) string {
 		return "(default)"
 	}
 	return id.Name
-}
-
-// addressFrom says where a local cluster's address comes from, source,
-// for the cluster with the listen address listenAddress.
-func addressFrom(source AddressSource, listenAddress string) string {
-	listen := "no listen address"
-	if listenAddress != "" {
-		listen = "listen address " + listenAddress
-	}
-	switch source {
-	case AddressFromListenAddress:
-		return "listen address"
-	case AddressFromHostIP:
-		return fmt.Sprintf("host IP (%s)", listen)
-	default:
-		return fmt.Sprintf("loopback, host IP unknown (%s)", listen)
-	}
 }

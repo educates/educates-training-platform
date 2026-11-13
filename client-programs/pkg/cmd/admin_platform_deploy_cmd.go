@@ -99,13 +99,9 @@ func (p *ProjectInfo) runDeploy(ctx context.Context, w io.Writer, o *PlatformDep
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
 		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
-		if o.LocalConfig {
-			// Fills <host-IP>.nip.io and defaults ingress.insecure when
-			// the domain was left empty; no-op when the user set one.
-			if _, err := maybeApplyHostDomain(c); err != nil {
-				return err
-			}
-		} else if c.Ingress.Domain == "" {
+		// The local cluster rules of --local-config have already given
+		// an empty ingress.domain the nip.io name of the listen address.
+		if !o.LocalConfig && c.Ingress.Domain == "" {
 			return fmt.Errorf("ingress.domain is required when using --config (set it in %s)", path)
 		}
 		// The certificates, and the cached Secrets to sync, come from the

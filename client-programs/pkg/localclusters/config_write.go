@@ -72,7 +72,7 @@ nip.io name of the listen address.`,
 // checks first, as EnsureNamedConfig does.
 //
 // The listen address must pass ValidateListenAddress, and the config
-// must be one LoadNamedConfig takes, so a config the cluster can't use is
+// must be one LoadConfigFile takes, so a config the cluster can't use is
 // never written.
 func WriteNamedConfig(id Identity, flags NamedConfigFlags) error {
 	if id.IsDefault() {
@@ -98,7 +98,7 @@ func WriteNamedConfig(id Identity, flags NamedConfigFlags) error {
 		return fmt.Errorf("marshal the config of local cluster %q: %w", id.Name, err)
 	}
 	body = append([]byte(config.DefaultLocalConfigModeline+"\n"), body...)
-	if _, err := parseNamedConfig(body, id.ConfigPath); err != nil {
+	if _, err := parseConfig(id, body, id.ConfigPath); err != nil {
 		return err
 	}
 	if err := MakeClusterFolder(id); err != nil {
@@ -142,7 +142,7 @@ func checkFlagsAgree(id Identity, flags NamedConfigFlags) error {
 	if err != nil {
 		return err
 	}
-	declared, err := declaredNamedConfig(cfg)
+	declared, _, err := declaredConfig(id, cfg)
 	if err != nil {
 		return fmt.Errorf("%s: %w", id.ConfigPath, err)
 	}

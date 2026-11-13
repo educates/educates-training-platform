@@ -16,6 +16,8 @@ const escapeKindWithCRs = `apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesConfig
 target:
   provider: kind
+  cluster:
+    listenAddress: 10.10.10.1
 educatesClusterConfig:
   mode: Managed
   ingress:
@@ -77,8 +79,8 @@ func TestPrepareLocalCreate_EscapeConfig_DeploysItsCustomResources(t *testing.T)
 	if got, want := in.Domain, "workshops.example.test"; got != want {
 		t.Errorf("Domain = %q, want %q", got, want)
 	}
-	if got, want := in.Cluster.ListenAddress, "127.0.0.1"; got != want {
-		t.Errorf("Cluster.ListenAddress = %q, want %q (local kind's default)", got, want)
+	if got, want := in.Cluster.ListenAddress, "10.10.10.1"; got != want {
+		t.Errorf("Cluster.ListenAddress = %q, want %q", got, want)
 	}
 
 	out := translateForTest(t, in)
@@ -131,7 +133,7 @@ func TestLoadLocalConfig_EscapeTargetProvider(t *testing.T) {
 		target  string
 		wantErr string
 	}{
-		{name: "kind", target: "target:\n  provider: kind\n"},
+		{name: "kind", target: "target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.1\n"},
 		{name: "other spelling", target: "target:\n  provider: Kind\n", wantErr: "schema validation failed"},
 		{name: "other provider", target: "target:\n  provider: gke\n", wantErr: "schema validation failed"},
 		{name: "no provider", target: "target:\n  cluster: {}\n", wantErr: "target.provider=kind"},

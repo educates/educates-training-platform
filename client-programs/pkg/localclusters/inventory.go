@@ -23,12 +23,6 @@ type Observed struct {
 	// interfaces.
 	InterfaceAddresses []netip.Addr
 
-	// HostIP is the host's IP address, from which the default local
-	// cluster's domain is derived when its config declares none, and at
-	// which the local DNS resolver points it by default. It is empty
-	// when it is not known.
-	HostIP string
-
 	// Mirrors is every registry mirror container on the Docker host,
 	// running or stopped, which every local cluster shares.
 	Mirrors []MirrorContainer
@@ -119,9 +113,9 @@ type ListRow struct {
 
 	// Domain is the cluster's ingress domain, declared or derived, as
 	// LoadedConfig.Domain gives it from the cluster's config in the data
-	// home and the host's IP address: the domain the local DNS resolver
-	// serves for the cluster. It is empty when the cluster has none, or
-	// its config is missing or does not load.
+	// home: the domain the local DNS resolver serves for the cluster. It is
+	// empty when the cluster has none, or its config is missing or does not
+	// load.
 	Domain string
 
 	// ConfigError is why the cluster's config in the data home does not
@@ -143,7 +137,7 @@ func (inv Inventory) List() []ListRow {
 		case err != nil:
 			row.ConfigError = err
 		default:
-			row.Domain = loaded.Domain(inv.observed.HostIP)
+			row.Domain = loaded.Domain()
 		}
 		rows = append(rows, row)
 	}

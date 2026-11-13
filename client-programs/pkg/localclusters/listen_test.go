@@ -30,11 +30,6 @@ func TestConfiguredListenAddress(t *testing.T) {
 			want:   "10.10.10.1",
 		},
 		{
-			name:   "the default cluster's default when its config declares none",
-			config: localConfigHeader,
-			want:   "127.0.0.1",
-		},
-		{
 			name: "the default cluster's target.cluster.listenAddress",
 			config: escapeConfigHeader + "target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.1\n" +
 				"educatesClusterConfig:\n  mode: Managed\n",
@@ -70,13 +65,27 @@ func TestConfiguredListenAddressOfAMissingConfigIsNone(t *testing.T) {
 }
 
 func TestConfiguredListenAddressReportsAConfigThatDoesNotLoad(t *testing.T) {
-	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
-	id := identityForTest(t, dataHome, "test2")
+	cases := []struct {
+		name    string
+		cluster string
+		config  string
+		want    string
+	}{
+		{name: "a named cluster's loopback address", cluster: "test2",
+			config: localConfigHeader + "cluster:\n  listenAddress: 127.0.0.1\n", want: "loopback"},
+		{name: "the default cluster's missing address", config: localConfigHeader, want: "must be set"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dataHome := t.TempDir()
+			writeClusterConfig(t, dataHome, tc.cluster, tc.config)
+			id := identityForTest(t, dataHome, tc.cluster)
 
-	_, err := ConfiguredListenAddress(id)
+			_, err := ConfiguredListenAddress(id)
 
-	wantErrorMentioning(t, err, id.ConfigPath, "loopback")
+			wantErrorMentioning(t, err, id.ConfigPath, "cluster.listenAddress", tc.want)
+		})
+	}
 }
 
 // identityForTest returns the identity of the local cluster named name in

@@ -221,15 +221,15 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		})
 	}
 
-	// resolver. A local cluster's names now resolve to its listen address
-	// when that is a specific IP address, so targetAddress goes. Setting
-	// the listen address from it instead would change where kind
-	// publishes the cluster's ports, so the notice says how to do that.
+	// resolver. A local cluster's names now resolve to its listen address,
+	// so targetAddress goes. Setting the listen address from it instead
+	// would change where kind publishes the cluster's ports, so the notice
+	// says how to do that.
 	if target := strV3Path(v3, "localDNSResolver", "targetAddress"); target != "" {
 		notes = append(notes, fmt.Sprintf("dropped localDNSResolver.targetAddress %[1]s: a local cluster's names "+
-			"now resolve to its cluster.listenAddress when that is a specific IP address, and otherwise to the "+
-			"host's IP address; set cluster.listenAddress to %[1]s to keep resolving the cluster there, or for "+
-			"other names add address=/<name>/%[1]s to a *.conf file in the dnsmasq.d folder of the data home", target))
+			"now resolve to its cluster.listenAddress; set cluster.listenAddress to %[1]s to keep resolving the "+
+			"cluster there, or for other names add address=/<name>/%[1]s to a *.conf file in the dnsmasq.d "+
+			"folder of the data home", target))
 	}
 	for _, d := range listV3Path(v3, "localDNSResolver", "extraDomains") {
 		if s, ok := d.(string); ok {

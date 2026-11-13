@@ -30,7 +30,7 @@ func listControlPlane(kindName, hostIP string, running bool) localclusters.NodeC
 func TestLocalClusterListShowsEveryEducatesClusterWithTheDefaultMarked(t *testing.T) {
 	dataHome := t.TempDir()
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "config.yaml"),
-		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ningress:\n  domain: educates.test\n")
+		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.2\n")
 	inventory := localclusters.NewInventory(localclusters.Observed{Nodes: []localclusters.NodeContainer{

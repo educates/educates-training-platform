@@ -117,8 +117,8 @@ func checkNoResolverTargetAddress(raw map[string]interface{}, kind string) error
 	}
 	resolverField := strings.Join(resolverPath, ".")
 	return fmt.Errorf("%s.targetAddress was removed: remove it from the config. A local cluster's names, "+
-		"its ingress domain and %s.extraDomains, now resolve to its %s when that is a specific IP "+
-		"address, and otherwise to the host's IP address. Names that resolve anywhere else go in "+
+		"its ingress domain and %s.extraDomains, now resolve to its %s, a specific IP address of the host. "+
+		"Names that resolve anywhere else go in "+
 		"dnsmasq configuration files of your own, %s",
 		resolverField, resolverField, listenAddressField,
 		filepath.Join(DnsmasqIncludeDir(utils.GetEducatesHomeDir()), "*.conf"))

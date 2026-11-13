@@ -10,7 +10,6 @@ import (
 // from.
 type viewInputs struct {
 	DataHome           string
-	HostIP             string
 	Observed           []NodeContainer
 	Includes           []IncludeFile
 	ResolverFileExists func(suffix string) bool
@@ -19,7 +18,7 @@ type viewInputs struct {
 // resolverView builds the view of the local DNS resolver from in.
 func resolverView(t *testing.T, in viewInputs) ResolverView {
 	t.Helper()
-	inv := NewInventory(Observed{Nodes: in.Observed, HostIP: in.HostIP}, in.DataHome)
+	inv := NewInventory(Observed{Nodes: in.Observed}, in.DataHome)
 	view, err := inv.ResolverView(in.Includes, in.ResolverFileExists)
 	if err != nil {
 		t.Fatalf("ResolverView: %v", err)
@@ -49,7 +48,7 @@ func TestResolverViewShowsEachClusterNameAndWhereItComesFrom(t *testing.T) {
 	}{
 		{
 			name: "a default cluster that declares its domain",
-			defaultConfig: localConfigHeader + "ingress:\n  domain: educates.test\n" +
+			defaultConfig: localConfigHeader + "cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n" +
 				"resolver:\n  extraDomains:\n  - example.test\n  - other.test\n",
 			want: []ResolverNameRow{
 				{Name: "educates.test", Cluster: "(default)", From: "ingress.domain"},
@@ -62,9 +61,9 @@ func TestResolverViewShowsEachClusterNameAndWhereItComesFrom(t *testing.T) {
 		},
 		{
 			name:          "a default cluster that declares no domain",
-			defaultConfig: localConfigHeader,
+			defaultConfig: localConfigHeader + "cluster:\n  listenAddress: 10.10.10.1\n",
 			want: []ResolverNameRow{
-				{Name: "192-168-50-151.nip.io", Cluster: "(default)", From: "nip.io name of the host IP"},
+				{Name: "10-10-10-1.nip.io", Cluster: "(default)", From: "nip.io name of the listen address"},
 				{Name: "10-10-10-2.nip.io", Cluster: "test2", From: "nip.io name of the listen address"},
 				{Name: "test3.example.test", Cluster: "test3", From: "educatesClusterConfig.ingress.domain"},
 				{Name: "extra3.example.test", Cluster: "test3", From: "target.resolver.extraDomains"},
@@ -80,7 +79,7 @@ func TestResolverViewShowsEachClusterNameAndWhereItComesFrom(t *testing.T) {
 				"  cluster:\n    listenAddress: 10.10.10.3\n  resolver:\n    extraDomains:\n    - extra3.example.test\n",
 				"test3.example.test"))
 
-			view := resolverView(t, viewInputs{DataHome: dataHome, HostIP: "192.168.50.151", Observed: observed})
+			view := resolverView(t, viewInputs{DataHome: dataHome, Observed: observed})
 
 			if got := nameRows(view); !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("name rows:\n got  %+v\n want %+v", got, tc.want)
@@ -91,9 +90,9 @@ func TestResolverViewShowsEachClusterNameAndWhereItComesFrom(t *testing.T) {
 
 func TestResolverViewShowsTheNamesOfTheUserIncludeFiles(t *testing.T) {
 	dataHome := t.TempDir()
-	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 
-	view := resolverView(t, viewInputs{DataHome: dataHome, HostIP: "192.168.50.151", Includes: []IncludeFile{
+	view := resolverView(t, viewInputs{DataHome: dataHome, Includes: []IncludeFile{
 		{Name: "vm.conf", Content: []byte("# My VM\n\naddress=/vm.test/192.168.64.5\n" +
 			"server=/corp.example/10.1.1.1\n  address = /a.test/b.test/10.0.0.9  \nlocal=/lan/\n")},
 		{Name: ".hidden.conf", Content: []byte("address=/hidden.test/10.0.0.1\n")},
@@ -118,7 +117,7 @@ func TestResolverViewShowsTheNamesOfTheUserIncludeFiles(t *testing.T) {
 
 func TestResolverViewNotesHowNamesOverlap(t *testing.T) {
 	dataHome := t.TempDir()
-	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n"+
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"+
 		"resolver:\n  extraDomains:\n  - foo.educates.test\n  - example.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n"+
@@ -126,7 +125,6 @@ func TestResolverViewNotesHowNamesOverlap(t *testing.T) {
 
 	view := resolverView(t, viewInputs{
 		DataHome: dataHome,
-		HostIP:   "192.168.50.151",
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
 		Includes: []IncludeFile{{Name: "vm.conf", Content: []byte(
 			"address=/vm.educates.test/192.168.64.5\naddress=/Example.test/192.168.64.6\n")}},
@@ -151,7 +149,7 @@ func TestResolverViewNotesHowNamesOverlap(t *testing.T) {
 
 func TestResolverViewNotesNamesNoResolverFileForwards(t *testing.T) {
 	dataHome := t.TempDir()
-	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n"+
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"+
 		"resolver:\n  extraDomains:\n  - example.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")
@@ -159,7 +157,6 @@ func TestResolverViewNotesNamesNoResolverFileForwards(t *testing.T) {
 		"cluster:\n  listenAddress: 10.10.10.3\n")
 	in := viewInputs{
 		DataHome: dataHome,
-		HostIP:   "192.168.50.151",
 		Observed: []NodeContainer{
 			controlPlane("educates-test2", "10.10.10.2", true),
 			controlPlane("educates-test3", "10.10.10.3", true),
@@ -207,12 +204,11 @@ func TestResolverViewNotesNamesNoResolverFileForwards(t *testing.T) {
 
 func TestResolverViewListsTheConfigsTheResolverLeavesOut(t *testing.T) {
 	dataHome := t.TempDir()
-	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
 
 	view := resolverView(t, viewInputs{
 		DataHome: dataHome,
-		HostIP:   "192.168.50.151",
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
 	})
 
@@ -227,7 +223,7 @@ func TestResolverViewListsTheConfigsTheResolverLeavesOut(t *testing.T) {
 
 func TestResolverViewRefusesADomainTwoClustersClaim(t *testing.T) {
 	dataHome := t.TempDir()
-	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: educates.test\n")
 	inv := NewInventory(Observed{Nodes: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)}}, dataHome)
@@ -237,61 +233,32 @@ func TestResolverViewRefusesADomainTwoClustersClaim(t *testing.T) {
 	wantErrorMentioning(t, err, "the default local cluster", `local cluster "test2"`, `"educates.test"`)
 }
 
-func TestResolverViewShowsEachClusterAddressAndWhereItComesFrom(t *testing.T) {
-	test2 := localConfigHeader + "cluster:\n  listenAddress: 10.10.10.2\n"
+func TestResolverViewShowsEachClusterListenAddressAndConfig(t *testing.T) {
 	observed := []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)}
 	for _, tc := range []struct {
 		name          string
 		defaultConfig string
-		hostIP        string
-		want          []ResolverClusterRow
 	}{
+		{name: "a default EducatesLocalConfig", defaultConfig: localConfigHeader + "cluster:\n  listenAddress: 10.10.10.1\n"},
 		{
-			name:          "a default cluster on a specific listen address",
-			defaultConfig: localConfigHeader + "cluster:\n  listenAddress: 10.10.10.1\n",
-			hostIP:        "192.168.50.151",
-			want: []ResolverClusterRow{
-				{Cluster: "(default)", Address: "10.10.10.1", AddressFrom: "listen address", Config: "config.yaml"},
-				{Cluster: "test2", Address: "10.10.10.2", AddressFrom: "listen address", Config: "clusters/test2/config.yaml"},
-			},
-		},
-		{
-			name:          "a default cluster on the loopback address",
-			defaultConfig: localConfigHeader,
-			hostIP:        "192.168.50.151",
-			want: []ResolverClusterRow{
-				{Cluster: "(default)", Address: "192.168.50.151", AddressFrom: "host IP (listen address 127.0.0.1)", Config: "config.yaml"},
-				{Cluster: "test2", Address: "10.10.10.2", AddressFrom: "listen address", Config: "clusters/test2/config.yaml"},
-			},
-		},
-		{
-			name:          "a default cluster on the loopback address, with the host IP unknown",
-			defaultConfig: localConfigHeader,
-			want: []ResolverClusterRow{
-				{Cluster: "(default)", Address: "127.0.0.1", AddressFrom: "loopback, host IP unknown (listen address 127.0.0.1)", Config: "config.yaml"},
-				{Cluster: "test2", Address: "10.10.10.2", AddressFrom: "listen address", Config: "clusters/test2/config.yaml"},
-			},
-		},
-		{
-			name: "a default EducatesConfig with no listen address",
-			defaultConfig: escapeConfig("  resolver:\n    extraDomains:\n    - extra.example.test\n",
-				"workshops.example.test"),
-			hostIP: "192.168.50.151",
-			want: []ResolverClusterRow{
-				{Cluster: "(default)", Address: "192.168.50.151", AddressFrom: "host IP (no listen address)", Config: "config.yaml"},
-				{Cluster: "test2", Address: "10.10.10.2", AddressFrom: "listen address", Config: "clusters/test2/config.yaml"},
-			},
+			name:          "a default EducatesConfig",
+			defaultConfig: escapeConfig("  cluster:\n    listenAddress: 10.10.10.1\n", "workshops.example.test"),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dataHome := t.TempDir()
 			writeDataHomeConfig(t, dataHome, "config.yaml", tc.defaultConfig)
-			writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", test2)
+			writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
+				"cluster:\n  listenAddress: 10.10.10.2\n")
 
-			view := resolverView(t, viewInputs{DataHome: dataHome, HostIP: tc.hostIP, Observed: observed})
+			view := resolverView(t, viewInputs{DataHome: dataHome, Observed: observed})
 
-			if !reflect.DeepEqual(view.Clusters, tc.want) {
-				t.Errorf("cluster rows:\n got  %+v\n want %+v", view.Clusters, tc.want)
+			want := []ResolverClusterRow{
+				{Cluster: "(default)", Address: "10.10.10.1", Config: "config.yaml"},
+				{Cluster: "test2", Address: "10.10.10.2", Config: "clusters/test2/config.yaml"},
+			}
+			if !reflect.DeepEqual(view.Clusters, want) {
+				t.Errorf("cluster rows:\n got  %+v\n want %+v", view.Clusters, want)
 			}
 		})
 	}

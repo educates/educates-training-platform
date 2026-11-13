@@ -23,8 +23,8 @@ func TestLoad_EmptyLocalConfig_AppliesDefaults(t *testing.T) {
 		t.Fatalf("expected *EducatesLocalConfig, got %T", cfg)
 	}
 
-	if got, want := local.Cluster.ListenAddress, "127.0.0.1"; got != want {
-		t.Errorf("ListenAddress = %q, want %q", got, want)
+	if got := local.Cluster.ListenAddress; got != "" {
+		t.Errorf("ListenAddress = %q, want none: a local cluster declares its own", got)
 	}
 	if local.ClusterAdmin == nil || *local.ClusterAdmin != true {
 		t.Errorf("ClusterAdmin = %v, want true", local.ClusterAdmin)

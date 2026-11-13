@@ -43,14 +43,13 @@ copy. On editor exit the temp copy is validated against the
 EducatesLocalConfig schema. A passing validation atomically replaces the
 canonical file. A failing validation reopens the editor with the error
 shown inline (kubectl-edit style), preserving your in-progress changes,
-until the configuration is valid or you abort.
+until the configuration is valid or you abort. On save it is also
+validated against the rules of a local cluster's config, such as a
+cluster.listenAddress that is a specific IP address of the host.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, edits the config of a
 named local cluster instead, <data-home>/clusters/<name>/config.yaml,
-which 'educates local config init --local-cluster <name>' writes first.
-On save it is also validated against the rules of a named local
-cluster's config, such as a cluster.listenAddress that is a specific IP
-address of the host.`,
+which 'educates local config init --local-cluster <name>' writes first.`,
 		Example: localConfigEditExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			id, err := selectedLocalCluster(cmd)
@@ -179,16 +178,21 @@ func runLocalConfigEdit(id localclusters.Identity) error {
 }
 
 // validateEditedConfig checks that the edited config at path loads as the
-// config of the local cluster id: an EducatesLocalConfig for the default
-// local cluster, and a config that follows the named-cluster rules for a
-// named one.
+// config of the local cluster id, following the rules of a local
+// cluster's config, and for the default local cluster, that it is an
+// EducatesLocalConfig. A rule it breaks is reported against the cluster's
+// config, which the edit replaces.
 func validateEditedConfig(id localclusters.Identity, path string) error {
 	if id.IsDefault() {
-		_, err := config.LoadLocal(path)
+		if _, err := config.LoadLocal(path); err != nil {
+			return err
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
 		return err
 	}
-	_, err := localclusters.LoadNamedConfig(path)
-	return err
+	return localclusters.CheckConfig(id, data, id.ConfigPath)
 }
 
 // resolveEditor picks $VISUAL, then $EDITOR, then vi, and resolves it on PATH.

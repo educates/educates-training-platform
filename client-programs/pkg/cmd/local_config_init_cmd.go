@@ -56,8 +56,8 @@ func (p *ProjectInfo) NewLocalConfigInitCmd() *cobra.Command {
 EducatesLocalConfig (apiVersion + kind only), leaving every other field
 to take its default at deploy time. With --defaults it instead writes the
 fully-defaulted configuration, with the static defaults, the CLI image
-registry and version, and the <host-IP>.nip.io domain (and the insecure
-default it implies) materialised into the file. Errors if the file
+registry and version, and the nip.io name of cluster.listenAddress as the
+domain (and the insecure default it implies) materialised into the file. Errors if the file
 already exists unless --force.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, writes the config of
@@ -114,12 +114,12 @@ func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclus
 				Kind:       v1alpha1.KindEducatesLocalConfig,
 			},
 		}
-		effective, hostErr, err := p.renderDefaultedLocalConfig(cfg)
+		effective, domainErr, err := p.renderDefaultedLocalConfig(cfg)
 		if err != nil {
 			return err
 		}
-		if hostErr != nil {
-			fmt.Fprintf(w, "note: ingress.domain left unset (%v)\n", hostErr)
+		if domainErr != nil {
+			fmt.Fprintf(w, "note: ingress.domain left unset (%v)\n", domainErr)
 		}
 		body = append([]byte(localConfigSchemaModeline+"\n"), effective...)
 	}
@@ -162,17 +162,17 @@ func refuseExistingConfig(path string, force bool) error {
 }
 
 // renderDefaultedLocalConfig applies every CLI default to cfg (the static
-// WithDefaults, the CLI image registry/version, and the host-IP nip.io +
-// insecure fallback) and marshals it to YAML. Host-IP detection is
-// best-effort: hostErr is non-nil when it fails, in which case the
-// ingress domain is left unset.
-func (p *ProjectInfo) renderDefaultedLocalConfig(cfg *v1alpha1.EducatesLocalConfig) (body []byte, hostErr error, err error) {
+// WithDefaults, the CLI image registry/version, and the nip.io name of
+// cluster.listenAddress with ingress.insecure, when no ingress.domain is
+// set) and marshals it to YAML. domainErr says why the domain could not
+// be derived, in which case it is left unset.
+func (p *ProjectInfo) renderDefaultedLocalConfig(cfg *v1alpha1.EducatesLocalConfig) (body []byte, domainErr error, err error) {
 	cfg.WithDefaults()
 	cfg.ApplyCLIDefaults(p.Version, p.ImageRepository)
-	_, hostErr = maybeApplyHostDomain(cfg)
+	domainErr = localclusters.DeriveDomain(cfg)
 	body, err = yaml.Marshal(cfg)
 	if err != nil {
-		return nil, hostErr, fmt.Errorf("marshal effective configuration: %w", err)
+		return nil, domainErr, fmt.Errorf("marshal effective configuration: %w", err)
 	}
-	return body, hostErr, nil
+	return body, domainErr, nil
 }

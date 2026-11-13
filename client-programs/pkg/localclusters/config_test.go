@@ -36,15 +36,15 @@ func wantErrorMentioning(t *testing.T, err error, parts ...string) {
 	}
 }
 
-func TestLoadNamedConfigRefusesAMissingListenAddress(t *testing.T) {
+func TestLoadConfigFileOfANamedClusterRefusesAMissingListenAddress(t *testing.T) {
 	path := writeConfig(t, localConfigHeader)
 
-	_, err := LoadNamedConfig(path)
+	_, err := LoadConfigFile(namedID(t, "test2", t.TempDir()), path)
 
 	wantErrorMentioning(t, err, path, "cluster.listenAddress", "must be set")
 }
 
-func TestLoadNamedConfigRefusesAListenAddressThatIsNotASpecificIP(t *testing.T) {
+func TestLoadConfigFileOfANamedClusterRefusesAListenAddressThatIsNotASpecificIP(t *testing.T) {
 	cases := []struct {
 		address string
 		reason  []string
@@ -62,29 +62,29 @@ func TestLoadNamedConfigRefusesAListenAddressThatIsNotASpecificIP(t *testing.T) 
 		t.Run(tc.address, func(t *testing.T) {
 			path := writeConfig(t, localConfigHeader+"cluster:\n  listenAddress: '"+tc.address+"'\n")
 
-			_, err := LoadNamedConfig(path)
+			_, err := LoadConfigFile(namedID(t, "test2", t.TempDir()), path)
 
 			wantErrorMentioning(t, err, append([]string{path, "cluster.listenAddress", tc.address}, tc.reason...)...)
 		})
 	}
 }
 
-// loadLocal loads the named config at path and returns it as the
+// loadLocal loads the config of a named local cluster at path and returns it as the
 // EducatesLocalConfig it must be.
 func loadLocal(t *testing.T, path string) *v1alpha1.EducatesLocalConfig {
 	t.Helper()
-	cfg, err := LoadNamedConfig(path)
+	cfg, err := LoadConfigFile(namedID(t, "test2", t.TempDir()), path)
 	if err != nil {
-		t.Fatalf("LoadNamedConfig: %v", err)
+		t.Fatalf("LoadConfigFile: %v", err)
 	}
 	local, ok := cfg.(*v1alpha1.EducatesLocalConfig)
 	if !ok {
-		t.Fatalf("LoadNamedConfig returned %T, want *v1alpha1.EducatesLocalConfig", cfg)
+		t.Fatalf("LoadConfigFile returned %T, want *v1alpha1.EducatesLocalConfig", cfg)
 	}
 	return local
 }
 
-func TestLoadNamedConfigFallsBackToTheNipDomainOfTheListenAddress(t *testing.T) {
+func TestLoadConfigFileOfANamedClusterFallsBackToTheNipDomainOfTheListenAddress(t *testing.T) {
 	path := writeConfig(t, localConfigHeader+"cluster:\n  listenAddress: 10.10.10.2\n")
 
 	c := loadLocal(t, path)
@@ -103,10 +103,10 @@ func TestLoadNamedConfigFallsBackToTheNipDomainOfTheListenAddress(t *testing.T) 
 	}
 }
 
-func TestLoadNamedConfigNeedsADomainForAnIPv6ListenAddress(t *testing.T) {
+func TestLoadConfigFileOfANamedClusterNeedsADomainForAnIPv6ListenAddress(t *testing.T) {
 	path := writeConfig(t, localConfigHeader+"cluster:\n  listenAddress: 'fd00::2'\n")
 
-	_, err := LoadNamedConfig(path)
+	_, err := LoadConfigFile(namedID(t, "test2", t.TempDir()), path)
 
 	wantErrorMentioning(t, err, path, "fd00::2", "nip.io", "ingress.domain")
 
@@ -120,19 +120,19 @@ func TestLoadNamedConfigNeedsADomainForAnIPv6ListenAddress(t *testing.T) {
 
 const escapeConfigHeader = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesConfig\n"
 
-func TestLoadNamedConfigTakesAnEducatesConfigForKindWithoutAFallback(t *testing.T) {
+func TestLoadConfigFileOfANamedClusterTakesAnEducatesConfigForKindWithoutAFallback(t *testing.T) {
 	path := writeConfig(t, escapeConfigHeader+
 		"target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.2\n"+
 		"educatesClusterConfig:\n  mode: Managed\n")
 
-	cfg, err := LoadNamedConfig(path)
+	cfg, err := LoadConfigFile(namedID(t, "test2", t.TempDir()), path)
 	if err != nil {
-		t.Fatalf("LoadNamedConfig: %v", err)
+		t.Fatalf("LoadConfigFile: %v", err)
 	}
 
 	escape, ok := cfg.(*v1alpha1.EducatesConfig)
 	if !ok {
-		t.Fatalf("LoadNamedConfig returned %T, want *v1alpha1.EducatesConfig", cfg)
+		t.Fatalf("LoadConfigFile returned %T, want *v1alpha1.EducatesConfig", cfg)
 	}
 	if got := escape.IngressDomain(); got != "" {
 		t.Errorf("ingress domain = %q, want none: an EducatesConfig gets no nip.io fallback", got)
@@ -142,7 +142,7 @@ func TestLoadNamedConfigTakesAnEducatesConfigForKindWithoutAFallback(t *testing.
 	}
 }
 
-func TestLoadNamedConfigRefusesAnEducatesConfigWithoutASpecificListenAddress(t *testing.T) {
+func TestLoadConfigFileOfANamedClusterRefusesAnEducatesConfigWithoutASpecificListenAddress(t *testing.T) {
 	cases := []struct {
 		name    string
 		cluster string
@@ -156,14 +156,14 @@ func TestLoadNamedConfigRefusesAnEducatesConfigWithoutASpecificListenAddress(t *
 		t.Run(tc.name, func(t *testing.T) {
 			path := writeConfig(t, escapeConfigHeader+"target:\n  provider: kind\n  cluster: "+tc.cluster+"\n")
 
-			_, err := LoadNamedConfig(path)
+			_, err := LoadConfigFile(namedID(t, "test2", t.TempDir()), path)
 
 			wantErrorMentioning(t, err, append([]string{path, "target.cluster.listenAddress"}, tc.reason...)...)
 		})
 	}
 }
 
-func TestLoadNamedConfigRefusesOtherConfigs(t *testing.T) {
+func TestLoadConfigFileOfANamedClusterRefusesOtherConfigs(t *testing.T) {
 	cases := []struct {
 		name string
 		body string
@@ -183,14 +183,14 @@ func TestLoadNamedConfigRefusesOtherConfigs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			path := writeConfig(t, tc.body)
 
-			_, err := LoadNamedConfig(path)
+			_, err := LoadConfigFile(namedID(t, "test2", t.TempDir()), path)
 
 			wantErrorMentioning(t, err, path, "EducatesLocalConfig", "EducatesConfig with target.provider: kind")
 		})
 	}
 }
 
-func TestLoadNamedConfigKeepsADeclaredDomain(t *testing.T) {
+func TestLoadConfigFileOfANamedClusterKeepsADeclaredDomain(t *testing.T) {
 	path := writeConfig(t, localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\n"+
 		"ingress:\n  domain: test2.educates.test\n")

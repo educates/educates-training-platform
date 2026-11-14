@@ -128,9 +128,7 @@ Sessions are requested through the portal's REST API as its robot client.
 The robot credentials come from the Secret the TrainingPortal's status
 names under `status.educates.credentialSecrets.robot`, in the portal's
 namespace, with the keys `username`, `password`, `client-id` and
-`client-secret`, when the status names one. Otherwise they come from the
-status fields `status.educates.credentials.robot` and
-`status.educates.clients.robot`. The report says which.
+`client-secret`. The report names the Secret.
 
 Session requests are spaced 10 seconds apart, and one that fails with a
 server error is retried twice, with a note in the report: the portal has

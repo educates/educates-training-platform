@@ -19,8 +19,9 @@ from .operator_config import (AMPLITUDE_TRACKING_ID, ANALYTICS_WEBHOOK_URL,
                               TRAINING_PORTAL_IMAGE)
 from .portal_credentials import (ADMIN_CREDENTIALS_SECRET,
                                  ROBOT_CREDENTIALS_SECRET, credentials_env,
+                                 credentials_secret_references,
                                  credentials_secrets, portal_credentials,
-                                 remote_access_rbac)
+                                 referenced_secret_problem, remote_access_rbac)
 
 __all__ = ["training_portal_create", "training_portal_delete"]
 
@@ -340,6 +341,91 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                     f"Training portal {portal_name} in unexpected state {phase}.",
                     delay=30,
                 )
+
+    # The TrainingPortal's spec can reference Secrets holding its admin and
+    # robot credentials, whose values are copied into the portal's own
+    # credentials Secrets. They are read before anything is created for the
+    # portal, which waits while a referenced Secret does not exist or has no
+    # value for one of its keys.
+
+    referenced_secrets = {}
+
+    for account, reference in credentials_secret_references(spec).items():
+        try:
+            referenced_secret = pykube.Secret.objects(
+                api, namespace=reference["namespace"]
+            ).get_or_none(name=reference["name"])
+
+        except pykube.exceptions.KubernetesError as exc:
+            message = (
+                f"Unexpected error reading Secret {reference['name']} in"
+                f" namespace {reference['namespace']}."
+            )
+
+            logger.exception(
+                "Unexpected error reading Secret %s in namespace %s for training portal %s.",
+                reference["name"],
+                reference["namespace"],
+                portal_name,
+            )
+
+            patch["status"] = {"educates": {"phase": "Unknown", "message": message}}
+
+            report_analytics_event(
+                "Resource/TemporaryError",
+                {
+                    "kind": "TrainingPortal",
+                    "name": name,
+                    "uid": uid,
+                    "retry": retry,
+                    "message": message,
+                },
+            )
+
+            raise kopf.TemporaryError(message, delay=30) from exc
+
+        if referenced_secret is not None:
+            referenced_secret = referenced_secret.obj
+
+        problem = referenced_secret_problem(account, reference, referenced_secret)
+
+        if problem:
+            if runtime.total_seconds() >= 300:
+                patch["status"] = {"educates": {"phase": "Failed", "message": problem}}
+
+                report_analytics_event(
+                    "Resource/PermanentError",
+                    {
+                        "kind": "TrainingPortal",
+                        "name": name,
+                        "uid": uid,
+                        "retry": retry,
+                        "message": problem,
+                    },
+                )
+
+                raise kopf.PermanentError(
+                    f"Training portal {portal_name} cannot be created. {problem}"
+                )
+
+            patch["status"] = {"educates": {"phase": "Pending", "message": problem}}
+
+            report_analytics_event(
+                "Resource/TemporaryError",
+                {
+                    "kind": "TrainingPortal",
+                    "name": name,
+                    "uid": uid,
+                    "retry": retry,
+                    "message": problem,
+                },
+            )
+
+            raise kopf.TemporaryError(
+                f"Training portal {portal_name} is waiting. {problem}", delay=30
+            )
+
+        referenced_secrets[account] = referenced_secret
 
     # Namespace doesn't already exist so we need to create it. We query back
     # the namespace immediately so we can access its unique uid. Note that we
@@ -1006,9 +1092,10 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         pykube.ServiceAccount(api, name_image_pull_secrets(service_account_body)).create()
         pykube.ClusterRoleBinding(api, cluster_role_binding_body).create()
 
-        # The portal's credentials are generated once, when the portal is
-        # created. If its credentials Secrets already exist, their values
-        # are the ones the portal was deployed with, so they are kept.
+        # The portal's credentials are set once, when the portal is created,
+        # from the Secrets its spec references, the values its spec sets, or
+        # generated values. If its credentials Secrets already exist, their
+        # values are the ones the portal was deployed with, so they are kept.
 
         portal_secrets = pykube.Secret.objects(api, namespace=portal_namespace)
 
@@ -1031,6 +1118,8 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                 if existing_robot_secret is not None
                 else None
             ),
+            referenced_admin_secret=referenced_secrets.get("admin"),
+            referenced_robot_secret=referenced_secrets.get("robot"),
         )
 
         admin_secret_body, robot_secret_body = credentials_secrets(
@@ -1101,9 +1190,9 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
     )
 
     # Save away the details of the portal which was created in status. The
-    # credentials Secrets are named, and live in the portal namespace. The
-    # credentials themselves are still copied into status for clients which
-    # read them from there.
+    # status names the credentials Secrets, which live in the portal
+    # namespace, and never holds the credentials themselves, since anyone who
+    # can read TrainingPortals can read their status.
 
     patch["status"] = {}
 
@@ -1115,22 +1204,6 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         "credentialSecrets": {
             "admin": ADMIN_CREDENTIALS_SECRET,
             "robot": ROBOT_CREDENTIALS_SECRET,
-        },
-        "credentials": {
-            "admin": {
-                "username": credentials["admin"]["username"],
-                "password": credentials["admin"]["password"],
-            },
-            "robot": {
-                "username": credentials["robot"]["username"],
-                "password": credentials["robot"]["password"],
-            },
-        },
-        "clients": {
-            "robot": {
-                "id": credentials["robot"]["client-id"],
-                "secret": credentials["robot"]["client-secret"],
-            }
         },
     }
 

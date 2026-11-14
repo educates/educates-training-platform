@@ -196,11 +196,17 @@ func bindServiceAccount(namespace, name, role string) {
 func impersonating(user string) client.Client {
 	GinkgoHelper()
 
-	impersonated := rest.CopyConfig(cfg)
-	impersonated.Impersonate = rest.ImpersonationConfig{UserName: user}
-	cl, err := client.New(impersonated, client.Options{Scheme: scheme.Scheme})
+	cl, err := client.New(impersonatingConfig(user), client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	return cl
+}
+
+// impersonatingConfig returns a copy of the suite's config that sends
+// every request as user.
+func impersonatingConfig(user string) *rest.Config {
+	impersonated := rest.CopyConfig(cfg)
+	impersonated.Impersonate = rest.ImpersonationConfig{UserName: user}
+	return impersonated
 }
 
 // serviceAccountUser is the user name a service account authenticates as.

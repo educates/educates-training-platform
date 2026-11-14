@@ -123,33 +123,24 @@ async function waitForPortal({ cluster, portal, log }) {
 }
 
 // robotCredentials reads the portal's robot credentials from the Secret its
-// status names under status.educates.credentialSecrets.robot when it names
-// one, and from the status fields otherwise.
+// status names under status.educates.credentialSecrets.robot.
 export async function robotCredentials(cluster, trainingPortal) {
   const status = trainingPortal.status?.educates ?? {};
   const ref = status.credentialSecrets?.robot;
-  let creds;
-  if (ref) {
-    const name = typeof ref === "string" ? ref : ref.name;
-    const namespace = (typeof ref === "object" && ref.namespace) || status.namespace;
-    const secret = await cluster.kubectlJson(["-n", namespace, "get", "secret", name]);
-    const value = (key) => Buffer.from(secret.data?.[key] ?? "", "base64").toString("utf8");
-    creds = {
-      source: `Secret ${namespace}/${name}, named by status.educates.credentialSecrets.robot`,
-      username: value("username"),
-      password: value("password"),
-      clientId: value("client-id"),
-      clientSecret: value("client-secret"),
-    };
-  } else {
-    creds = {
-      source: "TrainingPortal status.educates.credentials and status.educates.clients",
-      username: status.credentials?.robot?.username,
-      password: status.credentials?.robot?.password,
-      clientId: status.clients?.robot?.id,
-      clientSecret: status.clients?.robot?.secret,
-    };
+  if (!ref) {
+    throw new Error(`the TrainingPortal ${trainingPortal.metadata?.name} names no robot credentials Secret under status.educates.credentialSecrets.robot`);
   }
+  const name = typeof ref === "string" ? ref : ref.name;
+  const namespace = (typeof ref === "object" && ref.namespace) || status.namespace;
+  const secret = await cluster.kubectlJson(["-n", namespace, "get", "secret", name]);
+  const value = (key) => Buffer.from(secret.data?.[key] ?? "", "base64").toString("utf8");
+  const creds = {
+    source: `Secret ${namespace}/${name}, named by status.educates.credentialSecrets.robot`,
+    username: value("username"),
+    password: value("password"),
+    clientId: value("client-id"),
+    clientSecret: value("client-secret"),
+  };
   const missing = ["username", "password", "clientId", "clientSecret"].filter((k) => !creds[k]);
   if (missing.length) throw new Error(`robot credentials from ${creds.source} lack ${missing.join(", ")}`);
   return creds;

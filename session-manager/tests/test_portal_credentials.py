@@ -12,8 +12,10 @@ import string
 
 from handlers.portal_credentials import (
     credentials_env,
+    credentials_secret_references,
     credentials_secrets,
     portal_credentials,
+    referenced_secret_problem,
     remote_access_rbac,
 )
 
@@ -94,13 +96,202 @@ def test_an_existing_secret_wins_over_the_definition():
     assert credentials["admin"]["password"] == "existing-admin-password"
 
 
-def _secret(name, **values):
+def test_uses_the_values_of_the_secrets_the_definition_references():
+    spec = {
+        "portal": {
+            "credentialSecrets": {
+                "admin": {"name": "lab-admin", "namespace": "credentials"},
+                "robot": {"name": "lab-robot", "namespace": "credentials"},
+            }
+        }
+    }
+    referenced_admin = _secret(
+        "lab-admin", "credentials", username="admin-user", password="admin-secret"
+    )
+    referenced_robot = _secret(
+        "lab-robot",
+        "credentials",
+        **{
+            "username": "robot-user",
+            "password": "robot-secret",
+            "client-id": "robot-client-id",
+            "client-secret": "robot-client-secret",
+        },
+    )
+
+    credentials = portal_credentials(
+        spec,
+        referenced_admin_secret=referenced_admin,
+        referenced_robot_secret=referenced_robot,
+    )
+
+    assert credentials == {
+        "admin": {"username": "admin-user", "password": "admin-secret"},
+        "robot": {
+            "username": "robot-user",
+            "password": "robot-secret",
+            "client-id": "robot-client-id",
+            "client-secret": "robot-client-secret",
+        },
+    }
+
+
+def test_copies_only_the_credentials_keys_of_a_referenced_secret():
+    referenced_admin = _secret(
+        "lab-admin",
+        "credentials",
+        username="admin-user",
+        password="admin-secret",
+        notes="kept by the platform team",
+    )
+
+    credentials = portal_credentials(
+        ADMIN_REFERENCE_SPEC, referenced_admin_secret=referenced_admin
+    )
+
+    assert credentials["admin"] == {
+        "username": "admin-user",
+        "password": "admin-secret",
+    }
+
+
+def test_takes_each_account_from_its_own_source():
+    # The admin credentials come from a referenced Secret, the robot client
+    # from the definition, and the robot password is generated.
+
+    spec = {
+        "portal": {
+            "credentialSecrets": {
+                "admin": {"name": "lab-admin", "namespace": "credentials"},
+            },
+            "clients": {"robot": {"id": "inline-id", "secret": "inline-secret"}},
+        }
+    }
+    referenced_admin = _secret(
+        "lab-admin", "credentials", username="admin-user", password="admin-secret"
+    )
+
+    credentials = portal_credentials(spec, referenced_admin_secret=referenced_admin)
+
+    assert credentials["admin"] == {
+        "username": "admin-user",
+        "password": "admin-secret",
+    }
+    assert credentials["robot"]["username"] == "robot@educates"
+    assert _generated(credentials["robot"]["password"])
+    assert credentials["robot"]["client-id"] == "inline-id"
+    assert credentials["robot"]["client-secret"] == "inline-secret"
+
+
+def test_an_existing_secret_wins_over_a_referenced_one():
+    admin = _secret(
+        "training-portal-admin-credentials",
+        username="educates",
+        password="existing-admin-password",
+    )
+    referenced_admin = _secret(
+        "lab-admin", "credentials", username="admin-user", password="changed-password"
+    )
+
+    credentials = portal_credentials(
+        ADMIN_REFERENCE_SPEC,
+        admin_secret=admin,
+        referenced_admin_secret=referenced_admin,
+    )
+
+    assert credentials["admin"] == {
+        "username": "educates",
+        "password": "existing-admin-password",
+    }
+
+
+def test_names_the_secrets_the_definition_references():
+    spec = {
+        "portal": {
+            "credentialSecrets": {
+                "robot": {"name": "lab-robot", "namespace": "credentials"},
+            }
+        }
+    }
+
+    assert credentials_secret_references(spec) == {
+        "robot": {"name": "lab-robot", "namespace": "credentials"},
+    }
+    assert credentials_secret_references({}) == {}
+
+
+def test_a_referenced_secret_holding_every_key_can_be_used():
+    referenced_admin = _secret(
+        "lab-admin", "credentials", username="admin-user", password="admin-secret"
+    )
+
+    assert (
+        referenced_secret_problem(
+            "admin",
+            {"name": "lab-admin", "namespace": "credentials"},
+            referenced_admin,
+        )
+        is None
+    )
+
+
+def test_says_which_referenced_secret_does_not_exist():
+    assert referenced_secret_problem(
+        "admin", {"name": "lab-admin", "namespace": "credentials"}, None
+    ) == (
+        "Secret lab-admin in namespace credentials, referenced by"
+        " spec.portal.credentialSecrets.admin, does not exist."
+    )
+
+
+def test_says_which_keys_a_referenced_secret_lacks():
+    referenced_robot = _secret(
+        "lab-robot", "credentials", username="robot-user", password="robot-secret"
+    )
+
+    assert referenced_secret_problem(
+        "robot",
+        {"name": "lab-robot", "namespace": "credentials"},
+        referenced_robot,
+    ) == (
+        "Secret lab-robot in namespace credentials, referenced by"
+        " spec.portal.credentialSecrets.robot, has no value for the keys"
+        " client-id and client-secret."
+    )
+
+
+def test_an_empty_value_in_a_referenced_secret_counts_as_missing():
+    referenced_admin = _secret(
+        "lab-admin", "credentials", username="admin-user", password=""
+    )
+
+    assert referenced_secret_problem(
+        "admin",
+        {"name": "lab-admin", "namespace": "credentials"},
+        referenced_admin,
+    ) == (
+        "Secret lab-admin in namespace credentials, referenced by"
+        " spec.portal.credentialSecrets.admin, has no value for the key"
+        " password."
+    )
+
+
+ADMIN_REFERENCE_SPEC = {
+    "portal": {
+        "credentialSecrets": {
+            "admin": {"name": "lab-admin", "namespace": "credentials"},
+        }
+    }
+}
+
+
+def _secret(name, namespace="lab-portal-ui", **values):
     """A Secret as the API server returns it, its values base64 encoded."""
 
     return {
         "apiVersion": "v1",
         "kind": "Secret",
-        "metadata": {"name": name, "namespace": "lab-portal-ui"},
+        "metadata": {"name": name, "namespace": namespace},
         "type": "Opaque",
         "data": {
             key: base64.b64encode(value.encode()).decode()

@@ -705,9 +705,8 @@ Features Changed
   have been renamed to follow the Kubernetes convention of an application
   prefix separated by colons. Service roles are now named after their
   component: ``educates:session-manager``, ``educates:secrets-manager``,
-  ``educates:lookup-service``, ``educates:training-portal``,
-  ``educates:tunnel-manager``, ``educates:remote-access``,
-  ``educates:node-ca-injector`` and the operator's
+  ``educates:training-portal``, ``educates:tunnel-manager``,
+  ``educates:remote-access``, ``educates:node-ca-injector`` and the operator's
   ``educates:installer:manager`` and ``educates:installer:charts``. The roles
   bound to workshop session service accounts are now
   ``educates:session:admin``, ``educates:session:edit`` and
@@ -1381,14 +1380,50 @@ Features Changed
   ``password``, and the robot credentials in the secret
   ``training-portal-robot-credentials``, with the keys ``username``,
   ``password``, ``client-id`` and ``client-secret``, both in the namespace
-  ``<portal-name>-ui``. The training portal's status names them under
-  ``status.educates.credentialSecrets``. The training portal's deployment
-  now takes the credentials from these secrets, so its environment no longer
-  holds the admin password in clear. The installation wide
+  ``<portal-name>-ui``. The training portal's deployment now takes the
+  credentials from these secrets, so its environment no longer holds the
+  admin password in clear, and the training portal no longer writes its
+  admin password to its container log, which anyone permitted to read pod
+  logs in its namespace could read. The training portal's status names the
+  secrets under ``status.educates.credentialSecrets`` and no longer holds the
+  credentials themselves: ``status.educates.credentials`` and
+  ``status.educates.clients`` are removed from the ``TrainingPortal``
+  resource, and ``kubectl get trainingportals`` no longer shows the
+  ``AdminUsername`` and ``AdminPassword`` columns, so anyone permitted to
+  read ``TrainingPortal`` resources, such as a user bound to the built-in
+  ``view`` role, no longer sees a training portal's credentials. The
+  ``PortalPassword`` column stays. To get the admin credentials, read the
+  secret ``training-portal-admin-credentials`` in the training portal's
+  namespace, or run ``educates cluster portal password --admin``, either of
+  which needs ``get`` access on secrets in that namespace. Scripts which read
+  the credentials from the status need to read them from the secrets
+  instead. The installation wide
   ``trainingPortal.credentials`` and ``trainingPortal.clients`` settings,
   which in 3.x set the credentials shared by every training portal, no longer
   exist; set credentials for a training portal in its ``TrainingPortal``
   resource instead.
+
+* Setting a training portal's credentials inline in its ``TrainingPortal``
+  resource, under ``spec.portal.credentials`` and ``spec.portal.clients``, is
+  deprecated and will be removed in a future release, as anyone permitted to
+  read ``TrainingPortal`` resources can read them. Inline values are still
+  used. Instead, create secrets holding the credentials and reference them
+  with ``spec.portal.credentialSecrets.admin``, naming a secret with the keys
+  ``username`` and ``password``, and ``spec.portal.credentialSecrets.robot``,
+  naming a secret with the keys ``username``, ``password``, ``client-id`` and
+  ``client-secret``, each reference giving the secret's ``name`` and
+  ``namespace``. The session manager copies their values into the training
+  portal's own credentials secrets when the training portal is created, so
+  later changes to the referenced secrets do not reach it. While a referenced
+  secret does not exist, or has no value for one of its keys, the training
+  portal waits, with a status message naming the secret and what is missing,
+  and is marked as failed if that lasts five minutes. Creating or updating a
+  ``TrainingPortal`` resource which sets ``spec.portal.credentials`` or
+  ``spec.portal.clients`` returns a warning from the validating admission
+  policy ``educates-training-portal-inline-credentials`` naming the secret
+  references to use instead, which ``kubectl apply`` prints, and one which
+  sets the same credentials both inline and by a secret reference is
+  rejected.
 
 * The ``educates`` CLI now reads a training portal's credentials from the
   secrets that hold them rather than from the training portal's status.
@@ -1436,6 +1471,25 @@ Features Changed
   ``WorkshopAllocation`` resources, which the lookup service never used; it
   grants ``list`` and ``watch`` on ``TrainingPortal``,
   ``WorkshopEnvironment`` and ``WorkshopSession`` resources.
+
+* The Educates install now creates the ``educates-config`` namespace, where
+  the lookup service reads its configuration, and keeps it when the lookup
+  service or Educates is uninstalled, so the ``ClusterConfig``,
+  ``ClientConfig`` and ``TenantConfig`` resources and the kubeconfig secrets
+  in it survive a reinstall. Previously the namespace had to be created by
+  hand before configuring the lookup service. An ``educates-config``
+  namespace created by hand is taken over by the install, and the
+  configurations in it are kept. The lookup service now reads secrets only
+  in that namespace. Previously its service account was bound to the
+  ``educates-lookup-service`` cluster role, which granted read access to the
+  secrets of every namespace. That cluster role and its binding no longer
+  exist, and the lookup service holds nothing cluster wide: the role
+  ``educates-lookup-service`` in ``educates-config`` lets it list and watch
+  secrets and its configuration resources there, patch those resources, and
+  create events. Monitoring the cluster the lookup service runs on still
+  uses the ``remote-access`` service account. The lookup service's
+  deployment also now has a liveness probe, so a lookup service which can no
+  longer reach the Kubernetes API is restarted.
 
 Removed Features
 ----------------

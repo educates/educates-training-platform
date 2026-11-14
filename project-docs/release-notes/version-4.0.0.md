@@ -1360,8 +1360,9 @@ Features Changed
   ``ClusterRoleBinding`` in ``session.objects``. The console now opens on
   the session namespace, its namespace selector offers the session namespace
   followed by the secondary namespaces listed under
-  ``session.namespaces.secondary``, and it no longer shows a notification
-  for each request it is refused. Workshop sessions using a virtual cluster
+  ``session.namespaces.secondary`` and then the namespaces created through
+  ``session.objects``, and it no longer shows a notification for each
+  request it is refused. Workshop sessions using a virtual cluster
   are unaffected, as ``kubectl`` and the console in them work against the
   virtual cluster.
 
@@ -1983,3 +1984,15 @@ Bugs Fixed
   cluster role no longer has a rule for ``customresourcedefinitions`` in the
   core API group, which granted nothing, since custom resource definitions
   belong to the ``apiextensions.k8s.io`` API group.
+
+* The Kubernetes console of a workshop session failed to start, and could
+  not be opened, when the session's role did not allow reading, creating and
+  updating secrets in the session namespace, as with
+  ``session.namespaces.role`` set to ``view``, or a ``custom`` role which
+  does not grant them. The console keeps a CSRF key and an encryption key in
+  secrets in the session namespace, and wrote them itself as it started.
+  These secrets are now created with their keys when the workshop session is
+  created, and the session's service account can always get them, and the
+  console's settings, by name. The console only reads them, so it now works
+  under any role, without workshop users being able to create or update
+  secrets.

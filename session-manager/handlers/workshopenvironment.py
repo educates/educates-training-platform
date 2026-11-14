@@ -896,47 +896,6 @@ def workshop_environment_create(
 
     pykube.Secret(api, config_secret_body).create()
 
-    # Because the Kubernetes web console is designed for working against
-    # a whole cluster and we want to use it in scope of a single
-    # namespace, we need to at least grant it roles to be able to list
-    # and get namespaces. If we don't do this then the web console will
-    # forever generate a stream of events complaining that it can't read
-    # namespaces. This seems to hasten the web console hanging, but also
-    # means can't easily switch to other namespaces the workshop has
-    # access to as the list of namespaces cannot be generated. At this
-    # point we therefore create a cluster role associated with the
-    # name of the namespace create for the workshop environment. This
-    # will later be bound to the service account the workshop
-    # instances and web consoles runs as. As with the namespace we add
-    # it as a child to the custom resource for the workshop.
-
-    cluster_role_body = {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "ClusterRole",
-        "metadata": {
-            "name": f"educates:environment:console:{workshop_namespace}",
-            "labels": {
-                "training.educates.dev/component": "environment",
-                "training.educates.dev/workshop.name": workshop_name,
-                "training.educates.dev/portal.name": portal_name,
-                "training.educates.dev/portal.uid": portal_uid,
-                "training.educates.dev/environment.name": environment_name,
-                "training.educates.dev/environment.uid": environment_uid,
-            },
-        },
-        "rules": [
-            {
-                "apiGroups": [""],
-                "resources": ["namespaces"],
-                "verbs": ["get", "list", "watch"],
-            }
-        ],
-    }
-
-    kopf.adopt(cluster_role_body, namespace_instance.obj)
-
-    pykube.ClusterRole(api, cluster_role_body).create()
-
     # Setup rules for copying the ingress TLS and CA secrets into the
     # workshop namespace. The CA secret is copied whenever a CA is
     # configured, even when there is no wildcard TLS secret, as workshop

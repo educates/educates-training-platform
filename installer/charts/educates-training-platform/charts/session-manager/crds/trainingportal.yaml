@@ -25,6 +25,26 @@ spec:
               properties:
                 portal:
                   type: object
+                  x-kubernetes-validations:
+                  - rule: >-
+                      !has(self.credentialSecrets) || !has(self.credentialSecrets.admin)
+                      || !has(self.credentials) || !has(self.credentials.admin)
+                      || (!has(self.credentials.admin.username) && !has(self.credentials.admin.password))
+                    message: >-
+                      the admin credentials cannot be set both inline and by
+                      spec.portal.credentialSecrets.admin, remove spec.portal.credentials.admin
+                    fieldPath: .credentialSecrets.admin
+                  - rule: >-
+                      !has(self.credentialSecrets) || !has(self.credentialSecrets.robot)
+                      || ((!has(self.credentials) || !has(self.credentials.robot)
+                           || (!has(self.credentials.robot.username) && !has(self.credentials.robot.password)))
+                          && (!has(self.clients) || !has(self.clients.robot)
+                              || (!has(self.clients.robot.id) && !has(self.clients.robot.secret))))
+                    message: >-
+                      the robot credentials cannot be set both inline and by
+                      spec.portal.credentialSecrets.robot, remove spec.portal.credentials.robot
+                      and spec.portal.clients.robot
+                    fieldPath: .credentialSecrets.robot
                   properties:
                     title:
                       type: string
@@ -177,6 +197,7 @@ spec:
                         visibility:
                           type: string
                           pattern: '^(public|private)$'
+                    #! Deprecated, use "credentialSecrets.admin" and "credentialSecrets.robot".
                     credentials:
                       type: object
                       properties:
@@ -194,6 +215,7 @@ spec:
                               type: string
                             password:
                               type: string
+                    #! Deprecated, use "credentialSecrets.robot".
                     clients:
                       type: object
                       properties:
@@ -204,6 +226,33 @@ spec:
                               type: string
                             secret:
                               type: string
+                    credentialSecrets:
+                      type: object
+                      properties:
+                        admin:
+                          type: object
+                          required:
+                          - name
+                          - namespace
+                          properties:
+                            name:
+                              type: string
+                              minLength: 1
+                            namespace:
+                              type: string
+                              minLength: 1
+                        robot:
+                          type: object
+                          required:
+                          - name
+                          - namespace
+                          properties:
+                            name:
+                              type: string
+                              minLength: 1
+                            namespace:
+                              type: string
+                              minLength: 1
                     updates:
                       type: object
                       properties:

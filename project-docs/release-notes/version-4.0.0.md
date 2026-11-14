@@ -1389,6 +1389,24 @@ Features Changed
   exist; set credentials for a training portal in its ``TrainingPortal``
   resource instead.
 
+* The ``educates`` CLI now reads a training portal's credentials from the
+  secrets that hold them rather than from the training portal's status.
+  ``educates cluster portal password --admin`` reads the admin credentials
+  from the secret named by ``status.educates.credentialSecrets.admin``, and
+  the ``educates cluster session`` commands,
+  ``educates cluster workshop request`` and
+  ``educates admin diagnostics collect`` log in to the training portal's REST
+  API with the robot credentials from the secret named by
+  ``status.educates.credentialSecrets.robot``. Both secrets are in the
+  training portal's namespace, ``<portal-name>-ui``, so the identity of the
+  kube context these commands are run against now needs ``get`` access on
+  secrets in that namespace. When it lacks it, the command fails with an
+  error naming the secret and the namespace it could not read. The
+  diagnostics bundle written by ``educates admin diagnostics collect`` no
+  longer holds the credentials a ``TrainingPortal`` resource sets under
+  ``spec.portal.credentials`` and ``spec.portal.clients``, whose values it
+  replaces with ``REDACTED``, and it collects no secrets.
+
 Removed Features
 ----------------
 

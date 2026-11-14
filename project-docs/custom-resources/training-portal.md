@@ -545,6 +545,15 @@ educates cluster portal password --admin --portal lab-markdown-sample
 Reading the secrets, with ``kubectl`` or the ``educates`` command line tool,
 needs ``get`` access on secrets in the namespace of the training portal.
 
+The lookup service logs in to the REST API of a training portal with its
+robot credentials, which it reads as the ``remote-access`` service account in
+the ``educates`` namespace. When a training portal is created, a ``Role`` and
+``RoleBinding`` named ``educates-remote-access`` are created in its namespace,
+letting that service account get the robot credentials secret and no other
+secret, so it can never read the admin credentials. See
+[Cluster Monitoring](../lookup-service/cluster-monitoring) for the access the
+lookup service needs.
+
 The training portal itself receives its credentials from these secrets, so
 its deployment does not hold them in clear.
 

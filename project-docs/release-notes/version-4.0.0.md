@@ -1411,6 +1411,26 @@ Features Changed
   ``kubectl.kubernetes.io/last-applied-configuration`` annotations, and the
   bundle collects no secrets.
 
+* The lookup service now reads a training portal's robot credentials from
+  the secret named by ``status.educates.credentialSecrets.robot``, in the
+  training portal's namespace, rather than from the training portal's
+  status. It reads the secret through the same kubeconfig it monitors the
+  cluster with, so the identity a ``ClusterConfig`` accesses a cluster as now
+  needs ``get`` access on the secret ``training-portal-robot-credentials`` in
+  the namespace of each training portal. The ``remote-access`` service
+  account, which the lookup service uses for its own cluster and which
+  ``educates admin lookup kubeconfig`` generates a kubeconfig for, is given
+  it: for every training portal the session manager creates a ``Role`` and
+  ``RoleBinding`` named ``educates-remote-access`` in the training portal's
+  namespace, granting ``get`` on the robot credentials secret alone, whether
+  or not the lookup service is enabled, so the account can never read a
+  training portal's admin credentials. A kubeconfig using any other identity
+  needs the same grant added. The ``educates:remote-access`` cluster role no
+  longer grants ``get``, nor any access to ``Workshop`` and
+  ``WorkshopAllocation`` resources, which the lookup service never used; it
+  grants ``list`` and ``watch`` on ``TrainingPortal``,
+  ``WorkshopEnvironment`` and ``WorkshopSession`` resources.
+
 Removed Features
 ----------------
 

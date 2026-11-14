@@ -286,8 +286,6 @@ func (c *WorkshopsCatalogRequester) RequestWorkshop(workshopName string, environ
 
 func (c *WorkshopsCatalogRequester) Login() (func(), error) {
 	var err error
-	clientId := ""
-	clientSecret := ""
 
 	// We commented this out because cluster availability is checked on the caller cmd when cluster is needed
 	// if err := cluster.IsClusterAvailable(c.clusterConfig); err != nil {
@@ -295,6 +293,12 @@ func (c *WorkshopsCatalogRequester) Login() (func(), error) {
 	// }
 
 	dynamicClient, err := c.clusterConfig.GetDynamicClient()
+
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to create Kubernetes client")
+	}
+
+	client, err := c.clusterConfig.GetClient()
 
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to create Kubernetes client")
@@ -311,6 +315,10 @@ func (c *WorkshopsCatalogRequester) Login() (func(), error) {
 			return nil, errors.New("No session found.")
 		}
 
+		if err != nil {
+			return nil, errors.Wrapf(err, "unable to get training portal %q", c.portalName)
+		}
+
 		_, found, _ := unstructured.NestedMap(trainingPortal.Object, "status")
 
 		if found {
@@ -325,31 +333,27 @@ func (c *WorkshopsCatalogRequester) Login() (func(), error) {
 
 	c.PortalUrl, _, _ = unstructured.NestedString(trainingPortal.Object, "status", "educates", "url")
 
-	clientId, _, _ = unstructured.NestedString(trainingPortal.Object, "status", "educates", "clients", "robot", "id")
-	clientSecret, _, _ = unstructured.NestedString(trainingPortal.Object, "status", "educates", "clients", "robot", "secret")
-
-	username, _, _ := unstructured.NestedString(trainingPortal.Object, "status", "educates", "credentials", "robot", "username")
-	password, _, _ := unstructured.NestedString(trainingPortal.Object, "status", "educates", "credentials", "robot", "password")
-
 	if c.PortalUrl == "" {
 		return nil, errors.New("invalid URL endpoint in training portal")
 	}
 
-	if username == "" || password == "" {
-		return nil, errors.New("invalid credentials in training portal")
+	robot, err := ReadPortalRobotCredentials(context.TODO(), client, trainingPortal)
+
+	if err != nil {
+		return nil, err
 	}
 
 	form := url.Values{}
 
 	form.Add("grant_type", "password")
-	form.Add("username", username)
-	form.Add("password", password)
+	form.Add("username", robot.Username)
+	form.Add("password", robot.Password)
 
 	// We try to login 5 times in case of errors (since this operation might have happen too fast
 	// with relation to the creation of the trainingportal) adding an exponential delay between each try
 	var resBody []byte
 	for executions := 0; executions < 6; executions++ {
-		resBody, err = requestToken(c.PortalUrl, clientId, clientSecret, form)
+		resBody, err = requestToken(c.PortalUrl, robot.ClientID, robot.ClientSecret, form)
 		if err != nil {
 			time.Sleep(time.Duration(2*executions) * time.Second)
 			continue
@@ -375,8 +379,8 @@ func (c *WorkshopsCatalogRequester) Login() (func(), error) {
 		form = url.Values{}
 
 		form.Add("token", c.Auth.AccessToken)
-		form.Add("client_id", clientId)
-		form.Add("client_secret", clientSecret)
+		form.Add("client_id", robot.ClientID)
+		form.Add("client_secret", robot.ClientSecret)
 
 		req, err := http.NewRequest("POST", fmt.Sprintf("%s/oauth2/revoke-token/", c.PortalUrl), strings.NewReader(form.Encode()))
 

@@ -1342,6 +1342,29 @@ Features Changed
   binaries continue to report their release version and additionally show the
   commit they were built from.
 
+* Workshop users can no longer list the namespaces of the cluster. The
+  service account of every workshop session was bound to a cluster role
+  granting ``get``, ``list`` and ``watch`` on all namespaces, so
+  ``kubectl get namespaces`` in a workshop terminal showed the namespaces of
+  every other training portal, workshop and tenant sharing the cluster,
+  along with the security policy labels of each. That cluster role and its
+  bindings are no longer created, and ``kubectl get namespaces`` is now
+  forbidden. Instead, the service account can always get its own session
+  namespace, whatever role ``session.namespaces.role`` sets, ``custom``
+  included, so ``kubectl get namespace $SESSION_NAMESPACE`` keeps working,
+  and the terminal and console keep using the session namespace as their
+  default namespace. Workshop instructions which listed namespaces should
+  name the namespace they show instead, as
+  ``kubectl get namespace $SESSION_NAMESPACE`` does. A workshop whose users
+  must list every namespace can grant it with a ``ClusterRole`` and
+  ``ClusterRoleBinding`` in ``session.objects``. The console now opens on
+  the session namespace, its namespace selector offers the session namespace
+  followed by the secondary namespaces listed under
+  ``session.namespaces.secondary``, and it no longer shows a notification
+  for each request it is refused. Workshop sessions using a virtual cluster
+  are unaffected, as ``kubectl`` and the console in them work against the
+  virtual cluster.
+
 Removed Features
 ----------------
 

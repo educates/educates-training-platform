@@ -16,7 +16,7 @@ metadata:
   namespace: educates-config
 ```
 
-When no ``spec.credentials`` section is provided, the lookup service will monitor the local cluster where it is deployed, using the service account credentials available to the lookup service pod. A local cluster can still include ``spec.labels`` for use with tenant label selectors:
+When no ``spec.credentials`` section is provided, the lookup service will monitor the local cluster where it is deployed, accessing it as the ``remote-access`` service account in the ``educates`` namespace, whose token is mounted into the lookup service pod. See [Cluster Monitoring](cluster-monitoring) for the access this account has. A local cluster can still include ``spec.labels`` for use with tenant label selectors:
 
 ```yaml
 apiVersion: lookup.educates.dev/v1beta1

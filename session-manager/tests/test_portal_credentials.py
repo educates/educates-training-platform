@@ -2,7 +2,9 @@
 
 Each portal gets its own credentials, generated once when the portal is
 created unless its definition supplies them, and kept in two Secrets in the
-portal's namespace that its Deployment reads them from.
+portal's namespace that its Deployment reads them from. The remote-access
+service account, as which lookup-service logs in to the portal, may read the
+robot credentials Secret alone.
 """
 
 import base64
@@ -12,6 +14,7 @@ from handlers.portal_credentials import (
     credentials_env,
     credentials_secrets,
     portal_credentials,
+    remote_access_rbac,
 )
 
 ALPHANUMERIC = set(string.ascii_letters + string.digits)
@@ -226,3 +229,56 @@ def test_the_portal_takes_its_credentials_from_the_secrets():
         _from_secret("ROBOT_CLIENT_ID", robot, "client-id"),
         _from_secret("ROBOT_CLIENT_SECRET", robot, "client-secret"),
     ]
+
+
+def test_lets_remote_access_get_the_robot_credentials_secret_alone():
+    # lookup-service reads a portal's robot credentials as the remote-access
+    # service account, which must never read the portal's admin credentials.
+
+    role, _ = remote_access_rbac("lab-portal", "1234", "lab-portal-ui", "educates")
+
+    assert role == {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "kind": "Role",
+        "metadata": {
+            "name": "educates-remote-access",
+            "namespace": "lab-portal-ui",
+            "labels": PORTAL_LABELS,
+        },
+        "rules": [
+            {
+                "apiGroups": [""],
+                "resources": ["secrets"],
+                "resourceNames": ["training-portal-robot-credentials"],
+                "verbs": ["get"],
+            }
+        ],
+    }
+
+
+def test_binds_the_remote_access_service_account_of_the_educates_namespace():
+    _, role_binding = remote_access_rbac(
+        "lab-portal", "1234", "lab-portal-ui", "educates"
+    )
+
+    assert role_binding == {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "kind": "RoleBinding",
+        "metadata": {
+            "name": "educates-remote-access",
+            "namespace": "lab-portal-ui",
+            "labels": PORTAL_LABELS,
+        },
+        "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "Role",
+            "name": "educates-remote-access",
+        },
+        "subjects": [
+            {
+                "kind": "ServiceAccount",
+                "name": "remote-access",
+                "namespace": "educates",
+            }
+        ],
+    }

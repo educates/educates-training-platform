@@ -298,7 +298,18 @@ func fetchWorkshopSessionAndValidate(kubeconfig string, kubeContext string, work
 		return "", "", errors.New("workshop session not linked to target portal")
 	}
 
-	password, _, _ := unstructured.NestedString(workshopSession.Object, "spec", "session", "config", "password")
+	client, err := clusterConfig.GetClient()
+
+	if err != nil {
+		return "", "", errors.Wrapf(err, "unable to create Kubernetes client")
+	}
+
+	password, err := sessionConfigPassword(context.TODO(), client, workshopSession)
+
+	if err != nil {
+		return "", "", err
+	}
+
 	sessionURL, _, _ := unstructured.NestedString(workshopSession.Object, "status", "educates", "url")
 
 	if password == "" {

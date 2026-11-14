@@ -1380,10 +1380,24 @@ Features Changed
   ``password``, and the robot credentials in the secret
   ``training-portal-robot-credentials``, with the keys ``username``,
   ``password``, ``client-id`` and ``client-secret``, both in the namespace
-  ``<portal-name>-ui``. The training portal's status names them under
-  ``status.educates.credentialSecrets``. The training portal's deployment
-  now takes the credentials from these secrets, so its environment no longer
-  holds the admin password in clear. The installation wide
+  ``<portal-name>-ui``. The training portal's deployment now takes the
+  credentials from these secrets, so its environment no longer holds the
+  admin password in clear, and the training portal no longer writes its
+  admin password to its container log, which anyone permitted to read pod
+  logs in its namespace could read. The training portal's status names the
+  secrets under ``status.educates.credentialSecrets`` and no longer holds the
+  credentials themselves: ``status.educates.credentials`` and
+  ``status.educates.clients`` are removed from the ``TrainingPortal``
+  resource, and ``kubectl get trainingportals`` no longer shows the
+  ``AdminUsername`` and ``AdminPassword`` columns, so anyone permitted to
+  read ``TrainingPortal`` resources, such as a user bound to the built-in
+  ``view`` role, no longer sees a training portal's credentials. The
+  ``PortalPassword`` column stays. To get the admin credentials, read the
+  secret ``training-portal-admin-credentials`` in the training portal's
+  namespace, or run ``educates cluster portal password --admin``, either of
+  which needs ``get`` access on secrets in that namespace. Scripts which read
+  the credentials from the status need to read them from the secrets
+  instead. The installation wide
   ``trainingPortal.credentials`` and ``trainingPortal.clients`` settings,
   which in 3.x set the credentials shared by every training portal, no longer
   exist; set credentials for a training portal in its ``TrainingPortal``
@@ -1401,14 +1415,40 @@ Features Changed
   training portal's namespace, ``<portal-name>-ui``, so the identity of the
   kube context these commands are run against now needs ``get`` access on
   secrets in that namespace. When it lacks it, the command fails with an
-  error naming the secret and the namespace it could not read. The
-  diagnostics bundle written by ``educates admin diagnostics collect`` no
+  error naming the secret and the namespace it could not read.
+  ``educates cluster workshop serve`` likewise reads the config password of
+  a workshop session created by a training portal, which it uses to fetch
+  the session's variables, from a secret in the namespace of the session's
+  workshop environment rather than from the ``WorkshopSession`` resource, so
+  the identity of the kube context it runs against needs ``get`` access on
+  secrets in that namespace too, and an error names the secret and the
+  namespace when it lacks it. The diagnostics bundle written by ``educates admin diagnostics collect`` no
   longer holds the credentials a ``TrainingPortal`` resource sets under
   ``spec.portal.credentials`` and ``spec.portal.clients``. Their values are
   replaced with ``REDACTED``, both in the spec and in the copies of the spec
   held by the ``kopf.zalando.org/last-handled-configuration`` and
   ``kubectl.kubernetes.io/last-applied-configuration`` annotations, and the
   bundle collects no secrets.
+
+* The lookup service now reads a training portal's robot credentials from
+  the secret named by ``status.educates.credentialSecrets.robot``, in the
+  training portal's namespace, rather than from the training portal's
+  status. It reads the secret through the same kubeconfig it monitors the
+  cluster with, so the identity a ``ClusterConfig`` accesses a cluster as now
+  needs ``get`` access on the secret ``training-portal-robot-credentials`` in
+  the namespace of each training portal. The ``remote-access`` service
+  account, which the lookup service uses for its own cluster and which
+  ``educates admin lookup kubeconfig`` generates a kubeconfig for, is given
+  it: for every training portal the session manager creates a ``Role`` and
+  ``RoleBinding`` named ``educates-remote-access`` in the training portal's
+  namespace, granting ``get`` on the robot credentials secret alone, whether
+  or not the lookup service is enabled, so the account can never read a
+  training portal's admin credentials. A kubeconfig using any other identity
+  needs the same grant added. The ``educates:remote-access`` cluster role no
+  longer grants ``get``, nor any access to ``Workshop`` and
+  ``WorkshopAllocation`` resources, which the lookup service never used; it
+  grants ``list`` and ``watch`` on ``TrainingPortal``,
+  ``WorkshopEnvironment`` and ``WorkshopSession`` resources.
 
 * The Educates install now creates the ``educates-config`` namespace, where
   the lookup service reads its configuration, and keeps it when the lookup

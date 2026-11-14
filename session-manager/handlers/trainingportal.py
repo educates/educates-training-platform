@@ -15,11 +15,11 @@ from .operator_config import (AMPLITUDE_TRACKING_ID, ANALYTICS_WEBHOOK_URL,
                               FRAME_ANCESTORS, GOOGLE_TRACKING_ID,
                               INGRESS_CA_SECRET, INGRESS_CLASS, INGRESS_DOMAIN,
                               INGRESS_PROTOCOL, INGRESS_SECRET,
-                              OPERATOR_NAMESPACE, PORTAL_ADMIN_PASSWORD,
-                              PORTAL_ADMIN_USERNAME, PORTAL_ROBOT_CLIENT_ID,
-                              PORTAL_ROBOT_CLIENT_SECRET,
-                              PORTAL_ROBOT_PASSWORD, PORTAL_ROBOT_USERNAME,
-                              SESSION_COOKIE_DOMAIN, TRAINING_PORTAL_IMAGE)
+                              OPERATOR_NAMESPACE, SESSION_COOKIE_DOMAIN,
+                              TRAINING_PORTAL_IMAGE)
+from .portal_credentials import (ADMIN_CREDENTIALS_SECRET,
+                                 ROBOT_CREDENTIALS_SECRET, credentials_env,
+                                 credentials_secrets, portal_credentials)
 
 __all__ = ["training_portal_create", "training_portal_delete"]
 
@@ -96,27 +96,6 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         portal_hostname = ingress_hostname
 
     portal_url = f"{INGRESS_PROTOCOL}://{portal_hostname}"
-
-    # Calculate admin password and api credentials for portal management.
-
-    admin_username = xget(
-        spec, "portal.credentials.admin.username", PORTAL_ADMIN_USERNAME
-    )
-    admin_password = xget(
-        spec, "portal.credentials.admin.password", PORTAL_ADMIN_PASSWORD
-    )
-
-    robot_username = xget(
-        spec, "portal.credentials.robot.username", PORTAL_ROBOT_USERNAME
-    )
-    robot_password = xget(
-        spec, "portal.credentials.robot.password", PORTAL_ROBOT_PASSWORD
-    )
-
-    robot_client_id = xget(spec, "portal.clients.robot.id", PORTAL_ROBOT_CLIENT_ID)
-    robot_client_secret = xget(
-        spec, "portal.clients.robot.secret", PORTAL_ROBOT_CLIENT_SECRET
-    )
 
     # Calculate settings for portal web interface.
 
@@ -709,14 +688,7 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                                     "name": "FRAME_ANCESTORS",
                                     "value": frame_ancestors,
                                 },
-                                {
-                                    "name": "ADMIN_USERNAME",
-                                    "value": admin_username,
-                                },
-                                {
-                                    "name": "ADMIN_PASSWORD",
-                                    "value": admin_password,
-                                },
+                                *credentials_env(),
                                 {
                                     "name": "INGRESS_DOMAIN",
                                     "value": INGRESS_DOMAIN,
@@ -1059,6 +1031,44 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         pykube.ServiceAccount(api, name_image_pull_secrets(service_account_body)).create()
         pykube.Secret(api, service_account_token_body).create()
         pykube.ClusterRoleBinding(api, cluster_role_binding_body).create()
+
+        # The portal's credentials are generated once, when the portal is
+        # created. If its credentials Secrets already exist, their values
+        # are the ones the portal was deployed with, so they are kept.
+
+        portal_secrets = pykube.Secret.objects(api, namespace=portal_namespace)
+
+        existing_admin_secret = portal_secrets.get_or_none(
+            name=ADMIN_CREDENTIALS_SECRET
+        )
+        existing_robot_secret = portal_secrets.get_or_none(
+            name=ROBOT_CREDENTIALS_SECRET
+        )
+
+        credentials = portal_credentials(
+            spec,
+            admin_secret=(
+                existing_admin_secret.obj
+                if existing_admin_secret is not None
+                else None
+            ),
+            robot_secret=(
+                existing_robot_secret.obj
+                if existing_robot_secret is not None
+                else None
+            ),
+        )
+
+        admin_secret_body, robot_secret_body = credentials_secrets(
+            portal_name, portal_uid, portal_namespace, credentials
+        )
+
+        if existing_admin_secret is None:
+            pykube.Secret(api, admin_secret_body).create()
+
+        if existing_robot_secret is None:
+            pykube.Secret(api, robot_secret_body).create()
+
         pykube.PersistentVolumeClaim(api, persistent_volume_claim_body).create()
         pykube.ConfigMap(api, config_map_body).create()
         pykube.Service(api, service_body).create()
@@ -1103,7 +1113,10 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         portal_namespace,
     )
 
-    # Save away the details of the portal which was created in status.
+    # Save away the details of the portal which was created in status. The
+    # credentials Secrets are named, and live in the portal namespace. The
+    # credentials themselves are still copied into status for clients which
+    # read them from there.
 
     patch["status"] = {}
 
@@ -1112,11 +1125,26 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         "message": None,
         "namespace": portal_namespace,
         "url": portal_url,
-        "credentials": {
-            "admin": {"username": admin_username, "password": admin_password},
-            "robot": {"username": robot_username, "password": robot_password},
+        "credentialSecrets": {
+            "admin": ADMIN_CREDENTIALS_SECRET,
+            "robot": ROBOT_CREDENTIALS_SECRET,
         },
-        "clients": {"robot": {"id": robot_client_id, "secret": robot_client_secret}},
+        "credentials": {
+            "admin": {
+                "username": credentials["admin"]["username"],
+                "password": credentials["admin"]["password"],
+            },
+            "robot": {
+                "username": credentials["robot"]["username"],
+                "password": credentials["robot"]["password"],
+            },
+        },
+        "clients": {
+            "robot": {
+                "id": credentials["robot"]["client-id"],
+                "secret": credentials["robot"]["client-secret"],
+            }
+        },
     }
 
 

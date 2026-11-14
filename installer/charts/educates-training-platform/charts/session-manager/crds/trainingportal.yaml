@@ -327,6 +327,13 @@ spec:
                       type: string
                     url:
                       type: string
+                    credentialSecrets:
+                      type: object
+                      properties:
+                        admin:
+                          type: string
+                        robot:
+                          type: string
                     credentials:
                       type: object
                       required:

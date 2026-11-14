@@ -705,9 +705,8 @@ Features Changed
   have been renamed to follow the Kubernetes convention of an application
   prefix separated by colons. Service roles are now named after their
   component: ``educates:session-manager``, ``educates:secrets-manager``,
-  ``educates:lookup-service``, ``educates:training-portal``,
-  ``educates:tunnel-manager``, ``educates:remote-access``,
-  ``educates:node-ca-injector`` and the operator's
+  ``educates:training-portal``, ``educates:tunnel-manager``,
+  ``educates:remote-access``, ``educates:node-ca-injector`` and the operator's
   ``educates:installer:manager`` and ``educates:installer:charts``. The roles
   bound to workshop session service accounts are now
   ``educates:session:admin``, ``educates:session:edit`` and
@@ -1410,6 +1409,25 @@ Features Changed
   held by the ``kopf.zalando.org/last-handled-configuration`` and
   ``kubectl.kubernetes.io/last-applied-configuration`` annotations, and the
   bundle collects no secrets.
+
+* The Educates install now creates the ``educates-config`` namespace, where
+  the lookup service reads its configuration, and keeps it when the lookup
+  service or Educates is uninstalled, so the ``ClusterConfig``,
+  ``ClientConfig`` and ``TenantConfig`` resources and the kubeconfig secrets
+  in it survive a reinstall. Previously the namespace had to be created by
+  hand before configuring the lookup service. An ``educates-config``
+  namespace created by hand is taken over by the install, and the
+  configurations in it are kept. The lookup service now reads secrets only
+  in that namespace. Previously its service account was bound to the
+  ``educates-lookup-service`` cluster role, which granted read access to the
+  secrets of every namespace. That cluster role and its binding no longer
+  exist, and the lookup service holds nothing cluster wide: the role
+  ``educates-lookup-service`` in ``educates-config`` lets it list and watch
+  secrets and its configuration resources there, patch those resources, and
+  create events. Monitoring the cluster the lookup service runs on still
+  uses the ``remote-access`` service account. The lookup service's
+  deployment also now has a liveness probe, so a lookup service which can no
+  longer reach the Kubernetes API is restarted.
 
 Removed Features
 ----------------

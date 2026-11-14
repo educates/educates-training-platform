@@ -177,13 +177,11 @@ spec:
 Managing resources
 ------------------
 
-All configuration resources are created in the ``educates-config`` namespace. If this namespace does not already exist, create it before applying any configuration:
+All configuration resources are created in the ``educates-config`` namespace, along with the secrets holding the kubeconfig files of remote clusters. The Educates install creates this namespace when it deploys the lookup service, so you do not need to create it yourself. The namespace is kept when the lookup service or Educates is uninstalled, so your configuration resources and secrets are still there when you install Educates again. If you created the ``educates-config`` namespace by hand, as earlier versions of Educates required, the install takes it over and keeps what it holds.
 
-```
-kubectl create ns educates-config
-```
+The lookup service reads secrets, and its configuration resources, only in the ``educates-config`` namespace. Resources in any other namespace are ignored.
 
-Resources can then be created, updated, and deleted using standard ``kubectl`` commands:
+Resources can be created, updated, and deleted using standard ``kubectl`` commands:
 
 ```
 kubectl apply -f cluster-config.yaml

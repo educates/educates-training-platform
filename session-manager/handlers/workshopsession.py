@@ -46,6 +46,7 @@ from .session_access import (CONSOLE_ROLE_BINDING,
                              console_role_binding, console_settings_config_map,
                              session_namespace_role_binding,
                              session_object_namespaces)
+from .session_config import session_config_password
 
 __all__ = ["workshop_session_create", "workshop_session_delete"]
 
@@ -668,15 +669,31 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         applications.properties("registry")["secret"] = registry_secret
 
     # Generate a random password to be used for any services or applications
-    # deployed for a workshop, as well as one specifically for accessing the
-    # workshop configuration.
+    # deployed for a workshop.
 
     services_password = "".join(random.sample(characters, 32))
 
-    config_password = spec["session"].get("config", {}).get("password", "")
+    # Work out the password for accessing the workshop configuration. A
+    # training portal passes it in a Secret in the workshop namespace, which
+    # may not exist yet when the session is first seen, in which case this
+    # retries before the session namespace is created.
 
-    if not config_password:
-        config_password = "".join(random.sample(characters, 32))
+    def read_workshop_secret(secret_name):
+        try:
+            return (
+                pykube.Secret.objects(api, namespace=workshop_namespace)
+                .get(name=secret_name)
+                .obj
+            )
+
+        except pykube.exceptions.ObjectDoesNotExist:
+            return None
+
+    config_password, config_password_env = session_config_password(
+        spec["session"],
+        read_workshop_secret,
+        lambda: "".join(random.sample(characters, 32)),
+    )
 
     # Validate that any secrets to be copied into the workshop environment
     # namespace exist. This is done before creating the session namespace so we
@@ -1789,10 +1806,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                                     "name": "SERVICES_PASSWORD",
                                     "value": services_password,
                                 },
-                                {
-                                    "name": "CONFIG_PASSWORD",
-                                    "value": config_password,
-                                },
+                                config_password_env,
                             ],
                             "volumeMounts": [
                                 {

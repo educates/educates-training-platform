@@ -606,3 +606,34 @@ func TestClusterOfContext(t *testing.T) {
 		})
 	}
 }
+
+func TestConfiguredWithListenAddress(t *testing.T) {
+	dataHome := t.TempDir()
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.3\n")
+	writeClusterConfig(t, dataHome, "race-a", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.3\n")
+	writeClusterConfig(t, dataHome, "race-b", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.3\n")
+	writeClusterConfig(t, dataHome, "elsewhere", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.4\n")
+	writeClusterConfig(t, dataHome, "broken", "kind: [\n")
+	addClusterFolder(t, dataHome, "no-config")
+	addClusterFolder(t, dataHome, "Not_A_Name")
+	creating := namedForTest(t, dataHome, "race-b")
+
+	got := ConfiguredWithListenAddress(dataHome, creating, "10.10.10.3")
+
+	var names []string
+	for _, id := range got {
+		names = append(names, id.Description())
+	}
+	want := []string{"the default local cluster", `local cluster "race-a"`}
+	if !slices.Equal(names, want) {
+		t.Errorf("ConfiguredWithListenAddress() = %q, want %q", names, want)
+	}
+}
+
+func TestConfiguredWithListenAddressFindsNoneWithoutConfigs(t *testing.T) {
+	dataHome := t.TempDir()
+
+	if got := ConfiguredWithListenAddress(dataHome, Default(dataHome), "10.10.10.3"); len(got) != 0 {
+		t.Errorf("ConfiguredWithListenAddress() = %v, want none", got)
+	}
+}

@@ -132,7 +132,10 @@ func DeployRegistry(bindIP string, p Progress) error {
 }
 
 /**
- * This private function only creates the registry container.
+ * This private function only creates the registry container, unless it
+ * exists. Another command, such as a second local cluster create, may set
+ * it up at the same time: sharedContainer waits for whichever command
+ * creates it.
  */
 func createRegistryContainer(bindIP string, p Progress) error {
 	ctx := context.Background()
@@ -145,23 +148,42 @@ func createRegistryContainer(bindIP string, p Progress) error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	_, err = cli.ContainerInspect(ctx, EducatesRegistryContainer, client.ContainerInspectOptions{})
+	shared := sharedContainer{
+		name: EducatesRegistryContainer,
+		what: "registry",
+		state: func(ctx context.Context) (container.ContainerState, bool, error) {
+			return containerState(ctx, cli, EducatesRegistryContainer)
+		},
+		prepare: func(ctx context.Context) error {
+			return prepareRegistryContainer(ctx, cli, p)
+		},
+		create: func(ctx context.Context) error {
+			return newRegistryContainer(ctx, cli, bindIP)
+		},
+		setUp: func(ctx context.Context) error {
+			return startOnNetworks(ctx, cli, EducatesRegistryContainer, "registry", registryFixedAddress, p)
+		},
+		adopt: func(context.Context) error {
+			// If we can retrieve a container of required name we assume it is
+			// running okay. Technically it could be restarting, stopping or
+			// have exited and container was not removed, but if that is the case
+			// then leave it up to the user to sort out. It is still linked to the
+			// cluster network, which moves a registry linked without a fixed
+			// address onto its fixed address.
+			if err := linkToClusterNetwork(EducatesRegistryContainer, registryFixedAddress, p); err != nil {
+				return errors.Wrap(err, "failed to link registry to cluster")
+			}
 
-	if err == nil {
-		// If we can retrieve a container of required name we assume it is
-		// running okay. Technically it could be restarting, stopping or
-		// have exited and container was not removed, but if that is the case
-		// then leave it up to the user to sort out. It is still linked to the
-		// cluster network, which moves a registry linked without a fixed
-		// address onto its fixed address.
-
-		if err = linkToClusterNetwork(EducatesRegistryContainer, registryFixedAddress, p); err != nil {
-			return errors.Wrap(err, "failed to link registry to cluster")
-		}
-
-		return nil
+			return nil
+		},
 	}
 
+	return shared.ensure(ctx, p)
+}
+
+// prepareRegistryContainer pulls the registry image and creates the
+// educates network, which the registry container needs.
+func prepareRegistryContainer(ctx context.Context, cli *client.Client, p Progress) error {
 	report(p, "pulling registry image")
 
 	reader, err := cli.ImagePull(ctx, RegistryImageV3, client.ImagePullOptions{})
@@ -176,20 +198,18 @@ func createRegistryContainer(bindIP string, p Progress) error {
 	// under --verbose is a follow-up.
 	io.Copy(io.Discard, reader)
 
-	_, err = cli.NetworkInspect(ctx, EducatesNetworkName, client.NetworkInspectOptions{})
+	return ensureEducatesNetwork(ctx, cli)
+}
 
-	if err != nil {
-		_, err = cli.NetworkCreate(ctx, EducatesNetworkName, client.NetworkCreateOptions{})
-
-		if err != nil {
-			return errors.Wrap(err, "cannot create educates network")
-		}
-	}
-
+// newRegistryContainer creates the registry container, bound to bindIP,
+// without starting it. A registry container that exists already fails it
+// with Docker's conflict error.
+func newRegistryContainer(ctx context.Context, cli *client.Client, bindIP string) error {
 	// An empty bind address keeps the zero netip.Addr, which the daemon
 	// treats as binding to all interfaces, matching the previous string
 	// based behaviour.
 	var hostIP netip.Addr
+	var err error
 
 	if bindIP != "" {
 		hostIP, err = netip.ParseAddr(bindIP)
@@ -235,7 +255,7 @@ func createRegistryContainer(bindIP string, p Progress) error {
 		return errors.Wrap(err, "cannot create registry container")
 	}
 
-	return startOnNetworks(ctx, cli, EducatesRegistryContainer, "registry", registryFixedAddress, p)
+	return nil
 }
 
 /**
@@ -272,7 +292,10 @@ func DeployMirrorAndLinkToCluster(mirrorConfig *MirrorConfig, nodes []string, p 
 }
 
 /**
- * This private function only creates the registry mirror container.
+ * This private function only creates the registry mirror container, unless
+ * it exists. Another command, such as a second local cluster create, may
+ * set it up at the same time: sharedContainer waits for whichever command
+ * creates it.
  */
 func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 	ctx := context.Background()
@@ -291,24 +314,45 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 		return mirrorFixedAddress(nw, mirrorContainerName)
 	}
 
-	_, err = cli.ContainerInspect(ctx, mirrorContainerName, client.ContainerInspectOptions{})
+	shared := sharedContainer{
+		name: mirrorContainerName,
+		what: "local registry mirror",
+		state: func(ctx context.Context) (container.ContainerState, bool, error) {
+			return containerState(ctx, cli, mirrorContainerName)
+		},
+		prepare: func(ctx context.Context) error {
+			return ensureEducatesNetwork(ctx, cli)
+		},
+		create: func(ctx context.Context) error {
+			return newMirrorContainer(ctx, cli, mirrorConfig, mirrorContainerName)
+		},
+		setUp: func(ctx context.Context) error {
+			return startOnNetworks(ctx, cli, mirrorContainerName, "local registry mirror", mirrorFixedAddressFor, p)
+		},
+		adopt: func(context.Context) error {
+			// If we can retrieve a container of required name we assume it is
+			// running okay. Technically it could be restarting, stopping or
+			// have exited and container was not removed, but if that is the case
+			// then leave it up to the user to sort out. It is still linked to the
+			// cluster network, which moves a mirror linked without a fixed
+			// address onto its fixed address.
+			report(p, "mirror container already exists")
 
-	if err == nil {
-		// If we can retrieve a container of required name we assume it is
-		// running okay. Technically it could be restarting, stopping or
-		// have exited and container was not removed, but if that is the case
-		// then leave it up to the user to sort out. It is still linked to the
-		// cluster network, which moves a mirror linked without a fixed
-		// address onto its fixed address.
-		report(p, "mirror container already exists")
+			if err := linkToClusterNetwork(mirrorContainerName, mirrorFixedAddressFor, p); err != nil {
+				return errors.Wrap(err, "failed to link local registry mirror to cluster")
+			}
 
-		if err = linkToClusterNetwork(mirrorContainerName, mirrorFixedAddressFor, p); err != nil {
-			return errors.Wrap(err, "failed to link local registry mirror to cluster")
-		}
-
-		return nil
+			return nil
+		},
 	}
 
+	return shared.ensure(ctx, p)
+}
+
+// newMirrorContainer creates the container mirrorContainerName of the
+// registry mirror mirrorConfig, without starting it. A container of that
+// name that exists already fails it with Docker's conflict error.
+func newMirrorContainer(ctx context.Context, cli *client.Client, mirrorConfig *MirrorConfig, mirrorContainerName string) error {
 	// Prepare environment variables for the registry mirror
 	envs := []string{}
 	mirrorURL := mirrorConfig.URL
@@ -321,16 +365,6 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 	}
 	if mirrorConfig.Password != "" {
 		envs = append(envs, fmt.Sprintf("REGISTRY_PROXY_PASSWORD=%s", mirrorConfig.Password))
-	}
-
-	_, err = cli.NetworkInspect(ctx, EducatesNetworkName, client.NetworkInspectOptions{})
-
-	if err != nil {
-		_, err = cli.NetworkCreate(ctx, EducatesNetworkName, client.NetworkCreateOptions{})
-
-		if err != nil {
-			return errors.Wrap(err, "cannot create educates network")
-		}
 	}
 
 	hostConfig := &container.HostConfig{
@@ -354,7 +388,7 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 		constants.EducatesContainersUsernameLabelKey: mirrorConfig.Username,
 	}
 
-	_, err = cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+	_, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image: RegistryImageV3,
 			Tty:   false,
@@ -372,7 +406,7 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 		return errors.Wrap(err, "cannot create local registry mirror container")
 	}
 
-	return startOnNetworks(ctx, cli, mirrorContainerName, "local registry mirror", mirrorFixedAddressFor, p)
+	return nil
 }
 
 // startOnNetworks connects the created container containerName to the
@@ -385,13 +419,29 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 // it starts, then fails its lookup, exits and is restarted by Docker, which
 // refuses any network change meanwhile. A container that fails to join is
 // removed, so that deploying again starts afresh.
+//
+// Docker takes the container's fixed address only as it starts the
+// container, refusing an address another container took after it was
+// picked, such as a mirror deployed at the same time whose address hashed
+// to the same slot. A container that fails to start is linked to the
+// cluster network again, which picks a free fixed address now that the
+// other container holds its own, and started once more. One that still
+// fails to start is removed too, rather than left created and never
+// started.
 func startOnNetworks(ctx context.Context, cli *client.Client, containerName, what string, fixedAddress func(clusterNetwork) (netip.Addr, error), p Progress) error {
 	if err := joinNetworks(ctx, cli, containerName, what, fixedAddress, p); err != nil {
 		cli.ContainerRemove(ctx, containerName, client.ContainerRemoveOptions{Force: true})
 		return err
 	}
 
-	if _, err := cli.ContainerStart(ctx, containerName, client.ContainerStartOptions{}); err != nil {
+	_, err := cli.ContainerStart(ctx, containerName, client.ContainerStartOptions{})
+
+	if err != nil && linkToClusterNetwork(containerName, fixedAddress, p) == nil {
+		_, err = cli.ContainerStart(ctx, containerName, client.ContainerStartOptions{})
+	}
+
+	if err != nil {
+		cli.ContainerRemove(ctx, containerName, client.ContainerRemoveOptions{Force: true})
 		return errors.Wrapf(err, "unable to start %s", what)
 	}
 

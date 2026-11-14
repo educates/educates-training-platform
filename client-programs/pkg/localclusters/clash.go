@@ -3,7 +3,10 @@ package localclusters
 import (
 	"fmt"
 	"net/netip"
+	"os"
 	"slices"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 )
 
 // CheckCreate returns an error when creating the local cluster id with
@@ -79,6 +82,48 @@ func (inv Inventory) checkListenAddress(id Identity, addr netip.Addr, everyAddre
 			id.Description(), addr)
 	}
 	return nil
+}
+
+// ConfiguredWithListenAddress returns the local clusters of the data home
+// dataHome, other than id, whose config there declares the listen address
+// listenAddress: the default local cluster first, then the named ones by
+// name. A config that is missing or does not load declares none.
+//
+// It reads configs, not Docker, so it finds a local cluster another create
+// is setting up before its kind cluster exists, but also a deleted one,
+// whose config stays. It explains a failure to publish on listenAddress;
+// CheckCreate decides what clashes.
+func ConfiguredWithListenAddress(dataHome string, id Identity, listenAddress string) []Identity {
+	addr, err := netip.ParseAddr(listenAddress)
+	if err != nil {
+		return nil
+	}
+
+	candidates := []Identity{Default(dataHome)}
+	entries, _ := os.ReadDir(config.LocalClustersDir(dataHome))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if named, err := Named(entry.Name(), dataHome); err == nil {
+			candidates = append(candidates, named)
+		}
+	}
+
+	var configured []Identity
+	for _, other := range candidates {
+		if other.KindName == id.KindName {
+			continue
+		}
+		loaded, err := LoadConfig(other)
+		if err != nil {
+			continue
+		}
+		if otherAddr, err := netip.ParseAddr(loaded.ListenAddress()); err == nil && otherAddr.Unmap() == addr.Unmap() {
+			configured = append(configured, other)
+		}
+	}
+	return configured
 }
 
 // recreateAdvice is what to do about the local cluster id publishing its

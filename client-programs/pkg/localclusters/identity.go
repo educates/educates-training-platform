@@ -129,6 +129,14 @@ func (id Identity) ControlPlaneNode() string {
 	return id.KindName + "-" + ControlPlaneRole
 }
 
+// PortCheckContainer is the name of the probe container local cluster
+// create starts to check that the cluster's listen address has ports 80
+// and 443 free. Each local cluster has its own, so creates of different
+// local clusters can run at the same time.
+func (id Identity) PortCheckContainer() string {
+	return id.KindName + "-port-availability-check"
+}
+
 // NodeNames returns the names of the node containers kind creates for the
 // cluster from the node roles its config declares, in kind's order. No
 // roles means kind's default single control-plane node.

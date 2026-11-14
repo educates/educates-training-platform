@@ -1,0 +1,127 @@
+{{- /*
+Confines each training portal to its own workshop environments, sessions
+and allocations.
+
+These resources are cluster scoped, so RBAC can grant a portal write access
+to every portal's resources or to none, and session-manager acts on what a
+portal creates with its own, far wider, rights. The policy matches only
+training portal service accounts, `system:serviceaccount:<portal>-ui:training-portal`,
+takes the portal's name from the account's namespace, and admits a create,
+update or delete of these resources only when:
+
+  - the `training.educates.dev/portal.name` label names the portal on the
+    object and, for an update or delete, on the existing object;
+  - a workshop environment is named `<portal>-w<digits>`, and a session or
+    allocation names such an environment in `spec.environment.name`;
+  - an allocation's `spec.session.name` starts with its environment's name
+    and a hyphen;
+  - a workshop environment lists nothing in `spec.environment.objects` or
+    `spec.environment.secrets`.
+
+A native admission policy confines portals on every install, whether or not
+Kyverno is enabled. Every other identity, session-manager's included, is left
+alone.
+*/ -}}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: educates-training-portal-scope
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [training.educates.dev]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [workshopenvironments, workshopsessions, workshopallocations]
+  matchConditions:
+    - name: training-portal-service-account
+      expression: >-
+        request.userInfo.username.matches('^system:serviceaccount:[^:]+-ui:training-portal$')
+  variables:
+    - name: portalNamespace
+      expression: request.userInfo.username.split(':')[2]
+    - name: portal
+      expression: >-
+        variables.portalNamespace.substring(0, size(variables.portalNamespace) - size('-ui'))
+    # The workshop environment a request is about: the environment itself,
+    # or the one a session or allocation names.
+    - name: environmentName
+      expression: >-
+        request.kind.kind == 'WorkshopEnvironment' ? object.metadata.name
+        : has(object.spec) && has(object.spec.environment) && has(object.spec.environment.name)
+          ? object.spec.environment.name : ''
+    - name: environmentPrefix
+      expression: variables.portal + '-w'
+    - name: isPortalEnvironmentName
+      expression: >-
+        variables.environmentName.startsWith(variables.environmentPrefix)
+        && variables.environmentName.substring(size(variables.environmentPrefix)).matches('^[0-9]+$')
+  validations:
+    # The object written carries the portal's label.
+    - expression: >-
+        object == null
+        || (has(object.metadata.labels)
+            && 'training.educates.dev/portal.name' in object.metadata.labels
+            && object.metadata.labels['training.educates.dev/portal.name'] == variables.portal)
+      messageExpression: >-
+        'training portal ' + variables.portal
+        + ' may only write resources labelled training.educates.dev/portal.name='
+        + variables.portal
+      reason: Forbidden
+    # The object changed or deleted already carried it.
+    - expression: >-
+        oldObject == null
+        || (has(oldObject.metadata.labels)
+            && 'training.educates.dev/portal.name' in oldObject.metadata.labels
+            && oldObject.metadata.labels['training.educates.dev/portal.name'] == variables.portal)
+      messageExpression: >-
+        'training portal ' + variables.portal
+        + ' may only change or delete resources already labelled training.educates.dev/portal.name='
+        + variables.portal
+      reason: Forbidden
+    - expression: object == null || variables.isPortalEnvironmentName
+      messageExpression: >-
+        'training portal ' + variables.portal
+        + (request.kind.kind == 'WorkshopEnvironment'
+            ? ' may only name workshop environments '
+            : ' may only refer to workshop environments named ')
+        + variables.environmentPrefix + '<digits>'
+      reason: Forbidden
+    - expression: >-
+        object == null || request.kind.kind != 'WorkshopAllocation'
+        || (has(object.spec) && has(object.spec.session) && has(object.spec.session.name)
+            && object.spec.session.name.startsWith(variables.environmentName + '-'))
+      messageExpression: >-
+        'training portal ' + variables.portal
+        + ' may only allocate sessions whose names start with ' + variables.environmentName + '-'
+      reason: Forbidden
+    - expression: >-
+        object == null || request.kind.kind != 'WorkshopEnvironment'
+        || !has(object.spec) || !has(object.spec.environment)
+        || !has(object.spec.environment.objects) || size(object.spec.environment.objects) == 0
+      messageExpression: >-
+        'training portal ' + variables.portal
+        + ' may not list objects in a workshop environment\'s spec.environment.objects'
+      reason: Forbidden
+    - expression: >-
+        object == null || request.kind.kind != 'WorkshopEnvironment'
+        || !has(object.spec) || !has(object.spec.environment)
+        || !has(object.spec.environment.secrets) || size(object.spec.environment.secrets) == 0
+      messageExpression: >-
+        'training portal ' + variables.portal
+        + ' may not list Secrets in a workshop environment\'s spec.environment.secrets'
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: educates-training-portal-scope
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+spec:
+  policyName: educates-training-portal-scope
+  validationActions: [Deny]

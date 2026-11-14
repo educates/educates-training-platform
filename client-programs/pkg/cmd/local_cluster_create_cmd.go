@@ -226,8 +226,12 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	if err := checkDockerDesktopPrivilegedPorts(ctx, w); err != nil {
 		return err
 	}
+	// Another create running at the same time may take the listen address
+	// after the clash check above read Docker: the probe, or kind as it
+	// creates the nodes, then fails on the ports, and the error names that
+	// cluster.
 	if err := checkHostPortsAvailable(ctx, id.PortCheckContainer(), in.Cluster.ListenAddress, o.Verbose, w); err != nil {
-		return err
+		return listenAddressTakenError(ctx, id, in.Cluster.ListenAddress, err)
 	}
 
 	// The kind, registry, loopback and mirror phases all report through
@@ -253,7 +257,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		}
 		return clusterConfig.CreateCluster(bootstrap, o.ClusterImage, onPhase, o.Verbose)
 	}); err != nil {
-		return err
+		return listenAddressTakenError(ctx, id, in.Cluster.ListenAddress, err)
 	}
 	// The cluster exists now, so a resolver that can't be refreshed is
 	// only a warning.

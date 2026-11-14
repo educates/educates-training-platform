@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/netip"
@@ -11,7 +12,50 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
+
+// errPortsHeld is the error of a host port probe that could not publish
+// ports 80 and 443 on the listen address, because something holds them.
+var errPortsHeld = errors.New("ports 80/443 not available")
+
+// listenAddressTakenError returns the error of a create of the local
+// cluster id that failed with err to publish ports 80 and 443 on
+// listenAddress, at its host port probe or as kind created its nodes.
+//
+// The preflight's clash check reads from Docker which Educates clusters
+// publish on the listen address, so it misses a cluster another create
+// running at the same time sets up after the check. When such a cluster
+// publishes there by now, the error is the clash check's, which names it.
+// A probe that failed on the ports before that cluster's nodes existed,
+// as two creates probing at the same moment do, also names the other
+// local clusters whose config declares the listen address, one of which
+// may be the cluster being created.
+func listenAddressTakenError(ctx context.Context, id localclusters.Identity, listenAddress string, err error) error {
+	if inventory, invErr := localClusterInventory(ctx); invErr == nil {
+		if clash := inventory.CheckCreate(id, listenAddress); clash != nil {
+			return clash
+		}
+	}
+
+	if !errors.Is(err, errPortsHeld) {
+		return err
+	}
+
+	others := localclusters.ConfiguredWithListenAddress(utils.GetEducatesHomeDir(), id, listenAddress)
+	if len(others) == 0 {
+		return err
+	}
+
+	configs := "the config"
+	if len(others) > 1 {
+		configs = "the configs"
+	}
+
+	return fmt.Errorf("%w. Listen address %s is also in %s of %s: if another create is setting one up at the same time, "+
+		"give each local cluster a host IP of its own", err, listenAddress, configs, localclusters.DescribeClusters(others))
+}
 
 // checkHostPortsAvailable confirms host 80 and 443 are free on the given
 // listen address by attempting to start a busybox container with those
@@ -80,7 +124,7 @@ func checkHostPortsAvailable(ctx context.Context, probeContainer, listenAddress 
 	defer cli.ContainerRemove(ctx, probeContainer, client.ContainerRemoveOptions{Force: true})
 
 	if _, err := cli.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
-		return fmt.Errorf("ports 80/443 not available on %s — another process (an ingress controller, a dev server, Docker Desktop port forwards) is holding them: %w", listenAddress, err)
+		return fmt.Errorf("%w on %s — another process (an ingress controller, a dev server, Docker Desktop port forwards) is holding them: %w", errPortsHeld, listenAddress, err)
 	}
 
 	waitResult := cli.ContainerWait(ctx, probeContainer, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})

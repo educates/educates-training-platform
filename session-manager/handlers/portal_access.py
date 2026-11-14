@@ -1,13 +1,14 @@
 """Objects session-manager creates in a workshop environment namespace for
 the training portal that owns the environment.
 
-A training portal reads no Secrets. When it allocates a session it creates
-the Secrets holding the session's user details and request parameters in
-the session's workshop environment namespace. It may do so only in its own
-environment namespaces, through a RoleBinding in each of them to a
-ClusterRole granting `create` on Secrets alone. The binding trusts the
-environment's portal label, which an admission policy keeps a portal from
-setting to another portal's name.
+A training portal reads no Secrets. When it creates a session it creates the
+Secret passing the session's config password to session-manager, and when it
+allocates a session the Secrets holding the session's user details and
+request parameters, all in the session's workshop environment namespace. It
+may do so only in its own environment namespaces, through a RoleBinding in
+each of them to a ClusterRole granting `create` on Secrets alone. The binding
+trusts the environment's portal label, which an admission policy keeps a
+portal from setting to another portal's name.
 """
 
 PORTAL_NAME_LABEL = "training.educates.dev/portal.name"

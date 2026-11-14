@@ -65,6 +65,13 @@ spec:
                       properties:
                         password:
                           type: string
+                        passwordSecretRef:
+                          type: object
+                          required:
+                          - name
+                          properties:
+                            name:
+                              type: string
                     ingress:
                       type: object
                       properties:

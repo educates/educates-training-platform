@@ -17,6 +17,10 @@ architecture and CRD overview.
   `SessionManager` types + shared common types.
 - `internal/controller/{config,platform}/` — reconcilers for the config
   and platform CRDs.
+- `internal/runtimeadmission/`: the envtest suite for the admission
+  policies the session-manager chart ships. It applies the chart's CRDs,
+  policies and roles to a real API server and checks what each policy
+  admits and refuses, impersonating the service accounts involved.
 - `cmd/main.go` — manager wiring all four controllers.
 
 The kubebuilder-default `config/` kustomize tree is intentionally absent;

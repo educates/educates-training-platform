@@ -27,17 +27,3 @@ global:
 # Subject under test.
 node-ca-injector:
   enabled: true
-
-session-manager:
-  trainingPortal:
-    credentials:
-      admin:
-        username: educates
-        password: educates
-      robot:
-        username: robot@educates
-        password: robot
-    clients:
-      robot:
-        id: robot-client-id
-        secret: robot-client-secret

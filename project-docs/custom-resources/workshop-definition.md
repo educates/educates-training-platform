@@ -768,6 +768,12 @@ spec:
 
 Note that the ability to override environment variables using this field should be limited to cases where they are required for the workshop. If you want to set or override an environment for a specific workshop environment, use the ability to set environment variables in the ``WorkshopEnvironment`` custom resource for the workshop environment instead.
 
+The values of environment variables set with ``value`` are not secret. They
+are held in the ``Workshop`` resource, which anyone permitted to read
+workshops can read, and every training portal on the cluster can read. Do not
+use ``value`` to pass a password, token or other credential to a workshop
+session. Use ``valueFrom`` to take it from a secret instead.
+
 (overriding-the-memory-available)=
 Overriding the memory available
 -------------------------------
@@ -1170,6 +1176,10 @@ spec:
     namespaces:
       role: view
 ```
+
+Setting ``session.namespaces.role`` to ``custom`` gives the service account no role in the namespace, leaving the workshop to grant what it needs through the ``session.objects`` field described previously.
+
+Whatever the role, the service account can always get its own session namespace, so ``kubectl get namespace $SESSION_NAMESPACE`` works in the workshop terminal, and with a ``custom`` role the terminal and the console still use the session namespace as their default namespace. The service account cannot list the namespaces of the cluster, which would show the other workshops and tenants sharing it, so ``kubectl get namespaces`` is forbidden. Instructions which need to show a namespace should name it, as ``kubectl get namespace $SESSION_NAMESPACE`` does. A workshop whose users must list every namespace can grant it with a ``ClusterRole`` and ``ClusterRoleBinding`` in ``session.objects``, in the same way as for ``cluster-admin`` below, accepting that its users then see every namespace in the cluster. None of this applies to a workshop session using a virtual cluster, where ``kubectl`` talks to the virtual cluster.
 
 If you need to add additional roles to the service account, such as the ability to work with custom resource types which have been added to the cluster, you can add the appropriate ``Role`` and ``RoleBinding`` definitions to the ``session.objects`` field described previously.
 
@@ -2199,6 +2209,8 @@ spec:
 ```
 
 The Kubernetes dashboard provided by the Kubernetes project will be used. It is the only console which is available.
+
+The console runs with the same access as the workshop terminal, so it cannot list the namespaces of the cluster. It opens on the session namespace, and its namespace selector offers the session namespace followed by any secondary namespaces listed under ``session.namespaces.secondary``. As the console is refused requests outside of what the session can access, its notifications of access denied errors are turned off. In a workshop session using a virtual cluster, the console works against the virtual cluster instead.
 
 The ``vendor`` property is deprecated. It is still accepted so that existing workshop definitions remain valid, but the only value it can be given is ``kubernetes``. Any other value, including the ``octant`` value which was accepted in prior versions, is ignored and the Kubernetes dashboard is used in its place, with a warning being logged against the workshop session. The ``vendor`` property will be removed in a future version.
 

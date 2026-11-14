@@ -203,6 +203,14 @@ PORTAL_INDEX = os.environ.get("PORTAL_INDEX")
 
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "educates")
 
+# The robot account and the OAuth client a REST API client logs in with,
+# created when the portal first starts.
+
+ROBOT_USERNAME = os.environ.get("ROBOT_USERNAME", "robot@educates")
+ROBOT_PASSWORD = os.environ.get("ROBOT_PASSWORD", "")
+ROBOT_CLIENT_ID = os.environ.get("ROBOT_CLIENT_ID", "")
+ROBOT_CLIENT_SECRET = os.environ.get("ROBOT_CLIENT_SECRET", "")
+
 REGISTRATION_TYPE = os.environ.get("REGISTRATION_TYPE", "one-step")
 ENABLE_REGISTRATION = os.environ.get("ENABLE_REGISTRATION", "true")
 CATALOG_VISIBILITY = os.environ.get("CATALOG_VISIBILITY", "private")

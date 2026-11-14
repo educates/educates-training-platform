@@ -13,19 +13,6 @@ global:
     domain: ${DOMAIN}
 
 session-manager:
-  trainingPortal:
-    credentials:
-      admin:
-        username: educates
-        password: educates
-      robot:
-        username: robot@educates
-        password: robot
-    clients:
-      robot:
-        id: robot-client-id
-        secret: robot-client-secret
-
   # The thing under test: a custom training-portal theme with unique
   # markers that post-install.sh greps for in the rendered Secret.
   # `script` -> training-portal.js, `style` -> training-portal.css,

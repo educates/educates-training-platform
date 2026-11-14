@@ -353,70 +353,6 @@ Returns the merged list as a YAML array string (consume via fromYamlArray).
 {{- end -}}
 
 {{/*
-Resolve training-portal credentials with stability across `helm upgrade` and
-session-manager pod restarts. Priority for each field:
-
-  1. User-supplied non-empty value in .Values.trainingPortal.{credentials,
-     clients}. Explicit operator intent always wins.
-  2. Previously-persisted value, read back from the live `educates-config`
-     Secret if present. This is what keeps generated credentials stable
-     across upgrades and restarts.
-  3. Generated defaults: fixed usernames ("educates", "robot@educates");
-     32-char randAlphaNum for passwords and OAuth client id/secret.
-
-The runtime's xget() helper falls back to its own defaults only when keys are
-*absent* — not when they're set to empty strings. The chart previously
-emitted `username: ""` / `password: ""` keys unconditionally, which made the
-runtime use "" verbatim and broke training-portal initialisation. This helper
-ensures non-empty values land in the rendered config.
-
-The lookup-based reuse mirrors the v3 carvel installer's "ytt-generated-once
-at install time" semantics. `helm lookup` returns nil during `helm template`
-(no cluster connection); in that case the generated branch produces fresh
-values, which is the expected behaviour for offline rendering.
-*/}}
-{{- define "session-manager.resolvedTrainingPortal" -}}
-{{- $tp := default dict .Values.trainingPortal -}}
-{{- $cur := dict -}}
-{{- $existing := lookup "v1" "Secret" .Release.Namespace "educates-config" -}}
-{{- if $existing -}}
-  {{- $raw := index (default dict $existing.data) "educates-operator-config.yaml" | default "" -}}
-  {{- if $raw -}}
-    {{- $cfg := $raw | b64dec | fromYaml -}}
-    {{- $cur = default dict (dig "trainingPortal" dict $cfg) -}}
-  {{- end -}}
-{{- end -}}
-{{- $adminUsername := dig "credentials" "admin" "username" "" $tp -}}
-{{- if eq $adminUsername "" -}}{{- $adminUsername = dig "credentials" "admin" "username" "" $cur -}}{{- end -}}
-{{- if eq $adminUsername "" -}}{{- $adminUsername = "educates" -}}{{- end -}}
-{{- $adminPassword := dig "credentials" "admin" "password" "" $tp -}}
-{{- if eq $adminPassword "" -}}{{- $adminPassword = dig "credentials" "admin" "password" "" $cur -}}{{- end -}}
-{{- if eq $adminPassword "" -}}{{- $adminPassword = randAlphaNum 32 -}}{{- end -}}
-{{- $robotUsername := dig "credentials" "robot" "username" "" $tp -}}
-{{- if eq $robotUsername "" -}}{{- $robotUsername = dig "credentials" "robot" "username" "" $cur -}}{{- end -}}
-{{- if eq $robotUsername "" -}}{{- $robotUsername = "robot@educates" -}}{{- end -}}
-{{- $robotPassword := dig "credentials" "robot" "password" "" $tp -}}
-{{- if eq $robotPassword "" -}}{{- $robotPassword = dig "credentials" "robot" "password" "" $cur -}}{{- end -}}
-{{- if eq $robotPassword "" -}}{{- $robotPassword = randAlphaNum 32 -}}{{- end -}}
-{{- $robotClientId := dig "clients" "robot" "id" "" $tp -}}
-{{- if eq $robotClientId "" -}}{{- $robotClientId = dig "clients" "robot" "id" "" $cur -}}{{- end -}}
-{{- if eq $robotClientId "" -}}{{- $robotClientId = randAlphaNum 32 -}}{{- end -}}
-{{- $robotClientSecret := dig "clients" "robot" "secret" "" $tp -}}
-{{- if eq $robotClientSecret "" -}}{{- $robotClientSecret = dig "clients" "robot" "secret" "" $cur -}}{{- end -}}
-{{- if eq $robotClientSecret "" -}}{{- $robotClientSecret = randAlphaNum 32 -}}{{- end -}}
-{{- $out := dict
-  "credentials" (dict
-    "admin" (dict "username" $adminUsername "password" $adminPassword)
-    "robot" (dict "username" $robotUsername "password" $robotPassword)
-  )
-  "clients" (dict
-    "robot" (dict "id" $robotClientId "secret" $robotClientSecret)
-  )
--}}
-{{- toYaml $out -}}
-{{- end -}}
-
-{{/*
 Compose the `educates-operator-config.yaml` Secret content from typed values.
 Auto-injects `operator.namespace` (release ns) and `version` (.Chart.AppVersion
 — the bundled Educates runtime version, distinct from the chart-package
@@ -459,7 +395,6 @@ fully-qualified refs, so emitting empty here doesn't break runtime image
 resolution.
 */}}
 {{- $ir := include "session-manager.resolvedDevelopmentImageRegistry" . | fromYaml -}}
-{{- $tp := default dict .Values.trainingPortal -}}
 {{- $sc := default dict .Values.sessionCookies -}}
 {{- $cstg := default dict .Values.clusterStorage -}}
 {{- $crt := default dict .Values.clusterRuntime -}}
@@ -501,7 +436,6 @@ with them.
     "prefix" (default "" (default dict .Values.imageRegistry).prefix)
   )
   "imageVersions" (include "session-manager.imageVersions" . | fromYamlArray)
-  "trainingPortal" (include "session-manager.resolvedTrainingPortal" . | fromYaml)
   "sessionCookies" (dict "domain" (default "" $sc.domain))
   "clusterStorage" (dict
     "class" (default "" $cstg.class)

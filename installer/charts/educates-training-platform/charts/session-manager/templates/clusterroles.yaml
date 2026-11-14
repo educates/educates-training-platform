@@ -400,6 +400,21 @@ rules:
     resources: [rolebindings, roles]
     verbs: [create, delete, deletecollection, get, list, patch, update, watch]
 ---
+# Bound by session-manager, through the RoleBinding `educates-session-namespace`
+# in each session namespace, to the session's service account whatever the
+# session's role. A namespaced binding grants `get` on that namespace alone and
+# never list, so attendees resolve their own namespace without seeing others.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:session:namespace
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get]
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

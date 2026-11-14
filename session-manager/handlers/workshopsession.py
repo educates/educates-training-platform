@@ -40,6 +40,9 @@ from .operator_config import (AMPLITUDE_TRACKING_ID, BASE_ENVIRONMENT_IMAGE,
                               PLATFORM_ARCH,
                               RUNTIME_CLASS, SESSION_COOKIE_DOMAIN,
                               resolve_workshop_image)
+from .session_access import (SESSION_NAMESPACE_ROLE_BINDING,
+                             console_settings_config_map,
+                             session_namespace_role_binding)
 
 __all__ = ["workshop_session_create", "workshop_session_delete"]
 
@@ -890,58 +893,44 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             f"Failed to create access token {service_account}-token: {exc}"
         )
 
-    # Create the rolebinding for this service account to add access to
-    # the additional roles that the Kubernetes web console requires.
+    # Let the service account get its own session namespace, whatever the
+    # session's role, so that a custom role which does not grant it still
+    # resolves the session namespace rather than falling back to "default".
+    # Being namespaced, the binding never grants listing namespaces.
 
-    cluster_role_binding_body = {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "ClusterRoleBinding",
-        "metadata": {
-            "name": f"educates:session:console:{session_namespace}",
-            "labels": {
-                "training.educates.dev/component": "session",
-                "training.educates.dev/workshop.name": workshop_name,
-                "training.educates.dev/portal.name": portal_name,
-                "training.educates.dev/portal.uid": portal_uid,
-                "training.educates.dev/environment.name": environment_name,
-                "training.educates.dev/environment.uid": environment_uid,
-                "training.educates.dev/session.name": session_name,
-            },
+    session_namespace_role_binding_body = session_namespace_role_binding(
+        session_namespace,
+        service_account,
+        workshop_namespace,
+        {
+            "training.educates.dev/component": "session",
+            "training.educates.dev/workshop.name": workshop_name,
+            "training.educates.dev/portal.name": portal_name,
+            "training.educates.dev/portal.uid": portal_uid,
+            "training.educates.dev/environment.name": environment_name,
+            "training.educates.dev/environment.uid": environment_uid,
+            "training.educates.dev/session.name": session_name,
         },
-        "roleRef": {
-            "apiGroup": "rbac.authorization.k8s.io",
-            "kind": "ClusterRole",
-            "name": f"educates:environment:console:{workshop_namespace}",
-        },
-        "subjects": [
-            {
-                "kind": "ServiceAccount",
-                "namespace": workshop_namespace,
-                "name": service_account,
-            }
-        ],
-    }
-
-    kopf.adopt(cluster_role_binding_body, namespace_instance.obj)
+    )
 
     try:
-        pykube.ClusterRoleBinding(api, cluster_role_binding_body).create()
+        pykube.RoleBinding(api, session_namespace_role_binding_body).create()
 
     except pykube.exceptions.PyKubeError as exc:
         logger.exception(
-            "Unexpected error creating cluster role binding %s-web-console-%s.",
-            "educates",
+            "Unexpected error creating role binding %s in %s.",
+            SESSION_NAMESPACE_ROLE_BINDING,
             session_namespace,
         )
         patch["status"] = {
             "educates": {
                 "phase": "Failed",
-                "message": f"Failed to create cluster role binding educates:session:console:{session_namespace}: {exc}",
+                "message": f"Failed to create role binding {SESSION_NAMESPACE_ROLE_BINDING} in {session_namespace}: {exc}",
             }
         }
         raise kopf.PermanentError(
-            f"Failed to create cluster role binding educates:session:console:{session_namespace}: {exc}"
-        )
+            f"Failed to create role binding {SESSION_NAMESPACE_ROLE_BINDING} in {session_namespace}: {exc}"
+        ) from exc
 
     # Setup configuration on the primary session namespace.
 
@@ -1169,12 +1158,16 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
 
     namespaces = []
 
+    secondary_namespaces = []
+
     if workshop_spec.get("session"):
         namespaces = workshop_spec["session"].get("namespaces", {}).get("secondary", [])
         for namespaces_item in namespaces:
             target_namespace = substitute_variables(
                 namespaces_item["name"], session_variables
             )
+
+            secondary_namespaces.append(target_namespace)
 
             target_role = namespaces_item.get("role", role)
             target_budget = namespaces_item.get("budget", budget)
@@ -2323,6 +2316,26 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         }
 
         pykube.Secret(api, secret_body).create()
+
+        # The console cannot list namespaces, so give it its settings before
+        # it starts: it opens on the session namespace, offers the session's
+        # namespaces, and does not report each request it is refused.
+
+        console_settings_body = console_settings_config_map(
+            session_namespace,
+            secondary_namespaces,
+            {
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": workshop_name,
+                "training.educates.dev/portal.name": portal_name,
+                "training.educates.dev/portal.uid": portal_uid,
+                "training.educates.dev/environment.name": environment_name,
+                "training.educates.dev/environment.uid": environment_uid,
+                "training.educates.dev/session.name": session_name,
+            },
+        )
+
+        pykube.ConfigMap(api, console_settings_body).create()
 
     # Add in extra configuration for special cases, as well as bind policy.
 

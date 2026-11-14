@@ -56,6 +56,45 @@ spec:
 
 If you do not specify login credentials, there will not be any access controls on the workshop instance and anyone will be able to access it.
 
+Specifying the config password
+------------------------------
+
+The workshop instance serves its configuration, such as its kubeconfig and
+SSH private key, to any request carrying its config password. A training
+portal passes the config password of each workshop session it creates in a
+``Secret`` in the namespace of the workshop environment, and names that
+``Secret`` in the ``session.config.passwordSecretRef.name`` field. The
+``Secret`` holds the password under the key ``password``.
+
+```yaml
+apiVersion: training.educates.dev/v1beta1
+kind: WorkshopSession
+metadata:
+  name: lab-markdown-sample-user1
+spec:
+  environment:
+    name: lab-markdown-sample
+  session:
+    id: user1
+    config:
+      passwordSecretRef:
+        name: lab-markdown-sample-user1-config-password
+```
+
+The workshop instance is not created until the ``Secret`` exists and holds
+the password. To have the ``Secret`` deleted along with the workshop session,
+give it an owner reference to the ``WorkshopSession``.
+
+You can instead set the config password itself in the
+``session.config.password`` field. Anyone permitted to read ``WorkshopSession``
+resources can then read it, and with it the configuration of the workshop
+instance, so prefer a ``Secret``. If both fields are set, the ``Secret`` is
+used. If neither is set, a random config password is generated.
+
+Inside the workshop container, the config password is available in the
+``CONFIG_PASSWORD`` environment variable, and in workshop instructions as the
+``config_password`` variable.
+
 Specifying the ingress domain
 -----------------------------
 

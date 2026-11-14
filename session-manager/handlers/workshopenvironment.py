@@ -26,6 +26,7 @@ from .helpers import (
 )
 from .applications import environment_objects_list, workshop_spec_patches
 from .kyverno_rules import kyverno_environment_rules
+from .portal_access import portal_environment_role_binding
 from .portal_workshops import portal_workshop_refusal
 from .analytics import report_analytics_event
 
@@ -599,6 +600,31 @@ def workshop_environment_create(
     # explicitly catch and raise a temporary error at every point beyond here.
 
     patch["status"] = {"educates": {"phase": "Retrying"}}
+
+    # Let the training portal which owns the workshop environment create the
+    # Secrets holding a session's user details and request parameters in its
+    # namespace. This must exist before the status of the workshop environment
+    # is published, as the portal allocates sessions in it only after that. A
+    # workshop environment without a portal label gets no binding. When setup
+    # is retried the namespace is deleted along with the binding, and both are
+    # created again here.
+
+    portal_role_binding_body = portal_environment_role_binding(
+        body,
+        labels={
+            "training.educates.dev/component": "environment",
+            "training.educates.dev/workshop.name": workshop_name,
+            "training.educates.dev/portal.name": portal_name,
+            "training.educates.dev/portal.uid": portal_uid,
+            "training.educates.dev/environment.name": environment_name,
+            "training.educates.dev/environment.uid": environment_uid,
+        },
+    )
+
+    if portal_role_binding_body:
+        kopf.adopt(portal_role_binding_body, namespace_instance.obj)
+
+        pykube.RoleBinding(api, portal_role_binding_body).create()
 
     # Apply security policies to whole namespace if enabled. We need to set the
     # whole namespace as requiring privilged as we need to run docker in docker

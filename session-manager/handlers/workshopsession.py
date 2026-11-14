@@ -44,7 +44,8 @@ from .session_access import (CONSOLE_ROLE_BINDING,
                              SESSION_NAMESPACE_ROLE_BINDING,
                              console_csrf_secret, console_key_holder_secret,
                              console_role_binding, console_settings_config_map,
-                             session_namespace_role_binding)
+                             session_namespace_role_binding,
+                             session_object_namespaces)
 
 __all__ = ["workshop_session_create", "workshop_session_delete"]
 
@@ -2363,12 +2364,21 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
 
         # The console cannot list namespaces, so give it its settings before
         # it starts: it opens on the session namespace, offers the session's
-        # namespaces, and does not report each request it is refused.
+        # namespaces, the secondary ones and those the workshop's session
+        # objects create, and does not report each request it is refused.
+
+        object_namespaces = session_object_namespaces(
+            substitute_variables(object_body, session_variables)
+            for object_body in (workshop_spec.get("session") or {}).get("objects", [])
+        )
 
         pykube.ConfigMap(
             api,
             console_settings_config_map(
-                session_namespace, secondary_namespaces, console_labels
+                session_namespace,
+                secondary_namespaces,
+                object_namespaces,
+                console_labels,
             ),
         ).create()
 

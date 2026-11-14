@@ -19,6 +19,7 @@ from handlers.session_access import (
     console_settings,
     console_settings_config_map,
     session_namespace_role_binding,
+    session_object_namespaces,
 )
 
 LABELS = {
@@ -114,14 +115,14 @@ DASHBOARD_SETTINGS_FIELDS = {
 
 
 def test_console_settings_set_every_field_the_dashboard_reads():
-    settings = console_settings("lab-w01-s001", [])
+    settings = console_settings("lab-w01-s001", [], [])
 
     assert set(settings) == DASHBOARD_SETTINGS_FIELDS
 
 
 def test_console_settings_open_on_the_session_namespace_and_offer_its_namespaces():
     settings = console_settings(
-        "lab-w01-s001", ["lab-w01-s001-apps", "lab-w01-s001-db"]
+        "lab-w01-s001", ["lab-w01-s001-apps", "lab-w01-s001-db"], []
     )
 
     assert settings == {
@@ -140,17 +141,73 @@ def test_console_settings_open_on_the_session_namespace_and_offer_its_namespaces
     }
 
 
-def test_console_settings_offer_only_the_session_namespace_without_secondary_ones():
-    settings = console_settings("lab-w01-s001", [])
+def test_console_settings_offer_only_the_session_namespace_without_other_ones():
+    settings = console_settings("lab-w01-s001", [], [])
 
     assert settings["defaultNamespace"] == "lab-w01-s001"
     assert settings["namespaceFallbackList"] == ["lab-w01-s001"]
+
+
+def test_console_settings_offer_the_session_objects_namespaces_after_secondary_ones():
+    settings = console_settings(
+        "lab-w01-s001",
+        ["lab-w01-s001-apps"],
+        ["lab-w01-s001-cache", "lab-w01-s001-queue"],
+    )
+
+    assert settings["namespaceFallbackList"] == [
+        "lab-w01-s001",
+        "lab-w01-s001-apps",
+        "lab-w01-s001-cache",
+        "lab-w01-s001-queue",
+    ]
+
+
+def test_console_settings_offer_each_namespace_once():
+    settings = console_settings(
+        "lab-w01-s001",
+        ["lab-w01-s001-apps", "lab-w01-s001", "lab-w01-s001-apps"],
+        ["lab-w01-s001-cache", "lab-w01-s001-apps", "lab-w01-s001"],
+    )
+
+    assert settings["namespaceFallbackList"] == [
+        "lab-w01-s001",
+        "lab-w01-s001-apps",
+        "lab-w01-s001-cache",
+    ]
+
+
+def test_finds_the_namespaces_the_session_objects_create():
+    objects = [
+        {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": "lab-w01-s001-cache"}},
+        {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "Role",
+            "metadata": {"name": "cache", "namespace": "lab-w01-s001-cache"},
+        },
+        {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "settings"}},
+        {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": "lab-w01-s001-queue"}},
+    ]
+
+    assert session_object_namespaces(objects) == [
+        "lab-w01-s001-cache",
+        "lab-w01-s001-queue",
+    ]
+
+
+def test_finds_no_namespaces_among_session_objects_creating_none():
+    objects = [
+        {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "settings"}},
+    ]
+
+    assert session_object_namespaces(objects) == []
 
 
 def test_console_settings_config_map_holds_the_settings_as_the_dashboard_reads_them():
     body = console_settings_config_map(
         session_namespace="lab-w01-s001",
         secondary_namespaces=["lab-w01-s001-apps"],
+        object_namespaces=["lab-w01-s001-cache"],
         labels=LABELS,
     )
 
@@ -173,7 +230,11 @@ def test_console_settings_config_map_holds_the_settings_as_the_dashboard_reads_t
         "resourceAutoRefreshTimeInterval": 5,
         "disableAccessDeniedNotifications": True,
         "defaultNamespace": "lab-w01-s001",
-        "namespaceFallbackList": ["lab-w01-s001", "lab-w01-s001-apps"],
+        "namespaceFallbackList": [
+            "lab-w01-s001",
+            "lab-w01-s001-apps",
+            "lab-w01-s001-cache",
+        ],
     }
 
 

@@ -100,15 +100,34 @@ def console_role_binding(session_namespace, service_account, workshop_namespace,
     )
 
 
-def console_settings(session_namespace, secondary_namespaces):
+def session_object_namespaces(objects):
+    """Returns the names of the Namespaces among a session's objects, in
+    their order, from the objects as session-manager creates them, after
+    their session variables are substituted.
+
+    """
+
+    return [
+        object_body["metadata"]["name"]
+        for object_body in objects
+        if object_body.get("apiVersion") == "v1"
+        and object_body.get("kind", "").lower() == "namespace"
+    ]
+
+
+def console_settings(session_namespace, secondary_namespaces, object_namespaces):
     """Returns the console's settings object for a session. The console
     reads it as a whole, so every field is set: one left out would be zero,
     and an `itemsPerPage` of 0 empties every list. The console opens on the
-    session namespace and offers it followed by the secondary namespaces,
-    and, since it cannot list namespaces, does not report each refused
-    request.
+    session namespace and offers it followed by the secondary namespaces and
+    then the Namespaces the session's objects create, each once, and, since
+    it cannot list namespaces, does not report each refused request.
 
     """
+
+    namespaces = dict.fromkeys(
+        [session_namespace, *secondary_namespaces, *object_namespaces]
+    )
 
     return {
         "clusterName": "",
@@ -118,11 +137,13 @@ def console_settings(session_namespace, secondary_namespaces):
         "resourceAutoRefreshTimeInterval": 5,
         "disableAccessDeniedNotifications": True,
         "defaultNamespace": session_namespace,
-        "namespaceFallbackList": [session_namespace, *secondary_namespaces],
+        "namespaceFallbackList": list(namespaces),
     }
 
 
-def console_settings_config_map(session_namespace, secondary_namespaces, labels):
+def console_settings_config_map(
+    session_namespace, secondary_namespaces, object_namespaces, labels
+):
     """Returns the ConfigMap holding the console's settings, which must
     exist before the console starts: the console creates it with its own
     defaults when it is missing, and only reads it when it exists.
@@ -139,7 +160,9 @@ def console_settings_config_map(session_namespace, secondary_namespaces, labels)
         },
         "data": {
             "_global": json.dumps(
-                console_settings(session_namespace, secondary_namespaces)
+                console_settings(
+                    session_namespace, secondary_namespaces, object_namespaces
+                )
             ),
         },
     }

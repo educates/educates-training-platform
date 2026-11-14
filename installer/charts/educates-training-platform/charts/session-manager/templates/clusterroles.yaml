@@ -471,8 +471,8 @@ rules:
 # Bound by session-manager, through the RoleBinding `educates-training-portal`
 # in each workshop environment namespace whose WorkshopEnvironment carries a
 # portal label, to that portal's service account. The portal creates the
-# Secrets holding a session's user details and request parameters there, and
-# reads no Secret anywhere.
+# Secrets holding a session's config password, user details and request
+# parameters there, and reads no Secret anywhere.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

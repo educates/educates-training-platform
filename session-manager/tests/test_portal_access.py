@@ -2,9 +2,9 @@
 environment namespace for the training portal that owns the environment.
 
 A training portal reads no Secrets. It creates the Secrets carrying a
-session's user details and request parameters in its own workshop
-environment namespaces only, through a RoleBinding in each of them to a
-ClusterRole granting ``create`` on Secrets alone.
+session's config password, user details and request parameters in its own
+workshop environment namespaces only, through a RoleBinding in each of them
+to a ClusterRole granting ``create`` on Secrets alone.
 """
 
 from handlers.portal_access import portal_environment_role_binding

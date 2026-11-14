@@ -76,7 +76,7 @@ func adoptLookupServiceConfigNamespace(ctx context.Context, c client.Client) err
 		return fmt.Errorf("give Namespace %q the %s release's ownership metadata: %w",
 			lookupServiceConfigNamespace, lookupServiceReleaseName, err)
 	}
-	logf.FromContext(ctx).Info("Namespace created by hand taken over by the lookup-service release",
-		"namespace", lookupServiceConfigNamespace)
+	logf.FromContext(ctx).Info(fmt.Sprintf("Namespace %s, created by hand, taken over by the %s release",
+		lookupServiceConfigNamespace, lookupServiceReleaseName))
 	return nil
 }

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#
+# Runs the session acceptance harness: installs its Node dependencies when
+# they are missing or stale, then starts it with the given options. See
+# README.md beside this script, or run it with --help.
+
+set -euo pipefail
+
+HARNESS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+export HARNESS_CALLER_CWD=$PWD
+
+# Volta's shims, when installed, pick the Node version package.json pins
+# for the directory node starts in.
+if [ -d "$HOME/.volta/bin" ]; then
+    PATH="$HOME/.volta/bin:$PATH"
+fi
+cd "$HARNESS_DIR"
+
+if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 12) ? 0 : 1)'; then
+    echo "session-acceptance: needs Node 22.12 or later, found $(node --version); package.json pins the version for Volta" >&2
+    exit 2
+fi
+
+if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+    npm ci --no-audit --no-fund >&2
+fi
+
+exec node src/main.mjs "$@"

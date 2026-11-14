@@ -1,0 +1,16 @@
+{
+  "name": "educates-session-acceptance-harness",
+  "private": true,
+  "description": "Drives real workshop sessions on a local kind cluster the way an attendee would.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "harness": "node src/main.mjs"
+  },
+  "dependencies": {
+    "puppeteer-core": "25.16.0"
+  },
+  "volta": {
+    "node": "24.16.0"
+  }
+}

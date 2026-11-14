@@ -1,0 +1,88 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: terminal-custom-strict
+spec:
+  title: Terminal Clickable Actions Test
+  description: Terminal actions under a custom session role with a strict Role granting nothing on namespaces, with the console.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/session-acceptance-terminal-custom-strict-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/session-acceptance-terminal-custom-strict-files:$(workshop_version)"
+      includePaths:
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      role: custom
+      security:
+        token:
+          enabled: true
+    applications:
+      terminal:
+        enabled: true
+        layout: split/2
+      console:
+        enabled: true
+    dashboards:
+    - name: Terminal#4
+      url: terminal:4
+    objects:
+    # session-manager refuses a Role granting more than it holds itself, so
+    # each API group gets a rule of its own and the verbs are listed.
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: strict-workloads
+        namespace: $(session_namespace)
+      rules:
+      - apiGroups:
+        - ""
+        resources:
+        - pods
+        - services
+        verbs:
+        - get
+        - list
+        - watch
+        - create
+        - update
+        - patch
+        - delete
+      - apiGroups:
+        - apps
+        resources:
+        - deployments
+        verbs:
+        - get
+        - list
+        - watch
+        - create
+        - update
+        - patch
+        - delete
+      - apiGroups:
+        - ""
+        resources:
+        - pods/log
+        verbs:
+        - get
+        - list
+        - watch
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: strict-workloads
+        namespace: $(session_namespace)
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: strict-workloads
+      subjects:
+      - kind: ServiceAccount
+        namespace: $(workshop_namespace)
+        name: $(service_account)

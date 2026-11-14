@@ -1,0 +1,4 @@
+{
+  "sample": "lab-terminal-actions",
+  "summary": "terminal actions sample under role: custom, with a strict Role in the session namespace on pods, pods/log, services and deployments and nothing on namespaces, with the console"
+}

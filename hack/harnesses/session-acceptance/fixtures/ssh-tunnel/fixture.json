@@ -1,0 +1,4 @@
+{
+  "sample": "lab-ssh-remote-access",
+  "summary": "SSH remote access sample, connecting back over the tunnel from inside the session and from this host with the CLI under test"
+}

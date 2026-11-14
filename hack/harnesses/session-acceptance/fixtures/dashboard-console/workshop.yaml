@@ -1,0 +1,31 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: dashboard-console
+spec:
+  title: Dashboard Clickable Actions Test
+  description: Dashboard actions under the default admin session role, with the console.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/session-acceptance-dashboard-console-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/session-acceptance-dashboard-console-files:$(workshop_version)"
+      includePaths:
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      security:
+        token:
+          enabled: true
+    applications:
+      terminal:
+        enabled: true
+      console:
+        enabled: true
+    dashboards:
+    - name: Example
+      url: https://www.example.com

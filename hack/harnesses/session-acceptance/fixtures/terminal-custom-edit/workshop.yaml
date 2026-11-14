@@ -1,0 +1,47 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: terminal-custom-edit
+spec:
+  title: Terminal Clickable Actions Test
+  description: Terminal actions under a custom session role binding the built-in edit ClusterRole, with the console.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/session-acceptance-terminal-custom-edit-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/session-acceptance-terminal-custom-edit-files:$(workshop_version)"
+      includePaths:
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      role: custom
+      security:
+        token:
+          enabled: true
+    applications:
+      terminal:
+        enabled: true
+        layout: split/2
+      console:
+        enabled: true
+    dashboards:
+    - name: Terminal#4
+      url: terminal:4
+    objects:
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: $(session_namespace)-custom-edit
+        namespace: $(session_namespace)
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: edit
+      subjects:
+      - kind: ServiceAccount
+        namespace: $(workshop_namespace)
+        name: $(service_account)

@@ -61,14 +61,30 @@ def login_fn(**kwargs):
 
 @kopf.on.probe(id="api")
 def check_api_access(**kwargs):
+    """Checks for the liveness probe that the Kubernetes API accepts the
+    service account's token. It creates a SelfSubjectReview, which every
+    authenticated account may create, so it needs no RBAC rule. A failure is
+    reported as permanent, so the liveness endpoint fails at once rather than
+    waiting on kopf's retries.
+
+    """
+
     try:
         api = pykube.HTTPClient(pykube.KubeConfig.from_env())
-        pykube.Namespace.objects(api).get(name="default")
+        response = api.post(
+            version="authentication.k8s.io/v1",
+            url="selfsubjectreviews",
+            json={
+                "apiVersion": "authentication.k8s.io/v1",
+                "kind": "SelfSubjectReview",
+            },
+        )
+        api.raise_for_status(response)
 
-    except pykube.exceptions.KubernetesError:
-        logger.error("failed request to Kubernetes API")
+    except Exception as exc:
+        logger.exception("failed request to Kubernetes API")
 
-        raise
+        raise kopf.PermanentError("failed request to Kubernetes API") from exc
 
 
 @kopf.on.cleanup()
@@ -195,7 +211,13 @@ async def proxy_server(stop_flag):
 
 
 async def kopf_operator(stop_flag):
-    await kopf.operator(clusterwide=True, stop_flag=stop_flag)
+    # The liveness endpoint listens beside the proxy, which serves port 8080.
+
+    await kopf.operator(
+        clusterwide=True,
+        stop_flag=stop_flag,
+        liveness_endpoint="http://0.0.0.0:8081/healthz",
+    )
 
     logger.info("kopf operator stopped")
 

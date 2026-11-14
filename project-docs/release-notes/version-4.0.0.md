@@ -1404,8 +1404,11 @@ Features Changed
   error naming the secret and the namespace it could not read. The
   diagnostics bundle written by ``educates admin diagnostics collect`` no
   longer holds the credentials a ``TrainingPortal`` resource sets under
-  ``spec.portal.credentials`` and ``spec.portal.clients``, whose values it
-  replaces with ``REDACTED``, and it collects no secrets.
+  ``spec.portal.credentials`` and ``spec.portal.clients``. Their values are
+  replaced with ``REDACTED``, both in the spec and in the copies of the spec
+  held by the ``kopf.zalando.org/last-handled-configuration`` and
+  ``kubectl.kubernetes.io/last-applied-configuration`` annotations, and the
+  bundle collects no secrets.
 
 Removed Features
 ----------------

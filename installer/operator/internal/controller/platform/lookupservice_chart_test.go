@@ -66,7 +66,7 @@ func TestLookupServiceChart_CreatesConfigNamespaceKeptOnUninstall(t *testing.T) 
 	objects, _ := renderLookupServiceObjects(t)
 
 	for _, o := range objects {
-		if o.Kind != "Namespace" || o.Metadata.Name != "educates-config" {
+		if o.Kind != "Namespace" || o.Metadata.Name != lookupServiceConfigNamespace {
 			continue
 		}
 		if got := o.Metadata.Annotations["helm.sh/resource-policy"]; got != "keep" {
@@ -149,7 +149,7 @@ func TestLookupServiceChart_GrantsOnlyInConfigNamespace(t *testing.T) {
 	if role == nil {
 		t.Fatalf("the chart renders no Role")
 	}
-	if role.Name != "educates-lookup-service" || role.Namespace != "educates-config" {
+	if role.Name != "educates-lookup-service" || role.Namespace != lookupServiceConfigNamespace {
 		t.Errorf("Role is %s/%s, want educates-config/educates-lookup-service", role.Namespace, role.Name)
 	}
 	if !reflect.DeepEqual(role.Rules, wantRules) {
@@ -159,7 +159,7 @@ func TestLookupServiceChart_GrantsOnlyInConfigNamespace(t *testing.T) {
 	if binding == nil {
 		t.Fatalf("the chart renders no RoleBinding")
 	}
-	if binding.Name != "educates-lookup-service" || binding.Namespace != "educates-config" {
+	if binding.Name != "educates-lookup-service" || binding.Namespace != lookupServiceConfigNamespace {
 		t.Errorf("RoleBinding is %s/%s, want educates-config/educates-lookup-service", binding.Namespace, binding.Name)
 	}
 	if binding.RoleRef != wantRoleRef {

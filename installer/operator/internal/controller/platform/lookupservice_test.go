@@ -18,6 +18,7 @@ package platform
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -57,16 +58,14 @@ func lsReadyStatus(name string) metav1.ConditionStatus {
 // with exactly the given labels and annotations.
 func setConfigNamespaceMetadata(labels, annotations map[string]string) {
 	GinkgoHelper()
-	ensureNamespace("educates-config")
+	ensureNamespace(lookupServiceConfigNamespace)
 	Eventually(func() error {
 		ns := &corev1.Namespace{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: "educates-config"}, ns); err != nil {
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, ns); err != nil {
 			return err
 		}
-		ns.Labels = map[string]string{"kubernetes.io/metadata.name": "educates-config"}
-		for k, v := range labels {
-			ns.Labels[k] = v
-		}
+		ns.Labels = map[string]string{"kubernetes.io/metadata.name": lookupServiceConfigNamespace}
+		maps.Copy(ns.Labels, labels)
 		ns.Annotations = annotations
 		return k8sClient.Update(ctx, ns)
 	}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
@@ -269,7 +268,7 @@ var _ = Describe("LookupService reconciler", func() {
 		// looks instead.
 		setConfigNamespaceMetadata(nil, nil)
 		kubeconfig := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "kubeconfig-cluster-1", Namespace: "educates-config"},
+			ObjectMeta: metav1.ObjectMeta{Name: "kubeconfig-cluster-1", Namespace: lookupServiceConfigNamespace},
 			StringData: map[string]string{"config": "kubeconfig"},
 		}
 		if err := k8sClient.Create(ctx, kubeconfig); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -287,7 +286,7 @@ var _ = Describe("LookupService reconciler", func() {
 
 		Eventually(func(g Gomega) {
 			ns := &corev1.Namespace{}
-			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "educates-config"}, ns)).To(Succeed())
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, ns)).To(Succeed())
 			g.Expect(ns.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "Helm"))
 			g.Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-name", lookupServiceReleaseName))
 			g.Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-namespace", platformNamespace))
@@ -324,7 +323,7 @@ var _ = Describe("LookupService reconciler", func() {
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 
 		ns := &corev1.Namespace{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "educates-config"}, ns)).To(Succeed())
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, ns)).To(Succeed())
 		Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-name", "other"))
 		Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-namespace", "elsewhere"))
 	})

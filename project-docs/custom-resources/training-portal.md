@@ -560,13 +560,67 @@ lookup service needs.
 The training portal itself receives its credentials from these secrets, so
 its deployment does not hold them in clear.
 
-If you wish to set any of these values to a pre-determined value, you can add
-``credentials`` and ``clients`` sections to the training portal
-specification. A value set there is used in place of the generated one when
-the training portal is created. Changing it after the training portal has
-been created has no effect.
+If you wish to set the credentials to pre-determined values, for example so
+that a training portal you manage with GitOps keeps known credentials when it
+is created again, create secrets holding them and reference those secrets in
+the training portal specification under ``credentialSecrets``:
 
-To override the credentials for the admin and robot accounts use:
+```yaml
+spec:
+  portal:
+    credentialSecrets:
+      admin:
+        name: lab-markdown-sample-admin
+        namespace: portal-credentials
+      robot:
+        name: lab-markdown-sample-robot
+        namespace: portal-credentials
+```
+
+Each reference gives the ``name`` and ``namespace`` of a secret holding the
+same keys as the training portal's own secret: ``username`` and ``password``
+for the admin credentials, and ``username``, ``password``, ``client-id`` and
+``client-secret`` for the robot credentials. Any other key is ignored. You
+can reference a secret for the admin credentials, for the robot credentials,
+or for both, and credentials you do not reference are generated as described
+above. To create the two secrets referenced above, you could run:
+
+```
+kubectl create secret generic lab-markdown-sample-admin -n portal-credentials \
+  --from-literal=username=admin-user --from-literal=password=<admin-password>
+kubectl create secret generic lab-markdown-sample-robot -n portal-credentials \
+  --from-literal=username=robot-user --from-literal=password=<robot-password> \
+  --from-literal=client-id=<client-id> --from-literal=client-secret=<client-secret>
+```
+
+The values are copied into the training portal's own credentials secrets when
+the training portal is created. Changing or deleting a referenced secret
+after that has no effect on the training portal. If a referenced secret does
+not exist when the training portal is created, or has no value for one of its
+keys, the training portal waits for it: its status phase is ``Pending`` and
+its status message names the secret, its namespace and what is missing, and
+the secret is checked again every 30 seconds. If the secret is still missing
+or incomplete after five minutes, the training portal is marked as
+``Failed``, and you need to delete it and create it again once the secret is
+in place.
+
+The credentials can also be set inline in the training portal specification,
+in ``credentials`` and ``clients`` sections. These sections are deprecated
+and will be removed in a future release, as their values can be read by
+anyone able to read ``TrainingPortal`` resources, which includes every
+training portal and any user bound to the built-in ``view`` role. Use
+``credentialSecrets`` instead. They still work: a value set there is used in
+place of the generated one when the training portal is created, and changing
+it after the training portal has been created has no effect. Creating or
+updating a training portal which sets either section returns a warning, which
+``kubectl apply`` prints as:
+
+```
+Warning: Validation failed for ValidatingAdmissionPolicy 'educates-training-portal-inline-credentials' with binding 'educates-training-portal-inline-credentials': spec.portal.credentials and spec.portal.clients are deprecated and will be removed in a future release: reference Secrets holding the credentials with spec.portal.credentialSecrets.admin and spec.portal.credentialSecrets.robot instead
+```
+
+The deprecated sections set the credentials for the admin and robot accounts
+as:
 
 ```yaml
 spec:
@@ -580,7 +634,7 @@ spec:
         password: top-secret
 ```
 
-To override the application client details for OAuth access by the robot account use:
+and the application client details for OAuth access by the robot account as:
 
 ```yaml
 spec:
@@ -590,6 +644,13 @@ spec:
         id: application-id
         secret: top-secret
 ```
+
+The same credentials can not be set both inline and by a secret reference. A
+training portal which sets ``credentials.admin`` together with
+``credentialSecrets.admin``, or ``credentials.robot`` or ``clients.robot``
+together with ``credentialSecrets.robot``, is rejected when it is created or
+updated. Setting the admin credentials inline and referencing a secret for the
+robot credentials, or the other way round, is allowed.
 
 Controlling registration type
 -----------------------------

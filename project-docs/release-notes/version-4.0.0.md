@@ -1404,6 +1404,28 @@ Features Changed
   exist; set credentials for a training portal in its ``TrainingPortal``
   resource instead.
 
+* Setting a training portal's credentials inline in its ``TrainingPortal``
+  resource, under ``spec.portal.credentials`` and ``spec.portal.clients``, is
+  deprecated and will be removed in a future release, as anyone permitted to
+  read ``TrainingPortal`` resources can read them. Inline values are still
+  used. Instead, create secrets holding the credentials and reference them
+  with ``spec.portal.credentialSecrets.admin``, naming a secret with the keys
+  ``username`` and ``password``, and ``spec.portal.credentialSecrets.robot``,
+  naming a secret with the keys ``username``, ``password``, ``client-id`` and
+  ``client-secret``, each reference giving the secret's ``name`` and
+  ``namespace``. The session manager copies their values into the training
+  portal's own credentials secrets when the training portal is created, so
+  later changes to the referenced secrets do not reach it. While a referenced
+  secret does not exist, or has no value for one of its keys, the training
+  portal waits, with a status message naming the secret and what is missing,
+  and is marked as failed if that lasts five minutes. Creating or updating a
+  ``TrainingPortal`` resource which sets ``spec.portal.credentials`` or
+  ``spec.portal.clients`` returns a warning from the validating admission
+  policy ``educates-training-portal-inline-credentials`` naming the secret
+  references to use instead, which ``kubectl apply`` prints, and one which
+  sets the same credentials both inline and by a secret reference is
+  rejected.
+
 * The ``educates`` CLI now reads a training portal's credentials from the
   secrets that hold them rather than from the training portal's status.
   ``educates cluster portal password --admin`` reads the admin credentials

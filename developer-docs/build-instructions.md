@@ -288,3 +288,8 @@ Sample workshops for testing
 A set of sample workshops are provided for testing and demonstrating different features of the Educates platform. These are not intended for end user consumption but serve as minimal pre-canned workshops for verifying platform functionality.
 
 For details on the available sample workshops and instructions on how to deploy them, see the [workshop samples README](../workshop-samples/README.md).
+
+Checking a change in real sessions
+----------------------------------
+
+The harnesses under [hack/harnesses](../hack/harnesses/README.md) check a build by hand in real workshop sessions on a local cluster. The `local-cluster.sh` helper there creates a named local cluster from a `make local-build PACKAGE_VERSION=<tag>` build, beside any cluster you already run, and deletes it again. The session acceptance harness requests sessions of a set of fixture workshops, several of them built from the samples above, walks their instructions in Chrome, runs kubectl inside the workshop container, holds the console open and connects over the SSH tunnel, then reports what it saw.

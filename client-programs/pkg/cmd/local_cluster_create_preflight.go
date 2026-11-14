@@ -19,7 +19,11 @@ import (
 // otherwise comes up successfully but Envoy can't publish 80/443 and
 // the install hangs at IngressReady, leaving users to debug "cluster
 // created but nothing reachable".
-func checkHostPortsAvailable(ctx context.Context, listenAddress string, verbose bool, w io.Writer) error {
+//
+// The probe container is named probeContainer, the local cluster's own
+// probe name, so that creates of different local clusters running at the
+// same time never remove each other's probe.
+func checkHostPortsAvailable(ctx context.Context, probeContainer, listenAddress string, verbose bool, w io.Writer) error {
 
 	const busyboxImage = "docker.io/library/busybox:latest"
 
@@ -28,7 +32,6 @@ func checkHostPortsAvailable(ctx context.Context, listenAddress string, verbose 
 		return fmt.Errorf("port-availability check: docker client: %w", err)
 	}
 
-	const probeContainer = "educates-port-availability-check"
 	// Remove any leftover probe container from a previous interrupted run.
 	_, _ = cli.ContainerRemove(ctx, probeContainer, client.ContainerRemoveOptions{Force: true})
 

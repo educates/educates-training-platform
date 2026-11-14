@@ -29,6 +29,9 @@ func TestDefaultIdentity(t *testing.T) {
 	if got := id.ControlPlaneNode(); got != "educates-control-plane" {
 		t.Errorf("ControlPlaneNode() = %q, want %q", got, "educates-control-plane")
 	}
+	if got := id.PortCheckContainer(); got != "educates-port-availability-check" {
+		t.Errorf("PortCheckContainer() = %q, want %q", got, "educates-port-availability-check")
+	}
 }
 
 func TestNamedIdentity(t *testing.T) {
@@ -54,6 +57,9 @@ func TestNamedIdentity(t *testing.T) {
 	}
 	if got := id.ControlPlaneNode(); got != "educates-test2-control-plane" {
 		t.Errorf("ControlPlaneNode() = %q, want %q", got, "educates-test2-control-plane")
+	}
+	if got := id.PortCheckContainer(); got != "educates-test2-port-availability-check" {
+		t.Errorf("PortCheckContainer() = %q, want %q", got, "educates-test2-port-availability-check")
 	}
 }
 

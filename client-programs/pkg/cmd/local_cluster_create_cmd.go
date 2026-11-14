@@ -226,7 +226,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	if err := checkDockerDesktopPrivilegedPorts(ctx, w); err != nil {
 		return err
 	}
-	if err := checkHostPortsAvailable(ctx, in.Cluster.ListenAddress, o.Verbose, w); err != nil {
+	if err := checkHostPortsAvailable(ctx, id.PortCheckContainer(), in.Cluster.ListenAddress, o.Verbose, w); err != nil {
 		return err
 	}
 

@@ -149,17 +149,26 @@ func (c *ClusterDiagnosticsFetcher) fetchDynamicallyResources(res schema.GroupVe
 // redactedValue replaces a credential in the resources the bundle collects.
 const redactedValue = "REDACTED"
 
+// specCopyAnnotations are the annotations in which kopf records the spec of
+// a resource it last handled, and kubectl apply the manifest it last
+// applied, as JSON.
+var specCopyAnnotations = []string{
+	"kopf.zalando.org/last-handled-configuration",
+	"kubectl.kubernetes.io/last-applied-configuration",
+}
+
 // writeResources writes the resources of kind res to w as YAML, without
 // their managed fields. A TrainingPortal's inline credentials and OAuth
 // clients, under spec.portal.credentials and spec.portal.clients, are written
-// with every value redacted.
+// with every value redacted, in its spec and in the copies of its spec its
+// annotations hold.
 func writeResources(w io.Writer, res schema.GroupVersionResource, objects []unstructured.Unstructured) error {
 	y := printers.YAMLPrinter{}
 	for _, object := range objects {
 		object.SetManagedFields(nil) // Remove managedFields from the object
 		if res == trainingportalResource {
-			redactNestedValues(object.Object, "spec", "portal", "credentials")
-			redactNestedValues(object.Object, "spec", "portal", "clients")
+			redactInlineCredentials(object.Object)
+			redactInlineCredentialsInSpecCopies(&object)
 		}
 		if err := y.PrintObj(&object, w); err != nil {
 			return err
@@ -167,6 +176,43 @@ func writeResources(w io.Writer, res schema.GroupVersionResource, objects []unst
 	}
 
 	return nil
+}
+
+// redactInlineCredentials redacts the inline credentials and OAuth clients
+// of a TrainingPortal, or of a copy of its spec.
+func redactInlineCredentials(obj map[string]interface{}) {
+	redactNestedValues(obj, "spec", "portal", "credentials")
+	redactNestedValues(obj, "spec", "portal", "clients")
+}
+
+// redactInlineCredentialsInSpecCopies redacts the inline credentials in the
+// copies of a TrainingPortal's spec that its annotations hold. An annotation
+// that cannot be read as JSON is replaced with redactedValue.
+func redactInlineCredentialsInSpecCopies(object *unstructured.Unstructured) {
+	annotations := object.GetAnnotations()
+	changed := false
+	for _, name := range specCopyAnnotations {
+		value, found := annotations[name]
+		if !found {
+			continue
+		}
+		changed = true
+		var copied map[string]interface{}
+		if err := json.Unmarshal([]byte(value), &copied); err != nil {
+			annotations[name] = redactedValue
+			continue
+		}
+		redactInlineCredentials(copied)
+		redacted, err := json.Marshal(copied)
+		if err != nil {
+			annotations[name] = redactedValue
+			continue
+		}
+		annotations[name] = string(redacted)
+	}
+	if changed {
+		object.SetAnnotations(annotations)
+	}
 }
 
 // redactNestedValues replaces every value under the field at path in obj

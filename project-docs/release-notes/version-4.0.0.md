@@ -1416,8 +1416,14 @@ Features Changed
   training portal's namespace, ``<portal-name>-ui``, so the identity of the
   kube context these commands are run against now needs ``get`` access on
   secrets in that namespace. When it lacks it, the command fails with an
-  error naming the secret and the namespace it could not read. The
-  diagnostics bundle written by ``educates admin diagnostics collect`` no
+  error naming the secret and the namespace it could not read.
+  ``educates cluster workshop serve`` likewise reads the config password of
+  a workshop session created by a training portal, which it uses to fetch
+  the session's variables, from a secret in the namespace of the session's
+  workshop environment rather than from the ``WorkshopSession`` resource, so
+  the identity of the kube context it runs against needs ``get`` access on
+  secrets in that namespace too, and an error names the secret and the
+  namespace when it lacks it. The diagnostics bundle written by ``educates admin diagnostics collect`` no
   longer holds the credentials a ``TrainingPortal`` resource sets under
   ``spec.portal.credentials`` and ``spec.portal.clients``. Their values are
   replaced with ``REDACTED``, both in the spec and in the copies of the spec

@@ -273,6 +273,15 @@ educates serve-workshop --patch-workshop
 
 **NOTE**: For this to work, you need [hugo](https://gohugo.io/) to be available on your development machine.
 
+The command renders the instructions with the values of each workshop
+session's variables, which it fetches from the session using the session's
+config password. For a session created by a training portal, it reads that
+password from a secret in the namespace of the session's workshop
+environment, so the identity of the kube context the command runs with needs
+``get`` access on secrets in that namespace, on a local cluster or a hosted
+one alike. Without it, the command reports the secret and the namespace it
+could not read.
+
 The `--patch-workshop` command in this case will cause the workshop definition for the workshop to be patched so that workshop instructions will be sourced from a HTTP server run by the `educates serve-workshop` command.
 
 Under the covers what the `--patch-workshop` command is doing is injecting the following configuration into the workshop definition.

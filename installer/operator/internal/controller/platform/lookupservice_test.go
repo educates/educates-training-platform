@@ -18,6 +18,7 @@ package platform
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,6 +26,7 @@ import (
 
 	release "helm.sh/helm/v4/pkg/release/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,6 +52,23 @@ func lsReadyStatus(name string) metav1.ConditionStatus {
 		return metav1.ConditionUnknown
 	}
 	return c.Status
+}
+
+// setConfigNamespaceMetadata makes the educates-config namespace exist
+// with exactly the given labels and annotations.
+func setConfigNamespaceMetadata(labels, annotations map[string]string) {
+	GinkgoHelper()
+	ensureNamespace(lookupServiceConfigNamespace)
+	Eventually(func() error {
+		ns := &corev1.Namespace{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, ns); err != nil {
+			return err
+		}
+		ns.Labels = map[string]string{"kubernetes.io/metadata.name": lookupServiceConfigNamespace}
+		maps.Copy(ns.Labels, labels)
+		ns.Annotations = annotations
+		return k8sClient.Update(ctx, ns)
+	}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 }
 
 var _ = Describe("LookupService reconciler", func() {
@@ -241,6 +260,72 @@ var _ = Describe("LookupService reconciler", func() {
 		ci, ok := rel.Config["clusterIngress"].(map[string]any)
 		Expect(ok).To(BeTrue(), "clusterIngress missing from rendered values")
 		Expect(ci["caCertificateRef"]).To(Equal(ingressCAChartRef()))
+	})
+
+	It("lets the release take over an educates-config namespace created by hand, keeping its configurations", func() {
+		// envtest has no namespace controller, so a deleted namespace
+		// never goes: the namespace is reset to how a hand-made one
+		// looks instead.
+		setConfigNamespaceMetadata(nil, nil)
+		kubeconfig := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "kubeconfig-cluster-1", Namespace: lookupServiceConfigNamespace},
+			StringData: map[string]string{"config": "kubeconfig"},
+		}
+		if err := k8sClient.Create(ctx, kubeconfig); err != nil && !apierrors.IsAlreadyExists(err) {
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		Expect(k8sClient.Create(ctx, &platformv1alpha1.LookupService{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec: platformv1alpha1.LookupServiceSpec{
+				Ingress: platformv1alpha1.LookupServiceIngress{Prefix: "lookup"},
+			},
+		})).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			ns := &corev1.Namespace{}
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, ns)).To(Succeed())
+			g.Expect(ns.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "Helm"))
+			g.Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-name", lookupServiceReleaseName))
+			g.Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-namespace", platformNamespace))
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(kubeconfig), &corev1.Secret{})).To(Succeed())
+	})
+
+	It("leaves an educates-config namespace another Helm release owns to Helm", func() {
+		otherRelease := map[string]string{
+			"meta.helm.sh/release-name":      "other",
+			"meta.helm.sh/release-namespace": "elsewhere",
+		}
+		setConfigNamespaceMetadata(map[string]string{"app.kubernetes.io/managed-by": "Helm"}, otherRelease)
+
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		Expect(k8sClient.Create(ctx, &platformv1alpha1.LookupService{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec: platformv1alpha1.LookupServiceSpec{
+				Ingress: platformv1alpha1.LookupServiceIngress{Prefix: "lookup"},
+			},
+		})).To(Succeed())
+
+		// The memory Helm client installs without checking ownership; the
+		// release existing shows the reconciler got past the namespace.
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(lookupServiceReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		ns := &corev1.Namespace{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, ns)).To(Succeed())
+		Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-name", "other"))
+		Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-namespace", "elsewhere"))
 	})
 
 	It("uninstalls the chart on delete", func() {

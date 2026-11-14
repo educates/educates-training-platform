@@ -84,6 +84,7 @@ type LookupServiceReconciler struct {
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=lookupservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=lookupservices/finalizers,verbs=update
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=secretsmanagers,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;patch
 
 // Reconcile drives a LookupService CR through its lifecycle.
 func (r *LookupServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -259,6 +260,9 @@ func lookupServiceHost(obj *platformv1alpha1.LookupService, cfg *configv1alpha1.
 
 func (r *LookupServiceReconciler) installOrUpgradeLS(ctx context.Context, obj *platformv1alpha1.LookupService, cfg *configv1alpha1.EducatesClusterConfig) (helm.Result, error) {
 	if err := platformnamespace.Ensure(ctx, r.Client); err != nil {
+		return helm.Result{}, err
+	}
+	if err := adoptLookupServiceConfigNamespace(ctx, r.Client); err != nil {
 		return helm.Result{}, err
 	}
 	chrt, err := vendoredcharts.LookupService()

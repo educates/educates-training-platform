@@ -13,6 +13,7 @@ from .objects import (
     ensure_default_service_account,
     name_image_pull_secrets,
     Workshop,
+    TrainingPortal,
     SecretCopier,
 )
 from .helpers import (
@@ -25,6 +26,7 @@ from .helpers import (
 )
 from .applications import environment_objects_list, workshop_spec_patches
 from .kyverno_rules import kyverno_environment_rules
+from .portal_workshops import portal_workshop_refusal
 from .analytics import report_analytics_event
 
 from .operator_config import (
@@ -149,6 +151,74 @@ def workshop_environment_create(
     # environment.
 
     workshop_name = spec["workshop"]["name"]
+
+    # A workshop environment created by a training portal is deployed only
+    # for a workshop that the portal's TrainingPortal lists. This is checked
+    # before anything is created for the workshop environment.
+
+    training_portal = None
+
+    if portal_name:
+        try:
+            training_portal = TrainingPortal.objects(api).get(name=portal_name).obj
+
+        except pykube.exceptions.ObjectDoesNotExist:
+            pass
+
+        except pykube.exceptions.KubernetesError as exc:
+            logger.exception(
+                "Unexpected error querying training portal %s of workshop environment %s.",
+                portal_name,
+                environment_name,
+            )
+
+            patch["status"] = {
+                "educates": {
+                    "phase": "Unknown",
+                    "message": f"Unexpected error querying training portal {portal_name}.",
+                }
+            }
+
+            report_analytics_event(
+                "Resource/TemporaryError",
+                {
+                    "kind": "WorkshopEnvironment",
+                    "name": name,
+                    "uid": uid,
+                    "retry": retry,
+                    "message": f"Unexpected error querying training portal {portal_name}.",
+                },
+            )
+
+            raise kopf.TemporaryError(
+                f"Unexpected error querying training portal {portal_name} of workshop environment {environment_name}.",
+                delay=30,
+            ) from exc
+
+    refusal = portal_workshop_refusal(body, training_portal)
+
+    if refusal:
+        patch["status"] = {
+            "educates": {
+                "phase": "Failed",
+                "message": refusal,
+            }
+        }
+
+        report_analytics_event(
+            "Resource/PermanentError",
+            {
+                "kind": "WorkshopEnvironment",
+                "name": name,
+                "uid": uid,
+                "retry": retry,
+                "message": refusal,
+            },
+        )
+
+        raise kopf.PermanentError(
+            f"Workshop environment {environment_name} refused. {refusal}"
+        )
 
     try:
         workshop_instance = Workshop.objects(api).get(name=workshop_name)

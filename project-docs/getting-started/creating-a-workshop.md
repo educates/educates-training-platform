@@ -90,6 +90,20 @@ instance by running the following command, or its alias
 educates cluster portal password
 ```
 
+To view instead the admin credentials, the username and password for logging
+into the admin pages of the training portal, add the ``--admin`` option:
+
+```
+educates cluster portal password --admin
+```
+
+The admin credentials are read from the secret that the status of the
+training portal names under ``status.educates.credentialSecrets.admin``, in
+the namespace of the training portal, ``<portal-name>-ui``. The identity of
+the kube context the command is run against therefore needs ``get`` access on
+secrets in that namespace. If it does not have it, the command fails with an
+error naming the secret and the namespace it could not read.
+
 Workshop content layout
 -----------------------
 

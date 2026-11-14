@@ -436,6 +436,10 @@ rules:
     resourceNames: [kubernetes-dashboard-settings]
     verbs: [get]
 ---
+# Bound by session-manager to each training portal's service account. It grants
+# no access to Secrets or namespaces: a portal creates Secrets only in its own
+# workshop environment namespaces, through `educates:training-portal:environment`,
+# and its liveness probe needs no grant.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -443,13 +447,6 @@ metadata:
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 rules:
-  - apiGroups: [""]
-    resources: [namespaces]
-    resourceNames: [default]
-    verbs: [get]
-  - apiGroups: [""]
-    resources: [secrets]
-    verbs: [get, list, watch, create]
   - apiGroups: [training.educates.dev]
     resources:
       - workshops
@@ -470,6 +467,22 @@ rules:
       - workshopsessions
       - workshopallocations
     verbs: [create, patch, delete]
+---
+# Bound by session-manager, through the RoleBinding `educates-training-portal`
+# in each workshop environment namespace whose WorkshopEnvironment carries a
+# portal label, to that portal's service account. The portal creates the
+# Secrets holding a session's user details and request parameters there, and
+# reads no Secret anywhere.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:training-portal:environment
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

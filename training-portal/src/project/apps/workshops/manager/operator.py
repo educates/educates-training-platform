@@ -157,11 +157,30 @@ def login_fn(**kwargs):
 
 @kopf.on.probe(id="api")
 def check_api_access(**kwargs):
+    """Checks that the Kubernetes API accepts the portal's token. It creates
+    a SelfSubjectReview, which every authenticated account may create, so
+    the check needs no RBAC rule.
+
+    """
+
     try:
         api = pykube.HTTPClient(pykube.KubeConfig.from_env())
-        pykube.Namespace.objects(api).get(name="default")
 
-    except pykube.exceptions.KubernetesError as exc:
+        response = api.post(
+            version="authentication.k8s.io/v1",
+            url="selfsubjectreviews",
+            json={
+                "apiVersion": "authentication.k8s.io/v1",
+                "kind": "SelfSubjectReview",
+            },
+        )
+
+        api.raise_for_status(response)
+
+    except (
+        pykube.exceptions.KubernetesError,
+        requests.exceptions.RequestException,
+    ) as exc:
         logger.exception("Failed request to Kubernetes API.")
 
         raise kopf.PermanentError("Failed request to Kubernetes API.") from exc

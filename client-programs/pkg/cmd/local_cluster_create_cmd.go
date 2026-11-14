@@ -211,11 +211,12 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	// so a domain another cluster claims is refused here, whether or not
 	// the resolver runs. Another cluster's config that the resolver can't
 	// use is that cluster's problem, so it is only a warning. A running
-	// resolver serves this same configuration once the kind cluster
-	// exists.
-	resolverConfig, leftOut, err := inventory.ResolverConfig(localclusters.ResolverInput{
+	// resolver is refreshed once the kind cluster exists, from what the
+	// Docker host holds then.
+	resolverInput := localclusters.ResolverInput{
 		LoadedConfig: localclusters.LoadedConfig{Identity: id, Config: in.Deploy, Source: configPath},
-	})
+	}
+	_, leftOut, err := inventory.ResolverConfig(resolverInput)
 	if err != nil {
 		return err
 	}
@@ -260,8 +261,15 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return listenAddressTakenError(ctx, id, in.Cluster.ListenAddress, err)
 	}
 	// The cluster exists now, so a resolver that can't be refreshed is
-	// only a warning.
-	refreshLocalResolver(rep, func() ([]byte, []error, error) { return resolverConfig, nil, nil })
+	// only a warning. Its configuration is rendered again rather than
+	// taken from the preflight, so that it serves every local cluster
+	// another create running at the same time has made since: the last
+	// create to refresh the resolver then serves them all. The configs
+	// the resolver leaves out were warned about in the preflight.
+	refreshLocalResolver(rep, func() ([]byte, []error, error) {
+		content, _, err := observedResolverConfig(ctx, resolverInput)
+		return content, nil, err
+	})
 	// The registry, loopback and mirror steps talk to the cluster just
 	// created, through its own context in the kubeconfig kind wrote it in.
 	client, err := clusterConfig.Config.GetClient()

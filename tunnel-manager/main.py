@@ -8,6 +8,7 @@ from websockets.asyncio.server import serve
 
 import kopf
 import pykube
+import requests
 
 logger = logging.getLogger("educates")
 
@@ -61,16 +62,15 @@ def login_fn(**kwargs):
 
 @kopf.on.probe(id="api")
 def check_api_access(**kwargs):
-    """Checks for the liveness probe that the Kubernetes API accepts the
-    service account's token. It creates a SelfSubjectReview, which every
-    authenticated account may create, so it needs no RBAC rule. A failure is
-    reported as permanent, so the liveness endpoint fails at once rather than
-    waiting on kopf's retries.
+    """Checks that the Kubernetes API accepts tunnel-manager's token. It
+    creates a SelfSubjectReview, which every authenticated account may
+    create, so the check needs no RBAC rule.
 
     """
 
     try:
         api = pykube.HTTPClient(pykube.KubeConfig.from_env())
+
         response = api.post(
             version="authentication.k8s.io/v1",
             url="selfsubjectreviews",
@@ -79,9 +79,13 @@ def check_api_access(**kwargs):
                 "kind": "SelfSubjectReview",
             },
         )
+
         api.raise_for_status(response)
 
-    except Exception as exc:
+    except (
+        pykube.exceptions.KubernetesError,
+        requests.exceptions.RequestException,
+    ) as exc:
         logger.exception("failed request to Kubernetes API")
 
         raise kopf.PermanentError("failed request to Kubernetes API") from exc

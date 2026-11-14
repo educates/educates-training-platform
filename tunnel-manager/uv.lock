@@ -590,6 +590,7 @@ dependencies = [
     { name = "kopf", extra = ["full-auth"] },
     { name = "pykube-ng" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "websockets" },
 ]
 
@@ -599,6 +600,7 @@ requires-dist = [
     { name = "kopf", extras = ["full-auth"], specifier = ">=1.44.6" },
     { name = "pykube-ng", specifier = ">=23.6.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "requests", specifier = ">=2.33.0" },
     { name = "websockets", specifier = ">=16.0" },
 ]
 

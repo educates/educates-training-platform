@@ -1360,8 +1360,9 @@ Features Changed
   ``ClusterRoleBinding`` in ``session.objects``. The console now opens on
   the session namespace, its namespace selector offers the session namespace
   followed by the secondary namespaces listed under
-  ``session.namespaces.secondary``, and it no longer shows a notification
-  for each request it is refused. Workshop sessions using a virtual cluster
+  ``session.namespaces.secondary`` and then the namespaces created through
+  ``session.objects``, and it no longer shows a notification for each
+  request it is refused. Workshop sessions using a virtual cluster
   are unaffected, as ``kubectl`` and the console in them work against the
   virtual cluster.
 

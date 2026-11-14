@@ -415,6 +415,27 @@ rules:
     resources: [namespaces]
     verbs: [get]
 ---
+# Bound by session-manager, through the RoleBinding `educates-session-console`
+# in each session namespace with the console enabled, to the session's service
+# account whatever the session's role. session-manager creates the console's
+# Secrets with their keys and its settings before the console starts, so the
+# console only reads them by name and never writes a Secret.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:session:console
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [kubernetes-dashboard-csrf, kubernetes-dashboard-key-holder]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [kubernetes-dashboard-settings]
+    verbs: [get]
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

@@ -507,22 +507,6 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         },
     }
 
-    service_account_token_body = {
-        "apiVersion": "v1",
-        "kind": "Secret",
-        "metadata": {
-            "name": "training-portal-token",
-            "namespace": portal_namespace,
-            "annotations": {"kubernetes.io/service-account.name": "training-portal"},
-            "labels": {
-                "training.educates.dev/component": "portal",
-                "training.educates.dev/portal.name": portal_name,
-                "training.educates.dev/portal.uid": portal_uid,
-            },
-        },
-        "type": "kubernetes.io/service-account-token",
-    }
-
     cluster_role_binding_body = {
         "apiVersion": "rbac.authorization.k8s.io/v1",
         "kind": "ClusterRoleBinding",
@@ -617,7 +601,6 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                 },
                 "spec": {
                     "serviceAccountName": "training-portal",
-                    "automountServiceAccountToken": False,
                     "securityContext": {
                         "runAsUser": 1001,
                         "fsGroup": CLUSTER_STORAGE_GROUP,
@@ -750,11 +733,6 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                                     "name": "theme",
                                     "mountPath": "/opt/app-root/static/theme",
                                 },
-                                {
-                                    "name": "token",
-                                    "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
-                                    "readOnly": True,
-                                },
                             ],
                         }
                     ],
@@ -770,10 +748,6 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
                         {
                             "name": "theme",
                             "secret": {"secretName": theme_name},
-                        },
-                        {
-                            "name": "token",
-                            "secret": {"secretName": "training-portal-token"},
                         },
                     ],
                 },
@@ -1030,7 +1004,6 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         SecretCopier(api, theme_secret_copier_body).create()
 
         pykube.ServiceAccount(api, name_image_pull_secrets(service_account_body)).create()
-        pykube.Secret(api, service_account_token_body).create()
         pykube.ClusterRoleBinding(api, cluster_role_binding_body).create()
 
         # The portal's credentials are generated once, when the portal is

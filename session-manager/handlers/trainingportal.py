@@ -19,7 +19,8 @@ from .operator_config import (AMPLITUDE_TRACKING_ID, ANALYTICS_WEBHOOK_URL,
                               TRAINING_PORTAL_IMAGE)
 from .portal_credentials import (ADMIN_CREDENTIALS_SECRET,
                                  ROBOT_CREDENTIALS_SECRET, credentials_env,
-                                 credentials_secrets, portal_credentials)
+                                 credentials_secrets, portal_credentials,
+                                 remote_access_rbac)
 
 __all__ = ["training_portal_create", "training_portal_delete"]
 
@@ -1068,6 +1069,19 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
 
         if existing_robot_secret is None:
             pykube.Secret(api, robot_secret_body).create()
+
+        # lookup-service reads the robot credentials as the remote-access
+        # service account. The grant is made whether or not remote access is
+        # installed, so that enabling it later reaches existing portals.
+
+        remote_access_role_body, remote_access_role_binding_body = (
+            remote_access_rbac(
+                portal_name, portal_uid, portal_namespace, OPERATOR_NAMESPACE
+            )
+        )
+
+        pykube.Role(api, remote_access_role_body).create()
+        pykube.RoleBinding(api, remote_access_role_binding_body).create()
 
         pykube.PersistentVolumeClaim(api, persistent_volume_claim_body).create()
         pykube.ConfigMap(api, config_map_body).create()

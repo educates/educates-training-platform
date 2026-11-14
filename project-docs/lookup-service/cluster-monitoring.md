@@ -6,7 +6,7 @@ The lookup service monitors one or more Kubernetes clusters for training portals
 Local cluster monitoring
 ------------------------
 
-To monitor the cluster where the lookup service is deployed, create a ``ClusterConfig`` resource without a ``spec.credentials`` section. The lookup service will then use the service account credentials available to its own pod to access the Kubernetes API.
+To monitor the cluster where the lookup service is deployed, create a ``ClusterConfig`` resource without a ``spec.credentials`` section. The lookup service will then access the Kubernetes API as the ``remote-access`` service account in the ``educates`` namespace, using the token of that service account which is mounted into the lookup service pod. This is the same account a kubeconfig generated for a remote cluster uses, as described below, so the lookup service has the same access to the local cluster as it has to a remote one.
 
 In the simplest case the ``spec`` section can be omitted entirely:
 
@@ -45,15 +45,19 @@ Remote cluster access
 
 To monitor a remote cluster, the lookup service needs a kubeconfig file that provides access to the Educates resources on that cluster. The kubeconfig must be stored in a Kubernetes secret in the ``educates-config`` namespace of the cluster where the lookup service is running.
 
-The service account used in the kubeconfig should have limited permissions. Specifically, it needs ``get``, ``list``, and ``watch`` access to the following Educates resource types:
+The service account used in the kubeconfig should have limited permissions. Specifically, it needs ``list`` and ``watch`` access to the following Educates resource types:
 
 * ``TrainingPortal``
 * ``WorkshopEnvironment``
 * ``WorkshopSession``
-* ``WorkshopAllocation``
-* ``Workshop``
 
-It is strongly advised against using a kubeconfig with ``cluster-admin`` privileges for monitoring a remote cluster. The lookup service only needs read access to the Educates resources listed above.
+The lookup service also logs in to the REST API of each training portal it manages, using the robot credentials of that training portal. These are held in the secret ``training-portal-robot-credentials`` in the namespace of the training portal, ``<portal-name>-ui``, which the training portal's status names under ``status.educates.credentialSecrets.robot``. The lookup service reads that secret through the same kubeconfig, so the account it uses needs ``get`` access on the robot credentials secret in the namespace of every training portal.
+
+The ``remote-access`` service account in the ``educates`` namespace, which is what the kubeconfig generated as described below uses, is given this access by Educates. For every training portal, whether or not the lookup service or remote access is enabled, the session manager creates a ``Role`` named ``educates-remote-access`` in the namespace of the training portal, granting ``get`` on the robot credentials secret by name and on no other secret, and a ``RoleBinding`` of the same name binding it to the ``remote-access`` service account. Turning on the lookup service for a cluster where training portals already exist therefore needs no training portal to be recreated. The account can never read the admin credentials of a training portal, which are held in the separate secret ``training-portal-admin-credentials``, so a kubeconfig for the lookup service cannot be used to log in to the admin pages of a training portal.
+
+If the kubeconfig you give the lookup service uses an identity other than the ``remote-access`` service account, that identity needs to be granted ``get`` on the ``training-portal-robot-credentials`` secret in the namespace of each training portal, in addition to the access to the Educates resources listed above. Without it, the lookup service cannot obtain an access token for the training portals of that cluster and session requests for their workshops fail, with an error in the lookup service logs naming the secret it could not read. Grant ``get`` on that secret alone, by name, rather than on all secrets in the namespace, so that the identity cannot read the admin credentials secret.
+
+It is strongly advised against using a kubeconfig with ``cluster-admin`` privileges for monitoring a remote cluster. The lookup service only needs read access to the Educates resources listed above and to the robot credentials secret of each training portal.
 
 Generating a kubeconfig
 -----------------------
@@ -64,7 +68,7 @@ The Educates CLI provides a command to generate a kubeconfig with the appropriat
 educates admin lookup kubeconfig --context cluster-1 --output kubeconfig-cluster-1.yaml
 ```
 
-The ``--context`` option specifies which Kubernetes context to use when connecting to the remote cluster to create the service account and RBAC resources. The ``--output`` option specifies the file to write the generated kubeconfig to.
+The generated kubeconfig accesses the remote cluster as the ``remote-access`` service account in the ``educates`` namespace, using the token Educates creates for that account when remote access is installed on the remote cluster. The ``--context`` option specifies which Kubernetes context to use when connecting to the remote cluster to read that token. The ``--output`` option specifies the file to write the generated kubeconfig to.
 
 You can verify the generated kubeconfig has the correct permissions by testing it:
 
@@ -79,6 +83,13 @@ kubectl get namespaces --kubeconfig kubeconfig-cluster-1.yaml
 ```
 
 This should return a forbidden error, confirming that the kubeconfig has appropriately scoped permissions.
+
+For a training portal on the cluster, reading its robot credentials secret should succeed, and reading its admin credentials secret should return a forbidden error:
+
+```
+kubectl get secret training-portal-robot-credentials -n <portal-name>-ui --kubeconfig kubeconfig-cluster-1.yaml
+kubectl get secret training-portal-admin-credentials -n <portal-name>-ui --kubeconfig kubeconfig-cluster-1.yaml
+```
 
 Creating kubeconfig secrets
 ---------------------------

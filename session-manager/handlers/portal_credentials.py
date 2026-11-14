@@ -8,7 +8,9 @@ is generated for that portal alone, once, when the portal is created.
 
 They are kept in two Secrets in the portal's namespace, one for the admin
 credentials and one for the robot credentials, which the portal's Deployment
-reads them from and the TrainingPortal's status names.
+reads them from and the TrainingPortal's status names. The remote-access
+service account, as which lookup-service reaches the portal's REST API, may
+get the robot credentials Secret and no other.
 """
 
 import base64
@@ -19,6 +21,10 @@ from .helpers import xget
 
 ADMIN_CREDENTIALS_SECRET = "training-portal-admin-credentials"
 ROBOT_CREDENTIALS_SECRET = "training-portal-robot-credentials"
+
+REMOTE_ACCESS_ROLE = "educates-remote-access"
+
+REMOTE_ACCESS_SERVICE_ACCOUNT = "remote-access"
 
 CREDENTIAL_LENGTH = 32
 
@@ -125,6 +131,62 @@ def credentials_secrets(portal_name, portal_uid, portal_namespace, credentials):
         secret(ADMIN_CREDENTIALS_SECRET, credentials["admin"]),
         secret(ROBOT_CREDENTIALS_SECRET, credentials["robot"]),
     )
+
+
+def remote_access_rbac(portal_name, portal_uid, portal_namespace, educates_namespace):
+    """Returns the bodies of the Role and RoleBinding in a training portal's
+    namespace which let the remote-access service account of the Educates
+    namespace get the portal's robot credentials Secret, by name, and no
+    other Secret. lookup-service reads a portal's robot credentials as that
+    account, so the portal's admin credentials stay out of its reach."""
+
+    labels = {
+        "training.educates.dev/component": "portal",
+        "training.educates.dev/portal.name": portal_name,
+        "training.educates.dev/portal.uid": portal_uid,
+    }
+
+    role = {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "kind": "Role",
+        "metadata": {
+            "name": REMOTE_ACCESS_ROLE,
+            "namespace": portal_namespace,
+            "labels": dict(labels),
+        },
+        "rules": [
+            {
+                "apiGroups": [""],
+                "resources": ["secrets"],
+                "resourceNames": [ROBOT_CREDENTIALS_SECRET],
+                "verbs": ["get"],
+            }
+        ],
+    }
+
+    role_binding = {
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "kind": "RoleBinding",
+        "metadata": {
+            "name": REMOTE_ACCESS_ROLE,
+            "namespace": portal_namespace,
+            "labels": dict(labels),
+        },
+        "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "Role",
+            "name": REMOTE_ACCESS_ROLE,
+        },
+        "subjects": [
+            {
+                "kind": "ServiceAccount",
+                "name": REMOTE_ACCESS_SERVICE_ACCOUNT,
+                "namespace": educates_namespace,
+            }
+        ],
+    }
+
+    return role, role_binding
 
 
 def credentials_env():

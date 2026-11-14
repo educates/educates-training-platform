@@ -230,10 +230,10 @@ func (c *ClusterDiagnosticsFetcher) fetchTrainingPortalDetailsAtRest(fileNamePat
 			trainingPortalName,
 		)
 		logout, err := catalogApiRequester.Login()
-		defer logout()
 		if err != nil {
 			return errors.Wrap(err, "failed to login to training portal")
 		}
+		defer logout()
 
 		// Get the list of workshops so we can know which workshop environment
 		// we need to request a workshop from.

@@ -1,0 +1,14 @@
+{{- /*
+The namespace lookup-service reads its configuration from. Helm keeps it on
+uninstall, so the configurations in it survive a reinstall of Educates. When
+the namespace was created by hand, the operator gives it the release's
+ownership metadata before installing, so the release takes it over.
+*/ -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "lookup-service.configNamespace" . }}
+  labels:
+    {{- include "lookup-service.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep

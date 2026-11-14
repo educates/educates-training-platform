@@ -12,6 +12,7 @@ rules:
   - ""
   resources:
   - configmaps
+  - namespaces
   - persistentvolumeclaims
   - pods
   - secrets

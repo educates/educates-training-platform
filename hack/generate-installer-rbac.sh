@@ -45,6 +45,7 @@ command -v helm >/dev/null 2>&1 || { echo "helm not found on PATH" >&2; exit 1; 
 # core (v1). <Kind> is what the render check matches against. Keep sorted.
 CURATED=$(cat <<'EOF'
 |configmaps|ConfigMap
+|namespaces|Namespace
 |persistentvolumeclaims|PersistentVolumeClaim
 |pods|Pod
 |secrets|Secret

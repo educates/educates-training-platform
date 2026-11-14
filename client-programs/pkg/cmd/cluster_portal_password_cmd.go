@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/educatesrestapi"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -56,20 +57,24 @@ func (o *ClusterPortalPasswordOptions) Run() error {
 		return errors.New("no workshops deployed")
 	}
 
+	if err != nil {
+		return errors.Wrapf(err, "unable to get training portal %q", o.Portal)
+	}
+
 	if o.Admin {
-		username, found, err := unstructured.NestedString(trainingPortal.Object, "status", "educates", "credentials", "admin", "username")
+		client, err := clusterConfig.GetClient()
 
-		if err != nil || !found {
-			return errors.New("unable to access credentials")
+		if err != nil {
+			return errors.Wrapf(err, "unable to create Kubernetes client")
 		}
 
-		password, found, err := unstructured.NestedString(trainingPortal.Object, "status", "educates", "credentials", "admin", "password")
+		admin, err := educatesrestapi.ReadPortalAdminCredentials(context.TODO(), client, trainingPortal)
 
-		if err != nil || !found {
-			return errors.New("unable to access credentials")
+		if err != nil {
+			return err
 		}
 
-		fmt.Println(utils.PrintTable([]string{"USERNAME", "PASSWORD"}, [][]string{{username, password}}))
+		fmt.Println(utils.PrintTable([]string{"USERNAME", "PASSWORD"}, [][]string{{admin.Username, admin.Password}}))
 	} else {
 		password, _, _ := unstructured.NestedString(trainingPortal.Object, "spec", "portal", "password")
 

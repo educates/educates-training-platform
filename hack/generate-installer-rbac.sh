@@ -51,6 +51,8 @@ CURATED=$(cat <<'EOF'
 |serviceaccounts|ServiceAccount
 |services|Service
 admissionregistration.k8s.io|mutatingwebhookconfigurations|MutatingWebhookConfiguration
+admissionregistration.k8s.io|validatingadmissionpolicies|ValidatingAdmissionPolicy
+admissionregistration.k8s.io|validatingadmissionpolicybindings|ValidatingAdmissionPolicyBinding
 admissionregistration.k8s.io|validatingwebhookconfigurations|ValidatingWebhookConfiguration
 apiextensions.k8s.io|customresourcedefinitions|CustomResourceDefinition
 apiregistration.k8s.io|apiservices|APIService

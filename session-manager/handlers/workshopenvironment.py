@@ -26,6 +26,11 @@ from .helpers import (
 )
 from .applications import environment_objects_list, workshop_spec_patches
 from .kyverno_rules import kyverno_environment_rules
+from .tunnel_manager import (
+    tunnel_manager_deployment,
+    tunnel_manager_role,
+    tunnel_manager_role_binding,
+)
 from .portal_access import portal_environment_role_binding
 from .portal_workshops import portal_workshop_refusal
 from .analytics import report_analytics_event
@@ -2134,20 +2139,22 @@ def workshop_environment_create(
 
         tunnel_memory = applications.property("sshd", "tunnel.memory", "128Mi")
 
+        tunnel_labels = {
+            "training.educates.dev/component": "environment",
+            "training.educates.dev/workshop.name": workshop_name,
+            "training.educates.dev/portal.name": portal_name,
+            "training.educates.dev/portal.uid": portal_uid,
+            "training.educates.dev/environment.name": environment_name,
+            "training.educates.dev/environment.uid": environment_uid,
+        }
+
         tunnel_service_account_body = {
             "apiVersion": "v1",
             "kind": "ServiceAccount",
             "metadata": {
                 "name": "tunnel-manager",
                 "namespace": workshop_namespace,
-                "labels": {
-                    "training.educates.dev/component": "environment",
-                    "training.educates.dev/workshop.name": workshop_name,
-                    "training.educates.dev/portal.name": portal_name,
-                    "training.educates.dev/portal.uid": portal_uid,
-                    "training.educates.dev/environment.name": environment_name,
-                    "training.educates.dev/environment.uid": environment_uid,
-                },
+                "labels": dict(tunnel_labels),
             },
         }
 
@@ -2179,73 +2186,16 @@ def workshop_environment_create(
             ],
         }
 
-        tunnel_deployment_body = {
-            "apiVersion": "apps/v1",
-            "kind": "Deployment",
-            "metadata": {
-                "namespace": workshop_namespace,
-                "name": "tunnel-manager",
-                "labels": {
-                    "training.educates.dev/component": "environment",
-                    "training.educates.dev/workshop.name": workshop_name,
-                    "training.educates.dev/portal.name": portal_name,
-                    "training.educates.dev/portal.uid": portal_uid,
-                    "training.educates.dev/environment.name": environment_name,
-                    "training.educates.dev/environment.uid": environment_uid,
-                },
-            },
-            "spec": {
-                "replicas": 1,
-                "selector": {"matchLabels": {"deployment": "tunnel-manager"}},
-                "strategy": {"type": "Recreate"},
-                "template": {
-                    "metadata": {
-                        "labels": {
-                            "deployment": "tunnel-manager",
-                            "training.educates.dev/component": "environment",
-                            "training.educates.dev/workshop.name": workshop_name,
-                            "training.educates.dev/portal.name": portal_name,
-                            "training.educates.dev/portal.uid": portal_uid,
-                            "training.educates.dev/environment.name": environment_name,
-                            "training.educates.dev/environment.uid": environment_uid,
-                        },
-                    },
-                    "spec": {
-                        "serviceAccountName": "tunnel-manager",
-                        "containers": [
-                            {
-                                "name": "tunnel",
-                                "image": tunnel_image,
-                                "imagePullPolicy": tunnel_image_pull_policy,
-                                "securityContext": {
-                                    "allowPrivilegeEscalation": False,
-                                    "capabilities": {"drop": ["ALL"]},
-                                    "runAsNonRoot": True,
-                                    # "seccompProfile": {"type": "RuntimeDefault"},
-                                },
-                                "resources": {
-                                    "limits": {"memory": tunnel_memory},
-                                    "requests": {"memory": tunnel_memory},
-                                },
-                                "ports": [{"containerPort": 8080, "protocol": "TCP"}],
-                                "env": [
-                                    {"name": "INGRESS_DOMAIN", "value": INGRESS_DOMAIN},
-                                    {
-                                        "name": "ENVIRONMENT_NAME",
-                                        "value": environment_name,
-                                    },
-                                ],
-                            }
-                        ],
-                        "securityContext": {
-                            "runAsUser": 1001,
-                            "fsGroup": CLUSTER_STORAGE_GROUP,
-                            "supplementalGroups": [CLUSTER_STORAGE_GROUP],
-                        },
-                    },
-                },
-            },
-        }
+        tunnel_deployment_body = tunnel_manager_deployment(
+            workshop_namespace=workshop_namespace,
+            environment_name=environment_name,
+            image=tunnel_image,
+            image_pull_policy=tunnel_image_pull_policy,
+            memory=tunnel_memory,
+            ingress_domain=INGRESS_DOMAIN,
+            storage_group=CLUSTER_STORAGE_GROUP,
+            labels=tunnel_labels,
+        )
 
         tunnel_service_body = {
             "apiVersion": "v1",
@@ -2253,14 +2203,7 @@ def workshop_environment_create(
             "metadata": {
                 "namespace": workshop_namespace,
                 "name": "tunnel-manager",
-                "labels": {
-                    "training.educates.dev/component": "environment",
-                    "training.educates.dev/workshop.name": workshop_name,
-                    "training.educates.dev/portal.name": portal_name,
-                    "training.educates.dev/portal.uid": portal_uid,
-                    "training.educates.dev/environment.name": environment_name,
-                    "training.educates.dev/environment.uid": environment_uid,
-                },
+                "labels": dict(tunnel_labels),
             },
             "spec": {
                 "type": "ClusterIP",
@@ -2269,10 +2212,16 @@ def workshop_environment_create(
             },
         }
 
+        # The Role and RoleBinding letting tunnel-manager create events in
+        # the environment namespace are created before its Deployment, so
+        # the events it posts as it starts are not refused.
+
         tunnel_objects.extend(
             [
                 tunnel_service_account_body,
                 tunnel_cluster_role_binding_body,
+                tunnel_manager_role(workshop_namespace, tunnel_labels),
+                tunnel_manager_role_binding(workshop_namespace, tunnel_labels),
                 tunnel_deployment_body,
                 tunnel_service_body,
             ]

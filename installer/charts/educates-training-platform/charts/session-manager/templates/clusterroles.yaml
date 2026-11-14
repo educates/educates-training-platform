@@ -471,6 +471,13 @@ rules:
       - workshopallocations
     verbs: [create, patch, delete]
 ---
+# Bound by session-manager, through the ClusterRoleBinding
+# `educates:tunnel-manager:<environment namespace>`, to the `tunnel-manager`
+# service account of each workshop environment with the SSH tunnel enabled.
+# tunnel-manager serves a network-facing proxy, so it holds only what it uses:
+# watching WorkshopSessions here, and creating events in its own environment
+# namespace through the Role `educates-tunnel-manager` session-manager creates
+# there. Its liveness probe creates a SelfSubjectReview, which needs no rule.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -478,18 +485,6 @@ metadata:
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 rules:
-  - apiGroups: [""]
-    resources: [events]
-    verbs: [create]
-  - apiGroups: [""]
-    resources: [secrets]
-    verbs: [get, list, watch, create, delete, deletecollection, patch, update]
-  - apiGroups: [""]
-    resources: [namespaces]
-    verbs: [get, list, watch]
-  - apiGroups: [""]
-    resources: [serviceaccounts]
-    verbs: [get, list, watch, patch, update]
   - apiGroups: [training.educates.dev]
     resources: [workshopsessions]
     verbs: [get, list, watch]

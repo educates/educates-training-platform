@@ -135,12 +135,8 @@ func (c *ClusterDiagnosticsFetcher) fetchDynamicallyResources(res schema.GroupVe
 	}
 	defer newFile.Close()
 
-	y := printers.YAMLPrinter{}
-	for _, object := range objectList.Items {
-		object.SetManagedFields(nil) // Remove managedFields from the object
-		if err := y.PrintObj(&object, newFile); err != nil {
-			return err
-		}
+	if err := writeResources(newFile, res, objectList.Items); err != nil {
+		return err
 	}
 
 	if c.verbose {
@@ -148,6 +144,52 @@ func (c *ClusterDiagnosticsFetcher) fetchDynamicallyResources(res schema.GroupVe
 	}
 
 	return nil
+}
+
+// redactedValue replaces a credential in the resources the bundle collects.
+const redactedValue = "REDACTED"
+
+// writeResources writes the resources of kind res to w as YAML, without
+// their managed fields. A TrainingPortal's inline credentials and OAuth
+// clients, under spec.portal.credentials and spec.portal.clients, are written
+// with every value redacted.
+func writeResources(w io.Writer, res schema.GroupVersionResource, objects []unstructured.Unstructured) error {
+	y := printers.YAMLPrinter{}
+	for _, object := range objects {
+		object.SetManagedFields(nil) // Remove managedFields from the object
+		if res == trainingportalResource {
+			redactNestedValues(object.Object, "spec", "portal", "credentials")
+			redactNestedValues(object.Object, "spec", "portal", "clients")
+		}
+		if err := y.PrintObj(&object, w); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// redactNestedValues replaces every value under the field at path in obj
+// with redactedValue, keeping the keys, so the bundle shows which values were
+// set without holding them.
+func redactNestedValues(obj map[string]interface{}, path ...string) {
+	field, found, err := unstructured.NestedFieldNoCopy(obj, path...)
+	if err != nil || !found {
+		return
+	}
+	_ = unstructured.SetNestedField(obj, redactValue(field), path...)
+}
+
+func redactValue(value interface{}) interface{} {
+	nested, isMap := value.(map[string]interface{})
+	if !isMap {
+		return redactedValue
+	}
+	redacted := make(map[string]interface{}, len(nested))
+	for key, value := range nested {
+		redacted[key] = redactValue(value)
+	}
+	return redacted
 }
 
 func (c *ClusterDiagnosticsFetcher) fetchLogsForDeployment(labelSelector, namespaceSelector, fileNamePattern string) error {

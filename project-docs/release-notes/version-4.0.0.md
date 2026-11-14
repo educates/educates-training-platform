@@ -1381,10 +1381,24 @@ Features Changed
   ``password``, and the robot credentials in the secret
   ``training-portal-robot-credentials``, with the keys ``username``,
   ``password``, ``client-id`` and ``client-secret``, both in the namespace
-  ``<portal-name>-ui``. The training portal's status names them under
-  ``status.educates.credentialSecrets``. The training portal's deployment
-  now takes the credentials from these secrets, so its environment no longer
-  holds the admin password in clear. The installation wide
+  ``<portal-name>-ui``. The training portal's deployment now takes the
+  credentials from these secrets, so its environment no longer holds the
+  admin password in clear, and the training portal no longer writes its
+  admin password to its container log, which anyone permitted to read pod
+  logs in its namespace could read. The training portal's status names the
+  secrets under ``status.educates.credentialSecrets`` and no longer holds the
+  credentials themselves: ``status.educates.credentials`` and
+  ``status.educates.clients`` are removed from the ``TrainingPortal``
+  resource, and ``kubectl get trainingportals`` no longer shows the
+  ``AdminUsername`` and ``AdminPassword`` columns, so anyone permitted to
+  read ``TrainingPortal`` resources, such as a user bound to the built-in
+  ``view`` role, no longer sees a training portal's credentials. The
+  ``PortalPassword`` column stays. To get the admin credentials, read the
+  secret ``training-portal-admin-credentials`` in the training portal's
+  namespace, or run ``educates cluster portal password --admin``, either of
+  which needs ``get`` access on secrets in that namespace. Scripts which read
+  the credentials from the status need to read them from the secrets
+  instead. The installation wide
   ``trainingPortal.credentials`` and ``trainingPortal.clients`` settings,
   which in 3.x set the credentials shared by every training portal, no longer
   exist; set credentials for a training portal in its ``TrainingPortal``

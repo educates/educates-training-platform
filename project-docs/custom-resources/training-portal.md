@@ -528,7 +528,10 @@ portal, ``<portal-name>-ui``:
 The status of the training portal names these secrets under
 ``status.educates.credentialSecrets.admin`` and
 ``status.educates.credentialSecrets.robot``, and the namespace they are in
-under ``status.educates.namespace``. To read the admin password of the
+under ``status.educates.namespace``. Neither the status nor the columns
+``kubectl get trainingportals`` shows hold the credentials themselves, so
+being able to read ``TrainingPortal`` resources, as the built-in ``view``
+role allows, does not give access to them. To read the admin password of the
 training portal ``lab-markdown-sample``, for example, you can run:
 
 ```

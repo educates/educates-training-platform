@@ -535,9 +535,8 @@ training portal ``lab-markdown-sample``, for example, you can run:
 kubectl get secret training-portal-admin-credentials -n lab-markdown-sample-ui -o jsonpath='{.data.password}' | base64 --decode
 ```
 
-Only those who are permitted to read secrets in the namespace of the
-training portal can read its credentials. The training portal itself receives
-them from these secrets.
+The training portal itself receives its credentials from these secrets, so
+its deployment does not hold them in clear.
 
 If you wish to set any of these values to a pre-determined value, you can add
 ``credentials`` and ``clients`` sections to the training portal

@@ -23,10 +23,9 @@ from .operator import background_task
 from .locking import resources_lock
 from .analytics import report_analytics_event
 from .suffix import get_suffix_codec
+from .kubernetes_api import kubernetes_api
 
 logger = logging.getLogger("educates")
-
-api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 
 def resolve_request_params(workshop, params):
@@ -59,6 +58,8 @@ def resolve_request_params(workshop, params):
 
 
 def create_request_resources(session):
+    api = kubernetes_api()
+
     secret_body = {
         "apiVersion": "v1",
         "kind": "Secret",
@@ -195,6 +196,8 @@ def update_session_status(name, phase, user=None):
 
     """
 
+    api = kubernetes_api()
+
     K8SWorkshopSession = pykube.object_factory(
         api, "training.educates.dev/v1beta1", "WorkshopSession"
     )
@@ -319,7 +322,7 @@ def create_config_password_secret(session, password):
         },
     }
 
-    pykube.Secret(api, secret_body).create()
+    pykube.Secret(kubernetes_api(), secret_body).create()
 
 
 def create_workshop_session(session, secret):
@@ -434,6 +437,8 @@ def create_workshop_session(session, secret):
         }
 
     # Create the Kubernetes resource for the workshop session.
+
+    api = kubernetes_api()
 
     K8SWorkshopSession = pykube.object_factory(
         api, "training.educates.dev/v1beta1", "WorkshopSession"

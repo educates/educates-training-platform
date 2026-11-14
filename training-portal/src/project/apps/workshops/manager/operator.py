@@ -19,6 +19,8 @@ import kopf
 import pykube
 import requests
 
+from .kubernetes_api import kubernetes_api
+
 logger = logging.getLogger("educates")
 
 _event_loop = None  # pylint: disable=invalid-name
@@ -164,7 +166,7 @@ def check_api_access(**kwargs):
     """
 
     try:
-        api = pykube.HTTPClient(pykube.KubeConfig.from_env())
+        api = kubernetes_api()
 
         response = api.post(
             version="authentication.k8s.io/v1",

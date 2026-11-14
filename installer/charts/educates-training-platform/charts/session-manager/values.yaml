@@ -192,24 +192,8 @@ resources: {}
 clusterAdmin: false
 
 # =============================================================================
-# Training portal defaults
+# Session cookies
 # =============================================================================
-
-# Empty values cause the runtime to generate them on first reconciliation.
-# The chart deliberately does NOT use `randAlphaNum` defaults here because that
-# would rotate values on every `helm upgrade` and break in-flight workshops.
-trainingPortal:
-  credentials:
-    admin:
-      username: ""
-      password: ""
-    robot:
-      username: ""
-      password: ""
-  clients:
-    robot:
-      id: ""
-      secret: ""
 
 # Optional override for the cookie domain used by training portal and
 # workshop sessions. Empty means "use the ingress domain."

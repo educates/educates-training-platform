@@ -50,19 +50,19 @@ logger = logging.getLogger("educates")
 # XXX Disabled here as being handled in parent training_portal_event().
 # @resources_lock
 # @transaction.atomic
-def initialize_robot_account(resource):
+def initialize_robot_account():
     """Initialize the robot user account if this is the first time the
-    training portal has been started up.
+    training portal has been started up. The robot credentials and OAuth
+    client come from the portal's environment, which takes them from the
+    portal's robot credentials Secret.
 
     """
 
-    status = resource.status.get("educates")
+    robot_username = settings.ROBOT_USERNAME
+    robot_password = settings.ROBOT_PASSWORD
 
-    robot_username = status.get("credentials.robot.username")
-    robot_password = status.get("credentials.robot.password")
-
-    robot_client_id = status.get("clients.robot.id")
-    robot_client_secret = status.get("clients.robot.secret")
+    robot_client_id = settings.ROBOT_CLIENT_ID
+    robot_client_secret = settings.ROBOT_CLIENT_SECRET
 
     # Check whether the OAuth application for the robot user already
     # exists. If it exists the robot user has already been created and we
@@ -434,7 +434,7 @@ def training_portal_event(event, name, body, **_):
     # need to setup the access for the robot account. Access for the admin
     # user was already done when the database was intialized.
 
-    initialize_robot_account(resource)
+    initialize_robot_account()
 
     # Process the training portal configuration, creating or updating the set
     # of workshop environments, and creating or deleting reserved sessions.

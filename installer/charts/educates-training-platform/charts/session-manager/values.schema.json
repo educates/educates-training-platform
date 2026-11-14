@@ -244,49 +244,6 @@
 
       "clusterAdmin": { "type": "boolean" },
 
-      "trainingPortal": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "credentials": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "admin": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "username": { "type": "string" },
-                  "password": { "type": "string" }
-                }
-              },
-              "robot": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "username": { "type": "string" },
-                  "password": { "type": "string" }
-                }
-              }
-            }
-          },
-          "clients": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "robot": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "id":     { "type": "string" },
-                  "secret": { "type": "string" }
-                }
-              }
-            }
-          }
-        }
-      },
-
       "sessionCookies": {
         "type": "object",
         "additionalProperties": false,

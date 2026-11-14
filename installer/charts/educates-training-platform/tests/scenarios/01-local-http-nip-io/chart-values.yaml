@@ -16,17 +16,3 @@ global:
   clusterIngress:
     domain: ${DOMAIN}
     # protocol auto-derives to "http" because tlsCertificateRef.name is empty.
-
-session-manager:
-  trainingPortal:
-    credentials:
-      admin:
-        username: educates
-        password: educates
-      robot:
-        username: robot@educates
-        password: robot
-    clients:
-      robot:
-        id: robot-client-id
-        secret: robot-client-secret

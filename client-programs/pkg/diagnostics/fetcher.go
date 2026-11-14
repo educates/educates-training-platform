@@ -135,12 +135,8 @@ func (c *ClusterDiagnosticsFetcher) fetchDynamicallyResources(res schema.GroupVe
 	}
 	defer newFile.Close()
 
-	y := printers.YAMLPrinter{}
-	for _, object := range objectList.Items {
-		object.SetManagedFields(nil) // Remove managedFields from the object
-		if err := y.PrintObj(&object, newFile); err != nil {
-			return err
-		}
+	if err := writeResources(newFile, res, objectList.Items); err != nil {
+		return err
 	}
 
 	if c.verbose {
@@ -148,6 +144,98 @@ func (c *ClusterDiagnosticsFetcher) fetchDynamicallyResources(res schema.GroupVe
 	}
 
 	return nil
+}
+
+// redactedValue replaces a credential in the resources the bundle collects.
+const redactedValue = "REDACTED"
+
+// specCopyAnnotations are the annotations in which kopf records the spec of
+// a resource it last handled, and kubectl apply the manifest it last
+// applied, as JSON.
+var specCopyAnnotations = []string{
+	"kopf.zalando.org/last-handled-configuration",
+	"kubectl.kubernetes.io/last-applied-configuration",
+}
+
+// writeResources writes the resources of kind res to w as YAML, without
+// their managed fields. A TrainingPortal's inline credentials and OAuth
+// clients, under spec.portal.credentials and spec.portal.clients, are written
+// with every value redacted, in its spec and in the copies of its spec its
+// annotations hold.
+func writeResources(w io.Writer, res schema.GroupVersionResource, objects []unstructured.Unstructured) error {
+	y := printers.YAMLPrinter{}
+	for _, object := range objects {
+		object.SetManagedFields(nil) // Remove managedFields from the object
+		if res == trainingportalResource {
+			redactInlineCredentials(object.Object)
+			redactInlineCredentialsInSpecCopies(&object)
+		}
+		if err := y.PrintObj(&object, w); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// redactInlineCredentials redacts the inline credentials and OAuth clients
+// of a TrainingPortal, or of a copy of its spec.
+func redactInlineCredentials(obj map[string]interface{}) {
+	redactNestedValues(obj, "spec", "portal", "credentials")
+	redactNestedValues(obj, "spec", "portal", "clients")
+}
+
+// redactInlineCredentialsInSpecCopies redacts the inline credentials in the
+// copies of a TrainingPortal's spec that its annotations hold. An annotation
+// that cannot be read as JSON is replaced with redactedValue.
+func redactInlineCredentialsInSpecCopies(object *unstructured.Unstructured) {
+	annotations := object.GetAnnotations()
+	changed := false
+	for _, name := range specCopyAnnotations {
+		value, found := annotations[name]
+		if !found {
+			continue
+		}
+		changed = true
+		var copied map[string]interface{}
+		if err := json.Unmarshal([]byte(value), &copied); err != nil {
+			annotations[name] = redactedValue
+			continue
+		}
+		redactInlineCredentials(copied)
+		redacted, err := json.Marshal(copied)
+		if err != nil {
+			annotations[name] = redactedValue
+			continue
+		}
+		annotations[name] = string(redacted)
+	}
+	if changed {
+		object.SetAnnotations(annotations)
+	}
+}
+
+// redactNestedValues replaces every value under the field at path in obj
+// with redactedValue, keeping the keys, so the bundle shows which values were
+// set without holding them.
+func redactNestedValues(obj map[string]interface{}, path ...string) {
+	field, found, err := unstructured.NestedFieldNoCopy(obj, path...)
+	if err != nil || !found {
+		return
+	}
+	_ = unstructured.SetNestedField(obj, redactValue(field), path...)
+}
+
+func redactValue(value interface{}) interface{} {
+	nested, isMap := value.(map[string]interface{})
+	if !isMap {
+		return redactedValue
+	}
+	redacted := make(map[string]interface{}, len(nested))
+	for key, value := range nested {
+		redacted[key] = redactValue(value)
+	}
+	return redacted
 }
 
 func (c *ClusterDiagnosticsFetcher) fetchLogsForDeployment(labelSelector, namespaceSelector, fileNamePattern string) error {
@@ -230,10 +318,10 @@ func (c *ClusterDiagnosticsFetcher) fetchTrainingPortalDetailsAtRest(fileNamePat
 			trainingPortalName,
 		)
 		logout, err := catalogApiRequester.Login()
-		defer logout()
 		if err != nil {
 			return errors.Wrap(err, "failed to login to training portal")
 		}
+		defer logout()
 
 		// Get the list of workshops so we can know which workshop environment
 		// we need to request a workshop from.

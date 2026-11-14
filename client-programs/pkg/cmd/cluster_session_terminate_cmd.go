@@ -30,10 +30,10 @@ func (o *ClusterSessionTerminateOptions) Run() error {
 		o.Portal,
 	)
 	logout, err := catalogApiRequester.Login()
-	defer logout()
 	if err != nil {
 		return errors.Wrap(err, "failed to login to training portal")
 	}
+	defer logout()
 
 	details, err := catalogApiRequester.TerminateWorkshopSession(o.Name)
 	if err != nil {

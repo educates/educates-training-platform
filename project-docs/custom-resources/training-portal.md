@@ -535,6 +535,16 @@ training portal ``lab-markdown-sample``, for example, you can run:
 kubectl get secret training-portal-admin-credentials -n lab-markdown-sample-ui -o jsonpath='{.data.password}' | base64 --decode
 ```
 
+The ``educates`` command line tool prints the admin credentials, read from
+the same secret, when you run:
+
+```
+educates cluster portal password --admin --portal lab-markdown-sample
+```
+
+Reading the secrets, with ``kubectl`` or the ``educates`` command line tool,
+needs ``get`` access on secrets in the namespace of the training portal.
+
 The training portal itself receives its credentials from these secrets, so
 its deployment does not hold them in clear.
 

@@ -419,13 +419,29 @@ func newMirrorContainer(ctx context.Context, cli *client.Client, mirrorConfig *M
 // it starts, then fails its lookup, exits and is restarted by Docker, which
 // refuses any network change meanwhile. A container that fails to join is
 // removed, so that deploying again starts afresh.
+//
+// Docker takes the container's fixed address only as it starts the
+// container, refusing an address another container took after it was
+// picked, such as a mirror deployed at the same time whose address hashed
+// to the same slot. A container that fails to start is linked to the
+// cluster network again, which picks a free fixed address now that the
+// other container holds its own, and started once more. One that still
+// fails to start is removed too, rather than left created and never
+// started.
 func startOnNetworks(ctx context.Context, cli *client.Client, containerName, what string, fixedAddress func(clusterNetwork) (netip.Addr, error), p Progress) error {
 	if err := joinNetworks(ctx, cli, containerName, what, fixedAddress, p); err != nil {
 		cli.ContainerRemove(ctx, containerName, client.ContainerRemoveOptions{Force: true})
 		return err
 	}
 
-	if _, err := cli.ContainerStart(ctx, containerName, client.ContainerStartOptions{}); err != nil {
+	_, err := cli.ContainerStart(ctx, containerName, client.ContainerStartOptions{})
+
+	if err != nil && linkToClusterNetwork(containerName, fixedAddress, p) == nil {
+		_, err = cli.ContainerStart(ctx, containerName, client.ContainerStartOptions{})
+	}
+
+	if err != nil {
+		cli.ContainerRemove(ctx, containerName, client.ContainerRemoveOptions{Force: true})
 		return errors.Wrapf(err, "unable to start %s", what)
 	}
 

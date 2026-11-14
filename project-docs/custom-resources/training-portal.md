@@ -493,34 +493,59 @@ spec:
 
 The ``alias`` property needs to be set to different values for each workshop in this case as the ``name`` property otherwise would need to be unique for each across all workshop necessitating two separate copies of the ``Workshop`` definition.
 
+The values of environment variables set in ``env`` are not secret. They are
+held in the ``TrainingPortal`` resource and copied into the ``WorkshopSession``
+resource of every workshop session created from it, so anyone permitted to
+read those resources can read them, and every training portal on the cluster
+can read them. Do not use ``env`` to pass a password, token or other
+credential to a workshop.
+
 Overriding portal credentials
 -----------------------------
 
-When a training portal is deployed, the username for the admin and robot accounts will use the defaults of ``educates`` and ``robot@educates``. The passwords for each account will be randomly set.
+Each training portal has its own credentials. The portal admin credentials,
+a username and password, log in to the admin pages of the training portal.
+The portal robot credentials, a username and password together with an OAuth
+client id and client secret, are what a client of the portal REST API logs in
+with.
 
-For the robot account, the OAuth application client details used with the REST API will also be randomly generated.
+When a training portal is created, it is given credentials of its own, which
+no other training portal shares. The admin account's username is
+``educates`` and the robot account's username is ``robot@educates``. The
+passwords of both accounts, and the robot account's OAuth client id and
+client secret, are random 32 character values generated for that training
+portal alone. They are generated once, when the training portal is created,
+and do not change for as long as it exists.
 
-You can see what the credentials and client details are by running ``kubectl describe`` against the training portal resource. This will yield output which includes:
+The credentials are kept in two secrets in the namespace of the training
+portal, ``<portal-name>-ui``:
 
-```text
-Status:
-  educates:
-    Clients:
-      Robot:
-        Id:      ACZpcaLIT3qr725YWmXu8et9REl4HBg1
-        Secret:  t5IfXbGZQThAKR43apoc9usOFVDv2BLE
-    Credentials:
-      Admin:
-        Password:  0kGmMlYw46BZT2vCntyrRuFf1gQq5ohi
-        Username:  educates
-      Robot:
-        Password:  QrnY67ME9yGasNhq2OTbgWA4RzipUvo5
-        Username:  robot@educates
+* ``training-portal-admin-credentials``, holding the admin credentials under
+  the keys ``username`` and ``password``.
+* ``training-portal-robot-credentials``, holding the robot credentials under
+  the keys ``username``, ``password``, ``client-id`` and ``client-secret``.
+
+The status of the training portal names these secrets under
+``status.educates.credentialSecrets.admin`` and
+``status.educates.credentialSecrets.robot``, and the namespace they are in
+under ``status.educates.namespace``. To read the admin password of the
+training portal ``lab-markdown-sample``, for example, you can run:
+
+```
+kubectl get secret training-portal-admin-credentials -n lab-markdown-sample-ui -o jsonpath='{.data.password}' | base64 --decode
 ```
 
-If you wish to override any of these values in order to be able to set them to a pre-determined value, you can add ``credentials`` and ``clients`` sections to the training portal specification.
+Only those who are permitted to read secrets in the namespace of the
+training portal can read its credentials. The training portal itself receives
+them from these secrets.
 
-To overload the credentials for the admin and robot accounts use:
+If you wish to set any of these values to a pre-determined value, you can add
+``credentials`` and ``clients`` sections to the training portal
+specification. A value set there is used in place of the generated one when
+the training portal is created. Changing it after the training portal has
+been created has no effect.
+
+To override the credentials for the admin and robot accounts use:
 
 ```yaml
 spec:

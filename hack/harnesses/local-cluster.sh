@@ -78,6 +78,11 @@ data_home() {
     fi
 }
 
+# need_value fails unless the option $1 is followed by a value.
+need_value() {
+    [ $# -ge 2 ] || die "$1 needs a value"
+}
+
 check_name() {
     local name=$1
     if ! [[ "$name" =~ ^[a-z0-9]([a-z0-9-]{0,29}[a-z0-9])?$ ]]; then
@@ -112,10 +117,10 @@ cmd_create() {
     local name="" listen="" tag="" domain="" cli=""
     while [ $# -gt 0 ]; do
         case "$1" in
-            --listen-address) listen=${2:-}; shift 2 ;;
-            --tag) tag=${2:-}; shift 2 ;;
-            --domain) domain=${2:-}; shift 2 ;;
-            --cli) cli=${2:-}; shift 2 ;;
+            --listen-address) need_value "$@"; listen=$2; shift 2 ;;
+            --tag) need_value "$@"; tag=$2; shift 2 ;;
+            --domain) need_value "$@"; domain=$2; shift 2 ;;
+            --cli) need_value "$@"; cli=$2; shift 2 ;;
             -h|--help) usage; exit 0 ;;
             -*) die "unknown option $1" ;;
             *) [ -z "$name" ] || die "unexpected argument $1"; name=$1; shift ;;
@@ -213,7 +218,7 @@ cmd_delete() {
     local name="" cli=""
     while [ $# -gt 0 ]; do
         case "$1" in
-            --cli) cli=${2:-}; shift 2 ;;
+            --cli) need_value "$@"; cli=$2; shift 2 ;;
             -h|--help) usage; exit 0 ;;
             -*) die "unknown option $1" ;;
             *) [ -z "$name" ] || die "unexpected argument $1"; name=$1; shift ;;

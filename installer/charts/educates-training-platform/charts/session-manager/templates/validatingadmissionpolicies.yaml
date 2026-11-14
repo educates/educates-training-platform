@@ -132,3 +132,46 @@ metadata:
 spec:
   policyName: educates-training-portal-scope
   validationActions: [Deny]
+{{- /*
+Warns whoever creates or updates a TrainingPortal that sets its credentials
+inline, in `spec.portal.credentials` or `spec.portal.clients`. Both are
+deprecated, still honoured, and will be removed in a future release, in favour
+of referencing Secrets that hold the credentials with
+`spec.portal.credentialSecrets.admin` and `spec.portal.credentialSecrets.robot`.
+The binding only warns, for every user, and an error evaluating the policy is
+ignored, so it never stands in the way of a request.
+*/}}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: educates-training-portal-inline-credentials
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Ignore
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [training.educates.dev]
+        apiVersions: [v1beta1]
+        operations: [CREATE, UPDATE]
+        resources: [trainingportals]
+  validations:
+    - expression: >-
+        !has(object.spec) || !has(object.spec.portal)
+        || (!has(object.spec.portal.credentials) && !has(object.spec.portal.clients))
+      message: >-
+        spec.portal.credentials and spec.portal.clients are deprecated and will
+        be removed in a future release: reference Secrets holding the
+        credentials with spec.portal.credentialSecrets.admin and
+        spec.portal.credentialSecrets.robot instead
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: educates-training-portal-inline-credentials
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+spec:
+  policyName: educates-training-portal-inline-credentials
+  validationActions: [Warn]

@@ -13,8 +13,8 @@ update or delete of these resources only when:
     object and, for an update or delete, on the existing object;
   - a workshop environment is named `<portal>-w<digits>`, and a session or
     allocation names such an environment in `spec.environment.name`;
-  - an allocation's `spec.session.name` starts with its environment's name
-    and a hyphen;
+  - a session's own name, and an allocation's `spec.session.name`, start
+    with its environment's name and a hyphen;
   - a workshop environment lists nothing in `spec.environment.objects` or
     `spec.environment.secrets`.
 
@@ -90,6 +90,13 @@ spec:
             ? ' may only name workshop environments '
             : ' may only refer to workshop environments named ')
         + variables.environmentPrefix + '<digits>'
+      reason: Forbidden
+    - expression: >-
+        object == null || request.kind.kind != 'WorkshopSession'
+        || object.metadata.name.startsWith(variables.environmentName + '-')
+      messageExpression: >-
+        'training portal ' + variables.portal
+        + ' may only name sessions starting with ' + variables.environmentName + '-'
       reason: Forbidden
     - expression: >-
         object == null || request.kind.kind != 'WorkshopAllocation'

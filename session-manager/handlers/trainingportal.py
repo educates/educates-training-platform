@@ -1128,9 +1128,9 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
     )
 
     # Save away the details of the portal which was created in status. The
-    # credentials Secrets are named, and live in the portal namespace. The
-    # credentials themselves are still copied into status for clients which
-    # read them from there.
+    # status names the credentials Secrets, which live in the portal
+    # namespace, and never holds the credentials themselves, since anyone who
+    # can read TrainingPortals can read their status.
 
     patch["status"] = {}
 
@@ -1142,22 +1142,6 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
         "credentialSecrets": {
             "admin": ADMIN_CREDENTIALS_SECRET,
             "robot": ROBOT_CREDENTIALS_SECRET,
-        },
-        "credentials": {
-            "admin": {
-                "username": credentials["admin"]["username"],
-                "password": credentials["admin"]["password"],
-            },
-            "robot": {
-                "username": credentials["robot"]["username"],
-                "password": credentials["robot"]["password"],
-            },
-        },
-        "clients": {
-            "robot": {
-                "id": credentials["robot"]["client-id"],
-                "secret": credentials["robot"]["client-secret"],
-            }
         },
     }
 

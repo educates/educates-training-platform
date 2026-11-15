@@ -1444,10 +1444,11 @@ Features Changed
   workshop environment rather than from the ``WorkshopSession`` resource, so
   the identity of the kube context it runs against needs ``get`` access on
   secrets in that namespace too, and an error names the secret and the
-  namespace when it lacks it. The diagnostics bundle written by ``educates admin diagnostics collect`` no
-  longer holds the credentials a ``TrainingPortal`` resource sets under
-  ``spec.portal.credentials`` and ``spec.portal.clients``. Their values are
-  replaced with ``REDACTED``, both in the spec and in the copies of the spec
+  namespace when it lacks it. The diagnostics bundle written by
+  ``educates admin diagnostics collect`` no longer holds the credentials a
+  ``TrainingPortal`` resource sets under ``spec.portal.credentials`` and
+  ``spec.portal.clients``. Their values are replaced with ``REDACTED``,
+  both in the spec and in the copies of the spec
   held by the ``kopf.zalando.org/last-handled-configuration`` and
   ``kubectl.kubernetes.io/last-applied-configuration`` annotations, and the
   bundle collects no secrets.

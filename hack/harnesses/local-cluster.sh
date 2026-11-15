@@ -11,7 +11,9 @@
 # that this script created it in a marker file in the cluster's folder of the
 # CLI data home, and creates the cluster with the CLI. delete and show act
 # only on a cluster whose folder holds that marker, so they never touch a
-# local cluster this script did not create.
+# local cluster this script did not create. When the CLI's secrets cache had
+# no CA key pair for the cluster's domain before create, the marker records
+# the key pair the CLI mints for it, and delete removes that key pair too.
 
 set -euo pipefail
 
@@ -39,7 +41,9 @@ create   Creates the named local cluster <name> from the build
          'make local-build PACKAGE_VERSION=<tag>' produced, on the host
          address --listen-address, which no other local cluster may use,
          under --domain (default: <name>.educates.test).
-delete   Deletes a named local cluster this script created, and its config.
+delete   Deletes a named local cluster this script created, and its config,
+         and the CA key pair the CLI minted for its domain at create, unless
+         that key pair was cached before create.
 show     Prints what this script recorded when it created the cluster.
 
 --cli    The educates CLI the build produced (default: this checkout's
@@ -113,6 +117,43 @@ marker_value() {
     sed -n "s/^$key=//p" "$marker" | head -n 1
 }
 
+# secret_cached reports whether the CLI's secrets cache holds the secret
+# <name>. It fails the script when the CLI cannot list the cache, rather
+# than taking an unreadable cache for one without the secret.
+secret_cached() {
+    local cli=$1 secret=$2 listing
+    listing=$("$cli" local secrets list) || die "cannot list the CLI's secrets cache with $cli"
+    awk -v name="$secret" 'NR > 1 && $1 == name { found = 1 } END { exit !found }' <<<"$listing"
+}
+
+# domain_in_use reports whether a local cluster, as 'educates local cluster
+# list' sees them, serves the domain <domain>.
+domain_in_use() {
+    local cli=$1 domain=$2
+    cluster_rows "$cli" | awk -v domain="$domain" '$2 == domain { found = 1 } END { exit !found }'
+}
+
+# remove_minted_key_pair removes the CA key pair <key pair>, recorded in the
+# marker as minted for the domain <domain> at create, from the CLI's secrets
+# cache. It removes nothing but a CA key pair named for that domain, and
+# leaves one a local cluster still serving the domain uses.
+remove_minted_key_pair() {
+    local cli=$1 key_pair=$2 domain=$3
+    [ -n "$key_pair" ] || return 0
+    if [ "$key_pair" != "$domain-ca-key-pair" ]; then
+        echo "local-cluster.sh: the marker names CA key pair '$key_pair', not one for domain '$domain'; leaving it" >&2
+        return 0
+    fi
+    if domain_in_use "$cli" "$domain"; then
+        echo "==> A local cluster still serves '$domain'; keeping CA key pair '$key_pair'"
+        return 0
+    fi
+    if secret_cached "$cli" "$key_pair"; then
+        echo "==> Removing CA key pair '$key_pair', minted for '$domain' at create"
+        "$cli" local secrets remove "$key_pair"
+    fi
+}
+
 cmd_create() {
     local name="" listen="" tag="" domain="" cli=""
     while [ $# -gt 0 ]; do
@@ -164,18 +205,30 @@ cmd_create() {
     row=$(cluster_rows "$cli" | awk -v ip="$listen" '$1 == ip { print $3 }' | head -n 1)
     [ -z "$row" ] || die "listen address $listen is used by the local cluster of kube context $row"
 
+    # The CLI mints a CA key pair for the domain when its secrets cache has
+    # none. One cached before create may serve another cluster, or have been
+    # made by hand, so only a key pair create leads the CLI to mint is
+    # recorded for delete to remove.
+    local key_pair="$domain-ca-key-pair" minted_key_pair=""
+    if ! secret_cached "$cli" "$key_pair"; then
+        minted_key_pair=$key_pair
+    fi
+
     echo "==> Writing the config of local cluster '$name' ($listen, $domain)"
     "$cli" local config init --local-cluster "$name" --listen-address "$listen" --domain "$domain"
 
     cat > "$folder/$MARKER_FILE" <<EOF
 # Created by hack/harnesses/local-cluster.sh, whose delete command removes
-# this cluster and this folder.
+# this cluster and this folder, and the CA key pair named by
+# HARNESS_CLUSTER_MINTED_CA_KEY_PAIR, which is empty when the key pair was
+# cached before create.
 HARNESS_CLUSTER_NAME=$name
 HARNESS_CLUSTER_TAG=$tag
 HARNESS_CLUSTER_CLI=$cli
 HARNESS_CLUSTER_LISTEN_ADDRESS=$listen
 HARNESS_CLUSTER_DOMAIN=$domain
 HARNESS_CLUSTER_CONTEXT=kind-educates-$name
+HARNESS_CLUSTER_MINTED_CA_KEY_PAIR=$minted_key_pair
 HARNESS_CLUSTER_CREATED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 
@@ -191,6 +244,7 @@ EOF
             echo "local-cluster.sh: create failed; the cluster is left for inspection: delete it with '$0 delete $name'" >&2
         else
             "$cli" local config delete --local-cluster "$name" >/dev/null 2>&1 || true
+            remove_minted_key_pair "$cli" "$minted_key_pair" "$domain" || true
             echo "local-cluster.sh: create failed before the kind cluster existed; its config was removed" >&2
         fi
         exit 1
@@ -239,6 +293,11 @@ cmd_delete() {
     fi
     check_cli "$cli"
 
+    # The config's deletion removes the marker with it.
+    local domain minted_key_pair
+    domain=$(marker_value "$marker" HARNESS_CLUSTER_DOMAIN)
+    minted_key_pair=$(marker_value "$marker" HARNESS_CLUSTER_MINTED_CA_KEY_PAIR)
+
     if kind_cluster_exists "$cli" "$name"; then
         echo "==> Deleting local cluster '$name'"
         "$cli" local cluster delete --local-cluster "$name"
@@ -246,6 +305,7 @@ cmd_delete() {
         echo "==> Local cluster '$name' has no kind cluster; deleting its config only"
     fi
     "$cli" local config delete --local-cluster "$name"
+    remove_minted_key_pair "$cli" "$minted_key_pair" "$domain"
     echo "Deleted local cluster '$name' and its config."
 }
 

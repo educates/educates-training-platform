@@ -76,12 +76,17 @@ delete` for the named cluster, which leaves every other local cluster and
 the shared registry, registry mirrors and DNS resolver as they were, and
 refreshes the resolver so it stops serving the cluster's domain. It refuses
 a cluster `create` did not create, so it never removes a cluster someone
-made by hand. The CA key pair the CLI issued for the cluster's domain stays
-in the CLI's secrets cache, where a later cluster on the same domain reuses
-it.
+made by hand. It also removes, with `educates local secrets remove`, the CA
+key pair the CLI minted for the cluster's domain, `<domain>-ca-key-pair` in
+the CLI's secrets cache, when `create` led to it being minted: `create`
+records the key pair in its marker only when the cache had none for the
+domain before. A key pair that was cached before `create`, the root CA, its
+CA certificate and every other cluster's key pair stay as they are, and so
+does the key pair while another local cluster still serves the domain.
 
 `show` prints what `create` recorded: the build tag, the CLI, the listen
-address, the domain and the kube context.
+address, the domain, the kube context and the CA key pair `delete` removes,
+if any.
 
 ## Adding a harness
 

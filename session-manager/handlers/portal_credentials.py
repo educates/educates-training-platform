@@ -20,6 +20,7 @@ import secrets
 import string
 
 from .helpers import xget
+from .portal_labels import PORTAL_NAME_LABEL
 from .role_bindings import service_account_role_binding
 
 ADMIN_CREDENTIALS_SECRET = "training-portal-admin-credentials"
@@ -169,6 +170,17 @@ def portal_credentials(
     }
 
 
+def _portal_labels(portal_name, portal_uid):
+    """Returns the labels of the objects session-manager creates in a
+    training portal's namespace for the portal."""
+
+    return {
+        "training.educates.dev/component": "portal",
+        PORTAL_NAME_LABEL: portal_name,
+        "training.educates.dev/portal.uid": portal_uid,
+    }
+
+
 def credentials_secrets(portal_name, portal_uid, portal_namespace, credentials):
     """Returns the bodies of the admin and robot credentials Secrets for a
     training portal, holding the credentials portal_credentials() returns."""
@@ -180,11 +192,7 @@ def credentials_secrets(portal_name, portal_uid, portal_namespace, credentials):
             "metadata": {
                 "name": name,
                 "namespace": portal_namespace,
-                "labels": {
-                    "training.educates.dev/component": "portal",
-                    "training.educates.dev/portal.name": portal_name,
-                    "training.educates.dev/portal.uid": portal_uid,
-                },
+                "labels": _portal_labels(portal_name, portal_uid),
             },
             "type": "Opaque",
             "stringData": dict(values),
@@ -203,11 +211,7 @@ def remote_access_rbac(portal_name, portal_uid, portal_namespace, educates_names
     other Secret. lookup-service reads a portal's robot credentials as that
     account, so the portal's admin credentials stay out of its reach."""
 
-    labels = {
-        "training.educates.dev/component": "portal",
-        "training.educates.dev/portal.name": portal_name,
-        "training.educates.dev/portal.uid": portal_uid,
-    }
+    labels = _portal_labels(portal_name, portal_uid)
 
     role = {
         "apiVersion": "rbac.authorization.k8s.io/v1",

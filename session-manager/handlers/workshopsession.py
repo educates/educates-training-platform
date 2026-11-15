@@ -40,9 +40,7 @@ from .operator_config import (AMPLITUDE_TRACKING_ID, BASE_ENVIRONMENT_IMAGE,
                               PLATFORM_ARCH,
                               RUNTIME_CLASS, SESSION_COOKIE_DOMAIN,
                               resolve_workshop_image)
-from .session_access import (CONSOLE_ROLE_BINDING,
-                             SESSION_NAMESPACE_ROLE_BINDING,
-                             console_csrf_secret, console_key_holder_secret,
+from .session_access import (console_csrf_secret, console_key_holder_secret,
                              console_role_binding, console_settings_config_map,
                              session_namespace_role_binding,
                              session_object_namespaces)
@@ -913,44 +911,54 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             f"Failed to create access token {service_account}-token: {exc}"
         )
 
+    # The labels of the objects giving the session's service account, and
+    # the console running as it, access to the session namespace.
+
+    session_access_labels = {
+        "training.educates.dev/component": "session",
+        "training.educates.dev/workshop.name": workshop_name,
+        "training.educates.dev/portal.name": portal_name,
+        "training.educates.dev/portal.uid": portal_uid,
+        "training.educates.dev/environment.name": environment_name,
+        "training.educates.dev/environment.uid": environment_uid,
+        "training.educates.dev/session.name": session_name,
+    }
+
+    def create_session_role_binding(role_binding_body):
+        role_binding_name = role_binding_body["metadata"]["name"]
+
+        try:
+            pykube.RoleBinding(api, role_binding_body).create()
+
+        except pykube.exceptions.PyKubeError as exc:
+            logger.exception(
+                "Unexpected error creating role binding %s in %s.",
+                role_binding_name,
+                session_namespace,
+            )
+            patch["status"] = {
+                "educates": {
+                    "phase": "Failed",
+                    "message": f"Failed to create role binding {role_binding_name} in {session_namespace}: {exc}",
+                }
+            }
+            raise kopf.PermanentError(
+                f"Failed to create role binding {role_binding_name} in {session_namespace}: {exc}"
+            ) from exc
+
     # Let the service account get its own session namespace, whatever the
     # session's role, so that a custom role which does not grant it still
     # resolves the session namespace rather than falling back to "default".
     # Being namespaced, the binding never grants listing namespaces.
 
-    session_namespace_role_binding_body = session_namespace_role_binding(
-        session_namespace,
-        service_account,
-        workshop_namespace,
-        {
-            "training.educates.dev/component": "session",
-            "training.educates.dev/workshop.name": workshop_name,
-            "training.educates.dev/portal.name": portal_name,
-            "training.educates.dev/portal.uid": portal_uid,
-            "training.educates.dev/environment.name": environment_name,
-            "training.educates.dev/environment.uid": environment_uid,
-            "training.educates.dev/session.name": session_name,
-        },
-    )
-
-    try:
-        pykube.RoleBinding(api, session_namespace_role_binding_body).create()
-
-    except pykube.exceptions.PyKubeError as exc:
-        logger.exception(
-            "Unexpected error creating role binding %s in %s.",
-            SESSION_NAMESPACE_ROLE_BINDING,
+    create_session_role_binding(
+        session_namespace_role_binding(
             session_namespace,
+            service_account,
+            workshop_namespace,
+            session_access_labels,
         )
-        patch["status"] = {
-            "educates": {
-                "phase": "Failed",
-                "message": f"Failed to create role binding {SESSION_NAMESPACE_ROLE_BINDING} in {session_namespace}: {exc}",
-            }
-        }
-        raise kopf.PermanentError(
-            f"Failed to create role binding {SESSION_NAMESPACE_ROLE_BINDING} in {session_namespace}: {exc}"
-        ) from exc
+    )
 
     # With the console enabled, let the service account, as which the console
     # runs, get the console's Secrets and settings by name, whatever the
@@ -958,39 +966,14 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     # the console never writes them.
 
     if applications.is_enabled("console"):
-        console_role_binding_body = console_role_binding(
-            session_namespace,
-            service_account,
-            workshop_namespace,
-            {
-                "training.educates.dev/component": "session",
-                "training.educates.dev/workshop.name": workshop_name,
-                "training.educates.dev/portal.name": portal_name,
-                "training.educates.dev/portal.uid": portal_uid,
-                "training.educates.dev/environment.name": environment_name,
-                "training.educates.dev/environment.uid": environment_uid,
-                "training.educates.dev/session.name": session_name,
-            },
-        )
-
-        try:
-            pykube.RoleBinding(api, console_role_binding_body).create()
-
-        except pykube.exceptions.PyKubeError as exc:
-            logger.exception(
-                "Unexpected error creating role binding %s in %s.",
-                CONSOLE_ROLE_BINDING,
+        create_session_role_binding(
+            console_role_binding(
                 session_namespace,
+                service_account,
+                workshop_namespace,
+                session_access_labels,
             )
-            patch["status"] = {
-                "educates": {
-                    "phase": "Failed",
-                    "message": f"Failed to create role binding {CONSOLE_ROLE_BINDING} in {session_namespace}: {exc}",
-                }
-            }
-            raise kopf.PermanentError(
-                f"Failed to create role binding {CONSOLE_ROLE_BINDING} in {session_namespace}: {exc}"
-            ) from exc
+        )
 
     # Setup configuration on the primary session namespace.
 
@@ -2354,26 +2337,16 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     # Add in extra configuation for web console.
 
     if applications.is_enabled("console"):
-        console_labels = {
-            "training.educates.dev/component": "session",
-            "training.educates.dev/workshop.name": workshop_name,
-            "training.educates.dev/portal.name": portal_name,
-            "training.educates.dev/portal.uid": portal_uid,
-            "training.educates.dev/environment.name": environment_name,
-            "training.educates.dev/environment.uid": environment_uid,
-            "training.educates.dev/session.name": session_name,
-        }
-
         # Give the console its Secrets with their keys before it starts, as
         # it would otherwise write them itself, which a session role that
         # cannot create or update Secrets refuses.
 
         pykube.Secret(
-            api, console_csrf_secret(session_namespace, console_labels)
+            api, console_csrf_secret(session_namespace, session_access_labels)
         ).create()
 
         pykube.Secret(
-            api, console_key_holder_secret(session_namespace, console_labels)
+            api, console_key_holder_secret(session_namespace, session_access_labels)
         ).create()
 
         # The console cannot list namespaces, so give it its settings before
@@ -2392,7 +2365,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                 session_namespace,
                 secondary_namespaces,
                 object_namespaces,
-                console_labels,
+                session_access_labels,
             ),
         ).create()
 

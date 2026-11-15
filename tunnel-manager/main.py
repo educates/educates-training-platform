@@ -8,6 +8,7 @@ from websockets.asyncio.server import serve
 
 import kopf
 import pykube
+import requests
 
 logger = logging.getLogger("educates")
 
@@ -61,14 +62,33 @@ def login_fn(**kwargs):
 
 @kopf.on.probe(id="api")
 def check_api_access(**kwargs):
+    """Checks that the Kubernetes API accepts tunnel-manager's token. It
+    creates a SelfSubjectReview, which every authenticated account may
+    create, so the check needs no RBAC rule.
+
+    """
+
     try:
         api = pykube.HTTPClient(pykube.KubeConfig.from_env())
-        pykube.Namespace.objects(api).get(name="default")
 
-    except pykube.exceptions.KubernetesError:
-        logger.error("failed request to Kubernetes API")
+        response = api.post(
+            version="authentication.k8s.io/v1",
+            url="selfsubjectreviews",
+            json={
+                "apiVersion": "authentication.k8s.io/v1",
+                "kind": "SelfSubjectReview",
+            },
+        )
 
-        raise
+        api.raise_for_status(response)
+
+    except (
+        pykube.exceptions.KubernetesError,
+        requests.exceptions.RequestException,
+    ) as exc:
+        logger.exception("failed request to Kubernetes API")
+
+        raise kopf.PermanentError("failed request to Kubernetes API") from exc
 
 
 @kopf.on.cleanup()
@@ -195,7 +215,13 @@ async def proxy_server(stop_flag):
 
 
 async def kopf_operator(stop_flag):
-    await kopf.operator(clusterwide=True, stop_flag=stop_flag)
+    # The liveness endpoint listens beside the proxy, which serves port 8080.
+
+    await kopf.operator(
+        clusterwide=True,
+        stop_flag=stop_flag,
+        liveness_endpoint="http://0.0.0.0:8081/healthz",
+    )
 
     logger.info("kopf operator stopped")
 

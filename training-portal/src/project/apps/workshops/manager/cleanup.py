@@ -24,10 +24,9 @@ from .sessions import replace_reserved_session
 from .locking import resources_lock
 from .operator import background_task
 from .analytics import report_analytics_event
+from .kubernetes_api import kubernetes_api
 
 logger = logging.getLogger("educates")
-
-api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 
 # Minimum age a workshop session record must reach before the reaper will treat
@@ -111,6 +110,8 @@ def purge_vanished_workshop_sessions():
     # on both the portal name and uid labels. If the query fails, skip
     # detection of vanished workshop sessions and try again on a subsequent
     # pass.
+
+    api = kubernetes_api()
 
     K8SWorkshopSession = pykube.object_factory(
         api, "training.educates.dev/v1beta1", "WorkshopSession"
@@ -289,6 +290,8 @@ def delete_workshop_session(session):
     # First attempt to delete the deployment of the workshop session. It
     # doesn't matter if it doesn't exist. That situation can arise where
     # the workshop session was deleted manually for some reason.
+
+    api = kubernetes_api()
 
     K8SWorkshopSession = pykube.object_factory(
         api, "training.educates.dev/v1beta1", "WorkshopSession"

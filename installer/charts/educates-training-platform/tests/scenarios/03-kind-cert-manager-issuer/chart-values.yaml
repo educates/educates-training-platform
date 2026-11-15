@@ -21,17 +21,3 @@ global:
     caCertificateRef:
       name: local-root-ca
       namespace: educates-secrets
-
-session-manager:
-  trainingPortal:
-    credentials:
-      admin:
-        username: educates
-        password: educates
-      robot:
-        username: robot@educates
-        password: robot
-    clients:
-      robot:
-        id: robot-client-id
-        secret: robot-client-secret

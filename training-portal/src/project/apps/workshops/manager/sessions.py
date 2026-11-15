@@ -8,6 +8,7 @@ import base64
 from itertools import islice
 
 import pykube
+import requests
 import rstr
 
 from django.conf import settings
@@ -23,10 +24,9 @@ from .operator import background_task
 from .locking import resources_lock
 from .analytics import report_analytics_event
 from .suffix import get_suffix_codec
+from .kubernetes_api import kubernetes_api
 
 logger = logging.getLogger("educates")
-
-api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 
 def resolve_request_params(workshop, params):
@@ -59,6 +59,8 @@ def resolve_request_params(workshop, params):
 
 
 def create_request_resources(session):
+    api = kubernetes_api()
+
     secret_body = {
         "apiVersion": "v1",
         "kind": "Secret",
@@ -195,6 +197,8 @@ def update_session_status(name, phase, user=None):
 
     """
 
+    api = kubernetes_api()
+
     K8SWorkshopSession = pykube.object_factory(
         api, "training.educates.dev/v1beta1", "WorkshopSession"
     )
@@ -269,8 +273,67 @@ def update_sessions_status(names, phase):
         update_session_status(name, phase)
 
 
+def config_password_secret_name(session):
+    """Returns the name of the Secret passing the workshop session's config
+    password to session-manager, in the session's workshop environment
+    namespace.
+
+    """
+
+    return f"{session.name}-config-password"
+
+
+def create_config_password_secret(session, password):
+    """Creates the Secret passing the workshop session's config password to
+    session-manager, which the WorkshopSession names in its
+    spec.session.config.passwordSecretRef. The portal may only create
+    Secrets, so the Secret is created complete, owned by the WorkshopSession
+    so it goes with it. Setting blockOwnerDeletion on that reference needs
+    update on workshopsessions/finalizers, which the portal holds.
+
+    """
+
+    secret_body = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {
+            "name": config_password_secret_name(session),
+            "namespace": session.environment.name,
+            "labels": {
+                "training.educates.dev/component": "session",
+                "training.educates.dev/workshop.name": session.environment.workshop.name,
+                "training.educates.dev/portal.name": settings.PORTAL_NAME,
+                "training.educates.dev/portal.uid": settings.PORTAL_UID,
+                "training.educates.dev/environment.name": session.environment.name,
+                "training.educates.dev/session.name": session.name,
+            },
+            "ownerReferences": [
+                {
+                    "apiVersion": "training.educates.dev/v1beta1",
+                    "kind": "WorkshopSession",
+                    "blockOwnerDeletion": True,
+                    "controller": True,
+                    "name": session.name,
+                    "uid": session.uid,
+                }
+            ],
+        },
+        "data": {
+            "password": base64.b64encode(password.encode("UTF-8")).decode("UTF-8"),
+        },
+    }
+
+    pykube.Secret(kubernetes_api(), secret_body).create()
+
+
 def create_workshop_session(session, secret):
-    """Triggers the deployment of a new workshop session to the cluster."""
+    """Triggers the deployment of a new workshop session to the cluster. It
+    runs outside any transaction, once the session's record is committed:
+    on a commit hook of the request or task that created the record, or in a
+    reserved session's own task. What it saves to the record is therefore
+    kept even when it fails and passes the failure on.
+
+    """
 
     logger.info(
         "Deploying new workshop session %s for workshop environment %s.",
@@ -349,7 +412,9 @@ def create_workshop_session(session, secret):
                 "username": "",
                 "password": "",
                 "config": {
-                    "password": config_password,
+                    "passwordSecretRef": {
+                        "name": config_password_secret_name(session),
+                    },
                 },
                 "ingress": {
                     "domain": settings.INGRESS_DOMAIN,
@@ -380,6 +445,8 @@ def create_workshop_session(session, secret):
 
     # Create the Kubernetes resource for the workshop session.
 
+    api = kubernetes_api()
+
     K8SWorkshopSession = pykube.object_factory(
         api, "training.educates.dev/v1beta1", "WorkshopSession"
     )
@@ -387,9 +454,43 @@ def create_workshop_session(session, secret):
     resource = K8SWorkshopSession(api, session_body)
     resource.create()
 
+    session.uid = resource.obj["metadata"]["uid"]
+
+    # The config password goes to session-manager in a Secret the session
+    # owns, which can only be created once the session exists. The portal
+    # keeps its own copy for fetching the session's configuration. When the
+    # Secret cannot be created, session-manager would wait for it for as long
+    # as the session exists, so the session is deleted and its record marked
+    # stopped before the failure is passed on. A stopped record counts against
+    # no capacity or reserve, and a user requesting the workshop again gets a
+    # new session rather than this one.
+
+    try:
+        create_config_password_secret(session, config_password)
+
+    except Exception:
+        logger.exception(
+            "Failed to create config password Secret %s for workshop session %s, deleting the session.",
+            config_password_secret_name(session),
+            session.name,
+        )
+
+        try:
+            resource.delete()
+
+        except (
+            pykube.exceptions.PyKubeError,
+            requests.exceptions.RequestException,
+        ):
+            logger.exception("Failed to delete workshop session %s.", session.name)
+
+        with transaction.atomic():
+            session.mark_as_stopped()
+
+        raise
+
     logger.info("Deployed workshop session %s.", session.name)
 
-    session.uid = resource.obj["metadata"]["uid"]
     session.password = config_password
 
     # Update and save the state of the workshop session database record to
@@ -520,12 +621,13 @@ def setup_workshop_session(environment, **session_kwargs):
 
 @background_task
 @resources_lock
-@transaction.atomic
 def create_reserved_session(session, secret):
     """Deploy a single reserved workshop session in its own task. Scheduling the
     deployments individually, rather than running them all under the caller's
     lock, releases the global resources lock between sessions so that session
     allocation requests are not blocked for the duration of the whole batch.
+    The task opens no transaction, so a record the deployment marks stopped
+    when it fails is not rolled back with the failure.
 
     """
 

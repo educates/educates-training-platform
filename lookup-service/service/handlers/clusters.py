@@ -11,7 +11,7 @@ from wrapt import synchronized
 
 from ..caches.clusters import ClusterConfig
 from ..caches.environments import WorkshopEnvironment
-from ..caches.portals import PortalCredentials, TrainingPortal
+from ..caches.portals import TrainingPortal
 from ..caches.sessions import WorkshopSession
 from ..helpers.kubeconfig import (
     create_kubeconfig_from_access_token_secret,
@@ -234,11 +234,12 @@ class ClusterOperator(GenericOperator):
                         portal_state.phase = "Stopped"
 
                 else:
-                    credentials = PortalCredentials(
-                        client_id=xgetattr(status, "educates.clients.robot.id"),
-                        client_secret=xgetattr(status, "educates.clients.robot.secret"),
-                        username=xgetattr(status, "educates.credentials.robot.username"),
-                        password=xgetattr(status, "educates.credentials.robot.password"),
+                    # The status names the portal's robot credentials Secret,
+                    # which is read when the credentials are first needed.
+
+                    portal_namespace = xgetattr(status, "educates.namespace", "")
+                    robot_credentials_secret = xgetattr(
+                        status, "educates.credentialSecrets.robot", ""
                     )
 
                     portal_state = self.cluster_config.get_portal(portal_name)
@@ -259,9 +260,9 @@ class ClusterOperator(GenericOperator):
                                 generation=xgetattr(metadata, "generation"),
                                 labels=xgetattr(spec, "portal.labels", []),
                                 url=xgetattr(status, "educates.url"),
-                                namespace=xgetattr(status, "educates.namespace"),
+                                namespace=portal_namespace,
+                                robot_credentials_secret=robot_credentials_secret,
                                 phase=xgetattr(status, "educates.phase"),
-                                credentials=credentials,
                                 capacity=xgetattr(spec, "portal.sessions.maximum", 0),
                                 allocated=0,
                             )
@@ -277,13 +278,13 @@ class ClusterOperator(GenericOperator):
                             self.cluster_name,
                         )
 
-                        portal_state.uid = portal_uid
+                        portal_state.update_uid_namespace_and_robot_credentials_secret(
+                            portal_uid, portal_namespace, robot_credentials_secret
+                        )
                         portal_state.generation = xgetattr(metadata, "generation")
                         portal_state.labels = xgetattr(spec, "portal.labels", [])
                         portal_state.url = xgetattr(status, "educates.url")
-                        portal_state.namespace = xgetattr(status, "educates.namespace")
                         portal_state.phase = xgetattr(status, "educates.phase")
-                        portal_state.credentials = credentials
                         portal_state.capacity = xgetattr(
                             spec, "portal.sessions.maximum", 0
                         )
@@ -372,13 +373,8 @@ class ClusterOperator(GenericOperator):
                             labels=[],
                             url="",
                             namespace="",
+                            robot_credentials_secret="",
                             phase="Unknown",
-                            credentials=PortalCredentials(
-                                client_id="",
-                                client_secret="",
-                                username="",
-                                password="",
-                            ),
                             capacity=0,
                             allocated=0,
                         )
@@ -549,13 +545,8 @@ class ClusterOperator(GenericOperator):
                             labels=[],
                             url="",
                             namespace="",
+                            robot_credentials_secret="",
                             phase="Unknown",
-                            credentials=PortalCredentials(
-                                client_id="",
-                                client_secret="",
-                                username="",
-                                password="",
-                            ),
                             capacity=0,
                             allocated=0,
                         )

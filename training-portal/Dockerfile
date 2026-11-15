@@ -48,7 +48,12 @@ COPY --chown=1001:0 ./ /opt/app-root
 
 WORKDIR /opt/app-root/src
 
-RUN python manage.py collectstatic --no-input
+# Loading the settings to collect the static files writes a new secret key
+# into the data directory. Remove it in the same step so no key ships in the
+# image: each training portal generates its own on first start, in the data
+# volume mounted over that directory.
+RUN python manage.py collectstatic --no-input && \
+    rm -f /opt/app-root/data/secret-key.txt
 
 # ---- final: runtime only --------------------------------------------------
 

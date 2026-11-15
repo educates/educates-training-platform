@@ -94,6 +94,15 @@ rules:
   - patch
   - update
 - apiGroups:
+  - lookup.educates.dev
+  resources:
+  - clientconfigs
+  - clusterconfigs
+  - tenantconfigs
+  verbs:
+  - list
+  - patch
+- apiGroups:
   - networking.k8s.io
   resources:
   - ingressclasses

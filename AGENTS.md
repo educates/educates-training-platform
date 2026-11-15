@@ -450,6 +450,13 @@ Educates uses domain-specific terms that have precise meanings:
 - **Training Portal** — a deployed instance of the user-facing UI. Multiple
   training portals can exist on one Educates install, each serving
   different workshops.
+- **Portal admin credentials**: the username and password of a training
+  portal's administrator account. Each portal has its own, unless its
+  definition supplies them.
+- **Portal robot credentials**: the username, password, and OAuth client id
+  and secret that a REST API client, such as the educates CLI or the Lookup
+  Service, uses to obtain an access token for one training portal. Each
+  portal has its own, unless its definition supplies them.
 - **Cluster service** — an operational dependency of Educates that lives at
   cluster scope (cert-manager, contour, kyverno, external-dns). Distinct
   from Educates components.

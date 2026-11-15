@@ -45,12 +45,15 @@ command -v helm >/dev/null 2>&1 || { echo "helm not found on PATH" >&2; exit 1; 
 # core (v1). <Kind> is what the render check matches against. Keep sorted.
 CURATED=$(cat <<'EOF'
 |configmaps|ConfigMap
+|namespaces|Namespace
 |persistentvolumeclaims|PersistentVolumeClaim
 |pods|Pod
 |secrets|Secret
 |serviceaccounts|ServiceAccount
 |services|Service
 admissionregistration.k8s.io|mutatingwebhookconfigurations|MutatingWebhookConfiguration
+admissionregistration.k8s.io|validatingadmissionpolicies|ValidatingAdmissionPolicy
+admissionregistration.k8s.io|validatingadmissionpolicybindings|ValidatingAdmissionPolicyBinding
 admissionregistration.k8s.io|validatingwebhookconfigurations|ValidatingWebhookConfiguration
 apiextensions.k8s.io|customresourcedefinitions|CustomResourceDefinition
 apiregistration.k8s.io|apiservices|APIService
@@ -88,12 +91,14 @@ EOF
 # ---------------------------------------------------------------------------
 
 # Probe values that force each chart to render its full resource set (cert-
-# manager gates its CRDs; the runtime subcharts require an ingress domain / CA
-# ref to template). Default values are otherwise a superset of what the
-# operator enables.
+# manager gates its CRDs; external-dns requires a policy, given the one the
+# operator sets; the runtime subcharts require an ingress domain / CA ref to
+# template). Default values are otherwise a superset of what the operator
+# enables.
 render_args() {
     case "$1" in
         cert-manager-*)     echo "--set crds.enabled=true" ;;
+        external-dns-*)     echo "--set policy=sync" ;;
         lookup-service-*)   echo "--set ingress.host=probe.invalid" ;;
         node-ca-injector-*) echo "--set clusterIngress.caCertificateRef.name=probe" ;;
         session-manager-*)  echo "--set clusterIngress.domain=probe.invalid" ;;
@@ -105,21 +110,36 @@ known_kind() {
     grep -q "|$1\$" <<<"$CURATED"
 }
 
+# helm's error output for the chart being rendered, shown when it fails.
+render_errors=$(mktemp)
+trap 'rm -f "$render_errors"' EXIT
+
+# A chart that fails to render is a hard error: skipping it would leave its
+# Kinds unchecked.
 rendered_kinds() {
-    local tarball base
+    local tarball base manifest
     for tarball in "$VENDORED"/*.tgz; do
         base=$(basename "$tarball")
         # shellcheck disable=SC2046 -- render_args is a space-separated flag list
-        helm template rbac-probe "$tarball" --include-crds $(render_args "$base") 2>/dev/null \
-            | awk '/^kind:/ { gsub(/["\r]/,"",$2); print $2 }'
+        if ! manifest=$(helm template rbac-probe "$tarball" --include-crds $(render_args "$base") 2>"$render_errors"); then
+            {
+                echo "ERROR: helm template failed for $base:"
+                sed 's/^/  /' "$render_errors"
+                echo "Give it the values it needs to render in render_args."
+            } >&2
+            exit 1
+        fi
+        awk '/^kind:/ { gsub(/["\r]/,"",$2); print $2 }' <<<"$manifest"
     done | sort -u
 }
+
+kinds=$(rendered_kinds)
 
 unmapped=""
 while read -r kind; do
     [ -n "$kind" ] || continue
     known_kind "$kind" || unmapped+="  $kind"$'\n'
-done < <(rendered_kinds)
+done <<<"$kinds"
 
 if [ -n "$unmapped" ]; then
     {

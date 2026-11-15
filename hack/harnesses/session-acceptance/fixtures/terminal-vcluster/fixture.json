@@ -1,0 +1,4 @@
+{
+  "sample": "lab-terminal-actions",
+  "summary": "terminal actions sample with applications.vcluster.enabled, kubectl and the console on the virtual cluster"
+}

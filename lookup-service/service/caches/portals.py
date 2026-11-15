@@ -1,9 +1,13 @@
 """Configuration database for training portals."""
 
+import asyncio
+import base64
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
+import pykube
+import requests
 from aiohttp import BasicAuth, ClientSession, ClientConnectorError, ClientError
 
 from .clusters import ClusterConfig
@@ -26,10 +30,30 @@ class PortalCredentials:
     password: str
 
 
+def read_secret_data(kubeconfig: Dict[str, Any], namespace: str, name: str) -> dict:
+    """Returns the data of a Secret, its values base64 encoded, read through
+    the cluster access a kubeconfig gives."""
+
+    api = pykube.HTTPClient(pykube.KubeConfig(kubeconfig))
+
+    try:
+        secret = pykube.Secret.objects(api, namespace=namespace).get_by_name(name)
+
+    finally:
+        api.session.close()
+
+    return secret.obj.get("data") or {}
+
+
 @dataclass
 class TrainingPortal:
     """Snapshot of training portal state. This includes a database of the
-    workshop environments managed by the training portal."""
+    workshop environments managed by the training portal.
+
+    The portal's robot credentials, with which its REST API is used, are kept
+    in the Secret its status names in the portal's namespace. They are read
+    through the cluster's own access when they are first needed, and read
+    again while that Secret cannot be read."""
 
     cluster: ClusterConfig
     name: str
@@ -38,7 +62,8 @@ class TrainingPortal:
     labels: List[Dict[str, str]]
     url: str
     namespace: str
-    credentials: PortalCredentials
+    robot_credentials_secret: str
+    credentials: PortalCredentials | None
     phase: str
     capacity: int
     allocated: int
@@ -53,7 +78,7 @@ class TrainingPortal:
         labels: List[Dict[str, str]],
         url: str,
         namespace: str,
-        credentials: PortalCredentials,
+        robot_credentials_secret: str,
         phase: str,
         capacity: int,
         allocated: int,
@@ -65,11 +90,118 @@ class TrainingPortal:
         self.labels = labels
         self.url = url
         self.namespace = namespace
-        self.credentials = credentials
+        self.robot_credentials_secret = robot_credentials_secret
+        self.credentials = None
         self.phase = phase
         self.capacity = capacity
         self.allocated = allocated
         self.environments = {}
+
+    def _robot_credentials_source(self) -> Tuple[str, str, str]:
+        """Returns what the portal's robot credentials are read for: the
+        portal's uid, and the namespace and name of its robot credentials
+        Secret."""
+
+        return (self.uid, self.namespace, self.robot_credentials_secret)
+
+    def update_uid_namespace_and_robot_credentials_secret(
+        self, uid: str, namespace: str, robot_credentials_secret: str
+    ) -> None:
+        """Record the portal's uid and namespace and the name of its robot
+        credentials Secret, forgetting the credentials read before when any of
+        them changed, as when the portal was deleted and created again."""
+
+        if self._robot_credentials_source() != (
+            uid,
+            namespace,
+            robot_credentials_secret,
+        ):
+            self.credentials = None
+
+        self.uid = uid
+        self.namespace = namespace
+        self.robot_credentials_secret = robot_credentials_secret
+
+    async def robot_credentials(self) -> PortalCredentials | None:
+        """Returns the portal's robot credentials, reading them from the
+        Secret the portal's status names the first time. Returns None, having
+        logged why, while the status names no Secret or the Secret cannot be
+        read, such as before it exists, so a later call reads it again."""
+
+        if self.credentials:
+            return self.credentials
+
+        source = self._robot_credentials_source()
+
+        _, namespace, secret_name = source
+
+        if not namespace or not secret_name:
+            logger.error(
+                "Training portal %s of cluster %s does not name its robot credentials Secret yet.",  # pylint: disable=line-too-long
+                self.name,
+                self.cluster.name,
+            )
+
+            return None
+
+        try:
+            data = await asyncio.to_thread(
+                read_secret_data, self.cluster.kubeconfig, namespace, secret_name
+            )
+
+        except pykube.exceptions.ObjectDoesNotExist:
+            logger.error(
+                "Robot credentials Secret %s of training portal %s in namespace %s of cluster %s does not exist yet.",  # pylint: disable=line-too-long
+                secret_name,
+                self.name,
+                namespace,
+                self.cluster.name,
+            )
+
+            return None
+
+        except (pykube.exceptions.KubernetesError, requests.RequestException) as exc:
+            logger.error(
+                "Cannot read robot credentials Secret %s of training portal %s in namespace %s of cluster %s, which the identity the cluster is accessed as needs get access on: %s",  # pylint: disable=line-too-long
+                secret_name,
+                self.name,
+                namespace,
+                self.cluster.name,
+                exc,
+            )
+
+            return None
+
+        try:
+            values = {
+                key: base64.b64decode(data[key]).decode("utf-8")
+                for key in ("username", "password", "client-id", "client-secret")
+            }
+
+        except (KeyError, ValueError):
+            logger.error(
+                "Robot credentials Secret %s of training portal %s in namespace %s of cluster %s lacks a username, password, client-id or client-secret.",  # pylint: disable=line-too-long
+                secret_name,
+                self.name,
+                namespace,
+                self.cluster.name,
+            )
+
+            return None
+
+        credentials = PortalCredentials(
+            client_id=values["client-id"],
+            client_secret=values["client-secret"],
+            username=values["username"],
+            password=values["password"],
+        )
+
+        # Keep them only while they are still for the Secret the portal names.
+
+        if self._robot_credentials_source() == source:
+            self.credentials = credentials
+
+        return credentials
 
     @property
     def api_url(self) -> str:
@@ -165,11 +297,13 @@ class TrainingPortalClientSession:
 
     portal: TrainingPortal
     session: ClientSession
+    credentials: PortalCredentials | None
     access_token: str | None
 
     def __init__(self, portal: TrainingPortal, session: ClientSession) -> None:
         self.portal = portal
         self.session = session
+        self.credentials = None
         self.access_token = None
 
     async def __aenter__(self) -> "TrainingPortalClientSession":
@@ -193,17 +327,28 @@ class TrainingPortalClientSession:
     async def login(self) -> bool:
         """Login to the portal service ."""
 
+        self.credentials = await self.portal.robot_credentials()
+
+        if not self.credentials:
+            logger.error(
+                "Failed to login to portal %s of cluster %s as its robot credentials are not available.",  # pylint: disable=line-too-long
+                self.portal.name,
+                self.portal.cluster.name,
+            )
+
+            return False
+
         try:
             async with self.session.post(
                 f"{self.portal.api_url}/oauth2/token/",
                 data={
                     "grant_type": "password",
-                    "username": self.portal.credentials.username,
-                    "password": self.portal.credentials.password,
+                    "username": self.credentials.username,
+                    "password": self.credentials.password,
                 },
                 auth=BasicAuth(
-                    self.portal.credentials.client_id,
-                    self.portal.credentials.client_secret,
+                    self.credentials.client_id,
+                    self.credentials.client_secret,
                 ),
             ) as response:
                 if response.status != 200:
@@ -241,8 +386,8 @@ class TrainingPortalClientSession:
             async with self.session.post(
                 f"{self.portal.api_url}/oauth2/revoke-token/",
                 data={
-                    "client_id": self.portal.credentials.client_id,
-                    "client_secret": self.portal.credentials.client_secret,
+                    "client_id": self.credentials.client_id,
+                    "client_secret": self.credentials.client_secret,
                     "token": self.access_token,
                 },
             ) as response:

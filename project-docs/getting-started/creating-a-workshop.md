@@ -90,6 +90,20 @@ instance by running the following command, or its alias
 educates cluster portal password
 ```
 
+To view instead the admin credentials, the username and password for logging
+into the admin pages of the training portal, add the ``--admin`` option:
+
+```
+educates cluster portal password --admin
+```
+
+The admin credentials are read from the secret that the status of the
+training portal names under ``status.educates.credentialSecrets.admin``, in
+the namespace of the training portal, ``<portal-name>-ui``. The identity of
+the kube context the command is run against therefore needs ``get`` access on
+secrets in that namespace. If it does not have it, the command fails with an
+error naming the secret and the namespace it could not read.
+
 Workshop content layout
 -----------------------
 
@@ -163,6 +177,14 @@ This command will patch the workshop definition which exists in the cluster,
 triggering the deployment of a new workshop environment, where workshop
 sessions will be configured to connect back and load workshop instructions
 from a web server run by the ``educates cluster workshop serve`` command.
+
+To render the instructions with the values of a workshop session's
+variables, the command fetches them from the session, using the session's
+config password. For a session created by a training portal, it reads that
+password from a secret in the namespace of the session's workshop
+environment, so the identity of the kube context the command runs with needs
+``get`` access on secrets in that namespace. On a local cluster created with
+the ``educates`` command line tool you have that access already.
 
 To access the workshop, as before create a new workshop session from the training portal. When you now modify the local copy of any pages making up the workshop instructions, the view of the instructions will be automatically regenerated and the browser page refreshed to show the latest version, without needing to republish the workshop content.
 

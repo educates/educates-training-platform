@@ -1,0 +1,6 @@
+{
+  "summary": "lab-k8s-fundamentals 9.0 from its published files image: a kubectl workshop under the default admin role, with the console",
+  "ignoreTerminalLines": [
+    "^Error Log File\\s+: /dev/stderr"
+  ]
+}

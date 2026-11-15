@@ -1,6 +1,8 @@
 package diagnostics
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,8 +12,108 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/yaml"
+
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 )
+
+// portalWithInlineCredentials returns a TrainingPortal whose spec sets every
+// inline credential, each value distinct so a leak is easy to spot.
+func portalWithInlineCredentials() unstructured.Unstructured {
+	return unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "training.educates.dev/v1beta1",
+		"kind":       "TrainingPortal",
+		"metadata":   map[string]interface{}{"name": "lab-portal"},
+		"spec": map[string]interface{}{
+			"portal": map[string]interface{}{
+				"title": "Lab Portal",
+				"credentials": map[string]interface{}{
+					"admin": map[string]interface{}{"username": "inline-admin-user", "password": "inline-admin-password"},
+					"robot": map[string]interface{}{"username": "inline-robot-user", "password": "inline-robot-password"},
+				},
+				"clients": map[string]interface{}{
+					"robot": map[string]interface{}{"id": "inline-robot-client-id", "secret": "inline-robot-client-secret"},
+				},
+			},
+		},
+	}}
+}
+
+var inlineCredentialValues = []string{
+	"inline-admin-user", "inline-admin-password",
+	"inline-robot-user", "inline-robot-password",
+	"inline-robot-client-id", "inline-robot-client-secret",
+}
+
+func TestDiagnosticsRedactTrainingPortalInlineCredentialsInCopiesOfItsSpec(t *testing.T) {
+	// kopf records the spec it last handled, and kubectl apply the
+	// manifest it last applied, as JSON in annotations of the object.
+	portal := portalWithInlineCredentials()
+	portal.SetAnnotations(map[string]string{
+		"kopf.zalando.org/last-handled-configuration": `{"spec":{"portal":{"title":"Lab Portal",` +
+			`"credentials":{"admin":{"username":"inline-admin-user","password":"inline-admin-password"},"robot":{"username":"inline-robot-user","password":"inline-robot-password"}},` +
+			`"clients":{"robot":{"id":"inline-robot-client-id","secret":"inline-robot-client-secret"}}}}}`,
+		"kubectl.kubernetes.io/last-applied-configuration": `{"apiVersion":"training.educates.dev/v1beta1","kind":"TrainingPortal","metadata":{"name":"lab-portal"},` +
+			`"spec":{"portal":{"title":"Lab Portal",` +
+			`"credentials":{"admin":{"username":"inline-admin-user","password":"inline-admin-password"},"robot":{"username":"inline-robot-user","password":"inline-robot-password"}},` +
+			`"clients":{"robot":{"id":"inline-robot-client-id","secret":"inline-robot-client-secret"}}}}}`,
+		"example.com/unrelated": "inline-admin-user is kept here",
+	})
+	var bundle bytes.Buffer
+
+	if err := writeResources(&bundle, trainingportalResource, []unstructured.Unstructured{portal}); err != nil {
+		t.Fatalf("writeResources: %v", err)
+	}
+
+	written := bundle.String()
+	for _, value := range inlineCredentialValues {
+		if strings.Contains(strings.ReplaceAll(written, "inline-admin-user is kept here", ""), value) {
+			t.Errorf("the bundle holds the credential %q:\n%s", value, written)
+		}
+	}
+	var collected unstructured.Unstructured
+	if err := yaml.Unmarshal(bundle.Bytes(), &collected.Object); err != nil {
+		t.Fatalf("reading back the bundle: %v", err)
+	}
+	annotations := collected.GetAnnotations()
+	for _, annotation := range []string{"kopf.zalando.org/last-handled-configuration", "kubectl.kubernetes.io/last-applied-configuration"} {
+		var copied map[string]interface{}
+		if err := json.Unmarshal([]byte(annotations[annotation]), &copied); err != nil {
+			t.Errorf("the annotation %s is no longer JSON: %v", annotation, err)
+			continue
+		}
+		title, _, _ := unstructured.NestedString(copied, "spec", "portal", "title")
+		password, _, _ := unstructured.NestedString(copied, "spec", "portal", "credentials", "admin", "password")
+		if title != "Lab Portal" || password != "REDACTED" {
+			t.Errorf("the annotation %s holds title %q and admin password %q, want %q and %q", annotation, title, password, "Lab Portal", "REDACTED")
+		}
+	}
+	if annotations["example.com/unrelated"] != "inline-admin-user is kept here" {
+		t.Errorf("the bundle changed an annotation holding no copy of the spec: %q", annotations["example.com/unrelated"])
+	}
+}
+
+func TestDiagnosticsRedactTrainingPortalInlineCredentials(t *testing.T) {
+	var bundle bytes.Buffer
+
+	if err := writeResources(&bundle, trainingportalResource, []unstructured.Unstructured{portalWithInlineCredentials()}); err != nil {
+		t.Fatalf("writeResources: %v", err)
+	}
+
+	written := bundle.String()
+	for _, value := range inlineCredentialValues {
+		if strings.Contains(written, value) {
+			t.Errorf("the bundle holds the credential %q:\n%s", value, written)
+		}
+	}
+	if !strings.Contains(written, "title: Lab Portal") {
+		t.Errorf("the bundle lost the rest of the TrainingPortal's spec:\n%s", written)
+	}
+	if !strings.Contains(written, "REDACTED") {
+		t.Errorf("the bundle does not show that credentials were redacted:\n%s", written)
+	}
+}
 
 // testPortals are the training portals the fake cluster runs, each with
 // its namespace, as session-manager names it.
@@ -19,10 +121,26 @@ var testPortals = []string{"portal-a", "portal-b"}
 
 func portalNamespace(portal string) string { return portal + "-ui" }
 
+// robotCredentialsSecret is the Secret in its namespace that a portal's
+// status names as holding its robot credentials.
+const robotCredentialsSecret = "training-portal-robot-credentials"
+
+// robotCredentials are the values of the robot credentials Secret of
+// portal, by key, each distinct to the portal.
+func robotCredentials(portal string) map[string]string {
+	return map[string]string{
+		"username":      "robot-" + portal,
+		"password":      "robot-password-" + portal,
+		"client-id":     "robot-client-id-" + portal,
+		"client-secret": "robot-client-secret-" + portal,
+	}
+}
+
 // fakeEducatesCluster serves the Kubernetes API requests and training
 // portal REST API requests the diagnostics fetcher makes, for a cluster
 // running testPortals. Each portal's REST API is served under
-// /portals/<name>, the URL its TrainingPortal status gives.
+// /portals/<name>, the URL its TrainingPortal status gives, and accepts
+// only a login with the robot credentials of the Secret its status names.
 func fakeEducatesCluster(t *testing.T) *httptest.Server {
 	t.Helper()
 
@@ -42,12 +160,10 @@ func fakeEducatesCluster(t *testing.T) *httptest.Server {
 			"metadata":   map[string]interface{}{"name": name},
 			"status": map[string]interface{}{
 				"educates": map[string]interface{}{
-					"url": srv.URL + "/portals/" + name,
-					"clients": map[string]interface{}{
-						"robot": map[string]interface{}{"id": "robot-id", "secret": "robot-secret"},
-					},
-					"credentials": map[string]interface{}{
-						"robot": map[string]interface{}{"username": "robot", "password": "robot-password"},
+					"url":       srv.URL + "/portals/" + name,
+					"namespace": portalNamespace(name),
+					"credentialSecrets": map[string]interface{}{
+						"robot": robotCredentialsSecret,
 					},
 				},
 			},
@@ -74,6 +190,25 @@ func fakeEducatesCluster(t *testing.T) *httptest.Server {
 		case r.Method == http.MethodGet && len(parts) == 7 && parts[0] == "api" && parts[4] == "pods" && parts[6] == "log":
 			fmt.Fprintf(w, "log of %s\n", parts[3])
 
+		case r.Method == http.MethodGet && len(parts) == 6 && parts[0] == "api" && parts[4] == "secrets" && parts[5] == robotCredentialsSecret:
+			portal, ok := strings.CutSuffix(parts[3], "-ui")
+			if !ok {
+				t.Errorf("robot credentials Secret requested in namespace %q, which is no portal's", parts[3])
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			data := map[string]string{}
+			for key, value := range robotCredentials(portal) {
+				data[key] = base64.StdEncoding.EncodeToString([]byte(value))
+			}
+			writeJSON(w, map[string]interface{}{
+				"kind":       "Secret",
+				"apiVersion": "v1",
+				"metadata":   map[string]interface{}{"name": robotCredentialsSecret, "namespace": parts[3]},
+				"type":       "Opaque",
+				"data":       data,
+			})
+
 		case r.Method == http.MethodGet && r.URL.Path == "/apis/training.educates.dev/v1beta1/trainingportals":
 			var items []interface{}
 			for _, portal := range testPortals {
@@ -90,6 +225,17 @@ func fakeEducatesCluster(t *testing.T) *httptest.Server {
 			writeJSON(w, trainingPortal(parts[4]))
 
 		case r.Method == http.MethodPost && len(parts) == 4 && parts[0] == "portals" && parts[2] == "oauth2" && parts[3] == "token":
+			want := robotCredentials(parts[1])
+			clientID, clientSecret, _ := r.BasicAuth()
+			if err := r.ParseForm(); err != nil {
+				t.Errorf("parse login form for %s: %v", parts[1], err)
+			}
+			if clientID != want["client-id"] || clientSecret != want["client-secret"] ||
+				r.PostForm.Get("username") != want["username"] || r.PostForm.Get("password") != want["password"] {
+				t.Errorf("login to %s did not use the robot credentials of its Secret", parts[1])
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 			writeJSON(w, map[string]interface{}{"access_token": "token-" + parts[1], "token_type": "Bearer"})
 
 		case r.Method == http.MethodPost && len(parts) == 4 && parts[0] == "portals" && parts[2] == "oauth2" && parts[3] == "revoke-token":

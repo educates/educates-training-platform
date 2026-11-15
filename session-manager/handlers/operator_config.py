@@ -1,8 +1,6 @@
 import os
 import yaml
 import logging
-import string
-import random
 import socket
 
 from .helpers import xget
@@ -128,31 +126,6 @@ CLARITY_TRACKING_ID = xget(config_values, "workshopAnalytics.clarity.trackingId"
 AMPLITUDE_TRACKING_ID = xget(config_values, "workshopAnalytics.amplitude.trackingId", "")
 
 ANALYTICS_WEBHOOK_URL = xget(config_values, "workshopAnalytics.webhook.url", "")
-
-
-def generate_password(length):
-    characters = string.ascii_letters + string.digits
-    return "".join(random.sample(characters, length))
-
-
-PORTAL_ADMIN_USERNAME = xget(
-    config_values, "trainingPortal.credentials.admin.username", "educates"
-)
-PORTAL_ADMIN_PASSWORD = xget(
-    config_values, "trainingPortal.credentials.admin.password", generate_password(32)
-)
-PORTAL_ROBOT_USERNAME = xget(
-    config_values, "trainingPortal.credentials.robot.username", "robot@educates"
-)
-PORTAL_ROBOT_PASSWORD = xget(
-    config_values, "trainingPortal.credentials.robot.password", generate_password(32)
-)
-PORTAL_ROBOT_CLIENT_ID = xget(
-    config_values, "trainingPortal.clients.robot.id", generate_password(32)
-)
-PORTAL_ROBOT_CLIENT_SECRET = xget(
-    config_values, "trainingPortal.clients.robot.secret", generate_password(32)
-)
 
 
 def image_reference(name):

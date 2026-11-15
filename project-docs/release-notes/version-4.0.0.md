@@ -143,7 +143,11 @@ New Features
   new import and a key taken from a cluster cannot sign for any other site.
   The deploy prints a line whenever it mints. Later deploys for the same domain
   reuse the intermediate, and one that has expired or was minted from a root
-  since replaced is minted again. A root that carries its own name
+  since replaced is minted again. ``educates local cluster delete`` removes
+  the intermediate the deleted cluster used from the cache, unless another
+  local cluster, running or stopped, uses it or may use it, in which case it
+  keeps it and says why. A later deploy for the domain mints a new one, which
+  needs no new import. A root that carries its own name
   constraints must permit the ingress domain. The local secrets cache holds
   one root CA: ``add ca`` and ``educates local secrets import`` refuse a
   second one, naming the existing root, and

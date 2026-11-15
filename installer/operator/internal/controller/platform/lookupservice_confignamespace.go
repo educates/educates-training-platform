@@ -42,14 +42,14 @@ const (
 )
 
 // adoptLookupServiceConfigNamespace lets the lookup-service release take
-// over an educates-config Namespace created by hand, as operators were once
-// told to create it, with the configurations in it. Helm refuses to install
-// a resource that already exists unless it carries the release's ownership
-// metadata, so such a Namespace is given the managed-by label and the
-// release name and namespace annotations. A Namespace that names a Helm
-// release already, this one or another, is left as it is, so Helm still
-// refuses to take one over from another release. A missing Namespace is
-// left for the chart to create.
+// over an educates-config Namespace created by hand, with the
+// configurations in it. Helm refuses to install a resource that already
+// exists unless it carries the release's ownership metadata, so such a
+// Namespace is given the managed-by label and the release name and
+// namespace annotations. A Namespace that names a Helm release already,
+// this one or another, is left as it is, so Helm still refuses to take one
+// over from another release. A missing Namespace is left for the chart to
+// create.
 func adoptLookupServiceConfigNamespace(ctx context.Context, c client.Client) error {
 	ns := &corev1.Namespace{}
 	if err := c.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, ns); err != nil {

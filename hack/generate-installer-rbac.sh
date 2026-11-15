@@ -110,6 +110,10 @@ known_kind() {
     grep -q "|$1\$" <<<"$CURATED"
 }
 
+# helm's error output for the chart being rendered, shown when it fails.
+render_errors=$(mktemp)
+trap 'rm -f "$render_errors"' EXIT
+
 # A chart that fails to render is a hard error: skipping it would leave its
 # Kinds unchecked.
 rendered_kinds() {
@@ -117,11 +121,10 @@ rendered_kinds() {
     for tarball in "$VENDORED"/*.tgz; do
         base=$(basename "$tarball")
         # shellcheck disable=SC2046 -- render_args is a space-separated flag list
-        if ! manifest=$(helm template rbac-probe "$tarball" --include-crds $(render_args "$base") 2>/dev/null); then
+        if ! manifest=$(helm template rbac-probe "$tarball" --include-crds $(render_args "$base") 2>"$render_errors"); then
             {
                 echo "ERROR: helm template failed for $base:"
-                # shellcheck disable=SC2046
-                helm template rbac-probe "$tarball" --include-crds $(render_args "$base") 2>&1 >/dev/null | sed 's/^/  /'
+                sed 's/^/  /' "$render_errors"
                 echo "Give it the values it needs to render in render_args."
             } >&2
             exit 1

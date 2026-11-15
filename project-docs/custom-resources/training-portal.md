@@ -597,12 +597,14 @@ The values are copied into the training portal's own credentials secrets when
 the training portal is created. Changing or deleting a referenced secret
 after that has no effect on the training portal. If a referenced secret does
 not exist when the training portal is created, or has no value for one of its
-keys, the training portal waits for it: its status phase is ``Pending`` and
-its status message names the secret, its namespace and what is missing, and
-the secret is checked again every 30 seconds. If the secret is still missing
-or incomplete after five minutes, the training portal is marked as
-``Failed``, and you need to delete it and create it again once the secret is
-in place.
+keys, the training portal waits for it, checking the secret again every 30
+seconds. While it waits, its status phase is ``Pending`` and its status
+message names the secret, its namespace and what is missing, which
+``kubectl get trainingportals`` shows in its ``Status`` and ``Message``
+columns. If the secret is still missing or incomplete after five minutes, the
+training portal is marked as ``Failed``, which the ``Status`` column then
+shows, with the same message in the ``Message`` column, and you need to delete
+it and create it again once the secret is in place.
 
 The credentials can also be set inline in the training portal specification,
 in ``credentials`` and ``clients`` sections. These sections are deprecated

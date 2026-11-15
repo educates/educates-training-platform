@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -141,7 +142,9 @@ func robotCredentials(portal string) map[string]string {
 // running testPortals. Each portal's REST API is served under
 // /portals/<name>, the URL its TrainingPortal status gives, and accepts
 // only a login with the robot credentials of the Secret its status names.
-func fakeEducatesCluster(t *testing.T) *httptest.Server {
+// The portals withoutRobotSecret have no such Secret, so a login to them
+// fails.
+func fakeEducatesCluster(t *testing.T, withoutRobotSecret ...string) *httptest.Server {
 	t.Helper()
 
 	var srv *httptest.Server
@@ -195,6 +198,13 @@ func fakeEducatesCluster(t *testing.T) *httptest.Server {
 			if !ok {
 				t.Errorf("robot credentials Secret requested in namespace %q, which is no portal's", parts[3])
 				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			if slices.Contains(withoutRobotSecret, portal) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w, `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"NotFound","code":404,`+
+					`"message":"secrets %q not found","details":{"name":%q,"kind":"secrets"}}`, robotCredentialsSecret, robotCredentialsSecret)
 				return
 			}
 			data := map[string]string{}
@@ -351,5 +361,20 @@ func TestFetchLogsForDeployment_WritesOneFileForANamedNamespace(t *testing.T) {
 
 	if got, want := readFile(t, filepath.Join(dir, "session-manager.log")), "log of educates\n"; got != want {
 		t.Errorf("session-manager.log holds %q, want %q", got, want)
+	}
+}
+
+func TestFetchTrainingPortalDetailsAtRest_ReportsAFailedLogin(t *testing.T) {
+	fetcher, _ := newTestFetcher(t, fakeEducatesCluster(t, "portal-a"))
+
+	err := fetcher.fetchTrainingPortalDetailsAtRest("training-portal-catalog-%v.json")
+	if err == nil {
+		t.Fatal("fetch catalogs succeeded, want the failed login to portal-a reported")
+	}
+
+	for _, want := range []string{"failed to login to training portal", robotCredentialsSecret, "does not exist"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
 	}
 }

@@ -29,7 +29,8 @@ spec:
                   - rule: >-
                       !has(self.credentialSecrets) || !has(self.credentialSecrets.admin)
                       || !has(self.credentials) || !has(self.credentials.admin)
-                      || (!has(self.credentials.admin.username) && !has(self.credentials.admin.password))
+                      || ((!has(self.credentials.admin.username) || size(self.credentials.admin.username) == 0)
+                          && (!has(self.credentials.admin.password) || size(self.credentials.admin.password) == 0))
                     message: >-
                       the admin credentials cannot be set both inline and by
                       spec.portal.credentialSecrets.admin, remove spec.portal.credentials.admin
@@ -37,9 +38,11 @@ spec:
                   - rule: >-
                       !has(self.credentialSecrets) || !has(self.credentialSecrets.robot)
                       || ((!has(self.credentials) || !has(self.credentials.robot)
-                           || (!has(self.credentials.robot.username) && !has(self.credentials.robot.password)))
+                           || ((!has(self.credentials.robot.username) || size(self.credentials.robot.username) == 0)
+                               && (!has(self.credentials.robot.password) || size(self.credentials.robot.password) == 0)))
                           && (!has(self.clients) || !has(self.clients.robot)
-                              || (!has(self.clients.robot.id) && !has(self.clients.robot.secret))))
+                              || ((!has(self.clients.robot.id) || size(self.clients.robot.id) == 0)
+                                  && (!has(self.clients.robot.secret) || size(self.clients.robot.secret) == 0))))
                     message: >-
                       the robot credentials cannot be set both inline and by
                       spec.portal.credentialSecrets.robot, remove spec.portal.credentials.robot

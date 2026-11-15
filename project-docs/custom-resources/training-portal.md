@@ -613,8 +613,9 @@ anyone able to read ``TrainingPortal`` resources, which includes every
 training portal and any user bound to the built-in ``view`` role. Use
 ``credentialSecrets`` instead. They still work: a value set there is used in
 place of the generated one when the training portal is created, and changing
-it after the training portal has been created has no effect. Creating or
-updating a training portal which sets either section returns a warning, which
+it after the training portal has been created has no effect. An empty value
+counts as not set. Creating or updating a training portal which sets a value
+that is not empty in either section returns a warning, which
 ``kubectl apply`` prints as:
 
 ```
@@ -652,7 +653,8 @@ training portal which sets ``credentials.admin`` together with
 ``credentialSecrets.admin``, or ``credentials.robot`` or ``clients.robot``
 together with ``credentialSecrets.robot``, is rejected when it is created or
 updated. Setting the admin credentials inline and referencing a secret for the
-robot credentials, or the other way round, is allowed.
+robot credentials, or the other way round, is allowed, as is an empty inline
+value beside a secret reference, since an empty value counts as not set.
 
 Controlling registration type
 -----------------------------

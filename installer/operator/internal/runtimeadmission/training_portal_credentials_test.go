@@ -100,6 +100,8 @@ var _ = Describe("A training portal's credentials", Ordered, func() {
 		Entry("every credential", trainingPortal("inline", adminCredentials, robotCredentials, robotClient)),
 		Entry("the admin credentials inline and the robot credentials by reference",
 			trainingPortal("inline", adminCredentials, robotReference)),
+		Entry("an admin username beside an empty admin password",
+			trainingPortal("inline", adminUsernameOnly)),
 	)
 
 	DescribeTable("gives no warning for a portal setting none of them inline",
@@ -113,6 +115,12 @@ var _ = Describe("A training portal's credentials", Ordered, func() {
 		},
 		Entry("with generated credentials", trainingPortal("generated")),
 		Entry("with credentials Secret references", trainingPortal("referenced", adminReference, robotReference)),
+		Entry("with every inline value empty",
+			trainingPortal("empty", emptyAdminCredentials, emptyRobotCredentials, emptyRobotClient)),
+		Entry("with empty credentials and clients sections", trainingPortal("empty", emptyInlineSections)),
+		Entry("with every inline value empty beside credentials Secret references",
+			trainingPortal("empty", emptyAdminCredentials, emptyRobotCredentials, emptyRobotClient,
+				adminReference, robotReference)),
 	)
 
 	DescribeTable("admits a portal setting each account's credentials one way",
@@ -126,6 +134,10 @@ var _ = Describe("A training portal's credentials", Ordered, func() {
 			trainingPortal("mixed", adminCredentials, robotReference)),
 		Entry("with the robot credentials inline and the admin credentials by reference",
 			trainingPortal("mixed", robotCredentials, robotClient, adminReference)),
+		Entry("with empty inline admin credentials beside an admin reference",
+			trainingPortal("empty", emptyAdminCredentials, adminReference)),
+		Entry("with empty inline robot credentials and client beside a robot reference",
+			trainingPortal("empty", emptyRobotCredentials, emptyRobotClient, robotReference)),
 	)
 
 	DescribeTable("refuses a portal setting the same credentials inline and by reference",
@@ -140,6 +152,9 @@ var _ = Describe("A training portal's credentials", Ordered, func() {
 			"spec.portal.credentialSecrets.admin"),
 		Entry("the admin password alone",
 			trainingPortal("both", adminPassword, adminReference),
+			"spec.portal.credentialSecrets.admin"),
+		Entry("an admin username beside an empty admin password",
+			trainingPortal("both", adminUsernameOnly, adminReference),
 			"spec.portal.credentialSecrets.admin"),
 		Entry("the robot credentials",
 			trainingPortal("both", robotCredentials, robotReference),
@@ -213,12 +228,35 @@ func adminPassword(portalSpec map[string]any) {
 	nested(portalSpec, "credentials")["admin"] = map[string]any{"password": "admin-password"}
 }
 
+func adminUsernameOnly(portalSpec map[string]any) {
+	nested(portalSpec, "credentials")["admin"] = map[string]any{"username": "admin", "password": ""}
+}
+
+func emptyAdminCredentials(portalSpec map[string]any) {
+	nested(portalSpec, "credentials")["admin"] = map[string]any{"username": "", "password": ""}
+}
+
 func robotCredentials(portalSpec map[string]any) {
 	nested(portalSpec, "credentials")["robot"] = map[string]any{"username": "robot", "password": "robot-password"}
 }
 
 func robotClient(portalSpec map[string]any) {
 	nested(portalSpec, "clients")["robot"] = map[string]any{"id": "client-id", "secret": "client-secret"}
+}
+
+func emptyRobotCredentials(portalSpec map[string]any) {
+	nested(portalSpec, "credentials")["robot"] = map[string]any{"username": "", "password": ""}
+}
+
+func emptyRobotClient(portalSpec map[string]any) {
+	nested(portalSpec, "clients")["robot"] = map[string]any{"id": "", "secret": ""}
+}
+
+// emptyInlineSections sets the credentials and clients sections with
+// nothing in them.
+func emptyInlineSections(portalSpec map[string]any) {
+	portalSpec["credentials"] = map[string]any{}
+	portalSpec["clients"] = map[string]any{}
 }
 
 func adminReference(portalSpec map[string]any) {

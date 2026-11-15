@@ -138,8 +138,10 @@ inline, in `spec.portal.credentials` or `spec.portal.clients`. Both are
 deprecated, still honoured, and will be removed in a future release, in favour
 of referencing Secrets that hold the credentials with
 `spec.portal.credentialSecrets.admin` and `spec.portal.credentialSecrets.robot`.
-The binding only warns, for every user, and an error evaluating the policy is
-ignored, so it never stands in the way of a request.
+session-manager treats an empty inline value as unset, so only a value that is
+not empty draws the warning. The binding only warns, for every user, and an
+error evaluating the policy is ignored, so it never stands in the way of a
+request.
 */}}
 ---
 apiVersion: admissionregistration.k8s.io/v1
@@ -156,10 +158,35 @@ spec:
         apiVersions: [v1beta1]
         operations: [CREATE, UPDATE]
         resources: [trainingportals]
+  variables:
+    - name: adminCredentialsInline
+      expression: >-
+        has(object.spec) && has(object.spec.portal)
+        && has(object.spec.portal.credentials) && has(object.spec.portal.credentials.admin)
+        && ((has(object.spec.portal.credentials.admin.username)
+             && size(object.spec.portal.credentials.admin.username) != 0)
+            || (has(object.spec.portal.credentials.admin.password)
+                && size(object.spec.portal.credentials.admin.password) != 0))
+    - name: robotCredentialsInline
+      expression: >-
+        has(object.spec) && has(object.spec.portal)
+        && has(object.spec.portal.credentials) && has(object.spec.portal.credentials.robot)
+        && ((has(object.spec.portal.credentials.robot.username)
+             && size(object.spec.portal.credentials.robot.username) != 0)
+            || (has(object.spec.portal.credentials.robot.password)
+                && size(object.spec.portal.credentials.robot.password) != 0))
+    - name: robotClientInline
+      expression: >-
+        has(object.spec) && has(object.spec.portal)
+        && has(object.spec.portal.clients) && has(object.spec.portal.clients.robot)
+        && ((has(object.spec.portal.clients.robot.id)
+             && size(object.spec.portal.clients.robot.id) != 0)
+            || (has(object.spec.portal.clients.robot.secret)
+                && size(object.spec.portal.clients.robot.secret) != 0))
   validations:
     - expression: >-
-        !has(object.spec) || !has(object.spec.portal)
-        || (!has(object.spec.portal.credentials) && !has(object.spec.portal.clients))
+        !variables.adminCredentialsInline && !variables.robotCredentialsInline
+        && !variables.robotClientInline
       message: >-
         spec.portal.credentials and spec.portal.clients are deprecated and will
         be removed in a future release: reference Secrets holding the

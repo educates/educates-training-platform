@@ -1403,6 +1403,13 @@ Features Changed
   exist; set credentials for a training portal in its ``TrainingPortal``
   resource instead.
 
+* ``kubectl get workshopsessions`` no longer shows the ``Username`` and
+  ``Password`` columns, which showed the login username and password of a
+  workshop session created by hand with ``session.username`` and
+  ``session.password`` to anyone permitted to read ``WorkshopSession``
+  resources. Those fields still set the workshop session's login
+  credentials.
+
 * A training portal's credentials can now be set from secrets which its
   ``TrainingPortal`` resource references, with
   ``spec.portal.credentialSecrets.admin``, naming a secret with the keys

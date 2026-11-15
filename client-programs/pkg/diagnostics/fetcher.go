@@ -179,11 +179,12 @@ func (c *ClusterDiagnosticsFetcher) fetchLogsForDeployment(labelSelector, namesp
 			return err
 		}
 
+		fileName := fileNamePattern
 		if strings.Contains(fileNamePattern, "%v") {
-			fileNamePattern = fmt.Sprintf(fileNamePattern, namespaceName)
+			fileName = fmt.Sprintf(fileNamePattern, namespaceName)
 		}
 
-		logFile, err := os.Create(filepath.Join(c.tempDir, fileNamePattern))
+		logFile, err := os.Create(filepath.Join(c.tempDir, fileName))
 		if err != nil {
 			return err
 		}
@@ -203,7 +204,7 @@ func (c *ClusterDiagnosticsFetcher) fetchLogsForDeployment(labelSelector, namesp
 			}
 
 			if c.verbose {
-				fmt.Printf("Educates related logs saved in file: %v\n", fileNamePattern)
+				fmt.Printf("Educates related logs saved in file: %v\n", fileName)
 			}
 		}
 	}
@@ -242,10 +243,11 @@ func (c *ClusterDiagnosticsFetcher) fetchTrainingPortalDetailsAtRest(fileNamePat
 			return errors.Wrap(err, "failed to get workshops catalog")
 		}
 
+		fileName := fileNamePattern
 		if strings.Contains(fileNamePattern, "%v") {
-			fileNamePattern = fmt.Sprintf(fileNamePattern, trainingPortalName)
+			fileName = fmt.Sprintf(fileNamePattern, trainingPortalName)
 		}
-		newFile, err := os.Create(filepath.Join(c.tempDir, fileNamePattern))
+		newFile, err := os.Create(filepath.Join(c.tempDir, fileName))
 		if err != nil {
 			return err
 		}
@@ -263,7 +265,7 @@ func (c *ClusterDiagnosticsFetcher) fetchTrainingPortalDetailsAtRest(fileNamePat
 		}
 
 		if c.verbose {
-			fmt.Printf("Educates trainingportal details at rest saved in file: %v\n", fileNamePattern)
+			fmt.Printf("Educates trainingportal details at rest saved in file: %v\n", fileName)
 		}
 
 	}

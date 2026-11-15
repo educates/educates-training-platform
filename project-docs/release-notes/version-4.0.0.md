@@ -1551,6 +1551,15 @@ Bugs Fixed
   now reads the training portal again and redoes its change when its write
   loses such a race, keeping the other change.
 
+* On a cluster with more than one training portal, the bundle written by
+  ``educates admin diagnostics collect`` held the logs and the workshop
+  catalog of only one of them, in files named after the first. The logs of
+  each training portal were written to the first one's
+  ``training-portal-<namespace>.log`` file, replacing what was there, and
+  likewise each catalog to the first one's
+  ``training-portal-catalog-<portal>.json`` file. The bundle now has a log
+  file and a catalog file for every training portal.
+
 * Deploying a local image registry mirror could fail with ``network sandbox
   for container ... not found``, after a warning that Docker refused the
   mirror's fixed address, and then succeed when run again. The mirror's

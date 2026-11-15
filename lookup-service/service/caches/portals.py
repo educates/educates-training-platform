@@ -62,7 +62,7 @@ class TrainingPortal:
     labels: List[Dict[str, str]]
     url: str
     namespace: str
-    credentials_secret: str
+    robot_credentials_secret: str
     credentials: PortalCredentials | None
     phase: str
     capacity: int
@@ -78,7 +78,7 @@ class TrainingPortal:
         labels: List[Dict[str, str]],
         url: str,
         namespace: str,
-        credentials_secret: str,
+        robot_credentials_secret: str,
         phase: str,
         capacity: int,
         allocated: int,
@@ -90,30 +90,37 @@ class TrainingPortal:
         self.labels = labels
         self.url = url
         self.namespace = namespace
-        self.credentials_secret = credentials_secret
+        self.robot_credentials_secret = robot_credentials_secret
         self.credentials = None
         self.phase = phase
         self.capacity = capacity
         self.allocated = allocated
         self.environments = {}
 
-    def update_credentials_secret(
-        self, uid: str, namespace: str, credentials_secret: str
+    def _robot_credentials_source(self) -> Tuple[str, str, str]:
+        """Returns what the portal's robot credentials are read for: the
+        portal's uid, and the namespace and name of its robot credentials
+        Secret."""
+
+        return (self.uid, self.namespace, self.robot_credentials_secret)
+
+    def update_uid_namespace_and_robot_credentials_secret(
+        self, uid: str, namespace: str, robot_credentials_secret: str
     ) -> None:
-        """Record the portal's uid and the namespace and name of its robot
+        """Record the portal's uid and namespace and the name of its robot
         credentials Secret, forgetting the credentials read before when any of
         them changed, as when the portal was deleted and created again."""
 
-        if (self.uid, self.namespace, self.credentials_secret) != (
+        if self._robot_credentials_source() != (
             uid,
             namespace,
-            credentials_secret,
+            robot_credentials_secret,
         ):
             self.credentials = None
 
         self.uid = uid
         self.namespace = namespace
-        self.credentials_secret = credentials_secret
+        self.robot_credentials_secret = robot_credentials_secret
 
     async def robot_credentials(self) -> PortalCredentials | None:
         """Returns the portal's robot credentials, reading them from the
@@ -124,7 +131,9 @@ class TrainingPortal:
         if self.credentials:
             return self.credentials
 
-        uid, namespace, secret_name = self.uid, self.namespace, self.credentials_secret
+        source = self._robot_credentials_source()
+
+        _, namespace, secret_name = source
 
         if not namespace or not secret_name:
             logger.error(
@@ -189,11 +198,7 @@ class TrainingPortal:
 
         # Keep them only while they are still for the Secret the portal names.
 
-        if (self.uid, self.namespace, self.credentials_secret) == (
-            uid,
-            namespace,
-            secret_name,
-        ):
+        if self._robot_credentials_source() == source:
             self.credentials = credentials
 
         return credentials

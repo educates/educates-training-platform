@@ -238,7 +238,7 @@ class ClusterOperator(GenericOperator):
                     # which is read when the credentials are first needed.
 
                     portal_namespace = xgetattr(status, "educates.namespace", "")
-                    credentials_secret = xgetattr(
+                    robot_credentials_secret = xgetattr(
                         status, "educates.credentialSecrets.robot", ""
                     )
 
@@ -261,7 +261,7 @@ class ClusterOperator(GenericOperator):
                                 labels=xgetattr(spec, "portal.labels", []),
                                 url=xgetattr(status, "educates.url"),
                                 namespace=portal_namespace,
-                                credentials_secret=credentials_secret,
+                                robot_credentials_secret=robot_credentials_secret,
                                 phase=xgetattr(status, "educates.phase"),
                                 capacity=xgetattr(spec, "portal.sessions.maximum", 0),
                                 allocated=0,
@@ -278,8 +278,8 @@ class ClusterOperator(GenericOperator):
                             self.cluster_name,
                         )
 
-                        portal_state.update_credentials_secret(
-                            portal_uid, portal_namespace, credentials_secret
+                        portal_state.update_uid_namespace_and_robot_credentials_secret(
+                            portal_uid, portal_namespace, robot_credentials_secret
                         )
                         portal_state.generation = xgetattr(metadata, "generation")
                         portal_state.labels = xgetattr(spec, "portal.labels", [])
@@ -373,7 +373,7 @@ class ClusterOperator(GenericOperator):
                             labels=[],
                             url="",
                             namespace="",
-                            credentials_secret="",
+                            robot_credentials_secret="",
                             phase="Unknown",
                             capacity=0,
                             allocated=0,
@@ -545,7 +545,7 @@ class ClusterOperator(GenericOperator):
                             labels=[],
                             url="",
                             namespace="",
-                            credentials_secret="",
+                            robot_credentials_secret="",
                             phase="Unknown",
                             capacity=0,
                             allocated=0,

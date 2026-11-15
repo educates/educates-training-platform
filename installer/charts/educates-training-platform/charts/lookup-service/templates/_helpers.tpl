@@ -13,6 +13,17 @@ app: lookup-service
 {{- end -}}
 
 {{/*
+The namespace lookup-service reads its configuration from: its
+ClusterConfig, ClientConfig and TenantConfig resources and the kubeconfig
+Secrets they reference. lookup-service watches `educates-config` unless its
+OPERATOR_NAMESPACE environment variable names another, which the chart does
+not set.
+*/}}
+{{- define "lookup-service.configNamespace" -}}
+educates-config
+{{- end -}}
+
+{{/*
 Resolve the effective imageRegistry for chart-rendered refs. Reads the
 development override (subchart-local + umbrella global, deep-merged) and
 falls back per-leaf to Chart.yaml annotations

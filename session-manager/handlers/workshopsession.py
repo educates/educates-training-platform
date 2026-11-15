@@ -40,6 +40,11 @@ from .operator_config import (AMPLITUDE_TRACKING_ID, BASE_ENVIRONMENT_IMAGE,
                               PLATFORM_ARCH,
                               RUNTIME_CLASS, SESSION_COOKIE_DOMAIN,
                               resolve_workshop_image)
+from .session_access import (console_csrf_secret, console_key_holder_secret,
+                             console_role_binding, console_settings_config_map,
+                             session_namespace_role_binding,
+                             session_object_namespaces)
+from .session_config import session_config_password
 
 __all__ = ["workshop_session_create", "workshop_session_delete"]
 
@@ -662,15 +667,31 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
         applications.properties("registry")["secret"] = registry_secret
 
     # Generate a random password to be used for any services or applications
-    # deployed for a workshop, as well as one specifically for accessing the
-    # workshop configuration.
+    # deployed for a workshop.
 
     services_password = "".join(random.sample(characters, 32))
 
-    config_password = spec["session"].get("config", {}).get("password", "")
+    # Work out the password for accessing the workshop configuration. A
+    # training portal passes it in a Secret in the workshop namespace, which
+    # may not exist yet when the session is first seen, in which case this
+    # retries before the session namespace is created.
 
-    if not config_password:
-        config_password = "".join(random.sample(characters, 32))
+    def read_workshop_secret(secret_name):
+        try:
+            return (
+                pykube.Secret.objects(api, namespace=workshop_namespace)
+                .get(name=secret_name)
+                .obj
+            )
+
+        except pykube.exceptions.ObjectDoesNotExist:
+            return None
+
+    config_password, config_password_env = session_config_password(
+        spec["session"],
+        read_workshop_secret,
+        lambda: "".join(random.sample(characters, 32)),
+    )
 
     # Validate that any secrets to be copied into the workshop environment
     # namespace exist. This is done before creating the session namespace so we
@@ -890,57 +911,68 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
             f"Failed to create access token {service_account}-token: {exc}"
         )
 
-    # Create the rolebinding for this service account to add access to
-    # the additional roles that the Kubernetes web console requires.
+    # The labels of the objects giving the session's service account, and
+    # the console running as it, access to the session namespace.
 
-    cluster_role_binding_body = {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "ClusterRoleBinding",
-        "metadata": {
-            "name": f"educates:session:console:{session_namespace}",
-            "labels": {
-                "training.educates.dev/component": "session",
-                "training.educates.dev/workshop.name": workshop_name,
-                "training.educates.dev/portal.name": portal_name,
-                "training.educates.dev/portal.uid": portal_uid,
-                "training.educates.dev/environment.name": environment_name,
-                "training.educates.dev/environment.uid": environment_uid,
-                "training.educates.dev/session.name": session_name,
-            },
-        },
-        "roleRef": {
-            "apiGroup": "rbac.authorization.k8s.io",
-            "kind": "ClusterRole",
-            "name": f"educates:environment:console:{workshop_namespace}",
-        },
-        "subjects": [
-            {
-                "kind": "ServiceAccount",
-                "namespace": workshop_namespace,
-                "name": service_account,
-            }
-        ],
+    session_access_labels = {
+        "training.educates.dev/component": "session",
+        "training.educates.dev/workshop.name": workshop_name,
+        "training.educates.dev/portal.name": portal_name,
+        "training.educates.dev/portal.uid": portal_uid,
+        "training.educates.dev/environment.name": environment_name,
+        "training.educates.dev/environment.uid": environment_uid,
+        "training.educates.dev/session.name": session_name,
     }
 
-    kopf.adopt(cluster_role_binding_body, namespace_instance.obj)
+    def create_session_role_binding(role_binding_body):
+        role_binding_name = role_binding_body["metadata"]["name"]
 
-    try:
-        pykube.ClusterRoleBinding(api, cluster_role_binding_body).create()
+        try:
+            pykube.RoleBinding(api, role_binding_body).create()
 
-    except pykube.exceptions.PyKubeError as exc:
-        logger.exception(
-            "Unexpected error creating cluster role binding %s-web-console-%s.",
-            "educates",
-            session_namespace,
-        )
-        patch["status"] = {
-            "educates": {
-                "phase": "Failed",
-                "message": f"Failed to create cluster role binding educates:session:console:{session_namespace}: {exc}",
+        except pykube.exceptions.PyKubeError as exc:
+            logger.exception(
+                "Unexpected error creating role binding %s in %s.",
+                role_binding_name,
+                session_namespace,
+            )
+            patch["status"] = {
+                "educates": {
+                    "phase": "Failed",
+                    "message": f"Failed to create role binding {role_binding_name} in {session_namespace}: {exc}",
+                }
             }
-        }
-        raise kopf.PermanentError(
-            f"Failed to create cluster role binding educates:session:console:{session_namespace}: {exc}"
+            raise kopf.PermanentError(
+                f"Failed to create role binding {role_binding_name} in {session_namespace}: {exc}"
+            ) from exc
+
+    # Let the service account get its own session namespace, whatever the
+    # session's role, so that a custom role which does not grant it still
+    # resolves the session namespace rather than falling back to "default".
+    # Being namespaced, the binding never grants listing namespaces.
+
+    create_session_role_binding(
+        session_namespace_role_binding(
+            session_namespace,
+            service_account,
+            workshop_namespace,
+            session_access_labels,
+        )
+    )
+
+    # With the console enabled, let the service account, as which the console
+    # runs, get the console's Secrets and settings by name, whatever the
+    # session's role. They are created below with their keys and settings, so
+    # the console never writes them.
+
+    if applications.is_enabled("console"):
+        create_session_role_binding(
+            console_role_binding(
+                session_namespace,
+                service_account,
+                workshop_namespace,
+                session_access_labels,
+            )
         )
 
     # Setup configuration on the primary session namespace.
@@ -1169,12 +1201,16 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
 
     namespaces = []
 
+    secondary_namespaces = []
+
     if workshop_spec.get("session"):
         namespaces = workshop_spec["session"].get("namespaces", {}).get("secondary", [])
         for namespaces_item in namespaces:
             target_namespace = substitute_variables(
                 namespaces_item["name"], session_variables
             )
+
+            secondary_namespaces.append(target_namespace)
 
             target_role = namespaces_item.get("role", role)
             target_budget = namespaces_item.get("budget", budget)
@@ -1753,10 +1789,7 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
                                     "name": "SERVICES_PASSWORD",
                                     "value": services_password,
                                 },
-                                {
-                                    "name": "CONFIG_PASSWORD",
-                                    "value": config_password,
-                                },
+                                config_password_env,
                             ],
                             "volumeMounts": [
                                 {
@@ -2304,25 +2337,37 @@ def workshop_session_create(name, body, meta, uid, spec, status, patch, retry, *
     # Add in extra configuation for web console.
 
     if applications.is_enabled("console"):
-        secret_body = {
-            "apiVersion": "v1",
-            "kind": "Secret",
-            "metadata": {
-                "name": "kubernetes-dashboard-csrf",
-                "namespace": session_namespace,
-                "labels": {
-                    "training.educates.dev/component": "session",
-                    "training.educates.dev/workshop.name": workshop_name,
-                    "training.educates.dev/portal.name": portal_name,
-                    "training.educates.dev/portal.uid": portal_uid,
-                    "training.educates.dev/environment.name": environment_name,
-                    "training.educates.dev/environment.uid": environment_uid,
-                    "training.educates.dev/session.name": session_name,
-                },
-            },
-        }
+        # Give the console its Secrets with their keys before it starts, as
+        # it would otherwise write them itself, which a session role that
+        # cannot create or update Secrets refuses.
 
-        pykube.Secret(api, secret_body).create()
+        pykube.Secret(
+            api, console_csrf_secret(session_namespace, session_access_labels)
+        ).create()
+
+        pykube.Secret(
+            api, console_key_holder_secret(session_namespace, session_access_labels)
+        ).create()
+
+        # The console cannot list namespaces, so give it its settings before
+        # it starts: it opens on the session namespace, offers the session's
+        # namespaces, the secondary ones and those the workshop's session
+        # objects create, and does not report each request it is refused.
+
+        object_namespaces = session_object_namespaces(
+            substitute_variables(object_body, session_variables)
+            for object_body in (workshop_spec.get("session") or {}).get("objects", [])
+        )
+
+        pykube.ConfigMap(
+            api,
+            console_settings_config_map(
+                session_namespace,
+                secondary_namespaces,
+                object_namespaces,
+                session_access_labels,
+            ),
+        ).create()
 
     # Add in extra configuration for special cases, as well as bind policy.
 

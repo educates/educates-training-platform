@@ -1,0 +1,34 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: terminal-vcluster
+spec:
+  title: Terminal Clickable Actions Test
+  description: Terminal actions in a session with a virtual cluster, with the console.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/session-acceptance-terminal-vcluster-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/session-acceptance-terminal-vcluster-files:$(workshop_version)"
+      includePaths:
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      security:
+        token:
+          enabled: true
+    applications:
+      terminal:
+        enabled: true
+        layout: split/2
+      console:
+        enabled: true
+      vcluster:
+        enabled: true
+    dashboards:
+    - name: Terminal#4
+      url: terminal:4

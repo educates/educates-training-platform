@@ -18,6 +18,7 @@ package platform
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,9 +26,13 @@ import (
 
 	release "helm.sh/helm/v4/pkg/release/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -50,6 +55,114 @@ func lsReadyStatus(name string) metav1.ConditionStatus {
 		return metav1.ConditionUnknown
 	}
 	return c.Status
+}
+
+// setConfigNamespaceMetadata makes the educates-config namespace exist
+// with exactly the given labels and annotations.
+func setConfigNamespaceMetadata(labels, annotations map[string]string) {
+	GinkgoHelper()
+	ensureNamespace(lookupServiceConfigNamespace)
+	Eventually(func() error {
+		ns := &corev1.Namespace{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, ns); err != nil {
+			return err
+		}
+		ns.Labels = map[string]string{"kubernetes.io/metadata.name": lookupServiceConfigNamespace}
+		maps.Copy(ns.Labels, labels)
+		ns.Annotations = annotations
+		return k8sClient.Update(ctx, ns)
+	}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+}
+
+// removeNamespace deletes a namespace for good. envtest runs no namespace
+// controller, so the spec finalizes the namespace itself, as that
+// controller does once the namespace is empty, and deletes it again.
+func removeNamespace(name string) {
+	GinkgoHelper()
+	key := types.NamespacedName{Name: name}
+	Eventually(func(g Gomega) {
+		ns := &corev1.Namespace{}
+		err := k8sClient.Get(ctx, key, ns)
+		if apierrors.IsNotFound(err) {
+			return
+		}
+		g.Expect(err).NotTo(HaveOccurred())
+		switch {
+		case ns.DeletionTimestamp.IsZero():
+			g.Expect(k8sClient.Delete(ctx, ns)).To(Succeed())
+		case len(ns.Spec.Finalizers) > 0:
+			ns.Spec.Finalizers = nil
+			g.Expect(k8sClient.SubResource("finalize").Update(ctx, ns)).To(Succeed())
+		default:
+			g.Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, ns))).To(Succeed())
+		}
+		g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, key, &corev1.Namespace{}))).To(BeTrue(),
+			"namespace %s still exists", name)
+	}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+}
+
+// installLookupService creates the LookupService singleton with its gates
+// open and waits for its release, and with it lookup-service's CRDs.
+func installLookupService(helmFac *memoryHelmFactory) *platformv1alpha1.LookupService {
+	GinkgoHelper()
+	makeReadyClusterConfig()
+	makeReadySecretsManager()
+	ls := &platformv1alpha1.LookupService{
+		ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+		Spec: platformv1alpha1.LookupServiceSpec{
+			Ingress: platformv1alpha1.LookupServiceIngress{Prefix: "lookup"},
+		},
+	}
+	Expect(k8sClient.Create(ctx, ls)).To(Succeed())
+	Eventually(func() error {
+		hc, err := helmFac.For(platformNamespace)
+		if err != nil {
+			return err
+		}
+		_, err = hc.Status(lookupServiceReleaseName)
+		return err
+	}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+	return ls
+}
+
+// deleteLookupService deletes the LookupService singleton and waits for its
+// teardown to remove the reconciler's finalizer.
+func deleteLookupService(ls *platformv1alpha1.LookupService) {
+	GinkgoHelper()
+	Expect(k8sClient.Delete(ctx, ls)).To(Succeed())
+	Eventually(func() bool {
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, &platformv1alpha1.LookupService{})
+		return apierrors.IsNotFound(err)
+	}, 30*time.Second, 200*time.Millisecond).Should(BeTrue())
+}
+
+// lookupConfiguration returns a lookup-service configuration of the given
+// kind in its configuration namespace, carrying the given finalizers.
+func lookupConfiguration(kind, name string, finalizers ...string) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "lookup.educates.dev", Version: "v1beta1", Kind: kind})
+	obj.SetNamespace(lookupServiceConfigNamespace)
+	obj.SetName(name)
+	obj.SetFinalizers(finalizers)
+	return obj
+}
+
+// removeLookupConfiguration deletes a configuration whatever finalizers it
+// still carries.
+func removeLookupConfiguration(obj *unstructured.Unstructured) {
+	GinkgoHelper()
+	Eventually(func() error {
+		live := &unstructured.Unstructured{}
+		live.SetGroupVersionKind(obj.GroupVersionKind())
+		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), live); err != nil {
+			return client.IgnoreNotFound(err)
+		}
+		live.SetFinalizers(nil)
+		if err := k8sClient.Update(ctx, live); err != nil {
+			return client.IgnoreNotFound(err)
+		}
+		return client.IgnoreNotFound(k8sClient.Delete(ctx, live))
+	}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 }
 
 var _ = Describe("LookupService reconciler", func() {
@@ -243,6 +356,72 @@ var _ = Describe("LookupService reconciler", func() {
 		Expect(ci["caCertificateRef"]).To(Equal(ingressCAChartRef()))
 	})
 
+	It("lets the release take over an educates-config namespace created by hand, keeping its configurations", func() {
+		// envtest has no namespace controller, so a deleted namespace
+		// never goes: the namespace is reset to how a hand-made one
+		// looks instead.
+		setConfigNamespaceMetadata(nil, nil)
+		kubeconfig := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "kubeconfig-cluster-1", Namespace: lookupServiceConfigNamespace},
+			StringData: map[string]string{"config": "kubeconfig"},
+		}
+		if err := k8sClient.Create(ctx, kubeconfig); err != nil && !apierrors.IsAlreadyExists(err) {
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		Expect(k8sClient.Create(ctx, &platformv1alpha1.LookupService{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec: platformv1alpha1.LookupServiceSpec{
+				Ingress: platformv1alpha1.LookupServiceIngress{Prefix: "lookup"},
+			},
+		})).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			ns := &corev1.Namespace{}
+			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, ns)).To(Succeed())
+			g.Expect(ns.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "Helm"))
+			g.Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-name", lookupServiceReleaseName))
+			g.Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-namespace", platformNamespace))
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(kubeconfig), &corev1.Secret{})).To(Succeed())
+	})
+
+	It("leaves an educates-config namespace another Helm release owns to Helm", func() {
+		otherRelease := map[string]string{
+			"meta.helm.sh/release-name":      "other",
+			"meta.helm.sh/release-namespace": "elsewhere",
+		}
+		setConfigNamespaceMetadata(map[string]string{"app.kubernetes.io/managed-by": "Helm"}, otherRelease)
+
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		Expect(k8sClient.Create(ctx, &platformv1alpha1.LookupService{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec: platformv1alpha1.LookupServiceSpec{
+				Ingress: platformv1alpha1.LookupServiceIngress{Prefix: "lookup"},
+			},
+		})).To(Succeed())
+
+		// The memory Helm client installs without checking ownership; the
+		// release existing shows the reconciler got past the namespace.
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(lookupServiceReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		ns := &corev1.Namespace{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, ns)).To(Succeed())
+		Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-name", "other"))
+		Expect(ns.Annotations).To(HaveKeyWithValue("meta.helm.sh/release-namespace", "elsewhere"))
+	})
+
 	It("uninstalls the chart on delete", func() {
 		makeReadyClusterConfig()
 		makeReadySecretsManager()
@@ -282,5 +461,62 @@ var _ = Describe("LookupService reconciler", func() {
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, &platformv1alpha1.LookupService{})
 			return apierrors.IsNotFound(err)
 		}, 30*time.Second, 200*time.Millisecond).Should(BeTrue())
+	})
+
+	It("removes kopf's finalizer from lookup-service's configurations on delete, keeping other finalizers", func() {
+		const kopfFinalizer = "kopf.zalando.org/KopfFinalizerMarker"
+		const otherFinalizer = "example.com/keep"
+
+		ls := installLookupService(helmFac)
+		ensureNamespace(lookupServiceConfigNamespace)
+		configurations := []*unstructured.Unstructured{
+			lookupConfiguration("ClusterConfig", "finalizers-cluster", kopfFinalizer),
+			lookupConfiguration("ClientConfig", "finalizers-client", kopfFinalizer, otherFinalizer),
+			lookupConfiguration("TenantConfig", "finalizers-tenant", kopfFinalizer),
+		}
+		for _, obj := range configurations {
+			// The CRDs the release applied may not be established yet.
+			Eventually(func() error {
+				return k8sClient.Create(ctx, obj.DeepCopy())
+			}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+			DeferCleanup(removeLookupConfiguration, obj)
+		}
+
+		deleteLookupService(ls)
+
+		for _, obj := range configurations {
+			live := &unstructured.Unstructured{}
+			live.SetGroupVersionKind(obj.GroupVersionKind())
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), live)).To(Succeed())
+			Expect(live.GetFinalizers()).NotTo(ContainElement(kopfFinalizer), "%s %s", obj.GetKind(), obj.GetName())
+			if obj.GetKind() == "ClientConfig" {
+				Expect(live.GetFinalizers()).To(Equal([]string{otherFinalizer}))
+			}
+		}
+	})
+
+	It("finishes teardown when lookup-service's configuration CRDs are absent", func() {
+		ls := installLookupService(helmFac)
+		chrt, err := vendoredcharts.LookupService()
+		Expect(err).NotTo(HaveOccurred())
+		for _, crd := range chartCRDs(chrt) {
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, crd))).To(Succeed())
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(crd), &apiextensionsv1.CustomResourceDefinition{})
+				return apierrors.IsNotFound(err)
+			}, 30*time.Second, 200*time.Millisecond).Should(BeTrue(), "CRD %s", crd.Name)
+		}
+
+		deleteLookupService(ls)
+	})
+
+	It("finishes teardown when the educates-config namespace is absent", func() {
+		removeNamespace(lookupServiceConfigNamespace)
+		ls := installLookupService(helmFac)
+		// The memory Helm client creates none of the chart's resources.
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: lookupServiceConfigNamespace}, &corev1.Namespace{})
+		Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+		deleteLookupService(ls)
 	})
 })

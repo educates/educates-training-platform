@@ -8,33 +8,43 @@ The REST API will give you access to the list of workshops hosted by a training 
 Querying the credentials
 ------------------------
 
-To provide access to the REST API a robot account is automatically provisioned. The login credentials and details of the OAuth client endpoint used for authentication, can be obtained by querying the resource definition for the training portal after it has been created and the deployment completed. If using ``kubectl describe``, you would use:
+To provide access to the REST API a robot account is automatically
+provisioned for each training portal. Its robot credentials, the username and
+password of the robot account together with the client id and client secret
+of the OAuth client used for authentication, are kept in a secret in the
+namespace of the training portal, ``<portal-name>-ui``, once the training
+portal has been deployed.
+
+The status of the training portal names the secret under
+``status.educates.credentialSecrets.robot``, and the namespace it is in under
+``status.educates.namespace``. The secret is
+``training-portal-robot-credentials``, holding the robot credentials under the
+keys ``username``, ``password``, ``client-id`` and ``client-secret``. To read
+them for the training portal ``lab-markdown-sample`` using ``kubectl``, you
+would use:
 
 ```
-kubectl describe trainingportal.training.educates.dev/lab-markdown-sample
+kubectl get secret training-portal-robot-credentials -n lab-markdown-sample-ui -o jsonpath='{.data.username}' | base64 --decode
+kubectl get secret training-portal-robot-credentials -n lab-markdown-sample-ui -o jsonpath='{.data.password}' | base64 --decode
+kubectl get secret training-portal-robot-credentials -n lab-markdown-sample-ui -o jsonpath='{.data.client-id}' | base64 --decode
+kubectl get secret training-portal-robot-credentials -n lab-markdown-sample-ui -o jsonpath='{.data.client-secret}' | base64 --decode
 ```
 
-In the status section of the output you will see:
+Reading the secret needs ``get`` access on secrets in that namespace. The
+``educates`` command line tool reads the robot credentials from the same
+secret, through the kube context it is run against, when its
+``educates cluster session`` commands and
+``educates cluster workshop request`` log in to the REST API, so the identity
+of that kube context needs the same access.
 
-```
-Status:
-  educates:
-    Clients:
-      Robot:
-        Id:      ACZpcaLIT3qr725YWmXu8et9REl4HBg1
-        Secret:  t5IfXbGZQThAKR43apoc9usOFVDv2BLE
-    Credentials:
-      Admin:
-        Password:  0kGmMlYw46BZT2vCntyrRuFf1gQq5ohi
-        Username:  educates
-      Robot:
-        Password:  QrnY67ME9yGasNhq2OTbgWA4RzipUvo5
-        Username:  robot@educates
-```
-
-The admin login credentials is what you would use if logging into the training portal web interface to access admin pages.
-
-The robot login credentials is what would be used if wish to access the REST API.
+The robot credentials are what you would use if you wish to access the REST
+API. The admin credentials of the training portal, which you would use to log
+into the training portal web interface to access the admin pages, are kept in
+a separate secret, which the status names under
+``status.educates.credentialSecrets.admin``. The section on overriding portal
+credentials in the [Training Portal](../custom-resources/training-portal)
+documentation describes how the credentials are generated and how to set them
+yourself.
 
 Requesting an access token
 --------------------------

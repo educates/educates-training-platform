@@ -400,6 +400,46 @@ rules:
     resources: [rolebindings, roles]
     verbs: [create, delete, deletecollection, get, list, patch, update, watch]
 ---
+# Bound by session-manager, through the RoleBinding `educates-session-namespace`
+# in each session namespace, to the session's service account whatever the
+# session's role. A namespaced binding grants `get` on that namespace alone and
+# never list, so attendees resolve their own namespace without seeing others.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:session:namespace
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get]
+---
+# Bound by session-manager, through the RoleBinding `educates-session-console`
+# in each session namespace with the console enabled, to the session's service
+# account whatever the session's role. session-manager creates the console's
+# Secrets with their keys and its settings before the console starts, so the
+# console only reads them by name and never writes a Secret.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:session:console
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [kubernetes-dashboard-csrf, kubernetes-dashboard-key-holder]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [kubernetes-dashboard-settings]
+    verbs: [get]
+---
+# Bound by session-manager to each training portal's service account. It grants
+# no access to Secrets or namespaces: a portal creates Secrets only in its own
+# workshop environment namespaces, through `educates:training-portal:environment`,
+# and its liveness probe needs no grant.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -407,13 +447,6 @@ metadata:
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 rules:
-  - apiGroups: [""]
-    resources: [namespaces]
-    resourceNames: [default]
-    verbs: [get]
-  - apiGroups: [""]
-    resources: [secrets]
-    verbs: [get, list, watch, create]
   - apiGroups: [training.educates.dev]
     resources:
       - workshops
@@ -435,6 +468,29 @@ rules:
       - workshopallocations
     verbs: [create, patch, delete]
 ---
+# Bound by session-manager, through the RoleBinding `educates-training-portal`
+# in each workshop environment namespace whose WorkshopEnvironment carries a
+# portal label, to that portal's service account. The portal creates the
+# Secrets holding a session's config password, user details and request
+# parameters there, and reads no Secret anywhere.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: educates:training-portal:environment
+  labels:
+    {{- include "session-manager.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+---
+# Bound by session-manager, through the ClusterRoleBinding
+# `educates:tunnel-manager:<environment namespace>`, to the `tunnel-manager`
+# service account of each workshop environment with the SSH tunnel enabled.
+# tunnel-manager serves a network-facing proxy, so it holds only what it uses:
+# watching WorkshopSessions here, and creating events in its own environment
+# namespace through the Role `educates-tunnel-manager` session-manager creates
+# there. Its liveness probe creates a SelfSubjectReview, which needs no rule.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -442,18 +498,6 @@ metadata:
   labels:
     {{- include "session-manager.labels" . | nindent 4 }}
 rules:
-  - apiGroups: [""]
-    resources: [events]
-    verbs: [create]
-  - apiGroups: [""]
-    resources: [secrets]
-    verbs: [get, list, watch, create, delete, deletecollection, patch, update]
-  - apiGroups: [""]
-    resources: [namespaces]
-    verbs: [get, list, watch]
-  - apiGroups: [""]
-    resources: [serviceaccounts]
-    verbs: [get, list, watch, patch, update]
   - apiGroups: [training.educates.dev]
     resources: [workshopsessions]
     verbs: [get, list, watch]

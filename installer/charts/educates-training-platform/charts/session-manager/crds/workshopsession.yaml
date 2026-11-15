@@ -65,6 +65,13 @@ spec:
                       properties:
                         password:
                           type: string
+                        passwordSecretRef:
+                          type: object
+                          required:
+                          - name
+                          properties:
+                            name:
+                              type: string
                     ingress:
                       type: object
                       properties:
@@ -154,14 +161,6 @@ spec:
         type: string
         description: The URL to access the workshop.
         jsonPath: .status.educates.url
-      - name: Username
-        type: string
-        description: The username to access the workshop.
-        jsonPath: .spec.session.username
-      - name: Password
-        type: string
-        description: The password to access the workshop.
-        jsonPath: .spec.session.password
       - name: Status
         type: string
         description: The status of the workshop session.

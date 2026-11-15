@@ -84,6 +84,8 @@ type LookupServiceReconciler struct {
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=lookupservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=lookupservices/finalizers,verbs=update
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=secretsmanagers,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;patch
+// +kubebuilder:rbac:groups=lookup.educates.dev,resources=clusterconfigs;clientconfigs;tenantconfigs,verbs=list;patch
 
 // Reconcile drives a LookupService CR through its lifecycle.
 func (r *LookupServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -261,6 +263,9 @@ func (r *LookupServiceReconciler) installOrUpgradeLS(ctx context.Context, obj *p
 	if err := platformnamespace.Ensure(ctx, r.Client); err != nil {
 		return helm.Result{}, err
 	}
+	if err := adoptLookupServiceConfigNamespace(ctx, r.Client); err != nil {
+		return helm.Result{}, err
+	}
 	chrt, err := vendoredcharts.LookupService()
 	if err != nil {
 		return helm.Result{}, fmt.Errorf("load embedded chart: %w", err)
@@ -357,16 +362,20 @@ func (r *LookupServiceReconciler) deploymentAvailableLS(ctx context.Context) (bo
 	return false, nil
 }
 
-// cleanupLS uninstalls the helm release. The platform namespace is
-// left in place (shared with secrets-manager / session-manager).
+// cleanupLS uninstalls the helm release, then removes kopf's finalizer
+// from the configurations the release leaves behind in its kept
+// configuration namespace. The platform namespace is left in place
+// (shared with secrets-manager / session-manager).
 func (r *LookupServiceReconciler) cleanupLS(ctx context.Context) error {
-	_ = ctx
 	hc, err := r.HelmClientFor(platformNamespace)
 	if err != nil {
 		return fmt.Errorf("build helm client for cleanup: %w", err)
 	}
 	if err := hc.Uninstall(lookupServiceReleaseName); err != nil {
 		return fmt.Errorf("uninstall release: %w", err)
+	}
+	if err := releaseLookupServiceConfigurations(ctx, r.Client); err != nil {
+		return fmt.Errorf("release lookup-service configurations: %w", err)
 	}
 	return nil
 }

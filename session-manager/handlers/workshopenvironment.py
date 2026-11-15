@@ -13,6 +13,7 @@ from .objects import (
     ensure_default_service_account,
     name_image_pull_secrets,
     Workshop,
+    TrainingPortal,
     SecretCopier,
 )
 from .helpers import (
@@ -25,6 +26,13 @@ from .helpers import (
 )
 from .applications import environment_objects_list, workshop_spec_patches
 from .kyverno_rules import kyverno_environment_rules
+from .tunnel_manager import (
+    tunnel_manager_deployment,
+    tunnel_manager_role,
+    tunnel_manager_role_binding,
+)
+from .portal_access import portal_environment_role_binding
+from .portal_workshops import portal_workshop_refusal
 from .analytics import report_analytics_event
 
 from .operator_config import (
@@ -149,6 +157,74 @@ def workshop_environment_create(
     # environment.
 
     workshop_name = spec["workshop"]["name"]
+
+    # A workshop environment created by a training portal is deployed only
+    # for a workshop that the portal's TrainingPortal lists. This is checked
+    # before anything is created for the workshop environment.
+
+    training_portal = None
+
+    if portal_name:
+        try:
+            training_portal = TrainingPortal.objects(api).get(name=portal_name).obj
+
+        except pykube.exceptions.ObjectDoesNotExist:
+            pass
+
+        except pykube.exceptions.KubernetesError as exc:
+            logger.exception(
+                "Unexpected error querying training portal %s of workshop environment %s.",
+                portal_name,
+                environment_name,
+            )
+
+            patch["status"] = {
+                "educates": {
+                    "phase": "Unknown",
+                    "message": f"Unexpected error querying training portal {portal_name}.",
+                }
+            }
+
+            report_analytics_event(
+                "Resource/TemporaryError",
+                {
+                    "kind": "WorkshopEnvironment",
+                    "name": name,
+                    "uid": uid,
+                    "retry": retry,
+                    "message": f"Unexpected error querying training portal {portal_name}.",
+                },
+            )
+
+            raise kopf.TemporaryError(
+                f"Unexpected error querying training portal {portal_name} of workshop environment {environment_name}.",
+                delay=30,
+            ) from exc
+
+    refusal = portal_workshop_refusal(body, training_portal)
+
+    if refusal:
+        patch["status"] = {
+            "educates": {
+                "phase": "Failed",
+                "message": refusal,
+            }
+        }
+
+        report_analytics_event(
+            "Resource/PermanentError",
+            {
+                "kind": "WorkshopEnvironment",
+                "name": name,
+                "uid": uid,
+                "retry": retry,
+                "message": refusal,
+            },
+        )
+
+        raise kopf.PermanentError(
+            f"Workshop environment {environment_name} refused. {refusal}"
+        )
 
     try:
         workshop_instance = Workshop.objects(api).get(name=workshop_name)
@@ -530,6 +606,31 @@ def workshop_environment_create(
 
     patch["status"] = {"educates": {"phase": "Retrying"}}
 
+    # Let the training portal which owns the workshop environment create the
+    # Secrets holding a session's user details and request parameters in its
+    # namespace. This must exist before the status of the workshop environment
+    # is published, as the portal allocates sessions in it only after that. A
+    # workshop environment without a portal label gets no binding. When setup
+    # is retried the namespace is deleted along with the binding, and both are
+    # created again here.
+
+    portal_role_binding_body = portal_environment_role_binding(
+        body,
+        labels={
+            "training.educates.dev/component": "environment",
+            "training.educates.dev/workshop.name": workshop_name,
+            "training.educates.dev/portal.name": portal_name,
+            "training.educates.dev/portal.uid": portal_uid,
+            "training.educates.dev/environment.name": environment_name,
+            "training.educates.dev/environment.uid": environment_uid,
+        },
+    )
+
+    if portal_role_binding_body:
+        kopf.adopt(portal_role_binding_body, namespace_instance.obj)
+
+        pykube.RoleBinding(api, portal_role_binding_body).create()
+
     # Apply security policies to whole namespace if enabled. We need to set the
     # whole namespace as requiring privilged as we need to run docker in docker
     # in this namespace.
@@ -895,47 +996,6 @@ def workshop_environment_create(
     kopf.adopt(config_secret_body, namespace_instance.obj)
 
     pykube.Secret(api, config_secret_body).create()
-
-    # Because the Kubernetes web console is designed for working against
-    # a whole cluster and we want to use it in scope of a single
-    # namespace, we need to at least grant it roles to be able to list
-    # and get namespaces. If we don't do this then the web console will
-    # forever generate a stream of events complaining that it can't read
-    # namespaces. This seems to hasten the web console hanging, but also
-    # means can't easily switch to other namespaces the workshop has
-    # access to as the list of namespaces cannot be generated. At this
-    # point we therefore create a cluster role associated with the
-    # name of the namespace create for the workshop environment. This
-    # will later be bound to the service account the workshop
-    # instances and web consoles runs as. As with the namespace we add
-    # it as a child to the custom resource for the workshop.
-
-    cluster_role_body = {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "ClusterRole",
-        "metadata": {
-            "name": f"educates:environment:console:{workshop_namespace}",
-            "labels": {
-                "training.educates.dev/component": "environment",
-                "training.educates.dev/workshop.name": workshop_name,
-                "training.educates.dev/portal.name": portal_name,
-                "training.educates.dev/portal.uid": portal_uid,
-                "training.educates.dev/environment.name": environment_name,
-                "training.educates.dev/environment.uid": environment_uid,
-            },
-        },
-        "rules": [
-            {
-                "apiGroups": [""],
-                "resources": ["namespaces"],
-                "verbs": ["get", "list", "watch"],
-            }
-        ],
-    }
-
-    kopf.adopt(cluster_role_body, namespace_instance.obj)
-
-    pykube.ClusterRole(api, cluster_role_body).create()
 
     # Setup rules for copying the ingress TLS and CA secrets into the
     # workshop namespace. The CA secret is copied whenever a CA is
@@ -2079,20 +2139,22 @@ def workshop_environment_create(
 
         tunnel_memory = applications.property("sshd", "tunnel.memory", "128Mi")
 
+        tunnel_labels = {
+            "training.educates.dev/component": "environment",
+            "training.educates.dev/workshop.name": workshop_name,
+            "training.educates.dev/portal.name": portal_name,
+            "training.educates.dev/portal.uid": portal_uid,
+            "training.educates.dev/environment.name": environment_name,
+            "training.educates.dev/environment.uid": environment_uid,
+        }
+
         tunnel_service_account_body = {
             "apiVersion": "v1",
             "kind": "ServiceAccount",
             "metadata": {
                 "name": "tunnel-manager",
                 "namespace": workshop_namespace,
-                "labels": {
-                    "training.educates.dev/component": "environment",
-                    "training.educates.dev/workshop.name": workshop_name,
-                    "training.educates.dev/portal.name": portal_name,
-                    "training.educates.dev/portal.uid": portal_uid,
-                    "training.educates.dev/environment.name": environment_name,
-                    "training.educates.dev/environment.uid": environment_uid,
-                },
+                "labels": dict(tunnel_labels),
             },
         }
 
@@ -2124,73 +2186,16 @@ def workshop_environment_create(
             ],
         }
 
-        tunnel_deployment_body = {
-            "apiVersion": "apps/v1",
-            "kind": "Deployment",
-            "metadata": {
-                "namespace": workshop_namespace,
-                "name": "tunnel-manager",
-                "labels": {
-                    "training.educates.dev/component": "environment",
-                    "training.educates.dev/workshop.name": workshop_name,
-                    "training.educates.dev/portal.name": portal_name,
-                    "training.educates.dev/portal.uid": portal_uid,
-                    "training.educates.dev/environment.name": environment_name,
-                    "training.educates.dev/environment.uid": environment_uid,
-                },
-            },
-            "spec": {
-                "replicas": 1,
-                "selector": {"matchLabels": {"deployment": "tunnel-manager"}},
-                "strategy": {"type": "Recreate"},
-                "template": {
-                    "metadata": {
-                        "labels": {
-                            "deployment": "tunnel-manager",
-                            "training.educates.dev/component": "environment",
-                            "training.educates.dev/workshop.name": workshop_name,
-                            "training.educates.dev/portal.name": portal_name,
-                            "training.educates.dev/portal.uid": portal_uid,
-                            "training.educates.dev/environment.name": environment_name,
-                            "training.educates.dev/environment.uid": environment_uid,
-                        },
-                    },
-                    "spec": {
-                        "serviceAccountName": "tunnel-manager",
-                        "containers": [
-                            {
-                                "name": "tunnel",
-                                "image": tunnel_image,
-                                "imagePullPolicy": tunnel_image_pull_policy,
-                                "securityContext": {
-                                    "allowPrivilegeEscalation": False,
-                                    "capabilities": {"drop": ["ALL"]},
-                                    "runAsNonRoot": True,
-                                    # "seccompProfile": {"type": "RuntimeDefault"},
-                                },
-                                "resources": {
-                                    "limits": {"memory": tunnel_memory},
-                                    "requests": {"memory": tunnel_memory},
-                                },
-                                "ports": [{"containerPort": 8080, "protocol": "TCP"}],
-                                "env": [
-                                    {"name": "INGRESS_DOMAIN", "value": INGRESS_DOMAIN},
-                                    {
-                                        "name": "ENVIRONMENT_NAME",
-                                        "value": environment_name,
-                                    },
-                                ],
-                            }
-                        ],
-                        "securityContext": {
-                            "runAsUser": 1001,
-                            "fsGroup": CLUSTER_STORAGE_GROUP,
-                            "supplementalGroups": [CLUSTER_STORAGE_GROUP],
-                        },
-                    },
-                },
-            },
-        }
+        tunnel_deployment_body = tunnel_manager_deployment(
+            workshop_namespace=workshop_namespace,
+            environment_name=environment_name,
+            image=tunnel_image,
+            image_pull_policy=tunnel_image_pull_policy,
+            memory=tunnel_memory,
+            ingress_domain=INGRESS_DOMAIN,
+            storage_group=CLUSTER_STORAGE_GROUP,
+            labels=tunnel_labels,
+        )
 
         tunnel_service_body = {
             "apiVersion": "v1",
@@ -2198,14 +2203,7 @@ def workshop_environment_create(
             "metadata": {
                 "namespace": workshop_namespace,
                 "name": "tunnel-manager",
-                "labels": {
-                    "training.educates.dev/component": "environment",
-                    "training.educates.dev/workshop.name": workshop_name,
-                    "training.educates.dev/portal.name": portal_name,
-                    "training.educates.dev/portal.uid": portal_uid,
-                    "training.educates.dev/environment.name": environment_name,
-                    "training.educates.dev/environment.uid": environment_uid,
-                },
+                "labels": dict(tunnel_labels),
             },
             "spec": {
                 "type": "ClusterIP",
@@ -2214,10 +2212,16 @@ def workshop_environment_create(
             },
         }
 
+        # The Role and RoleBinding letting tunnel-manager create events in
+        # the environment namespace are created before its Deployment, so
+        # the events it posts as it starts are not refused.
+
         tunnel_objects.extend(
             [
                 tunnel_service_account_body,
                 tunnel_cluster_role_binding_body,
+                tunnel_manager_role(workshop_namespace, tunnel_labels),
+                tunnel_manager_role_binding(workshop_namespace, tunnel_labels),
                 tunnel_deployment_body,
                 tunnel_service_body,
             ]

@@ -22,7 +22,13 @@ CONFIG_DIR=$ROOT_DIR/config
 
 cd $SRC_DIR
 
-# Set defaults for environment variables which are optional.
+# Set defaults for environment variables which are optional. Tracing is
+# turned off while the admin credentials are set, as it would write their
+# values to the container log, which anyone who can read pod logs in the
+# portal namespace can read. Nothing after this expands them in a command
+# that is traced.
+
+{ set +x; } 2>/dev/null
 
 ADMIN_USERNAME=${ADMIN_USERNAME:-educates}
 ADMIN_EMAIL=${ADMIN_EMAIL:-training@educates.dev}
@@ -31,6 +37,8 @@ ADMIN_PASSWORD=${ADMIN_PASSWORD:-educates}
 export ADMIN_USERNAME
 export ADMIN_EMAIL
 export ADMIN_PASSWORD
+
+set -x
 
 # Activate the Python virtual environment for the portal application.
 
@@ -60,14 +68,20 @@ fi
 python $SRC_DIR/manage.py migrate
 
 if [ x"$THIS_IS_THE_FIRST_TIME" = x"true" ]; then
-    if [ x"$ADMIN_PASSWORD" != x"" ]; then
+    # Test whether a password is set without expanding it in the traced
+    # command. The superuser is created from the exported variables, not
+    # from values placed in the Python source, so no quoting in a credential
+    # can turn into an error that prints the source line to the log.
+    if [ x"${ADMIN_PASSWORD:+set}" = x"set" ]; then
         echo " -----> Creating predefined Django super user"
-        (cat - | python $SRC_DIR/manage.py shell) << !
+        (cat - | python $SRC_DIR/manage.py shell) << '!'
+import os
 from django.contrib.auth.models import User
 try:
-    User.objects.get(username='$ADMIN_USERNAME')
+    User.objects.get(username=os.environ['ADMIN_USERNAME'])
 except User.DoesNotExist:
-    User.objects.create_superuser('$ADMIN_USERNAME','$ADMIN_EMAIL','$ADMIN_PASSWORD')
+    User.objects.create_superuser(os.environ['ADMIN_USERNAME'],
+        os.environ['ADMIN_EMAIL'], os.environ['ADMIN_PASSWORD'])
 !
     else
         if (tty > /dev/null 2>&1); then

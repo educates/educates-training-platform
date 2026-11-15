@@ -26,12 +26,11 @@ from .sessions import (
     create_reserved_session,
 )
 from .analytics import report_analytics_event
+from .kubernetes_api import kubernetes_api
 
 from ..models import TrainingPortal, Environment, Workshop
 
 logger = logging.getLogger("educates")
-
-api = pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 
 def convert_duration_to_seconds(size):
@@ -79,6 +78,8 @@ def update_environment_status(name, phase):
     environment.
 
     """
+
+    api = kubernetes_api()
 
     K8SWorkshopEnvironment = pykube.object_factory(
         api,
@@ -415,6 +416,8 @@ def delete_workshop_environment(environment):
 
     """
 
+    api = kubernetes_api()
+
     K8SWorkshopEnvironment = pykube.object_factory(
         api, "training.educates.dev/v1beta1", "WorkshopEnvironment"
     )
@@ -672,6 +675,8 @@ def process_workshop_environment(portal, workshop, position):
     # are received for the workshop environment resource are in fact for the
     # instance we created.
 
+    api = kubernetes_api()
+
     K8SWorkshopEnvironment = pykube.object_factory(
         api, "training.educates.dev/v1beta1", "WorkshopEnvironment"
     )
@@ -789,6 +794,8 @@ def replace_workshop_environment(environment):
 
 def update_environment_status_details(name, capacity, reserved):
     """Update the capacity for the workshop environment recorded in the status."""
+
+    api = kubernetes_api()
 
     K8SWorkshopEnvironment = pykube.object_factory(
         api,

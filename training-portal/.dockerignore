@@ -6,3 +6,4 @@ src/static
 testing
 venv
 .venv
+**/__pycache__

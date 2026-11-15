@@ -30,6 +30,16 @@ spec:
           imagePullPolicy: {{ include "lookup-service.image.pullPolicy" . }}
           ports:
             - containerPort: 8080
+            - containerPort: 8081
+          # kopf's liveness endpoint. It fails when the Kubernetes API
+          # refuses lookup-service's token or cannot be reached, a check
+          # that needs no RBAC rule.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 10
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

@@ -346,6 +346,7 @@ dependencies = [
     { name = "pyjwt" },
     { name = "pykube-ng" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "wrapt" },
 ]
 
@@ -356,6 +357,7 @@ requires-dist = [
     { name = "pyjwt", specifier = ">=2.15.1" },
     { name = "pykube-ng", specifier = ">=23.6.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "requests", specifier = ">=2.33.0" },
     { name = "wrapt", specifier = ">=2.2.1" },
 ]
 

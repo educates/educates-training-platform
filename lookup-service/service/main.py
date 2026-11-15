@@ -11,6 +11,7 @@ import threading
 import aiohttp
 import kopf
 import pykube
+import requests
 
 from .caches.databases import client_database, cluster_database, tenant_database
 from .handlers import clients as _  # pylint: disable=unused-import
@@ -71,20 +72,33 @@ def login_fn(**kwargs) -> dict:
 
 @kopf.on.probe(id="api")
 def check_api_access(**_) -> None:
-    """Checks if we can access the Kubernetes API for the liveness probe. The
-    kopf framework will handle the response to the liveness probe based on
-    the result of this function. The kopf operator framework will also do
-    basic checks to determine if the operator is still running and if it is
-    able to process events."""
+    """Checks that the Kubernetes API accepts lookup-service's token. It
+    creates a SelfSubjectReview, which every authenticated account may
+    create, so the check needs no RBAC rule.
+
+    """
 
     try:
         api = pykube.HTTPClient(pykube.KubeConfig.from_env())
-        pykube.Namespace.objects(api).get(name="default")
 
-    except pykube.exceptions.KubernetesError:
-        logger.error("Failed liveness probe request to Kubernetes API.")
+        response = api.post(
+            version="authentication.k8s.io/v1",
+            url="selfsubjectreviews",
+            json={
+                "apiVersion": "authentication.k8s.io/v1",
+                "kind": "SelfSubjectReview",
+            },
+        )
 
-        raise
+        api.raise_for_status(response)
+
+    except (
+        pykube.exceptions.KubernetesError,
+        requests.exceptions.RequestException,
+    ) as exc:
+        logger.exception("Failed request to Kubernetes API.")
+
+        raise kopf.PermanentError("Failed request to Kubernetes API.") from exc
 
 
 # Process variables and shutdown handling. Signal handlers run in the main

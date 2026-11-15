@@ -20,19 +20,6 @@ global:
     domain: ${DOMAIN}
 
 session-manager:
-  trainingPortal:
-    credentials:
-      admin:
-        username: educates
-        password: educates
-      robot:
-        username: robot@educates
-        password: robot
-    clients:
-      robot:
-        id: robot-client-id
-        secret: robot-client-secret
-
   # Cluster-wide policy enforcement via Kyverno (the chart default).
   # The chart applies the bundled cluster-policies (PSS baseline +
   # restricted) plus the user-supplied marker ClusterPolicy below.

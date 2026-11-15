@@ -16,7 +16,7 @@ metadata:
   namespace: educates-config
 ```
 
-When no ``spec.credentials`` section is provided, the lookup service will monitor the local cluster where it is deployed, using the service account credentials available to the lookup service pod. A local cluster can still include ``spec.labels`` for use with tenant label selectors:
+When no ``spec.credentials`` section is provided, the lookup service will monitor the local cluster where it is deployed, accessing it as the ``remote-access`` service account in the ``educates`` namespace, whose token is mounted into the lookup service pod. See [Cluster Monitoring](cluster-monitoring) for the access this account has. A local cluster can still include ``spec.labels`` for use with tenant label selectors:
 
 ```yaml
 apiVersion: lookup.educates.dev/v1beta1
@@ -177,13 +177,11 @@ spec:
 Managing resources
 ------------------
 
-All configuration resources are created in the ``educates-config`` namespace. If this namespace does not already exist, create it before applying any configuration:
+All configuration resources are created in the ``educates-config`` namespace, along with the secrets holding the kubeconfig files of remote clusters. The Educates install creates this namespace when it deploys the lookup service, so you do not need to create it yourself. The namespace is kept when the lookup service or Educates is uninstalled, so your configuration resources and secrets are still there when you install Educates again. While the lookup service runs, it puts a finalizer on each configuration resource so that it can act on the resource's deletion. Uninstalling the lookup service removes that finalizer, so once it is uninstalled you can delete the configuration resources, or the namespace itself, as usual. If you created the ``educates-config`` namespace by hand, as earlier versions of Educates required, the install takes it over and keeps what it holds.
 
-```
-kubectl create ns educates-config
-```
+The lookup service reads secrets, and its configuration resources, only in the ``educates-config`` namespace. Resources in any other namespace are ignored.
 
-Resources can then be created, updated, and deleted using standard ``kubectl`` commands:
+Resources can be created, updated, and deleted using standard ``kubectl`` commands:
 
 ```
 kubectl apply -f cluster-config.yaml

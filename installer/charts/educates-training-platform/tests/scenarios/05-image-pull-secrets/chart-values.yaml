@@ -23,19 +23,6 @@ session-manager:
   imagePullSecrets:
     - name: test-pull-secret
 
-  trainingPortal:
-    credentials:
-      admin:
-        username: educates
-        password: educates
-      robot:
-        username: robot@educates
-        password: robot
-    clients:
-      robot:
-        id: robot-client-id
-        secret: robot-client-secret
-
   secretPropagation:
     # Distribute this Secret name from operator NS to every portal /
     # environment / session namespace, and inject it into the matching

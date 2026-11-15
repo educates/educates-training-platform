@@ -21,8 +21,14 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/educates/educates-training-platform/installer/operator/internal/ownership"
@@ -39,7 +45,62 @@ const (
 	helmManagedByValue             = "Helm"
 	helmReleaseNameAnnotation      = "meta.helm.sh/release-name"
 	helmReleaseNamespaceAnnotation = "meta.helm.sh/release-namespace"
+
+	// kopfFinalizer is the finalizer kopf puts on every lookup-service
+	// configuration, and removes once lookup-service has handled its
+	// deletion.
+	kopfFinalizer = "kopf.zalando.org/KopfFinalizerMarker"
 )
+
+// lookupServiceConfigurationKinds are the kinds of lookup-service's
+// configurations, which it reads from its configuration namespace.
+var lookupServiceConfigurationKinds = []schema.GroupVersionKind{
+	{Group: "lookup.educates.dev", Version: "v1beta1", Kind: "ClusterConfig"},
+	{Group: "lookup.educates.dev", Version: "v1beta1", Kind: "ClientConfig"},
+	{Group: "lookup.educates.dev", Version: "v1beta1", Kind: "TenantConfig"},
+}
+
+// releaseLookupServiceConfigurations removes kopf's finalizer from every
+// lookup-service configuration in the configuration namespace, leaving any
+// other finalizer. The namespace and its configurations outlive the
+// lookup-service release, and with lookup-service gone nothing else removes
+// kopf's finalizer, so deleting a configuration, or the namespace, would wait
+// for lookup-service to run again. Call it only once the release is
+// uninstalled, so lookup-service can no longer put the finalizer back.
+func releaseLookupServiceConfigurations(ctx context.Context, c client.Client) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		for _, gvk := range lookupServiceConfigurationKinds {
+			list := &unstructured.UnstructuredList{}
+			list.SetGroupVersionKind(gvk.GroupVersion().WithKind(gvk.Kind + "List"))
+			if err := c.List(ctx, list, client.InNamespace(lookupServiceConfigNamespace)); err != nil {
+				// The kind is not served: its CRD is gone, so are its
+				// resources. A list in a missing namespace is empty
+				// rather than an error, so NotFound means the same as a
+				// NoMatch, from a mapping cached before the CRD went.
+				if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+					continue
+				}
+				return fmt.Errorf("list %s resources in namespace %q: %w", gvk.Kind, lookupServiceConfigNamespace, err)
+			}
+			for i := range list.Items {
+				obj := &list.Items[i]
+				if !controllerutil.ContainsFinalizer(obj, kopfFinalizer) {
+					continue
+				}
+				patch := client.MergeFromWithOptions(obj.DeepCopy(), client.MergeFromWithOptimisticLock{})
+				controllerutil.RemoveFinalizer(obj, kopfFinalizer)
+				if err := c.Patch(ctx, obj, patch); err != nil {
+					if apierrors.IsNotFound(err) {
+						continue
+					}
+					return fmt.Errorf("remove finalizer %s from %s %s/%s: %w",
+						kopfFinalizer, gvk.Kind, obj.GetNamespace(), obj.GetName(), err)
+				}
+			}
+		}
+		return nil
+	})
+}
 
 // adoptLookupServiceConfigNamespace lets the lookup-service release take
 // over an educates-config Namespace created by hand, with the

@@ -1478,20 +1478,23 @@ Features Changed
   the lookup service reads its configuration, and keeps it when the lookup
   service or Educates is uninstalled, so the ``ClusterConfig``,
   ``ClientConfig`` and ``TenantConfig`` resources and the kubeconfig secrets
-  in it survive a reinstall. Previously the namespace had to be created by
-  hand before configuring the lookup service. An ``educates-config``
-  namespace created by hand is taken over by the install, and the
-  configurations in it are kept. The lookup service now reads secrets only
-  in that namespace. Previously its service account was bound to the
-  ``educates-lookup-service`` cluster role, which granted read access to the
-  secrets of every namespace. That cluster role and its binding no longer
-  exist, and the lookup service holds nothing cluster wide: the role
-  ``educates-lookup-service`` in ``educates-config`` lets it list and watch
-  secrets and its configuration resources there, patch those resources, and
-  create events. Monitoring the cluster the lookup service runs on still
-  uses the ``remote-access`` service account. The lookup service's
-  deployment also now has a liveness probe, so a lookup service which can no
-  longer reach the Kubernetes API is restarted.
+  in it survive a reinstall. Uninstalling the lookup service removes the
+  finalizer the lookup service puts on those resources, so once it is
+  uninstalled they, and the namespace, can be deleted as usual rather than
+  waiting for the lookup service to run again. Previously the namespace had
+  to be created by hand before configuring the lookup service. An
+  ``educates-config`` namespace created by hand is taken over by the
+  install, and the configurations in it are kept. The lookup service now
+  reads secrets only in that namespace. Previously its service account was
+  bound to the ``educates-lookup-service`` cluster role, which granted read
+  access to the secrets of every namespace. That cluster role and its
+  binding no longer exist, and the lookup service holds nothing cluster
+  wide: the role ``educates-lookup-service`` in ``educates-config`` lets it
+  list and watch secrets and its configuration resources there, patch those
+  resources, and create events. Monitoring the cluster the lookup service
+  runs on still uses the ``remote-access`` service account. The lookup
+  service's deployment also now has a liveness probe, so a lookup service
+  which can no longer reach the Kubernetes API is restarted.
 
 Removed Features
 ----------------

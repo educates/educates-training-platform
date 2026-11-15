@@ -177,7 +177,7 @@ spec:
 Managing resources
 ------------------
 
-All configuration resources are created in the ``educates-config`` namespace, along with the secrets holding the kubeconfig files of remote clusters. The Educates install creates this namespace when it deploys the lookup service, so you do not need to create it yourself. The namespace is kept when the lookup service or Educates is uninstalled, so your configuration resources and secrets are still there when you install Educates again. If you created the ``educates-config`` namespace by hand, as earlier versions of Educates required, the install takes it over and keeps what it holds.
+All configuration resources are created in the ``educates-config`` namespace, along with the secrets holding the kubeconfig files of remote clusters. The Educates install creates this namespace when it deploys the lookup service, so you do not need to create it yourself. The namespace is kept when the lookup service or Educates is uninstalled, so your configuration resources and secrets are still there when you install Educates again. While the lookup service runs, it puts a finalizer on each configuration resource so that it can act on the resource's deletion. Uninstalling the lookup service removes that finalizer, so once it is uninstalled you can delete the configuration resources, or the namespace itself, as usual. If you created the ``educates-config`` namespace by hand, as earlier versions of Educates required, the install takes it over and keeps what it holds.
 
 The lookup service reads secrets, and its configuration resources, only in the ``educates-config`` namespace. Resources in any other namespace are ignored.
 

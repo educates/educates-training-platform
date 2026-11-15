@@ -2,12 +2,13 @@ package educatesrestapi
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 )
 
 // PortalAdminCredentials are the username and password of a training
@@ -69,14 +70,10 @@ func readCredentialsSecret(ctx context.Context, client kubernetes.Interface, tra
 		return nil, errors.Errorf("training portal %q does not yet name its %s credentials Secret in its status", trainingPortal.GetName(), account)
 	}
 
-	secret, err := client.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
-	switch {
-	case k8serrors.IsNotFound(err):
-		return nil, errors.Errorf("the %s credentials Secret %q that training portal %q names does not exist in namespace %q", account, name, trainingPortal.GetName(), namespace)
-	case k8serrors.IsForbidden(err):
-		return nil, errors.Wrapf(err, "cannot read the %s credentials Secret %q of training portal %q: the cluster identity this command uses needs \"get\" access on Secrets in namespace %q", account, name, trainingPortal.GetName(), namespace)
-	case err != nil:
-		return nil, errors.Wrapf(err, "cannot read the %s credentials Secret %q of training portal %q", account, name, trainingPortal.GetName())
+	secret, err := cluster.ReadReferencedSecret(ctx, client,
+		fmt.Sprintf("training portal %q", trainingPortal.GetName()), account+" credentials", namespace, name)
+	if err != nil {
+		return nil, err
 	}
 
 	values := map[string]string{}

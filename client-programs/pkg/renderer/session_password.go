@@ -2,12 +2,13 @@ package renderer
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 )
 
 // configPasswordKey is the key of the Secret that holds a workshop
@@ -33,14 +34,10 @@ func sessionConfigPassword(ctx context.Context, client kubernetes.Interface, wor
 
 	namespace, _, _ := unstructured.NestedString(workshopSession.Object, "spec", "environment", "name")
 
-	secret, err := client.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
-	switch {
-	case k8serrors.IsNotFound(err):
-		return "", errors.Errorf("the config password Secret %q that workshop session %q names does not exist in namespace %q", name, workshopSession.GetName(), namespace)
-	case k8serrors.IsForbidden(err):
-		return "", errors.Wrapf(err, "cannot read the config password Secret %q of workshop session %q: the cluster identity this command uses needs \"get\" access on Secrets in namespace %q", name, workshopSession.GetName(), namespace)
-	case err != nil:
-		return "", errors.Wrapf(err, "cannot read the config password Secret %q of workshop session %q", name, workshopSession.GetName())
+	secret, err := cluster.ReadReferencedSecret(ctx, client,
+		fmt.Sprintf("workshop session %q", workshopSession.GetName()), "config password", namespace, name)
+	if err != nil {
+		return "", err
 	}
 
 	password, found := secret.Data[configPasswordKey]

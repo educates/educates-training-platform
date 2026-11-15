@@ -21,6 +21,8 @@ import secrets
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+from .role_bindings import service_account_role_binding
+
 SESSION_NAMESPACE_ROLE_BINDING = "educates-session-namespace"
 
 SESSION_NAMESPACE_CLUSTER_ROLE = "educates:session:namespace"
@@ -36,32 +38,6 @@ CONSOLE_CSRF_SECRET = "kubernetes-dashboard-csrf"
 CONSOLE_KEY_HOLDER_SECRET = "kubernetes-dashboard-key-holder"
 
 
-def _service_account_role_binding(
-    name, cluster_role, session_namespace, service_account, workshop_namespace, labels
-):
-    return {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "RoleBinding",
-        "metadata": {
-            "name": name,
-            "namespace": session_namespace,
-            "labels": dict(labels),
-        },
-        "roleRef": {
-            "apiGroup": "rbac.authorization.k8s.io",
-            "kind": "ClusterRole",
-            "name": cluster_role,
-        },
-        "subjects": [
-            {
-                "kind": "ServiceAccount",
-                "name": service_account,
-                "namespace": workshop_namespace,
-            }
-        ],
-    }
-
-
 def session_namespace_role_binding(
     session_namespace, service_account, workshop_namespace, labels
 ):
@@ -72,13 +48,14 @@ def session_namespace_role_binding(
 
     """
 
-    return _service_account_role_binding(
-        SESSION_NAMESPACE_ROLE_BINDING,
-        SESSION_NAMESPACE_CLUSTER_ROLE,
-        session_namespace,
-        service_account,
-        workshop_namespace,
-        labels,
+    return service_account_role_binding(
+        name=SESSION_NAMESPACE_ROLE_BINDING,
+        namespace=session_namespace,
+        role_kind="ClusterRole",
+        role_name=SESSION_NAMESPACE_CLUSTER_ROLE,
+        service_account=service_account,
+        service_account_namespace=workshop_namespace,
+        labels=labels,
     )
 
 
@@ -90,13 +67,14 @@ def console_role_binding(session_namespace, service_account, workshop_namespace,
 
     """
 
-    return _service_account_role_binding(
-        CONSOLE_ROLE_BINDING,
-        CONSOLE_CLUSTER_ROLE,
-        session_namespace,
-        service_account,
-        workshop_namespace,
-        labels,
+    return service_account_role_binding(
+        name=CONSOLE_ROLE_BINDING,
+        namespace=session_namespace,
+        role_kind="ClusterRole",
+        role_name=CONSOLE_CLUSTER_ROLE,
+        service_account=service_account,
+        service_account_namespace=workshop_namespace,
+        labels=labels,
     )
 
 

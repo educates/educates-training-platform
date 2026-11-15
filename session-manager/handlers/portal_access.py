@@ -11,6 +11,8 @@ trusts the environment's portal label, which an admission policy keeps a
 portal from setting to another portal's name.
 """
 
+from .role_bindings import service_account_role_binding
+
 PORTAL_NAME_LABEL = "training.educates.dev/portal.name"
 
 PORTAL_ENVIRONMENT_ROLE_BINDING = "educates-training-portal"
@@ -35,24 +37,12 @@ def portal_environment_role_binding(environment, labels):
     if not portal_name:
         return None
 
-    return {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "RoleBinding",
-        "metadata": {
-            "name": PORTAL_ENVIRONMENT_ROLE_BINDING,
-            "namespace": environment["metadata"]["name"],
-            "labels": dict(labels),
-        },
-        "roleRef": {
-            "apiGroup": "rbac.authorization.k8s.io",
-            "kind": "ClusterRole",
-            "name": PORTAL_ENVIRONMENT_CLUSTER_ROLE,
-        },
-        "subjects": [
-            {
-                "kind": "ServiceAccount",
-                "name": PORTAL_SERVICE_ACCOUNT,
-                "namespace": f"{portal_name}-ui",
-            }
-        ],
-    }
+    return service_account_role_binding(
+        name=PORTAL_ENVIRONMENT_ROLE_BINDING,
+        namespace=environment["metadata"]["name"],
+        role_kind="ClusterRole",
+        role_name=PORTAL_ENVIRONMENT_CLUSTER_ROLE,
+        service_account=PORTAL_SERVICE_ACCOUNT,
+        service_account_namespace=f"{portal_name}-ui",
+        labels=labels,
+    )

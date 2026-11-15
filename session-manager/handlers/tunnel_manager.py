@@ -13,6 +13,8 @@ Kubernetes API still accepts its token, and its Deployment probes that
 endpoint, so a wedged tunnel-manager is restarted.
 """
 
+from .role_bindings import service_account_role_binding
+
 TUNNEL_MANAGER_SERVICE_ACCOUNT = "tunnel-manager"
 
 TUNNEL_MANAGER_ROLE = "educates-tunnel-manager"
@@ -139,24 +141,12 @@ def tunnel_manager_role_binding(workshop_namespace, labels):
 
     """
 
-    return {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "RoleBinding",
-        "metadata": {
-            "name": TUNNEL_MANAGER_ROLE,
-            "namespace": workshop_namespace,
-            "labels": dict(labels),
-        },
-        "roleRef": {
-            "apiGroup": "rbac.authorization.k8s.io",
-            "kind": "Role",
-            "name": TUNNEL_MANAGER_ROLE,
-        },
-        "subjects": [
-            {
-                "kind": "ServiceAccount",
-                "name": TUNNEL_MANAGER_SERVICE_ACCOUNT,
-                "namespace": workshop_namespace,
-            }
-        ],
-    }
+    return service_account_role_binding(
+        name=TUNNEL_MANAGER_ROLE,
+        namespace=workshop_namespace,
+        role_kind="Role",
+        role_name=TUNNEL_MANAGER_ROLE,
+        service_account=TUNNEL_MANAGER_SERVICE_ACCOUNT,
+        service_account_namespace=workshop_namespace,
+        labels=labels,
+    )

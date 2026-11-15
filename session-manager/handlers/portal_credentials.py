@@ -20,6 +20,7 @@ import secrets
 import string
 
 from .helpers import xget
+from .role_bindings import service_account_role_binding
 
 ADMIN_CREDENTIALS_SECRET = "training-portal-admin-credentials"
 ROBOT_CREDENTIALS_SECRET = "training-portal-robot-credentials"
@@ -226,27 +227,15 @@ def remote_access_rbac(portal_name, portal_uid, portal_namespace, educates_names
         ],
     }
 
-    role_binding = {
-        "apiVersion": "rbac.authorization.k8s.io/v1",
-        "kind": "RoleBinding",
-        "metadata": {
-            "name": REMOTE_ACCESS_ROLE,
-            "namespace": portal_namespace,
-            "labels": dict(labels),
-        },
-        "roleRef": {
-            "apiGroup": "rbac.authorization.k8s.io",
-            "kind": "Role",
-            "name": REMOTE_ACCESS_ROLE,
-        },
-        "subjects": [
-            {
-                "kind": "ServiceAccount",
-                "name": REMOTE_ACCESS_SERVICE_ACCOUNT,
-                "namespace": educates_namespace,
-            }
-        ],
-    }
+    role_binding = service_account_role_binding(
+        name=REMOTE_ACCESS_ROLE,
+        namespace=portal_namespace,
+        role_kind="Role",
+        role_name=REMOTE_ACCESS_ROLE,
+        service_account=REMOTE_ACCESS_SERVICE_ACCOUNT,
+        service_account_namespace=educates_namespace,
+        labels=labels,
+    )
 
     return role, role_binding
 

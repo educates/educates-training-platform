@@ -8,6 +8,7 @@ import base64
 from itertools import islice
 
 import pykube
+import requests
 import rstr
 
 from django.conf import settings
@@ -451,9 +452,31 @@ def create_workshop_session(session, secret):
 
     # The config password goes to session-manager in a Secret the session
     # owns, which can only be created once the session exists. The portal
-    # keeps its own copy for fetching the session's configuration.
+    # keeps its own copy for fetching the session's configuration. When the
+    # Secret cannot be created, session-manager would wait for it for as long
+    # as the session exists, so the session is deleted before the failure is
+    # passed on.
 
-    create_config_password_secret(session, config_password)
+    try:
+        create_config_password_secret(session, config_password)
+
+    except Exception:
+        logger.exception(
+            "Failed to create config password Secret %s for workshop session %s, deleting the session.",
+            config_password_secret_name(session),
+            session.name,
+        )
+
+        try:
+            resource.delete()
+
+        except (
+            pykube.exceptions.PyKubeError,
+            requests.exceptions.RequestException,
+        ):
+            logger.exception("Failed to delete workshop session %s.", session.name)
+
+        raise
 
     logger.info("Deployed workshop session %s.", session.name)
 

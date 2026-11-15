@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/util/retry"
 )
 
 var clusterWorkshopDeployExample = `
@@ -311,55 +312,41 @@ func (p *ProjectInfo) NewClusterWorkshopDeployCmd() *cobra.Command {
 
 var trainingPortalResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "trainingportals"}
 
-func deployWorkshopResource(client dynamic.Interface, workshop *unstructured.Unstructured, alias string, portal string, capacity uint, reserved uint, initial uint, expires string, overtime string, deadline string, orphaned string, overdue string, refresh string, registry string, environ []string, labels []string, openBrowser bool) error {
-	trainingPortalClient := client.Resource(trainingPortalResource)
-
-	trainingPortal, err := trainingPortalClient.Get(context.TODO(), portal, metav1.GetOptions{})
-
-	var trainingPortalExists = true
-
-	if k8serrors.IsNotFound(err) {
-		trainingPortalExists = false
-
-		trainingPortal = &unstructured.Unstructured{}
-
-		trainingPortal.SetUnstructuredContent(map[string]interface{}{
-			"apiVersion": "training.educates.dev/v1beta1",
-			"kind":       "TrainingPortal",
-			"metadata": map[string]interface{}{
-				"name": portal,
-			},
-			"spec": map[string]interface{}{
-				"portal": map[string]interface{}{
-					"password": randomPassword(12),
-					"registration": struct {
-						Type string `json:"type"`
-					}{
-						Type: "anonymous",
-					},
-					"updates": struct {
-						Workshop bool `json:"workshop"`
-					}{
-						Workshop: true,
-					},
-					"sessions": struct {
-						Maximum int64 `json:"maximum"`
-					}{
-						Maximum: 5,
-					},
-					"workshop": map[string]interface{}{
-						"defaults": struct {
-							Reserved int `json:"reserved"`
-						}{
-							Reserved: 0,
-						},
+// newTrainingPortal returns the training portal deploy creates when the
+// named one does not exist.
+func newTrainingPortal(name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "training.educates.dev/v1beta1",
+		"kind":       "TrainingPortal",
+		"metadata": map[string]interface{}{
+			"name": name,
+		},
+		"spec": map[string]interface{}{
+			"portal": map[string]interface{}{
+				"password": randomPassword(12),
+				"registration": map[string]interface{}{
+					"type": "anonymous",
+				},
+				"updates": map[string]interface{}{
+					"workshop": true,
+				},
+				"sessions": map[string]interface{}{
+					"maximum": int64(5),
+				},
+				"workshop": map[string]interface{}{
+					"defaults": map[string]interface{}{
+						"reserved": int64(0),
 					},
 				},
-				"workshops": []interface{}{},
 			},
-		})
-	}
+			"workshops": []interface{}{},
+		},
+	}}
+}
 
+// addWorkshopToTrainingPortal adds the workshop to the portal's
+// spec.workshops under alias, or updates the entry already there for it.
+func addWorkshopToTrainingPortal(trainingPortal *unstructured.Unstructured, workshop *unstructured.Unstructured, alias string, capacity uint, reserved uint, initial uint, expires string, overtime string, deadline string, orphaned string, overdue string, refresh string, registry string, environ []string, labels []string) error {
 	workshops, _, err := unstructured.NestedSlice(trainingPortal.Object, "spec", "workshops")
 
 	if err != nil {
@@ -555,18 +542,59 @@ func deployWorkshopResource(client dynamic.Interface, workshop *unstructured.Uns
 		updatedWorkshops = append(updatedWorkshops, workshopDetailsMap)
 	}
 
-	unstructured.SetNestedSlice(trainingPortal.Object, updatedWorkshops, "spec", "workshops")
+	return unstructured.SetNestedSlice(trainingPortal.Object, updatedWorkshops, "spec", "workshops")
+}
 
-	if trainingPortalExists {
-		fmt.Printf("Updating existing training portal %q.\n", trainingPortal.GetName())
-		_, err = trainingPortalClient.Update(context.TODO(), trainingPortal, metav1.UpdateOptions{FieldManager: "educates-cli"})
-	} else {
-		fmt.Printf("Creating new training portal %q.\n", trainingPortal.GetName())
-		_, err = trainingPortalClient.Create(context.TODO(), trainingPortal, metav1.CreateOptions{FieldManager: "educates-cli"})
-	}
+// isTrainingPortalWriteConflict reports whether a write of a training
+// portal lost a race with another writer: an update of a portal changed
+// since it was read, or a create of a portal created since.
+func isTrainingPortalWriteConflict(err error) bool {
+	return k8serrors.IsConflict(err) || k8serrors.IsAlreadyExists(err)
+}
+
+func deployWorkshopResource(client dynamic.Interface, workshop *unstructured.Unstructured, alias string, portal string, capacity uint, reserved uint, initial uint, expires string, overtime string, deadline string, orphaned string, overdue string, refresh string, registry string, environ []string, labels []string, openBrowser bool) error {
+	trainingPortalClient := client.Resource(trainingPortalResource)
+
+	var trainingPortalExists bool
+
+	// Other writers change the portal too: session-manager adds its
+	// finalizer and status to a portal just created, and a parallel deploy
+	// adds its own workshop. Each attempt reads the portal again, so a
+	// write that lost the race is redone on top of theirs.
+	err := retry.OnError(retry.DefaultRetry, isTrainingPortalWriteConflict, func() error {
+		trainingPortal, err := trainingPortalClient.Get(context.TODO(), portal, metav1.GetOptions{})
+
+		switch {
+		case err == nil:
+			trainingPortalExists = true
+		case k8serrors.IsNotFound(err):
+			trainingPortalExists = false
+			trainingPortal = newTrainingPortal(portal)
+		default:
+			return err
+		}
+
+		if err := addWorkshopToTrainingPortal(trainingPortal, workshop, alias, capacity, reserved, initial, expires, overtime, deadline, orphaned, overdue, refresh, registry, environ, labels); err != nil {
+			return err
+		}
+
+		if trainingPortalExists {
+			_, err = trainingPortalClient.Update(context.TODO(), trainingPortal, metav1.UpdateOptions{FieldManager: "educates-cli"})
+		} else {
+			_, err = trainingPortalClient.Create(context.TODO(), trainingPortal, metav1.CreateOptions{FieldManager: "educates-cli"})
+		}
+
+		return err
+	})
 
 	if err != nil {
 		return errors.Wrapf(err, "unable to update training portal %q in cluster", portal)
+	}
+
+	if trainingPortalExists {
+		fmt.Printf("Updated existing training portal %q.\n", portal)
+	} else {
+		fmt.Printf("Created new training portal %q.\n", portal)
 	}
 
 	fmt.Print("Workshop added to training portal.\n")
@@ -576,6 +604,7 @@ func deployWorkshopResource(client dynamic.Interface, workshop *unstructured.Uns
 		// for access may not have been set yet.
 
 		var targetUrl string
+		var trainingPortal *unstructured.Unstructured
 
 		fmt.Print("Checking training portal is ready.\n")
 

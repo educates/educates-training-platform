@@ -1540,6 +1540,17 @@ Deprecations
 Bugs Fixed
 ----------
 
+* ``educates cluster workshop deploy`` could fail with ``the object has been
+  modified; please apply your changes to the latest version and try again``
+  when something else changed the training portal between the command
+  reading it and writing it back, such as the session manager adding its
+  finalizer and status to a training portal created moments before, or
+  another ``educates cluster workshop deploy`` adding its own workshop. When
+  two of them ran at once for a training portal which did not exist yet, the
+  one which did not create it failed, saying it already existed. The command
+  now reads the training portal again and redoes its change when its write
+  loses such a race, keeping the other change.
+
 * Deploying a local image registry mirror could fail with ``network sandbox
   for container ... not found``, after a warning that Docker refused the
   mirror's fixed address, and then succeed when run again. The mirror's

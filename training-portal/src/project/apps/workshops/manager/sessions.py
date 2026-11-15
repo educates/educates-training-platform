@@ -327,7 +327,13 @@ def create_config_password_secret(session, password):
 
 
 def create_workshop_session(session, secret):
-    """Triggers the deployment of a new workshop session to the cluster."""
+    """Triggers the deployment of a new workshop session to the cluster. It
+    runs outside any transaction, once the session's record is committed:
+    on a commit hook of the request or task that created the record, or in a
+    reserved session's own task. What it saves to the record is therefore
+    kept even when it fails and passes the failure on.
+
+    """
 
     logger.info(
         "Deploying new workshop session %s for workshop environment %s.",
@@ -454,8 +460,10 @@ def create_workshop_session(session, secret):
     # owns, which can only be created once the session exists. The portal
     # keeps its own copy for fetching the session's configuration. When the
     # Secret cannot be created, session-manager would wait for it for as long
-    # as the session exists, so the session is deleted before the failure is
-    # passed on.
+    # as the session exists, so the session is deleted and its record marked
+    # stopped before the failure is passed on. A stopped record counts against
+    # no capacity or reserve, and a user requesting the workshop again gets a
+    # new session rather than this one.
 
     try:
         create_config_password_secret(session, config_password)
@@ -475,6 +483,9 @@ def create_workshop_session(session, secret):
             requests.exceptions.RequestException,
         ):
             logger.exception("Failed to delete workshop session %s.", session.name)
+
+        with transaction.atomic():
+            session.mark_as_stopped()
 
         raise
 
@@ -610,12 +621,13 @@ def setup_workshop_session(environment, **session_kwargs):
 
 @background_task
 @resources_lock
-@transaction.atomic
 def create_reserved_session(session, secret):
     """Deploy a single reserved workshop session in its own task. Scheduling the
     deployments individually, rather than running them all under the caller's
     lock, releases the global resources lock between sessions so that session
     allocation requests are not blocked for the duration of the whole batch.
+    The task opens no transaction, so a record the deployment marks stopped
+    when it fails is not rolled back with the failure.
 
     """
 

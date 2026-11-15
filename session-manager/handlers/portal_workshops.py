@@ -7,7 +7,7 @@ session-manager trusts the label and deploys a portal-labelled environment
 only for a workshop that portal's TrainingPortal lists in `spec.workshops`.
 """
 
-PORTAL_NAME_LABEL = "training.educates.dev/portal.name"
+from .portal_labels import portal_label
 
 
 def portal_workshop_refusal(environment, training_portal):
@@ -20,7 +20,7 @@ def portal_workshop_refusal(environment, training_portal):
 
     """
 
-    portal_name = environment["metadata"].get("labels", {}).get(PORTAL_NAME_LABEL, "")
+    portal_name = portal_label(environment)
 
     if not portal_name:
         return None

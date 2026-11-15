@@ -11,9 +11,8 @@ trusts the environment's portal label, which an admission policy keeps a
 portal from setting to another portal's name.
 """
 
+from .portal_labels import portal_label
 from .role_bindings import service_account_role_binding
-
-PORTAL_NAME_LABEL = "training.educates.dev/portal.name"
 
 PORTAL_ENVIRONMENT_ROLE_BINDING = "educates-training-portal"
 
@@ -32,7 +31,7 @@ def portal_environment_role_binding(environment, labels):
 
     """
 
-    portal_name = environment["metadata"].get("labels", {}).get(PORTAL_NAME_LABEL, "")
+    portal_name = portal_label(environment)
 
     if not portal_name:
         return None

@@ -2113,3 +2113,10 @@ Bugs Fixed
   console's settings, by name. The console only reads them, so it now works
   under any role, without workshop users being able to create or update
   secrets.
+
+* A login shell started with ``kubectl exec`` in a workshop session container
+  printed an error and the usage message of ``ps`` on standard error. The
+  shell profile checks whether the shell was started by ``sshd`` by looking
+  up its parent process, and a process started by ``kubectl exec`` has no
+  parent process in the container. The profile now skips that check when
+  there is no parent process, so nothing is printed.

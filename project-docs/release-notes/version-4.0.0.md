@@ -143,7 +143,11 @@ New Features
   new import and a key taken from a cluster cannot sign for any other site.
   The deploy prints a line whenever it mints. Later deploys for the same domain
   reuse the intermediate, and one that has expired or was minted from a root
-  since replaced is minted again. A root that carries its own name
+  since replaced is minted again. ``educates local cluster delete`` removes
+  the intermediate the deleted cluster used from the cache, unless another
+  local cluster, running or stopped, uses it or may use it, in which case it
+  keeps it and says why. A later deploy for the domain mints a new one, which
+  needs no new import. A root that carries its own name
   constraints must permit the ingress domain. The local secrets cache holds
   one root CA: ``add ca`` and ``educates local secrets import`` refuse a
   second one, naming the existing root, and
@@ -1704,6 +1708,26 @@ Deprecations
 
 Bugs Fixed
 ----------
+
+* ``educates cluster workshop deploy`` could fail with ``the object has been
+  modified; please apply your changes to the latest version and try again``
+  when something else changed the training portal between the command
+  reading it and writing it back, such as the session manager adding its
+  finalizer and status to a training portal created moments before, or
+  another ``educates cluster workshop deploy`` adding its own workshop. When
+  two of them ran at once for a training portal which did not exist yet, the
+  one which did not create it failed, saying it already existed. The command
+  now reads the training portal again and redoes its change when its write
+  loses such a race, keeping the other change.
+
+* On a cluster with more than one training portal, the bundle written by
+  ``educates admin diagnostics collect`` held the logs and the workshop
+  catalog of only one of them, in files named after the first. The logs of
+  each training portal were written to the first one's
+  ``training-portal-<namespace>.log`` file, replacing what was there, and
+  likewise each catalog to the first one's
+  ``training-portal-catalog-<portal>.json`` file. The bundle now has a log
+  file and a catalog file for every training portal.
 
 * Deploying a local image registry mirror could fail with ``network sandbox
   for container ... not found``, after a warning that Docker refused the

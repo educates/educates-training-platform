@@ -54,7 +54,9 @@ def test_reuses_the_values_of_credentials_secrets_that_already_exist():
         },
     )
 
-    assert portal_credentials({}, admin_secret=admin, robot_secret=robot) == {
+    assert portal_credentials(
+        {}, existing_secrets={"admin": admin, "robot": robot}
+    ) == {
         "admin": {"username": "educates", "password": "existing-admin-password"},
         "robot": {
             "username": "robot@educates",
@@ -72,7 +74,7 @@ def test_generates_the_credentials_of_a_secret_that_does_not_exist_yet():
         password="existing-admin-password",
     )
 
-    credentials = portal_credentials({}, admin_secret=admin)
+    credentials = portal_credentials({}, existing_secrets={"admin": admin})
 
     assert credentials["admin"]["password"] == "existing-admin-password"
     assert _generated(credentials["robot"]["password"])
@@ -91,7 +93,7 @@ def test_an_existing_secret_wins_over_the_definition():
         password="existing-admin-password",
     )
 
-    credentials = portal_credentials(spec, admin_secret=admin)
+    credentials = portal_credentials(spec, existing_secrets={"admin": admin})
 
     assert credentials["admin"]["password"] == "existing-admin-password"
 
@@ -121,8 +123,7 @@ def test_uses_the_values_of_the_secrets_the_definition_references():
 
     credentials = portal_credentials(
         spec,
-        referenced_admin_secret=referenced_admin,
-        referenced_robot_secret=referenced_robot,
+        referenced_secrets={"admin": referenced_admin, "robot": referenced_robot},
     )
 
     assert credentials == {
@@ -146,7 +147,7 @@ def test_copies_only_the_credentials_keys_of_a_referenced_secret():
     )
 
     credentials = portal_credentials(
-        ADMIN_REFERENCE_SPEC, referenced_admin_secret=referenced_admin
+        ADMIN_REFERENCE_SPEC, referenced_secrets={"admin": referenced_admin}
     )
 
     assert credentials["admin"] == {
@@ -171,7 +172,9 @@ def test_takes_each_account_from_its_own_source():
         "lab-admin", "credentials", username="admin-user", password="admin-secret"
     )
 
-    credentials = portal_credentials(spec, referenced_admin_secret=referenced_admin)
+    credentials = portal_credentials(
+        spec, referenced_secrets={"admin": referenced_admin}
+    )
 
     assert credentials["admin"] == {
         "username": "admin-user",
@@ -195,8 +198,8 @@ def test_an_existing_secret_wins_over_a_referenced_one():
 
     credentials = portal_credentials(
         ADMIN_REFERENCE_SPEC,
-        admin_secret=admin,
-        referenced_admin_secret=referenced_admin,
+        existing_secrets={"admin": admin},
+        referenced_secrets={"admin": referenced_admin},
     )
 
     assert credentials["admin"] == {

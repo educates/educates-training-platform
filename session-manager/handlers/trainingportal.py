@@ -1106,20 +1106,19 @@ def training_portal_create(name, uid, body, spec, status, patch, runtime, retry,
             name=ROBOT_CREDENTIALS_SECRET
         )
 
+        existing_secrets = {
+            account: secret.obj
+            for account, secret in (
+                ("admin", existing_admin_secret),
+                ("robot", existing_robot_secret),
+            )
+            if secret is not None
+        }
+
         credentials = portal_credentials(
             spec,
-            admin_secret=(
-                existing_admin_secret.obj
-                if existing_admin_secret is not None
-                else None
-            ),
-            robot_secret=(
-                existing_robot_secret.obj
-                if existing_robot_secret is not None
-                else None
-            ),
-            referenced_admin_secret=referenced_secrets.get("admin"),
-            referenced_robot_secret=referenced_secrets.get("robot"),
+            existing_secrets=existing_secrets,
+            referenced_secrets=referenced_secrets,
         )
 
         admin_secret_body, robot_secret_body = credentials_secrets(

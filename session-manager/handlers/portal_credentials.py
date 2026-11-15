@@ -108,15 +108,14 @@ def referenced_secret_problem(account, reference, secret):
     return f"{described} has no value for the keys {keys}."
 
 
-def portal_credentials(
-    spec,
-    admin_secret=None,
-    robot_secret=None,
-    referenced_admin_secret=None,
-    referenced_robot_secret=None,
-):
+def portal_credentials(spec, existing_secrets=None, referenced_secrets=None):
     """Returns the admin and robot credentials for a training portal, keyed
     as the keys of the Secrets that hold them.
+
+    existing_secrets holds the portal's own credentials Secrets that already
+    exist, and referenced_secrets the Secrets the TrainingPortal's spec
+    references under portal.credentialSecrets, each keyed by the account
+    whose credentials it holds, admin or robot, as the API server returns it.
 
     When the portal's admin or robot credentials Secret already exists, its
     values are the ones the portal was deployed with, so they are used as
@@ -125,20 +124,29 @@ def portal_credentials(
     keys. Failing both, a value the spec sets inline, and does not leave
     empty, is used as given, and any other value is generated."""
 
-    existing_admin = secret_values(admin_secret)
-    existing_robot = secret_values(robot_secret)
+    existing = {
+        account: secret_values((existing_secrets or {}).get(account))
+        for account in CREDENTIALS_KEYS
+    }
 
-    referenced_admin = secret_values(referenced_admin_secret)
-    referenced_robot = secret_values(referenced_robot_secret)
+    referenced = {
+        account: secret_values((referenced_secrets or {}).get(account))
+        for account in CREDENTIALS_KEYS
+    }
 
-    def value(existing, referenced, key, path, default):
-        return existing.get(key) or referenced.get(key) or xget(spec, path) or default()
+    def value(account, key, path, default):
+        return (
+            existing[account].get(key)
+            or referenced[account].get(key)
+            or xget(spec, path)
+            or default()
+        )
 
     def admin(key, path, default):
-        return value(existing_admin, referenced_admin, key, path, default)
+        return value("admin", key, path, default)
 
     def robot(key, path, default):
-        return value(existing_robot, referenced_robot, key, path, default)
+        return value("robot", key, path, default)
 
     return {
         "admin": {

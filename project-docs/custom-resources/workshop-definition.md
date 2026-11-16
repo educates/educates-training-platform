@@ -1994,7 +1994,9 @@ This means an array doesn't outright replace an existing array, but a more intel
 Workshop instructions layout
 ----------------------------
 
-Workshop instructions will by default be displayed in a panel on the left hand side of the workshop dashboard. If you instead want the workshop instructions to be displayed in a tab of the workshop dashboard, with no left hand side panel, you can override the layout for the workshop instructions using:
+Workshop instructions will by default be displayed in a panel on the left hand side of the workshop dashboard. A workshop user can collapse this panel out of the way by clicking on the button at the start of the dashboard tabs. The button then changes to show that clicking on it again expands the panel, restoring the width the panel had before it was collapsed. Double clicking on the divider between the panel and the dashboard tabs also collapses or expands the panel, and the divider can be dragged to change the width of the panel.
+
+If you instead want the workshop instructions to be displayed in a tab of the workshop dashboard, with no left hand side panel, you can override the layout for the workshop instructions using:
 
 ```yaml
 spec:

@@ -3,7 +3,14 @@
 {{- $glyph := default "fa-bug" .glyph -}}
 {{- $prefix := default "Action" .prefix -}}
 {{- $title := default "Invalid action definition" .title -}}
+{{- /*
+    The body is shown as preformatted text, unless sections are supplied.
+    Each section is a dict with a "label" and a "text", shown as the label
+    above the text preformatted. When a section sets "copy", shift+click on
+    the action copies that section's text instead of the whole body.
+*/ -}}
 {{- $body := .body -}}
+{{- $sections := .sections -}}
 {{- $args := default dict .args -}}
 {{- if isset $args "cooldown" -}}
     {{- if or (eq (printf "%v" $args.cooldown) "+Inf") (eq (printf "%v" $args.cooldown) "-Inf") -}}
@@ -18,7 +25,18 @@
         <span class="clickable-action__required fas fa-asterisk" aria-hidden="true" title="Required"></span>
         {{- end }}
     </div>
+    {{- if $sections }}
+    <div class="clickable-action__body clickable-action__body--sections">
+        {{- range $sections }}
+        <div class="clickable-action__section">
+            <div class="clickable-action__label">{{ .label }}</div>
+            <pre class="clickable-action__text"{{ if .copy }} data-action-copy{{ end }}><code>{{ .text }}</code></pre>
+        </div>
+        {{- end }}
+    </div>
+    {{- else }}
     <pre class="clickable-action__body"><code>{{ $body }}</code></pre>
+    {{- end }}
 </div>
 <script>
     document.addEventListener('DOMContentLoaded', function () {

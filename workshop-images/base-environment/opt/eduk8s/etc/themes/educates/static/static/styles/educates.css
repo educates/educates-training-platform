@@ -425,6 +425,39 @@ div.magic-code-block-upload {
     margin-bottom: 1em;
 }
 
+/* Action body made of labelled sections, each with preformatted text */
+
+.clickable-action__body--sections {
+    padding: 6px;
+}
+
+.clickable-action__section + .clickable-action__section {
+    border-top: 1px solid var(--bs-border-color);
+    margin-top: 6px;
+    padding-top: 6px;
+}
+
+.clickable-action__label {
+    color: var(--bs-secondary-color);
+    font-size: 0.7em;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.page-content .clickable-action__text {
+    background: transparent;
+    padding: 0;
+    margin: 0;
+}
+
+.clickable-action__text code:empty::before {
+    content: "(empty)";
+    color: var(--bs-secondary-color);
+    font-style: italic;
+}
+
 .clickable-action__form {
     background-color: lightyellow;
     padding: 8px;

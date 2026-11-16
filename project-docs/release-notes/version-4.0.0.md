@@ -591,6 +591,14 @@ New Features
   stay in place. See [pre-pulling workshop
   images](pre-pulling-workshop-images).
 
+* The workshop dashboard has a button at the start of its tabs for collapsing
+  the panel holding the workshop instructions out of the way. When the panel
+  is collapsed the icon on the button changes, and clicking on it expands the
+  panel again. Dragging the divider between the panel and the tabs all the
+  way to the left, or double clicking on the divider, still collapses the
+  panel as before. The button is shown only when the workshop instructions
+  are displayed in the left hand side panel.
+
 Features Changed
 ----------------
 
@@ -704,6 +712,27 @@ Features Changed
   primary color using ``--bs-primary`` and ``--bs-primary-rgb`` also changes
   the highlight for the current page, the step progress indicator, and the
   step number shown with the page title.
+
+* The body of the ``editor:replace-matching-text`` clickable action now shows
+  the ``match`` and ``replacement`` values as two separate blocks of
+  preformatted text, each under a label, instead of a single line joining them
+  with an arrow. Multi-line values keep their line breaks and indentation, so
+  it is clear where the text to match ends and its replacement starts. When
+  ``isRegex`` is ``true`` the ``match`` value is labelled as a pattern, and if
+  ``group`` also selects a match group other than ``0``, the label of the
+  ``replacement`` value names that group. An empty ``replacement`` is shown as
+  ``(empty)``. Holding down shift while clicking on the action now copies
+  only the replacement text. Setting ``description`` still replaces the body
+  with that text. A custom ``workshop-instructions.css`` file can style the
+  blocks through the ``clickable-action__section``,
+  ``clickable-action__label`` and ``clickable-action__text`` classes.
+
+* Expanding the collapsed panel holding the workshop instructions in the
+  workshop dashboard now restores the width the panel had before it was
+  collapsed, instead of resetting it to the default width. This applies
+  whether the panel is expanded using the button at the start of the
+  dashboard tabs, by double clicking on the divider, by holding down shift
+  while clicking on the reload button, or from the workshop instructions.
 
 * The ``ClusterRole`` and ``ClusterRoleBinding`` resources created by Educates
   have been renamed to follow the Kubernetes convention of an application

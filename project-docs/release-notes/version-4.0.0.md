@@ -591,6 +591,14 @@ New Features
   stay in place. See [pre-pulling workshop
   images](pre-pulling-workshop-images).
 
+* The workshop dashboard has a button at the start of its tabs for collapsing
+  the panel holding the workshop instructions out of the way. When the panel
+  is collapsed the icon on the button changes, and clicking on it expands the
+  panel again. Dragging the divider between the panel and the tabs all the
+  way to the left, or double clicking on the divider, still collapses the
+  panel as before. The button is shown only when the workshop instructions
+  are displayed in the left hand side panel.
+
 Features Changed
 ----------------
 
@@ -718,6 +726,13 @@ Features Changed
   with that text. A custom ``workshop-instructions.css`` file can style the
   blocks through the ``clickable-action__section``,
   ``clickable-action__label`` and ``clickable-action__text`` classes.
+
+* Expanding the collapsed panel holding the workshop instructions in the
+  workshop dashboard now restores the width the panel had before it was
+  collapsed, instead of resetting it to the default width. This applies
+  whether the panel is expanded using the button at the start of the
+  dashboard tabs, by double clicking on the divider, by holding down shift
+  while clicking on the reload button, or from the workshop instructions.
 
 * The ``ClusterRole`` and ``ClusterRoleBinding`` resources created by Educates
   have been renamed to follow the Kubernetes convention of an application

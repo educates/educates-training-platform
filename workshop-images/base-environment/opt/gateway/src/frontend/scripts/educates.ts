@@ -16,6 +16,13 @@ const _ = require("lodash")
 
 const Split = require("split.js")
 
+// Sizes, as percentages, of the workshop panel and the workarea panel when the
+// dashboard opens. A workshop panel narrower than the collapsed size counts as
+// collapsed.
+
+const WORKSHOP_PANEL_DEFAULT_SIZES = [35, 65]
+const WORKSHOP_PANEL_COLLAPSED_SIZE = 5.0
+
 declare var gtag: Function
 declare var clarity: Function
 
@@ -1410,6 +1417,7 @@ class Terminals {
 
 class Dashboard {
     private dashboard: any
+    private workshop_panel_sizes: number[] = [...WORKSHOP_PANEL_DEFAULT_SIZES]
     private expiration: number
     private extendable: boolean
     private expiring: boolean
@@ -1445,14 +1453,25 @@ class Dashboard {
 
             console.log("Adding split for workshop/workarea")
 
+            // Dragging the divider remembers the width of the workshop panel,
+            // both before the drag, in case the drag collapses the panel, and
+            // after it, so that expanding a collapsed panel restores it.
+
             if ($("#workshop-panel").length) {
                 this.dashboard = Split(["#workshop-panel", "#workarea-panel"], {
                     gutterSize: 8,
-                    sizes: [35, 65],
+                    sizes: [...WORKSHOP_PANEL_DEFAULT_SIZES],
                     cursor: "col-resize",
                     direction: "horizontal",
                     snapOffset: 120,
-                    minSize: 0
+                    minSize: 0,
+                    onDragStart: (sizes: number[]) => {
+                        this.remember_workshop_panel_sizes(sizes)
+                    },
+                    onDragEnd: (sizes: number[]) => {
+                        this.remember_workshop_panel_sizes(sizes)
+                        this.update_workshop_panel_toggle()
+                    }
                 })
             }
 
@@ -1460,10 +1479,16 @@ class Dashboard {
             // either collapse or expand the workshop panel.
 
             $("#workshop-panel").next("div.gutter-horizontal").on("dblclick", () => {
-                if (this.dashboard.getSizes()[0] < 5.0)
-                    this.dashboard.setSizes([35, 65])
-                else
-                    this.dashboard.collapse(0)
+                this.toggle_workshop_panel()
+            })
+
+            // The button at the start of the dashboard tabs also collapses or
+            // expands the workshop panel. The handler is bound on the tab bar,
+            // as reordering the tabs below empties the tab bar, which drops
+            // any handler bound to the button itself.
+
+            $("#workarea-nav").on("click", "#workshop-panel-toggle-button", () => {
+                this.toggle_workshop_panel()
             })
 
             // If the terminal layout is "lower", then the terminal is being
@@ -1523,9 +1548,16 @@ class Dashboard {
 
             let remaining_tabs = []
 
+            // The button for collapsing the workshop panel stays ahead of
+            // the tabs.
+
+            let leading_items = []
+
             $('#workarea-nav > li').each((_, element) => {
                 let id = $(element).children().first().attr("id")
-                if (tab_ids.includes(id)) {
+                if (element.id == "workshop-panel-toggle") {
+                    leading_items.push(element)
+                } else if (tab_ids.includes(id)) {
                     matched_tabs[id] = element
                 } else {
                     remaining_tabs.push(element)
@@ -1533,6 +1565,8 @@ class Dashboard {
             })
 
             navbar.empty()
+
+            leading_items.forEach(element => navbar.append(element))
 
             tab_ids.forEach(name => {
                 if (name in matched_tabs) {
@@ -1688,20 +1722,11 @@ class Dashboard {
 
         $("#refresh-button").on("click", (event) => {
             if (event.shiftKey) {
-                if (this.dashboard) {
-                    // If shift is pressed we target the workshop panel,
-                    // either reloading it, or expanding the panel if it
-                    // was previously collapsed.
+                // If shift is pressed we target the workshop panel, either
+                // reloading it, or expanding the panel if it was previously
+                // collapsed.
 
-                    if (this.dashboard.getSizes()[0] >= 5.0) {
-                        let iframe = $("#workshop-iframe")
-                        let iframe_window: any = iframe.contents().get(0)
-                        iframe_window.location.reload()
-                    }
-                    else {
-                        this.dashboard.setSizes([35, 65])
-                    }
-                }
+                this.reload_workshop()
             }
             else {
                 // Refreshing a terminal reconnects it if it has closed, or
@@ -1760,6 +1785,7 @@ class Dashboard {
         // pointer sweeps across the row of buttons.
 
         let tooltip_buttons = [
+            "#workshop-panel-toggle-button",
             "#restart-button",
             "#countdown-button",
             "#refresh-button",
@@ -2283,20 +2309,78 @@ class Dashboard {
 
     reload_workshop() {
         if (this.dashboard) {
-            if (this.dashboard.getSizes()[0] >= 5.0) {
+            if (!this.is_workshop_panel_collapsed()) {
                 let iframe = $("#workshop-iframe")
                 let iframe_window: any = iframe.contents().get(0)
                 iframe_window.location.reload()
             }
             else {
-                this.dashboard.setSizes([35, 65])
+                this.expand_workshop_panel()
             }
         }
     }
 
     collapse_workshop() {
         if (this.dashboard)
-            this.dashboard.collapse(0)
+            this.collapse_workshop_panel()
+    }
+
+    private is_workshop_panel_collapsed(): boolean {
+        return this.dashboard.getSizes()[0] < WORKSHOP_PANEL_COLLAPSED_SIZE
+    }
+
+    private remember_workshop_panel_sizes(sizes: number[]) {
+        // Remember the sizes of the panels as the ones to restore when the
+        // workshop panel is expanded, unless the workshop panel is collapsed.
+
+        if (sizes[0] >= WORKSHOP_PANEL_COLLAPSED_SIZE)
+            this.workshop_panel_sizes = [...sizes]
+    }
+
+    private collapse_workshop_panel() {
+        this.remember_workshop_panel_sizes(this.dashboard.getSizes())
+        this.dashboard.collapse(0)
+        this.update_workshop_panel_toggle()
+    }
+
+    private expand_workshop_panel() {
+        this.dashboard.setSizes([...this.workshop_panel_sizes])
+        this.update_workshop_panel_toggle()
+    }
+
+    private toggle_workshop_panel() {
+        if (this.is_workshop_panel_collapsed())
+            this.expand_workshop_panel()
+        else
+            this.collapse_workshop_panel()
+    }
+
+    private update_workshop_panel_toggle() {
+        // Keep the button at the start of the dashboard tabs, its icon and
+        // its tooltip, in sync with whether clicking it collapses or expands
+        // the workshop panel.
+
+        let element = document.getElementById("workshop-panel-toggle-button")
+
+        if (!element)
+            return
+
+        let collapsed = this.is_workshop_panel_collapsed()
+        let text = collapsed ? "Show workshop instructions" : "Hide workshop instructions"
+
+        element.setAttribute("aria-label", text)
+        element.setAttribute("aria-expanded", collapsed ? "false" : "true")
+
+        // The icon's chevron points left, to where the panel goes, while the
+        // panel is shown, and right while it is collapsed.
+
+        $(element).find(".workshop-panel-icon-chevron")
+            .attr("points", collapsed ? "13,9 16,12 13,15" : "16,9 13,12 16,15")
+
+        let tooltip = bootstrap.Tooltip.getInstance(element)
+
+        if (tooltip)
+            tooltip.setContent({ ".tooltip-inner": text })
     }
 }
 

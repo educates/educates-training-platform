@@ -705,6 +705,20 @@ Features Changed
   the highlight for the current page, the step progress indicator, and the
   step number shown with the page title.
 
+* The body of the ``editor:replace-matching-text`` clickable action now shows
+  the ``match`` and ``replacement`` values as two separate blocks of
+  preformatted text, each under a label, instead of a single line joining them
+  with an arrow. Multi-line values keep their line breaks and indentation, so
+  it is clear where the text to match ends and its replacement starts. When
+  ``isRegex`` is ``true`` the ``match`` value is labelled as a pattern, and if
+  ``group`` also selects a match group other than ``0``, the label of the
+  ``replacement`` value names that group. An empty ``replacement`` is shown as
+  ``(empty)``. Holding down shift while clicking on the action now copies
+  only the replacement text. Setting ``description`` still replaces the body
+  with that text. A custom ``workshop-instructions.css`` file can style the
+  blocks through the ``clickable-action__section``,
+  ``clickable-action__label`` and ``clickable-action__text`` classes.
+
 * The ``ClusterRole`` and ``ClusterRoleBinding`` resources created by Educates
   have been renamed to follow the Kubernetes convention of an application
   prefix separated by colons. Service roles are now named after their

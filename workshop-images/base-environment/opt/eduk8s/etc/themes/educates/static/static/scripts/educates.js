@@ -2649,12 +2649,14 @@ const educates = (function () {
         const action = element.id;
 
         // If shift key is pressed, copy inner text instead of executing action.
-        // But not if action is currently pending.
+        // But not if action is currently pending. A body made of sections can
+        // mark the one section whose text is copied instead of the whole body.
 
         if (event.shiftKey && element.dataset.actionResult !== 'pending') {
             const body_element = element.querySelector('.clickable-action__body');
             if (body_element) {
-                set_paste_buffer_to_text(body_element.textContent);
+                const copy_element = body_element.querySelector('[data-action-copy]') || body_element;
+                set_paste_buffer_to_text(copy_element.textContent);
                 show_copy_feedback(element);
 
                 // Clear any text selection caused by shift+click.

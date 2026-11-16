@@ -5,9 +5,29 @@
 {{- $glyph := "fa-exchange-alt" -}}
 {{- $prefix := default "Editor" $args.prefix -}}
 {{- $title := default (printf "Replace matching text in file \"%s\"" $args.file) $args.title -}}
-{{- $body := printf "%s → %s" $args.match $args.replacement -}}
+{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "args" $args -}}
 {{- if isset $args "description" -}}
-{{- $body = $args.description -}}
+{{- $context = merge $context (dict "body" $args.description) -}}
+{{- else -}}
+{{- $match := "" -}}
+{{- if ne $args.match nil -}}
+{{- $match = printf "%v" $args.match -}}
 {{- end -}}
-{{- $context := dict "action" $action "name" $name "glyph" $glyph "prefix" $prefix "title" $title "body" $body "args" $args -}}
+{{- $replacement := "" -}}
+{{- if ne $args.replacement nil -}}
+{{- $replacement = printf "%v" $args.replacement -}}
+{{- end -}}
+{{- $matchLabel := "Match" -}}
+{{- $replacementLabel := "Replace with" -}}
+{{- if $args.isRegex -}}
+{{- $matchLabel = "Match pattern" -}}
+{{- with $args.group -}}
+{{- if gt . 0 -}}
+{{- $replacementLabel = printf "Replace group %v with" . -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $sections := slice (dict "label" $matchLabel "text" $match) (dict "label" $replacementLabel "text" $replacement "copy" true) -}}
+{{- $context = merge $context (dict "sections" $sections) -}}
+{{- end -}}
 {{- partial "clickable-action.html" $context -}}

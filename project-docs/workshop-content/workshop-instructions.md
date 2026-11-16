@@ -504,7 +504,9 @@ replacement: |-
 ```
 ~~~
 
-As with ``editor:select-matching-text``, you can use regular expressions by setting ``isRegex`` to ``true``, select a specific match group using the ``group`` property, and limit the search range using ``start`` and ``stop`` properties.
+The body of the clickable action shows the ``match`` and ``replacement`` values as two separate blocks of preformatted text, each under a label, so that multi-line values keep their line breaks and indentation. An empty ``replacement``, which deletes the matching text, is shown as ``(empty)``.
+
+As with ``editor:select-matching-text``, you can use regular expressions by setting ``isRegex`` to ``true``, select a specific match group using the ``group`` property, and limit the search range using ``start`` and ``stop`` properties. When ``isRegex`` is ``true``, the label above the ``match`` value says it is a pattern, and if ``group`` also selects a match group other than ``0``, the label above the ``replacement`` value names the group it replaces.
 
 ~~~text
 ```editor:replace-matching-text

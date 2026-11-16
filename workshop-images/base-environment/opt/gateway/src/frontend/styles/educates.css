@@ -268,13 +268,16 @@ div.notify-hijacked:after {
 	background: none;
 }
 
-/* Icon of the button collapsing or expanding the workshop panel, sized and
-   aligned to match the Font Awesome icons of the other dashboard buttons. */
+/* Icon of the button collapsing or expanding the workshop panel. It takes the
+   box of the Font Awesome icons of the other dashboard buttons, 1em high with
+   its bottom 0.143em below the baseline, and its viewBox fits the drawing to
+   the band those icons draw in, so its edges line up with theirs at any zoom
+   level. */
 
 .workshop-panel-icon {
-	width: 1.25em;
-	height: 1.25em;
-	vertical-align: -0.25em;
+	width: 1.036em;
+	height: 1em;
+	vertical-align: -0.143em;
 }
 
 .btn:focus, .btn:active {

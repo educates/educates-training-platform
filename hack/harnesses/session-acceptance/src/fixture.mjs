@@ -3,8 +3,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { PortalClient, holdConsole, newFixtureLog, openDashboard, walkInstructions } from "./browser.mjs";
+import { PortalClient, holdConsole, newFixtureLog, openDashboard, screenshot, walkInstructions } from "./browser.mjs";
 import { consoleLog, kubectlChecks, tunnelCheck, waitForSessionPod } from "./checks.mjs";
+import { copyPasteProblems, runCopyPaste } from "./copypaste.mjs";
 import { workshopName } from "./portal.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -32,12 +33,17 @@ export async function runFixture(h, fixture) {
       console: !!spec.console?.enabled,
       vcluster: !!spec.vcluster?.enabled,
       tunnel: !!(spec.sshd?.enabled && spec.sshd?.tunnel?.enabled),
+      copyPaste: fixture.terminalCopyPaste,
     },
     problems: [],
     notes: [],
   };
   const started = Date.now();
-  const context = await h.browser.createBrowserContext();
+  // The copy and paste step drives a browser of its own: the clipboard is
+  // the browser's, and other fixtures' walks click copy actions.
+  const ownProfile = path.join(h.outDir, `chrome-profile-${fixture.name}`);
+  const ownBrowser = result.features.copyPaste ? await h.launchBrowser(ownProfile) : null;
+  const context = await (ownBrowser ?? h.browser).createBrowserContext();
   const pages = new Set();
   // Pages an action opens, and dialogs, block a headless page: close them.
   // The harness's own pages are known by the time the delay ends.
@@ -113,6 +119,24 @@ export async function runFixture(h, fixture) {
       if (!result.tunnel.connected) result.problems.push(`tunnel: ${result.tunnel.output || "no connection"}`);
     }
 
+    if (result.features.copyPaste) {
+      say("pressing the terminal copy and paste shortcuts under each platform");
+      // The walk's page lets go of the terminals the step connects to.
+      await page.goto("about:blank").catch(() => {});
+      result.copyPaste = await runCopyPaste({
+        newPage,
+        browserVersion: await context.browser().version(),
+        cluster: h.cluster,
+        environment,
+        pod,
+        sessionPageUrl: `${h.portalUrl}/workshops/session/${details.name}/`,
+        sessionHost: h.cluster.hostname(details.name),
+        log,
+        screenshot: (p, name) => screenshot(p, dir, name, log),
+      });
+      result.problems.push(...copyPasteProblems(result.copyPaste));
+    }
+
     const restarts = await h.cluster.kubectlJson(["-n", environment, "get", "pod", pod]);
     const workshopContainer = restarts.status?.containerStatuses?.find((c) => c.name === "workshop");
     result.workshopContainerRestarts = workshopContainer?.restartCount ?? null;
@@ -125,6 +149,10 @@ export async function runFixture(h, fixture) {
       log("session-terminated", { status: t.status });
     }
     await context.close().catch(() => {});
+    if (ownBrowser) {
+      await ownBrowser.close().catch(() => {});
+      fs.rmSync(ownProfile, { recursive: true, force: true });
+    }
   }
   result.seconds = Math.round((Date.now() - started) / 1000);
   result.passed = result.problems.length === 0;

@@ -31,11 +31,12 @@ export const SHORTCUTS = Object.fromEntries(
 );
 
 // The cases each platform runs, in order. A copy case presses its key with
-// text the terminal shows selected, or with nothing selected; a paste case
-// presses it with known text on the clipboard; the interrupt case presses
-// it with nothing selected while sleep runs.
+// text the terminal shows selected, or with nothing selected, and a case
+// that presses it again does so once the first press is over, with nothing
+// else between; a paste case presses it with known text on the clipboard;
+// the interrupt case presses it with nothing selected while sleep runs.
 export const CASES = [
-  { id: "ctrl-c-selection", shortcut: "ctrl-c", label: "Ctrl+C, text selected", kind: "copy", selection: true },
+  { id: "ctrl-c-selection", shortcut: "ctrl-c", label: "Ctrl+C, text selected, then again", kind: "copy", selection: true, pressAgain: true },
   { id: "ctrl-c-running", shortcut: "ctrl-c", label: "Ctrl+C, nothing selected, sleep running", kind: "interrupt" },
   { id: "ctrl-v", shortcut: "ctrl-v", label: "Ctrl+V", kind: "paste" },
   { id: "ctrl-shift-c-selection", shortcut: "ctrl-shift-c", label: "Ctrl+Shift+C, text selected", kind: "copy", selection: true },
@@ -58,19 +59,19 @@ const CTRL_SHIFT_COPY_PASTE = {
 };
 const EXPECTED = {
   windows: {
-    "ctrl-c-selection": { copied: "selection", shell: "nothing", selection: "cleared" },
+    "ctrl-c-selection": { copied: "selection", shell: "nothing", secondPressShell: "^C", selection: "cleared" },
     "ctrl-c-running": INTERRUPTS,
     "ctrl-v": PASTES,
     ...CTRL_SHIFT_COPY_PASTE,
   },
   linux: {
-    "ctrl-c-selection": { copied: "nothing", shell: "^C" },
+    "ctrl-c-selection": { copied: "nothing", shell: "^C", secondPressShell: "^C" },
     "ctrl-c-running": INTERRUPTS,
     "ctrl-v": { shell: "^V" },
     ...CTRL_SHIFT_COPY_PASTE,
   },
   macos: {
-    "ctrl-c-selection": { copied: "nothing", shell: "^C" },
+    "ctrl-c-selection": { copied: "nothing", shell: "^C", secondPressShell: "^C" },
     "ctrl-c-running": INTERRUPTS,
     "ctrl-v": { shell: "^V" },
     "ctrl-shift-c-selection": { copied: "nothing", shell: "nothing", cancelled: false },
@@ -80,22 +81,26 @@ const EXPECTED = {
 };
 
 // The probe the cases run in the terminal, written into the workshop
-// container. 'read' clears the screen, shows the text given, and prints in
-// hex every byte the terminal delivers until three seconds pass without
-// one, with the terminal raw, so ^C and ^V arrive as bytes. 'sleep' clears
-// the screen and sleeps ten seconds, saying on a line of its own, after the
-// ^C the terminal echoes, whether an interrupt ended it.
+// container. 'read' clears the screen, shows the text given, and, with the
+// terminal raw, so that ^C and ^V arrive as bytes, prints in hex every byte
+// the terminal delivers until three seconds pass without one, as many times
+// as the presses given, one by default. 'sleep' clears the screen and sleeps
+// ten seconds, saying on a line of its own, after the ^C the terminal
+// echoes, whether an interrupt ended it.
 const PROBE_PATH = "/tmp/session-acceptance-keys";
 const PROBE_SCRIPT = `#!/bin/bash
 case "$1" in
 read)
     printf '\\033[H\\033[2J%s\\n' "$3"
+    presses=\${4:-1}
     saved=$(stty -g)
     stty raw -echo min 0 time 30
-    printf 'keys-ready-%s\\r\\n' "$2"
-    bytes=$(od -An -tx1 -v | tr -d ' \\n')
-    stty "$saved"
-    printf 'keys-got-%s:%s.\\n' "$2" "$bytes"
+    for ((press = 1; press <= presses; press++)); do
+        printf 'keys-ready-%s-press%s\\r\\n' "$2" "$press"
+        bytes=$(od -An -tx1 -v | tr -d ' \\n')
+        if ((press == presses)); then stty "$saved"; fi
+        printf 'keys-got-%s-press%s:%s.\\r\\n' "$2" "$press" "$bytes"
+    done
     ;;
 sleep)
     printf '\\033[H\\033[2J'
@@ -167,6 +172,16 @@ function hexToText(hex) {
   return Buffer.from(hex, "hex").toString("latin1");
 }
 
+function shellExpects(value) {
+  if (value === "pasted") return "pastes";
+  if (value === "nothing") return "nothing reaches the shell";
+  return `${value} reaches the shell`;
+}
+
+function shellObserved(value) {
+  return value === "pasted" ? "shell got the paste" : `shell got ${value}`;
+}
+
 // What a case observes, field by field in the order it is reported, with
 // how the key behaviour table's value for a field reads and how an
 // observed value reads, or null when there is nothing to say. interrupted:
@@ -174,8 +189,9 @@ function hexToText(hex) {
 // the clipboard, as classifyCopied names it. pasteEvent: what the page's
 // paste event carried, which is reported, never judged. selection: whether
 // the selection was kept or cleared, or none was made. shell: what reached
-// the shell, as classifyShell names it. cancelled: whether the key's
-// default action was cancelled.
+// the shell, as classifyShell names it. secondPressShell: the same, for the
+// key pressed a second time. cancelled: whether the key's default action
+// was cancelled.
 const OBSERVATIONS = [
   {
     field: "interrupted",
@@ -193,10 +209,11 @@ const OBSERVATIONS = [
     expects: (v) => `${v === "kept" ? "keeps" : "clears"} the selection`,
     observed: (v) => (v === "none" ? null : `selection ${v}`),
   },
+  { field: "shell", expects: shellExpects, observed: shellObserved },
   {
-    field: "shell",
-    expects: (v) => (v === "pasted" ? "pastes" : v === "nothing" ? "nothing reaches the shell" : `${v} reaches the shell`),
-    observed: (v) => (v === "pasted" ? "shell got the paste" : `shell got ${v}`),
+    field: "secondPressShell",
+    expects: (v) => `on a second press ${shellExpects(v)}`,
+    observed: (v) => `on a second press ${shellObserved(v)}`,
   },
   {
     field: "cancelled",
@@ -492,15 +509,19 @@ async function runCase(page, frame, platform, testCase, n, action) {
   const shortcut = SHORTCUTS[testCase.shortcut];
   const id = `${platform.id}-${n}`;
   const suffix = Math.random().toString(36).slice(2, 6);
+  const presses = testCase.pressAgain ? 2 : 1;
   const observed = {};
-  // The line the probe ends with: the bytes it read, or how its sleep ended.
-  const probeEnd = (r) => {
+  // The line the probe prints after a press: the bytes it read, or how its
+  // sleep ended.
+  const probeEnd = (press) => (r) => {
     if (r === `keys-interrupted-${id}`) return { interrupted: true };
     if (r === `keys-slept-${id}`) return { interrupted: false };
-    const got = r.match(new RegExp(`^keys-got-${id}:([0-9a-f]*)\\.$`));
+    const got = r.match(new RegExp(`^keys-got-${id}-press${press}:([0-9a-f]*)\\.$`));
     return got ? { bytes: hexToText(got[1]) } : null;
   };
-  const waitForProbeEnd = () => waitForRow(frame, probeEnd, 20_000, "the probe's last line");
+  const waitForProbeEnd = (press) => waitForRow(frame, probeEnd(press), 20_000, `the probe's line after press ${press}`);
+  const waitForProbeReady = (press) => waitForRow(frame, (r) => r === `keys-ready-${id}-press${press}`, 30_000, `the probe ready for press ${press}`);
+  const pressKey = () => pressShortcut(page, shortcut, action.mode === "simulated" ? action.command : null);
 
   if (testCase.kind === "paste") {
     observed.pasteText = `pasteme-${id}-${suffix}`;
@@ -516,9 +537,9 @@ async function runCase(page, frame, platform, testCase, n, action) {
       await waitForRow(frame, (r) => r === `keys-sleeping-${id}`, 30_000, "the probe sleeping");
     } else {
       const shown = `copyme-${id}-${suffix}`;
-      await typeLine(page, `bash ${PROBE_PATH} read ${id} ${shown}`);
+      await typeLine(page, `bash ${PROBE_PATH} read ${id} ${shown} ${presses}`);
       started = true;
-      await waitForRow(frame, (r) => r === `keys-ready-${id}`, 30_000, "the probe ready");
+      await waitForProbeReady(1);
       if (testCase.selection) {
         await selectWord(page, frame, shown);
         observed.selectedText = shown;
@@ -529,7 +550,7 @@ async function runCase(page, frame, platform, testCase, n, action) {
     if (!testCase.selection && selectedBefore) throw new Error("the terminal kept a selection after a click");
 
     await resetObserver(frame);
-    await pressShortcut(page, shortcut, action.mode === "simulated" ? action.command : null);
+    await pressKey();
     await sleep(700);
     const seen = await readObserver(frame, shortcut.key);
     if (!seen.keydown) throw new Error(`the dashboard's frame never saw the ${shortcut.label} keydown`);
@@ -544,18 +565,23 @@ async function runCase(page, frame, platform, testCase, n, action) {
     }
     observed.selection = selectedBefore ? ((await hasSelection(frame)) ? "kept" : "cleared") : "none";
 
-    const end = await waitForProbeEnd();
-    started = false;
+    const end = await waitForProbeEnd(1);
     if (testCase.kind === "interrupt") {
       observed.interrupted = end.interrupted;
     } else {
       observed.bytes = end.bytes;
       observed.shell = classifyShell(end.bytes, observed.pasteText);
     }
+    if (testCase.pressAgain) {
+      await waitForProbeReady(2);
+      await pressKey();
+      observed.secondPressShell = classifyShell((await waitForProbeEnd(2)).bytes, observed.pasteText);
+    }
+    started = false;
     return observed;
   } finally {
     // A case that failed leaves its probe to end before the next one types.
-    if (started) await waitForProbeEnd().catch(() => {});
+    if (started) await waitForProbeEnd(presses).catch(() => {});
   }
 }
 

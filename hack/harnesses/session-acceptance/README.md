@@ -214,26 +214,27 @@ runs:
 
 | Case | What the probe does |
 |---|---|
-| Ctrl+C, text selected | Shows a word, which the step double-clicks to select, and prints every byte the terminal delivers until three seconds pass without one, with the terminal raw so that ^C and ^V arrive as bytes. |
+| Ctrl+C, text selected, then again | Shows a word, which the step double-clicks to select, and prints every byte the terminal delivers until three seconds pass without one, with the terminal raw so that ^C and ^V arrive as bytes. It then does so once more, for Ctrl+C pressed a second time with nothing else between. |
 | Ctrl+C, nothing selected, sleep running | Sleeps ten seconds and prints whether an interrupt ended the sleep. |
 | Ctrl+V | Prints the bytes delivered, with known text put on the clipboard first from the portal's own page. |
-| Ctrl+Shift+C, text selected | As for Ctrl+C with text selected. |
+| Ctrl+Shift+C, text selected | Shows a word, which the step double-clicks to select, and prints the bytes delivered. |
 | Ctrl+Shift+C, nothing selected | Prints the bytes delivered, with nothing selected. |
 | Ctrl+Shift+V | As for Ctrl+V. |
 
 It observes what a workshop user would: what the page's `copy` event put
 on the clipboard, read from the event since the clipboard can't be read
 over plain HTTP; whether the page's `paste` event carried the clipboard's
-text; what reached the shell, whether the pasted text, ^C, ^V or nothing;
-whether the selection was kept or cleared; whether the sleep was
-interrupted; and whether the page cancelled the key's default action. It
-judges each case against the key behaviour table:
+text; what reached the shell, whether the pasted text, ^C, ^V or nothing,
+and for a second press of Ctrl+C, what reached the shell then; whether the
+selection was kept or cleared; whether the sleep was interrupted; and
+whether the page cancelled the key's default action. It judges each case
+against the key behaviour table:
 
 | Platform | Ctrl+C | Ctrl+V | Ctrl+Shift+C | Ctrl+Shift+V |
 |---|---|---|---|---|
-| Windows | Copies a selection and clears it, with nothing reaching the shell; interrupts with none. | Pastes. | Cancelled; copies a selection and keeps it; does nothing with none. | Pastes. |
-| Linux | ^C, which interrupts with no selection. | ^V. | As on Windows. | Pastes. |
-| macOS | ^C, which interrupts with no selection. | ^V. | Left to the browser; copies nothing and sends nothing. | Sends nothing. |
+| Windows | Copies a selection and clears it, with nothing reaching the shell, so that a second press sends ^C; interrupts with none. | Pastes. | Cancelled; copies a selection and keeps it; does nothing with none. | Pastes. |
+| Linux | ^C, on a second press too, which interrupts with no selection. | ^V. | As on Windows. | Pastes. |
+| macOS | ^C, on a second press too, which interrupts with no selection. | ^V. | Left to the browser; copies nothing and sends nothing. | Sends nothing. |
 
 The fixture passes only when all eighteen cases match.
 

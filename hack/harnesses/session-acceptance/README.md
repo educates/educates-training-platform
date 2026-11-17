@@ -88,7 +88,7 @@ running.
 | `full` | 15 minutes | every minute | An acceptance run, where a console that hangs after a few minutes shows |
 
 Both profiles walk every fixture in full. With the default of three
-sessions at once, the quick profile takes about 15 minutes on a laptop, and
+sessions at once, the quick profile takes about 18 minutes on a laptop, and
 the full one about 45. To repeat only what a fix touches, name the fixtures
 with `--fixtures`, and shorten or lengthen the hold with `--hold`.
 

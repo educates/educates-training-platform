@@ -119,13 +119,22 @@ On macOS, and on an iPad with a keyboard, ``Cmd+C`` copies the text selected
 in a terminal and ``Cmd+V`` pastes. ``Ctrl+C`` and ``Ctrl+V`` are sent to the
 shell, so that ``Ctrl+C`` interrupts the running command.
 
-On Windows, Linux and other platforms, ``Ctrl+Shift+C`` copies the text
-selected in a terminal and leaves it selected, and does nothing when no text
-is selected. ``Ctrl+Shift+V`` pastes. ``Ctrl+C`` and ``Ctrl+V`` are sent to
-the shell, so that ``Ctrl+C`` interrupts the running command. While a
-terminal has focus, ``Ctrl+Shift+C`` doesn't open the browser's element
-inspector, as it does elsewhere in the browser. ``F12`` and ``Ctrl+Shift+I``
-still open the browser's developer tools.
+On Linux and other platforms, ``Ctrl+Shift+C`` copies the text selected in a
+terminal and leaves it selected, and does nothing when no text is selected.
+``Ctrl+Shift+V`` pastes. ``Ctrl+C`` and ``Ctrl+V`` are sent to the shell, so
+that ``Ctrl+C`` interrupts the running command. While a terminal has focus,
+``Ctrl+Shift+C`` doesn't open the browser's element inspector, as it does
+elsewhere in the browser. ``F12`` and ``Ctrl+Shift+I`` still open the
+browser's developer tools.
+
+On Windows, ``Ctrl+C`` copies the text selected in a terminal and then clears
+the selection, so that pressing ``Ctrl+C`` again interrupts the running
+command. When no text is selected, ``Ctrl+C`` is sent to the shell and
+interrupts the running command. ``Ctrl+V`` pastes. ``Ctrl+Shift+C`` and
+``Ctrl+Shift+V`` also copy and paste, as they do on Linux. Because ``Ctrl+V``
+pastes, it isn't sent to the shell on Windows, so a program in the terminal
+that reads ``Ctrl+V`` as a key of its own doesn't receive it. In ``vim``, use
+``Ctrl+Q`` instead of ``Ctrl+V`` to start visual block mode.
 
 On every platform, the browser's right-click menu in a terminal also offers
 Copy and Paste.

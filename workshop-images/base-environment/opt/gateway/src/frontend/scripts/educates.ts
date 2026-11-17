@@ -654,10 +654,10 @@ class TerminalSession {
         if (event.type != "keydown" || KEYBOARD_PLATFORM == KeyboardPlatform.APPLE)
             return true
 
-        let ctrl = event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey
+        let ctrl_only = event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey
         let ctrl_shift = event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey
 
-        if (ctrl && KEYBOARD_PLATFORM == KeyboardPlatform.WINDOWS) {
+        if (ctrl_only && KEYBOARD_PLATFORM == KeyboardPlatform.WINDOWS) {
             if (event.keyCode == KEY_CODE_C && this.terminal.hasSelection()) {
                 setTimeout(() => this.terminal.clearSelection(), 0)
 

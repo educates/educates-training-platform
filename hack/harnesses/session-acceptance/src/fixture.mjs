@@ -33,7 +33,7 @@ export async function runFixture(h, fixture) {
       console: !!spec.console?.enabled,
       vcluster: !!spec.vcluster?.enabled,
       tunnel: !!(spec.sshd?.enabled && spec.sshd?.tunnel?.enabled),
-      copyPaste: fixture.terminalCopyPaste,
+      terminalCopyPaste: fixture.terminalCopyPaste,
     },
     problems: [],
     notes: [],
@@ -42,7 +42,7 @@ export async function runFixture(h, fixture) {
   // The copy and paste step drives a browser of its own: the clipboard is
   // the browser's, and other fixtures' walks click copy actions.
   const ownProfile = path.join(h.outDir, `chrome-profile-${fixture.name}`);
-  const ownBrowser = result.features.copyPaste ? await h.launchBrowser(ownProfile) : null;
+  const ownBrowser = result.features.terminalCopyPaste ? await h.launchBrowser(ownProfile) : null;
   const context = await (ownBrowser ?? h.browser).createBrowserContext();
   const pages = new Set();
   // Pages an action opens, and dialogs, block a headless page: close them.
@@ -119,11 +119,11 @@ export async function runFixture(h, fixture) {
       if (!result.tunnel.connected) result.problems.push(`tunnel: ${result.tunnel.output || "no connection"}`);
     }
 
-    if (result.features.copyPaste) {
+    if (result.features.terminalCopyPaste) {
       say("pressing the terminal copy and paste shortcuts under each platform");
       // The walk's page lets go of the terminals the step connects to.
       await page.goto("about:blank").catch(() => {});
-      result.copyPaste = await runCopyPaste({
+      result.terminalCopyPaste = await runCopyPaste({
         newPage,
         browserVersion: await context.browser().version(),
         cluster: h.cluster,
@@ -134,7 +134,7 @@ export async function runFixture(h, fixture) {
         log,
         screenshot: (p, name) => screenshot(p, dir, name, log),
       });
-      result.problems.push(...copyPasteProblems(result.copyPaste));
+      result.problems.push(...copyPasteProblems(result.terminalCopyPaste));
     }
 
     const restarts = await h.cluster.kubectlJson(["-n", environment, "get", "pod", pod]);

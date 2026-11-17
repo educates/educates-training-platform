@@ -2,30 +2,31 @@
 // training portal's page, is loaded once per platform with the browser's
 // reported platform set before the page loads, and in a terminal each copy
 // and paste shortcut is pressed and what a workshop user would observe is
-// judged against the key behavior each platform's terminals follow.
+// judged against the key behaviour each platform's terminals follow.
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // The platforms the dashboard is loaded under: navigator.platform as each
-// reports it, which is what the dashboard tells platforms apart by, and the
-// operating system its user agent names.
-export const PLATFORMS = [
-  { id: "windows", label: "Windows", platform: "Win32", os: "Windows NT 10.0; Win64; x64" },
-  { id: "linux", label: "Linux", platform: "Linux x86_64", os: "X11; Linux x86_64" },
-  { id: "macos", label: "macOS", platform: "MacIntel", os: "Macintosh; Intel Mac OS X 10_15_7" },
+// reports it, which is what the dashboard tells platforms apart by, the
+// operating system its user agent names, and whether Chrome on it binds the
+// Ctrl shortcuts of its own: its copy and paste commands and its inspector.
+const PLATFORMS = [
+  { id: "windows", label: "Windows", platform: "Win32", os: "Windows NT 10.0; Win64; x64", chromeBindsCtrlShortcuts: true },
+  { id: "linux", label: "Linux", platform: "Linux x86_64", os: "X11; Linux x86_64", chromeBindsCtrlShortcuts: true },
+  { id: "macos", label: "macOS", platform: "MacIntel", os: "Macintosh; Intel Mac OS X 10_15_7", chromeBindsCtrlShortcuts: false },
 ];
 
-// The shortcuts, with the editing command Chrome runs for each on Windows
-// and Linux when the page leaves the key's default action alone. Chrome on
-// macOS binds none of them to copy or paste. Ctrl+Shift+C opens Chrome's
-// inspector on Windows and Linux, a browser action no page observes, so it
-// is judged by whether the page cancels the key.
+// The shortcuts, with the editing command Chrome runs for each where it
+// binds the Ctrl shortcuts, when the page leaves the key's default action
+// alone, and whether Chrome opens its inspector for it there instead.
+// Opening the inspector is a browser action no page observes, so such a
+// shortcut is judged by whether the page cancels the key.
 export const SHORTCUTS = Object.fromEntries(
   [
-    { id: "ctrl-c", label: "Ctrl+C", modifiers: ["Control"], key: "c", command: "copy", event: "copy" },
-    { id: "ctrl-v", label: "Ctrl+V", modifiers: ["Control"], key: "v", command: "paste", event: "paste" },
-    { id: "ctrl-shift-c", label: "Ctrl+Shift+C", modifiers: ["Control", "Shift"], key: "c", command: null, event: null },
-    { id: "ctrl-shift-v", label: "Ctrl+Shift+V", modifiers: ["Control", "Shift"], key: "v", command: "pasteAndMatchStyle", event: "paste" },
+    { id: "ctrl-c", label: "Ctrl+C", modifiers: ["Control"], key: "c", command: "copy", event: "copy", opensInspector: false },
+    { id: "ctrl-v", label: "Ctrl+V", modifiers: ["Control"], key: "v", command: "paste", event: "paste", opensInspector: false },
+    { id: "ctrl-shift-c", label: "Ctrl+Shift+C", modifiers: ["Control", "Shift"], key: "c", command: null, event: null, opensInspector: true },
+    { id: "ctrl-shift-v", label: "Ctrl+Shift+V", modifiers: ["Control", "Shift"], key: "v", command: "pasteAndMatchStyle", event: "paste", opensInspector: false },
   ].map((s) => [s.id, s]),
 );
 
@@ -42,33 +43,31 @@ export const CASES = [
   { id: "ctrl-shift-v", shortcut: "ctrl-shift-v", label: "Ctrl+Shift+V", kind: "paste" },
 ];
 
-// The key behavior table, as what a workshop user observes in each case:
-// copied, what a copy puts on the clipboard, the selected text or nothing;
-// shell, what reaches the shell: nothing, ^C, ^V or the pasted text;
-// selection, whether the selection is kept or cleared; cancelled, whether
-// the key's default action is cancelled; interrupted, whether the running
-// command is interrupted. A field left out is reported, not judged.
+// The key behaviour table, as what a workshop user observes in each case,
+// in the fields OBSERVATIONS describes. A field left out is reported, not
+// judged.
 const INTERRUPTS = { copied: "nothing", interrupted: true };
 const PASTES = { shell: "pasted" };
 const COPIES_AND_KEEPS = { copied: "selection", shell: "nothing", selection: "kept", cancelled: true };
 const DOES_NOTHING = { copied: "nothing", shell: "nothing", cancelled: true };
-const LINUX_COPY_PASTE = {
+// The Ctrl+Shift+C and Ctrl+Shift+V cases, alike on Windows and Linux.
+const CTRL_SHIFT_COPY_PASTE = {
   "ctrl-shift-c-selection": COPIES_AND_KEEPS,
   "ctrl-shift-c-none": DOES_NOTHING,
   "ctrl-shift-v": PASTES,
 };
-export const EXPECTED = {
+const EXPECTED = {
   windows: {
     "ctrl-c-selection": { copied: "selection", shell: "nothing", selection: "cleared" },
     "ctrl-c-running": INTERRUPTS,
     "ctrl-v": PASTES,
-    ...LINUX_COPY_PASTE,
+    ...CTRL_SHIFT_COPY_PASTE,
   },
   linux: {
     "ctrl-c-selection": { copied: "nothing", shell: "^C" },
     "ctrl-c-running": INTERRUPTS,
     "ctrl-v": { shell: "^V" },
-    ...LINUX_COPY_PASTE,
+    ...CTRL_SHIFT_COPY_PASTE,
   },
   macos: {
     "ctrl-c-selection": { copied: "nothing", shell: "^C" },
@@ -86,8 +85,8 @@ export const EXPECTED = {
 // one, with the terminal raw, so ^C and ^V arrive as bytes. 'sleep' clears
 // the screen and sleeps ten seconds, saying on a line of its own, after the
 // ^C the terminal echoes, whether an interrupt ended it.
-export const PROBE_PATH = "/tmp/session-acceptance-keys";
-export const PROBE_SCRIPT = `#!/bin/bash
+const PROBE_PATH = "/tmp/session-acceptance-keys";
+const PROBE_SCRIPT = `#!/bin/bash
 case "$1" in
 read)
     printf '\\033[H\\033[2J%s\\n' "$3"
@@ -108,7 +107,8 @@ sleep)
 esac
 `;
 
-const TERMINAL = "#terminal-1";
+const TERMINAL_1_SELECTOR = "#terminal-1";
+const TERMINAL_1_ROWS_SELECTOR = `${TERMINAL_1_SELECTOR} .xterm-rows > div`;
 
 // browserAction says what the browser itself does for a shortcut under a
 // platform, and how the step brings it about. Chrome's own editing
@@ -117,30 +117,36 @@ const TERMINAL = "#terminal-1";
 // platform's Chrome would, the step sends the key with that command
 // attached, which Chrome runs only when the page leaves the key's default
 // action alone, as it does its own.
-export function browserAction(platform, shortcut, hostNative) {
-  const command = platform.id === "macos" ? null : shortcut.command;
+function browserAction(platform, shortcut, hostBindsShortcut) {
+  const command = platform.chromeBindsCtrlShortcuts ? shortcut.command : null;
   if (command) {
-    return hostNative
+    return hostBindsShortcut
       ? { mode: "native", command, text: `native ${command}` }
       : { mode: "simulated", command, text: `simulated ${command}` };
   }
-  if (hostNative) {
+  if (hostBindsShortcut) {
     return { mode: "host", command: null, text: `host's ${shortcut.command}, which ${platform.label} lacks` };
   }
-  if (shortcut.id === "ctrl-shift-c" && platform.id !== "macos") {
+  if (shortcut.opensInspector && platform.chromeBindsCtrlShortcuts) {
     return { mode: "not run", command: null, text: "inspector not run" };
   }
   return { mode: "none", command: null, text: "none" };
 }
 
-export function userAgent(platform, browserVersion) {
+// reportPlatform makes a page report a platform from its next load on:
+// navigator.platform reads the platform's own, and the user agent names its
+// operating system.
+function reportPlatform(page, platform, browserVersion) {
   const version = browserVersion.replace(/^[A-Za-z]*Chrome\//, "");
-  return `Mozilla/5.0 (${platform.os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version} Safari/537.36`;
+  return page.setUserAgent({
+    userAgent: `Mozilla/5.0 (${platform.os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version} Safari/537.36`,
+    platform: platform.platform,
+  });
 }
 
 // classifyShell names what reached the shell: nothing, ^C, ^V, the pasted
 // text with or without bracketed paste around it, or the bytes themselves.
-export function classifyShell(bytes, pasted) {
+function classifyShell(bytes, pasted) {
   if (bytes === "") return "nothing";
   if (bytes === "\x03") return "^C";
   if (bytes === "\x16") return "^V";
@@ -149,48 +155,88 @@ export function classifyShell(bytes, pasted) {
   return JSON.stringify(bytes);
 }
 
+// classifyCopied names what a copy put on the clipboard: nothing, the
+// selected text, or the text itself.
+function classifyCopied(text, selected) {
+  if (text === "") return "nothing";
+  if (text === selected) return "selection";
+  return JSON.stringify(text);
+}
+
 function hexToText(hex) {
   return Buffer.from(hex, "hex").toString("latin1");
 }
 
+// What a case observes, field by field in the order it is reported, with
+// how the key behaviour table's value for a field reads and how an
+// observed value reads, or null when there is nothing to say. interrupted:
+// whether the running command was interrupted. copied: what a copy put on
+// the clipboard, as classifyCopied names it. pasteEvent: what the page's
+// paste event carried, which is reported, never judged. selection: whether
+// the selection was kept or cleared, or none was made. shell: what reached
+// the shell, as classifyShell names it. cancelled: whether the key's
+// default action was cancelled.
+const OBSERVATIONS = [
+  {
+    field: "interrupted",
+    expects: (v) => (v ? "interrupts sleep" : "lets sleep run on"),
+    observed: (v) => (v ? "interrupted sleep" : "sleep ran on"),
+  },
+  {
+    field: "copied",
+    expects: (v) => (v === "selection" ? "copies the selection" : "copies nothing"),
+    observed: (v) => (v === "selection" ? "copied the selection" : v === "nothing" ? "no copy" : `copied ${v}`),
+  },
+  { field: "pasteEvent", observed: (v) => `paste event ${v}` },
+  {
+    field: "selection",
+    expects: (v) => `${v === "kept" ? "keeps" : "clears"} the selection`,
+    observed: (v) => (v === "none" ? null : `selection ${v}`),
+  },
+  {
+    field: "shell",
+    expects: (v) => (v === "pasted" ? "pastes" : v === "nothing" ? "nothing reaches the shell" : `${v} reaches the shell`),
+    observed: (v) => (v === "pasted" ? "shell got the paste" : `shell got ${v}`),
+  },
+  {
+    field: "cancelled",
+    expects: (v) => (v ? "cancels the key" : "leaves the key to the browser"),
+    observed: (v) => (v ? "cancelled" : "not cancelled"),
+  },
+];
+
 // judge compares what a case observed with what the table says, and
-// returns the differences.
-export function judge(expected, observed) {
-  const differences = [];
-  if (expected.copied !== undefined) {
-    const copied = observed.copied === "" ? "nothing" : observed.copied === observed.selectedText ? "selection" : "other";
-    if (copied !== expected.copied) differences.push("copied");
-  }
-  if (expected.shell !== undefined && observed.shell !== expected.shell) differences.push("shell");
-  if (expected.selection !== undefined && observed.selection !== expected.selection) differences.push("selection");
-  if (expected.cancelled !== undefined && observed.cancelled !== expected.cancelled) differences.push("cancelled");
-  if (expected.interrupted !== undefined && observed.interrupted !== expected.interrupted) differences.push("interrupted");
-  return differences;
+// returns the fields that differ.
+function judge(expected, observed) {
+  return Object.keys(expected).filter((field) => observed[field] !== expected[field]);
 }
 
-export function describeExpected(e) {
-  const parts = [];
-  if (e.interrupted) parts.push("interrupts sleep");
-  if (e.copied === "selection") parts.push("copies the selection");
-  if (e.copied === "nothing") parts.push("copies nothing");
-  if (e.selection) parts.push(`${e.selection === "kept" ? "keeps" : "clears"} the selection`);
-  if (e.shell === "nothing") parts.push("nothing reaches the shell");
-  if (e.shell === "^C" || e.shell === "^V") parts.push(`${e.shell} reaches the shell`);
-  if (e.shell === "pasted") parts.push("pastes");
-  if (e.cancelled !== undefined) parts.push(e.cancelled ? "cancels the key" : "leaves the key to the browser");
-  return parts.join(", ");
+export function describeExpected(expected) {
+  return OBSERVATIONS.filter((o) => expected[o.field] !== undefined)
+    .map((o) => o.expects(expected[o.field]))
+    .join(", ");
 }
 
-export function describeObserved(o) {
-  if (o.error) return `not observed: ${o.error}`;
-  const parts = [];
-  if (o.interrupted !== undefined) parts.push(o.interrupted ? "interrupted sleep" : "sleep ran on");
-  if (o.copied !== undefined) parts.push(o.copied === "" ? "no copy" : `copied ${JSON.stringify(o.copied)}`);
-  if (o.pasteEvent !== undefined) parts.push(`paste event ${o.pasteEvent}`);
-  if (o.selection && o.selection !== "none") parts.push(`selection ${o.selection}`);
-  if (o.shell !== undefined) parts.push(o.shell === "pasted" ? "pasted text reached the shell" : `shell got ${o.shell}`);
-  if (o.cancelled !== undefined) parts.push(o.cancelled ? "cancelled" : "not cancelled");
-  return parts.join(", ");
+// describeFields reads out the fields of an observation that are also
+// fields of selecting, in the order they are reported.
+function describeFields(observed, selecting) {
+  return OBSERVATIONS.filter((o) => selecting[o.field] !== undefined && observed[o.field] !== undefined)
+    .map((o) => o.observed(observed[o.field]))
+    .filter(Boolean)
+    .join(", ");
+}
+
+export function describeObserved(observed) {
+  if (observed.error) return `not observed: ${observed.error}`;
+  return describeFields(observed, observed);
+}
+
+// copyPasteCaseCell reads out a case for a table cell: whether it matched,
+// what was observed of what the table judges, and the browser's own action.
+export function copyPasteCaseCell(c) {
+  if (!c) return "-";
+  if (c.observed.error) return `FAIL: not observed [${c.action.text}]`;
+  return `${c.matches ? "ok" : "FAIL"}: ${describeFields(c.observed, c.expected)} [${c.action.text}]`;
 }
 
 // The observer installed in the dashboard's frame, which leaves every
@@ -256,7 +302,7 @@ function readObserver(frame, key) {
 
 function terminalRows(frame) {
   return frame
-    .evaluate((t) => [...document.querySelectorAll(`${t} .xterm-rows > div`)].map((r) => r.textContent.replace(/\s+$/, "")), TERMINAL)
+    .evaluate((rows) => [...document.querySelectorAll(rows)].map((r) => r.textContent.replace(/\s+$/, "")), TERMINAL_1_ROWS_SELECTOR)
     .catch(() => []);
 }
 
@@ -282,14 +328,14 @@ function hasSelection(frame) {
         const r = box.getBoundingClientRect();
         return r.width > 0 && r.height > 0;
       }),
-    TERMINAL,
+    TERMINAL_1_SELECTOR,
   );
 }
 
 // focusTerminal clicks the terminal's last row, which focuses it and
 // clears any selection, as a click does for a user.
 async function focusTerminal(page, frame) {
-  const screen = await frame.$(`${TERMINAL} .xterm-screen`);
+  const screen = await frame.$(`${TERMINAL_1_SELECTOR} .xterm-screen`);
   if (!screen) throw new Error("the dashboard has no terminal 1");
   const box = await screen.boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height - 6);
@@ -300,7 +346,7 @@ async function focusTerminal(page, frame) {
       terminal: !!document.activeElement?.closest(t) && document.activeElement.tagName === "TEXTAREA",
       element: `${document.activeElement?.tagName.toLowerCase()}.${document.activeElement?.className}`,
     }),
-    TERMINAL,
+    TERMINAL_1_SELECTOR,
   );
   if (!focus.document || !focus.terminal) {
     throw new Error(`clicking terminal 1 did not focus it: the frame ${focus.document ? "has" : "lacks"} focus, on ${focus.element}`);
@@ -327,7 +373,7 @@ async function connectTerminal(page, frame, marker) {
 // selectWord double-clicks text the terminal shows, which selects the word
 // it is, as a user selects it.
 async function selectWord(page, frame, text) {
-  for (const row of await frame.$$(`${TERMINAL} .xterm-rows > div`)) {
+  for (const row of await frame.$$(TERMINAL_1_ROWS_SELECTOR)) {
     const at = await row.evaluate((el, t) => {
       const index = el.textContent.indexOf(t);
       if (index < 0) return null;
@@ -387,21 +433,21 @@ async function typeLine(page, line) {
   await page.keyboard.press("Enter");
 }
 
-// hostBindings finds which shortcuts the host's Chrome turns into its own
-// copy or paste under a platform: in a page of its own reporting that
-// platform, it presses each in a textarea with text selected and watches
-// for the copy or paste event.
-export async function hostBindings(newPage, platform, agent) {
+// findHostBindings finds which shortcuts the host's Chrome turns into its
+// own copy or paste under a platform, by shortcut: in a page of its own
+// reporting that platform, it presses each in a textarea with text
+// selected and watches for the copy or paste event.
+async function findHostBindings(newPage, platform, browserVersion) {
   const page = await newPage();
   try {
-    await page.setUserAgent({ userAgent: agent, platform: platform.platform });
+    await reportPlatform(page, platform, browserVersion);
     await page.setContent(
       `<textarea id="probe"></textarea><script>
         window.seen = [];
         for (const t of ["copy", "paste"]) document.addEventListener(t, () => window.seen.push(t), true);
       </script>`,
     );
-    const native = {};
+    const hostBindings = {};
     for (const shortcut of Object.values(SHORTCUTS)) {
       if (!shortcut.event) continue;
       await page.evaluate(() => {
@@ -413,9 +459,9 @@ export async function hostBindings(newPage, platform, agent) {
       });
       await pressShortcut(page, shortcut, null);
       await sleep(200);
-      native[shortcut.id] = (await page.evaluate(() => window.seen)).includes(shortcut.event);
+      hostBindings[shortcut.id] = (await page.evaluate(() => window.seen)).includes(shortcut.event);
     }
-    return native;
+    return hostBindings;
   } finally {
     await page.close().catch(() => {});
   }
@@ -434,10 +480,7 @@ async function dashboardFrame(page, host) {
         continue;
       }
       if (hostname !== host) continue;
-      const connected = await frame
-        .evaluate((t) => [...document.querySelectorAll(`${t} .xterm-rows > div`)].some((r) => r.textContent.trim() !== ""), TERMINAL)
-        .catch(() => false);
-      if (connected) return frame;
+      if ((await terminalRows(frame)).some((r) => r !== "")) return frame;
     }
     await sleep(1000);
   }
@@ -457,6 +500,7 @@ async function runCase(page, frame, platform, testCase, n, action) {
     const got = r.match(new RegExp(`^keys-got-${id}:([0-9a-f]*)\\.$`));
     return got ? { bytes: hexToText(got[1]) } : null;
   };
+  const waitForProbeEnd = () => waitForRow(frame, probeEnd, 20_000, "the probe's last line");
 
   if (testCase.kind === "paste") {
     observed.pasteText = `pasteme-${id}-${suffix}`;
@@ -496,11 +540,11 @@ async function runCase(page, frame, platform, testCase, n, action) {
       const text = seen.pastes.pop();
       observed.pasteEvent = text === undefined ? "none" : text === observed.pasteText ? "carried the text" : `carried ${JSON.stringify(text)}`;
     } else {
-      observed.copied = seen.copies.filter((c) => c !== "").pop() ?? "";
+      observed.copied = classifyCopied(seen.copies.filter((c) => c !== "").pop() ?? "", observed.selectedText);
     }
     observed.selection = selectedBefore ? ((await hasSelection(frame)) ? "kept" : "cleared") : "none";
 
-    const end = await waitForRow(frame, probeEnd, 20_000, "the probe's last line");
+    const end = await waitForProbeEnd();
     started = false;
     if (testCase.kind === "interrupt") {
       observed.interrupted = end.interrupted;
@@ -511,7 +555,7 @@ async function runCase(page, frame, platform, testCase, n, action) {
     return observed;
   } finally {
     // A case that failed leaves its probe to end before the next one types.
-    if (started) await waitForRow(frame, probeEnd, 20_000, "the probe's last line").catch(() => {});
+    if (started) await waitForProbeEnd().catch(() => {});
   }
 }
 
@@ -528,21 +572,20 @@ export async function runCopyPaste({ newPage, browserVersion, cluster, environme
 
   const platforms = [];
   for (const platform of PLATFORMS) {
-    const agent = userAgent(platform, browserVersion);
     const result = { platform: platform.id, label: platform.label, reported: null, cases: [], error: null };
     platforms.push(result);
     let page = null;
     try {
-      const native = await hostBindings(newPage, platform, agent);
-      result.hostBindings = native;
+      const hostBindings = await findHostBindings(newPage, platform, browserVersion);
+      result.hostBindings = hostBindings;
       page = await newPage();
       // Only the browser's front page has focus, which keys need.
       await page.bringToFront();
-      await page.setUserAgent({ userAgent: agent, platform: platform.platform });
+      await reportPlatform(page, platform, browserVersion);
       await page.goto(sessionPageUrl, { waitUntil: "domcontentloaded", timeout: 120_000 });
       const frame = await dashboardFrame(page, sessionHost);
       result.reported = await frame.evaluate(() => navigator.platform);
-      log("copy-paste-platform", { platform: platform.id, reported: result.reported, hostBindings: native });
+      log("copy-paste-platform", { platform: platform.id, reported: result.reported, hostBindings });
       if (result.reported !== platform.platform) {
         throw new Error(`the dashboard's frame reports navigator.platform ${result.reported}, not ${platform.platform}`);
       }
@@ -550,7 +593,7 @@ export async function runCopyPaste({ newPage, browserVersion, cluster, environme
       await installObserver(frame);
       for (const [index, testCase] of CASES.entries()) {
         const shortcut = SHORTCUTS[testCase.shortcut];
-        const action = browserAction(platform, shortcut, !!native[shortcut.id]);
+        const action = browserAction(platform, shortcut, !!hostBindings[shortcut.id]);
         const expected = EXPECTED[platform.id][testCase.id];
         const entry = { case: testCase.id, label: testCase.label, expected, action };
         try {

@@ -1,7 +1,7 @@
 // The run's report: a table to read at a glance and, per fixture, what was
 // observed, current behaviour included.
 
-import { CASES, SHORTCUTS, describeExpected, describeObserved } from "./copypaste.mjs";
+import { CASES, SHORTCUTS, copyPasteCaseCell, describeExpected, describeObserved } from "./copypaste.mjs";
 
 function kubectlCell(check) {
   return check ? check.outcome : "-";
@@ -26,29 +26,13 @@ function tunnelCell(r) {
 }
 
 function copyPasteCell(r) {
-  if (!r.features.copyPaste) return "-";
-  if (!r.copyPaste) return "not checked";
-  const cases = r.copyPaste.platforms.flatMap((p) => p.cases);
+  if (!r.features.terminalCopyPaste) return "-";
+  const copyPaste = r.terminalCopyPaste;
+  if (!copyPaste) return "not checked";
+  const cases = copyPaste.platforms.flatMap((p) => p.cases);
   const matched = cases.filter((c) => c.matches).length;
-  const notRun = r.copyPaste.platforms.filter((p) => p.error).length;
-  return `${matched} of ${CASES.length * r.copyPaste.platforms.length} match${notRun ? `, ${notRun} platform(s) not run` : ""}`;
-}
-
-// A case's cell in the copy and paste table: whether it matched, what was
-// observed of what the table judges, and the browser's own action.
-function copyPasteCaseCell(c) {
-  if (!c) return "-";
-  if (c.observed.error) return `FAIL: not observed [${c.action.text}]`;
-  const o = c.observed;
-  const parts = [];
-  if (c.expected.interrupted !== undefined) parts.push(o.interrupted ? "interrupted" : "not interrupted");
-  if (c.expected.copied !== undefined) {
-    parts.push(o.copied === "" ? "no copy" : o.copied === o.selectedText ? "copied" : `copied ${JSON.stringify(o.copied)}`);
-  }
-  if (c.expected.selection !== undefined) parts.push(`selection ${o.selection}`);
-  if (c.expected.shell !== undefined) parts.push(`shell ${o.shell === "pasted" ? "got the paste" : `got ${o.shell}`}`);
-  if (c.expected.cancelled !== undefined) parts.push(o.cancelled ? "cancelled" : "not cancelled");
-  return `${c.matches ? "ok" : "FAIL"}: ${parts.join(", ")} [${c.action.text}]`;
+  const notRun = copyPaste.platforms.filter((p) => p.error).length;
+  return `${matched} of ${CASES.length * copyPaste.platforms.length} match${notRun ? `, ${notRun} platform(s) not run` : ""}`;
 }
 
 function markdownTable(rows) {
@@ -63,7 +47,7 @@ function markdownTable(rows) {
 function copyPasteTable(results) {
   const rows = [["Fixture", "Platform", ...CASES.map((c) => c.label)]];
   for (const r of results) {
-    for (const p of r.copyPaste?.platforms ?? []) {
+    for (const p of r.terminalCopyPaste?.platforms ?? []) {
       const byCase = Object.fromEntries(p.cases.map((c) => [c.case, c]));
       rows.push([r.fixture, p.error ? `${p.label}: not run` : p.label, ...CASES.map((c) => copyPasteCaseCell(byCase[c.id]))]);
     }
@@ -148,7 +132,7 @@ function fixtureSection(r) {
   if (r.tunnel) {
     out.push(`- Tunnel from this host with \`educates tunnel connect\`: ${r.tunnel.connected ? "connected" : "failed"}`, "", fence(r.tunnel.output || "(no output)"), "");
   }
-  if (r.copyPaste) out.push(...copyPasteSection(r.copyPaste));
+  if (r.terminalCopyPaste) out.push(...copyPasteSection(r.terminalCopyPaste));
   for (const n of r.notes) out.push(`- Note: ${n}`);
   if (r.problems.length) {
     out.push("", "Problems:", "");
@@ -164,7 +148,7 @@ function copyPasteSection(copyPaste) {
   for (const p of copyPaste.platforms) {
     const host = p.hostBindings
       ? Object.entries(p.hostBindings)
-          .map(([id, native]) => `${SHORTCUTS[id].label} ${native ? "fires a" : "fires no"} ${SHORTCUTS[id].event} event`)
+          .map(([id, hostBindsShortcut]) => `${SHORTCUTS[id].label} ${hostBindsShortcut ? "fires a" : "fires no"} ${SHORTCUTS[id].event} event`)
           .join(", ")
       : "not checked";
     out.push(`- ${p.label}: navigator.platform ${p.reported ?? "not read"} in the dashboard's frame; in this host's Chrome, unaided, ${host}`);

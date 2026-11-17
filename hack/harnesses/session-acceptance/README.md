@@ -34,7 +34,7 @@ go.
 A fixture passes when its walk reached the last instruction page with every
 action clicked and no terminal errors, for the SSH fixture, the tunnel
 connected, and, for a fixture with the copy and paste step, every shortcut
-behaved as the key behavior table says under every platform. The kubectl
+behaved as the key behaviour table says under every platform. The kubectl
 checks and the console are reported as observed, not judged: they describe
 the build's current behaviour, which a change may set out to alter, so read
 them against what the change intends.
@@ -74,6 +74,13 @@ reaches the cluster only through its own kube context, `kind-educates` or
 address from `educates local cluster list`, and its ingress domain and
 protocol from the cluster's `EducatesClusterConfig` status, so it works the
 same over HTTPS and plain HTTP.
+
+To reach a cluster served over plain HTTP, the harness's Chrome runs with
+its `HttpsUpgrades`, `HttpsFirstBalancedModeAutoEnable` and
+`LocalNetworkAccessChecks` features turned off. With them on, Chrome
+refuses plain HTTP to the private address such a cluster listens on. This
+makes the harness's Chrome looser than a user's, so a run over plain HTTP
+doesn't show what a user's Chrome does with that cluster.
 
 It never prompts. It prints its progress, writes the report, prints the
 summary table and exits 0 when every fixture passed, 1 when one failed, and
@@ -220,7 +227,7 @@ over plain HTTP; whether the page's `paste` event carried the clipboard's
 text; what reached the shell, whether the pasted text, ^C, ^V or nothing;
 whether the selection was kept or cleared; whether the sleep was
 interrupted; and whether the page cancelled the key's default action. It
-judges each case against the key behavior table:
+judges each case against the key behaviour table:
 
 | Platform | Ctrl+C | Ctrl+V | Ctrl+Shift+C | Ctrl+Shift+V |
 |---|---|---|---|---|
@@ -246,6 +253,14 @@ Ctrl+Shift+C opens Chrome's inspector, a browser action no page can observe
 and the step doesn't run, so the step judges it by whether the page
 cancelled the key, and the report says the inspector was not run.
 
+The step's full pass is established on a macOS host, whose Chrome binds
+none of these keys. On another host, such as Linux, the host Chrome's own
+bindings act under every platform the step fakes. Under macOS, Ctrl+Shift+V
+then pastes as plain text, which fails its case, and the report names the
+host's command as the browser's own action. With `--headful`, macOS's
+Ctrl+Shift+C, which the page leaves to the browser, opens the host Chrome's
+real inspector.
+
 ## The report
 
 The results directory holds:
@@ -260,7 +275,7 @@ The results directory holds:
   probe, and of the terminal after each platform's copy and paste cases.
 
 For a fixture with the copy and paste step, the summary table counts the
-cases that matched the key behavior table, and a second table shows each
+cases that matched the key behaviour table, and a second table shows each
 case per fixture and platform: whether it matched, what was observed of
 what the table judges, and, in brackets, the browser's own action and
 whether it ran natively or was simulated. The fixture's section shows, per

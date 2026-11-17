@@ -680,6 +680,18 @@ New Features
   field manager other than the command line tool owns, such as one
   ``kubectl edit`` changed, with when it wrote them.
 
+* The terminals of the workshop dashboard, in its tabs and on a page of their
+  own, have the copy and paste keyboard shortcuts of Linux terminals on every
+  platform other than Apple's. ``Ctrl+Shift+C`` copies the text selected in a
+  terminal and leaves it selected, and ``Ctrl+Shift+V`` pastes. While a
+  terminal has focus, ``Ctrl+Shift+C`` no longer opens the browser's element
+  inspector, and does nothing when no text is selected; ``F12`` and
+  ``Ctrl+Shift+I`` still open the browser's developer tools. ``Ctrl+C`` and
+  ``Ctrl+V`` are still sent to the shell, and on macOS ``Cmd+C`` and ``Cmd+V``
+  copy and paste as before. The shortcuts work over plain HTTP as well as
+  HTTPS, without the browser asking for permission to use the clipboard. See
+  [copying and pasting in terminals](copying-and-pasting-in-terminals).
+
 Features Changed
 ----------------
 

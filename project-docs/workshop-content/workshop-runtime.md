@@ -105,6 +105,35 @@ The application should send any logging output to ``stdout`` or ``stderr``, and 
 
 If you need to restart or shutdown the application within the workshop interactive terminal, you can use the ``supervisorctl`` control script.
 
+(copying-and-pasting-in-terminals)=
+Copying and pasting in terminals
+--------------------------------
+
+Workshop users can copy text from the terminals of the workshop dashboard,
+and paste text into them, with the keyboard shortcuts their platform's own
+terminals use. This holds for the terminals in the dashboard's tabs and for
+a terminal opened on a page of its own, but not for the terminal of the
+embedded editor, which has key bindings of its own.
+
+On macOS, and on an iPad with a keyboard, ``Cmd+C`` copies the text selected
+in a terminal and ``Cmd+V`` pastes. ``Ctrl+C`` and ``Ctrl+V`` are sent to the
+shell, so that ``Ctrl+C`` interrupts the running command.
+
+On Windows, Linux and other platforms, ``Ctrl+Shift+C`` copies the text
+selected in a terminal and leaves it selected, and does nothing when no text
+is selected. ``Ctrl+Shift+V`` pastes. ``Ctrl+C`` and ``Ctrl+V`` are sent to
+the shell, so that ``Ctrl+C`` interrupts the running command. While a
+terminal has focus, ``Ctrl+Shift+C`` doesn't open the browser's element
+inspector, as it does elsewhere in the browser. ``F12`` and ``Ctrl+Shift+I``
+still open the browser's developer tools.
+
+On every platform, the browser's right-click menu in a terminal also offers
+Copy and Paste.
+
+The shortcuts work whether the workshop session is served over HTTPS or
+plain HTTP, including when the dashboard is shown inside the training
+portal, and the browser doesn't ask for permission to use the clipboard.
+
 Terminal user shell environment
 -------------------------------
 

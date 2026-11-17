@@ -1,0 +1,30 @@
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: terminal-copy-paste
+spec:
+  title: Terminal Clickable Actions Test
+  description: Terminal actions, with the terminal copy and paste shortcuts pressed under each platform.
+  duration: 15m
+  difficulty: beginner
+  publish:
+    image: "$(image_repository)/session-acceptance-terminal-copy-paste-files:$(workshop_version)"
+  workshop:
+    files:
+    - image:
+        url: "$(image_repository)/session-acceptance-terminal-copy-paste-files:$(workshop_version)"
+      includePaths:
+      - /workshop/**
+      - /README.md
+  session:
+    namespaces:
+      security:
+        token:
+          enabled: true
+    applications:
+      terminal:
+        enabled: true
+        layout: split/2
+    dashboards:
+    - name: Terminal#4
+      url: terminal:4

@@ -169,6 +169,7 @@ published, as `lab-k8s-fundamentals` does.
 | `dashboard-console` | The dashboard actions sample, with the console. |
 | `terminal-vcluster` | The terminal actions sample with a virtual cluster, where kubectl and the console use the virtual cluster. |
 | `ssh-tunnel` | The SSH remote access sample, which connects back over the tunnel from inside the session, and from this host with the CLI under test. |
+| `terminal-copy-paste` | The terminal actions sample under the default `admin` role, with the terminal copy and paste step. |
 
 Every sample turns the session token off, and each fixture built from one
 turns it back on, so its session has a service account token, as most

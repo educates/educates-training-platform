@@ -1,0 +1,5 @@
+{
+  "sample": "lab-terminal-actions",
+  "summary": "terminal actions sample under the default admin role, with the terminal copy and paste shortcuts pressed under Windows, Linux and macOS",
+  "terminalCopyPaste": true
+}

@@ -53,15 +53,7 @@ func translateAndDeploy(
 		return err
 	}
 
-	cf := genericclioptions.NewConfigFlags(true)
-	if flags.Kubeconfig != "" {
-		cf.KubeConfig = &flags.Kubeconfig
-	}
-	if flags.Context != "" {
-		cf.Context = &flags.Context
-	}
-	ns := deployer.OperatorNamespace
-	cf.Namespace = &ns
+	cf := deployConfigFlags(flags)
 
 	helmLog := io.Discard
 	if flags.Verbose {
@@ -88,6 +80,71 @@ func translateAndDeploy(
 	}
 
 	return deployer.Deploy(ctx, out, deployOpts)
+}
+
+// translateAndDiff is translateAndDeploy as a preview: it translates cfg
+// as a deploy does and shows what the deploy would change in the
+// cluster, changing nothing there or in the local secrets cache. plan is
+// not committed: the CA key pairs it minted, which a deploy writes to the
+// cache before it syncs them, are previewed from the plan itself.
+func translateAndDiff(
+	ctx context.Context,
+	w io.Writer,
+	cfg v1alpha1.Config,
+	plan *localcerts.Plan,
+	flags deployPipelineFlags,
+) error {
+	opts := translator.Options{}
+	if plan != nil {
+		opts = plan.TranslatorOptions()
+	}
+	out, err := translator.Translate(cfg, opts)
+	if err != nil {
+		return err
+	}
+
+	cf := deployConfigFlags(flags)
+
+	kubeContext := flags.Context
+	if kubeContext == "" {
+		if raw, err := cf.ToRawKubeConfigLoader().RawConfig(); err == nil {
+			kubeContext = raw.CurrentContext
+		}
+	}
+
+	diffOpts := deployer.DiffOptions{
+		Getter:  cf,
+		Out:     w,
+		Context: kubeContext,
+		Verbose: flags.Verbose,
+	}
+	if plan != nil {
+		diffOpts.Notes = append(diffOpts.Notes, plan.Notices...)
+		for _, warning := range plan.Warnings {
+			diffOpts.Notes = append(diffOpts.Notes, "warning: "+warning)
+		}
+		diffOpts.SyncLocalSecrets = true
+		diffOpts.LocalSecretNames = plan.SyncSecretNames
+		diffOpts.PendingSecrets = plan.PendingCAKeyPairs()
+	}
+
+	return deployer.Diff(ctx, out, diffOpts)
+}
+
+// deployConfigFlags returns the kubectl-style connection flags of a deploy
+// or its preview: flags' kubeconfig and context, and the operator
+// namespace.
+func deployConfigFlags(flags deployPipelineFlags) *genericclioptions.ConfigFlags {
+	cf := genericclioptions.NewConfigFlags(true)
+	if flags.Kubeconfig != "" {
+		cf.KubeConfig = &flags.Kubeconfig
+	}
+	if flags.Context != "" {
+		cf.Context = &flags.Context
+	}
+	ns := deployer.OperatorNamespace
+	cf.Namespace = &ns
+	return cf
 }
 
 // isStdoutTTY tells the progress reporter whether to use \r-based

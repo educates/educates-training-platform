@@ -594,3 +594,11 @@ Updating settings
 -----------------
 
 Configuration is applied by re-running `educates admin platform deploy` with the changed file (or re-applying the custom resources in a GitOps flow). The operator reconciles differences in place. The `EducatesClusterConfig` mode (`Managed` vs `Inline`) and how each of its cluster services is provided are immutable once set: the certificates provider (`ingress.certificates.provider`), the ingress controller provider (`ingress.controller.provider`), the DNS provider (`dns.provider`) and the policy enforcement engines and Kyverno provider (`policyEnforcement`). Switching any of them requires deleting and re-creating the installation, for example with `educates admin platform delete` followed by a new deploy. On the local configuration, switching between plain HTTP and HTTPS, by setting or clearing `ingress.insecure` or by setting a custom `ingress.domain` in place of the `nip.io` default, changes the certificates provider. Configuration changes will not necessarily affect training portals or workshop environments which already exist.
+
+To see what a redeploy would change before running it, add `--diff`:
+
+```
+educates admin platform deploy --config config.yaml --diff
+```
+
+It changes nothing, in the cluster or in the local secrets cache, and exits with status 0 whether or not anything would change. It lists the cached Secrets a local configuration would sync into the `educates-secrets` namespace, by name and never with their values, the CRDs, and the operator release with its chart version and a diff of its values. For each platform custom resource it shows a diff against the resource as the API server would leave it after the deploy, defaults included. A change the API server would refuse, such as one to how a cluster service is provided, shows as refused, with the reason. Add `--verbose` for the full diffs of the CRDs and of the other objects of the operator release. What the operator then changes in the components and cluster services it installs is not shown.

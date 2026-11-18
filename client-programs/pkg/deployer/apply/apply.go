@@ -72,6 +72,17 @@ func (c *Client) InvalidateDiscovery() {
 // after the operator stamps defaults into .spec don't deadlock on field
 // conflicts the operator caused.
 func (c *Client) Apply(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return c.apply(ctx, obj, false)
+}
+
+// DryRunApply is Apply as a server-side dry run: the API server validates
+// and defaults obj, and merges it into the live object as Apply would,
+// and returns the object Apply would leave, persisting nothing.
+func (c *Client) DryRunApply(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return c.apply(ctx, obj, true)
+}
+
+func (c *Client) apply(ctx context.Context, obj *unstructured.Unstructured, dryRun bool) (*unstructured.Unstructured, error) {
 	gvk := obj.GroupVersionKind()
 	mapping, err := c.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
@@ -89,10 +100,14 @@ func (c *Client) Apply(ctx context.Context, obj *unstructured.Unstructured) (*un
 	}
 
 	force := true
-	applied, err := typed.Patch(ctx, obj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
+	options := metav1.PatchOptions{
 		FieldManager: FieldManager,
 		Force:        &force,
-	})
+	}
+	if dryRun {
+		options.DryRun = []string{metav1.DryRunAll}
+	}
+	applied, err := typed.Patch(ctx, obj.GetName(), types.ApplyPatchType, data, options)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, fmt.Errorf("apply %s/%s: target not found (CRD not installed?): %w", gvk.Kind, obj.GetName(), err)

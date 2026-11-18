@@ -25,6 +25,10 @@ const adminPlatformDeployExample = `
   # Redeploy the named local cluster test2 from its own config, into its
   # own kube context:
   educates admin platform deploy --local-config --local-cluster test2
+
+  # Show what a redeploy from the default local cluster's config would
+  # change in the cluster, without changing anything:
+  educates admin platform deploy --local-config --diff
 `
 
 // PlatformDeployOptions mirrors PlatformRenderOptions plus the kubectl
@@ -35,6 +39,9 @@ type PlatformDeployOptions struct {
 	LocalConfig bool
 	Timeout     time.Duration
 	Verbose     bool
+
+	// Diff shows what the deploy would change instead of deploying.
+	Diff bool
 
 	// LocalCluster selects the local cluster whose config LocalConfig
 	// reads.
@@ -66,7 +73,17 @@ then push to the cluster:
 context, kind-educates or kind-educates-<name>, and with --local-config it
 installs that cluster's config: <data-home>/config.yaml for the default
 local cluster, <data-home>/clusters/<name>/config.yaml for a named one.
-With neither set, the install goes into the current context.`,
+With neither set, the install goes into the current context.
+
+--diff shows what the deploy would change in the cluster and changes
+nothing, in the cluster or in the local secrets cache: the cached Secrets
+it would sync, the CRDs, the operator release, and the platform resources,
+each dry-run by the API server or Helm. The platform resources and the
+values of the operator release are shown as unified diffs, and the CRDs
+and the other objects of the operator release as a line each, unless
+--verbose shows their diffs as well. What the operator then changes in
+the components and cluster services it installs is not shown. The command
+exits with status 0 whether or not anything would change.`,
 		Example: adminPlatformDeployExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			o.LocalCluster = localClusterSelection(cmd)
@@ -81,7 +98,8 @@ With neither set, the install goes into the current context.`,
 	c.Flags().StringVar(&o.Context, "context", "", "context name to use within the kubeconfig")
 	addLocalClusterContextFlag(c, &o.KubeconfigOptions)
 	c.Flags().DurationVar(&o.Timeout, "timeout", deployer.DefaultTimeout, "per-CR Ready=True wait timeout")
-	c.Flags().BoolVar(&o.Verbose, "verbose", false, "show helm SDK debug output on stderr")
+	c.Flags().BoolVar(&o.Verbose, "verbose", false, "show helm SDK debug output on stderr; with --diff, show the full diff of each CRD and operator chart object")
+	c.Flags().BoolVar(&o.Diff, "diff", false, "show what the deploy would change in the cluster, without changing anything")
 	c.MarkFlagsMutuallyExclusive("config", "local-config")
 	c.MarkFlagsOneRequired("config", "local-config")
 
@@ -114,10 +132,16 @@ func (p *ProjectInfo) runDeploy(ctx context.Context, w io.Writer, o *PlatformDep
 		// Pure passthrough.
 	}
 
-	return translateAndDeploy(ctx, w, cfg, plan, deployPipelineFlags{
+	flags := deployPipelineFlags{
 		Kubeconfig: o.Kubeconfig,
 		Context:    o.Context,
 		Timeout:    o.Timeout,
 		Verbose:    o.Verbose,
-	})
+	}
+
+	if o.Diff {
+		return translateAndDiff(ctx, w, cfg, plan, flags)
+	}
+
+	return translateAndDeploy(ctx, w, cfg, plan, flags)
 }

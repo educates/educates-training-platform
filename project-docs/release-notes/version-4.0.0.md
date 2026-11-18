@@ -632,6 +632,20 @@ New Features
   the status and the response, and any other request only when it fails.
   Before, the error of a failed deploy reached only the extension.
 
+* ``educates admin platform deploy --diff`` shows what a deploy would change
+  in the cluster, and changes nothing, in the cluster or in the local
+  secrets cache. It lists the cached Secrets a local configuration would
+  sync into the ``educates-secrets`` namespace, by name and never with their
+  values, the CRDs, and the operator release with its chart version and a
+  diff of its values, and shows a diff of each platform custom resource
+  against the resource as the API server would leave it, from a server-side
+  dry run of the deploy's apply. A change the API server would refuse, such
+  as one to how a cluster service is provided, shows as refused with the
+  reason. ``--verbose`` adds the full diffs of the CRDs and of the other
+  objects of the operator release. The command exits with status 0 whether
+  or not anything would change. It replaces the ``--show-changes`` option
+  of the 3.x installer, which printed the changes and applied them at once.
+
 Features Changed
 ----------------
 

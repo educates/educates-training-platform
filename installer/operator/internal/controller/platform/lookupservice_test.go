@@ -101,6 +101,51 @@ func removeNamespace(name string) {
 	}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 }
 
+// servePlainHTTPOnClusterConfig makes the makeReadyClusterConfig fixture
+// publish the ingress of a plain HTTP install, as the None certificates
+// provider publishes it: the http protocol and no wildcard certificate.
+func servePlainHTTPOnClusterConfig() {
+	GinkgoHelper()
+	Eventually(func() error {
+		cc := &configv1alpha1.EducatesClusterConfig{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: configSingletonName}, cc); err != nil {
+			return err
+		}
+		cc.Status.Ingress.Protocol = configv1alpha1.IngressProtocolHTTP
+		cc.Status.Ingress.WildcardCertificateSecretRef = nil
+		return k8sClient.Status().Update(ctx, cc)
+	}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+}
+
+// lookupServiceReadyWithURL creates the LookupService singleton with the
+// prefix lookup, marks its Deployment Available once its release exists,
+// and returns the status.url it publishes on reaching Ready.
+func lookupServiceReadyWithURL(helmFac *memoryHelmFactory) string {
+	GinkgoHelper()
+	Expect(k8sClient.Create(ctx, &platformv1alpha1.LookupService{
+		ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+		Spec: platformv1alpha1.LookupServiceSpec{
+			Ingress: platformv1alpha1.LookupServiceIngress{Prefix: "lookup"},
+		},
+	})).To(Succeed())
+	Eventually(func() error {
+		hc, err := helmFac.For(platformNamespace)
+		if err != nil {
+			return err
+		}
+		_, err = hc.Status(lookupServiceReleaseName)
+		return err
+	}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+	markDeploymentAvailable(lookupServiceDeploymentName)
+	Eventually(func() metav1.ConditionStatus {
+		return lsReadyStatus(singletonName)
+	}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
+
+	got := &platformv1alpha1.LookupService{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, got)).To(Succeed())
+	return got.Status.URL
+}
+
 // installLookupService creates the LookupService singleton with its gates
 // open and waits for its release, and with it lookup-service's CRDs.
 func installLookupService(helmFac *memoryHelmFactory) *platformv1alpha1.LookupService {
@@ -235,6 +280,21 @@ var _ = Describe("LookupService reconciler", func() {
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("ClusterConfigNotReady"))
 
 		Expect(lsReadyStatus(singletonName)).To(Equal(metav1.ConditionFalse))
+	})
+
+	It("publishes an https status.url on an HTTPS install", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+
+		Expect(lookupServiceReadyWithURL(helmFac)).To(Equal("https://lookup.test.example.com"))
+	})
+
+	It("publishes an http status.url on a plain HTTP install", func() {
+		makeReadyClusterConfig()
+		servePlainHTTPOnClusterConfig()
+		makeReadySecretsManager()
+
+		Expect(lookupServiceReadyWithURL(helmFac)).To(Equal("http://lookup.test.example.com"))
 	})
 
 	It("installs the chart, derives status.url, and reaches Ready", func() {

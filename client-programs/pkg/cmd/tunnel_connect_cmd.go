@@ -12,8 +12,12 @@ import (
 )
 
 var tunnelConnectExample = `
-  # Connect an SSH proxy through a workshop session websocket tunnel:
-  educates tunnel connect --url wss://workshop.example.com/session/tunnel
+  # Connect an SSH proxy through the websocket tunnel of the workshop session
+  # served at lab-w01-s001.educates.example.com over HTTPS:
+  educates tunnel connect --url wss://lab-w01-s001.educates.example.com/tunnel/
+
+  # The same, for a session served over plain HTTP:
+  educates tunnel connect --url ws://lab-w01-s001.10-10-10-2.nip.io/tunnel/
 `
 
 type TunnelConnectOptions struct {
@@ -75,7 +79,7 @@ func (p *ProjectInfo) NewTunnelConnectCmd() *cobra.Command {
 		&o.Url,
 		"url",
 		"",
-		"URL of websocket for connecting to workshop session",
+		"websocket URL of the workshop session's tunnel: wss://<session host>/tunnel/, or ws:// when the session is served over plain HTTP",
 	)
 
 	c.MarkFlagRequired("url")

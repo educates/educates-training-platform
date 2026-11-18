@@ -36,7 +36,7 @@ script can drive the whole sequence.
 removes it again:
 
 ```
-local-cluster.sh create <name> --listen-address <ip> --tag <tag> [--domain <domain>] [--cli <path>]
+local-cluster.sh create <name> --listen-address <ip> --tag <tag> [--domain <domain> | --insecure] [--cli <path>]
 local-cluster.sh delete <name> [--cli <path>]
 local-cluster.sh show <name>
 ```
@@ -63,6 +63,18 @@ of its own build, so the cluster runs exactly that build, and the shared
   from the CA root in its secrets cache, and resolves on the host through
   the local DNS resolver and `/etc/resolver/educates.test`, as for the
   default cluster.
+- With `--insecure`, the cluster is served over plain HTTP instead, as the
+  quick start's default install is. Use it for a check that needs plain
+  HTTP, such as of a session where the browser's clipboard API is
+  undefined, as it is on any page served over plain HTTP. `create` writes
+  the config without `ingress.domain`, so the CLI takes the `nip.io` name
+  of the listen address, such as `10-10-10-2.nip.io` for `10.10.10.2`, and
+  defaults `ingress.insecure` to true, as "The ingress domain", under
+  "Running several local clusters" in the local environment guide,
+  describes. The name resolves through public DNS, and the CLI mints no CA
+  key pair for the cluster. The listen address must be an IPv4 address,
+  since `nip.io` names only those, and `--insecure` can't be given with
+  `--domain`.
 - Kind makes the cluster it creates the current kube context; `create` puts
   back the current context there was before, or none, so other terminals
   keep their cluster.
@@ -85,8 +97,8 @@ CA certificate and every other cluster's key pair stay as they are, and so
 does the key pair while another local cluster still serves the domain.
 
 `show` prints what `create` recorded: the build tag, the CLI, the listen
-address, the domain, the kube context and the CA key pair `delete` removes,
-if any.
+address, the domain, whether the cluster is served over plain HTTP, the kube
+context and the CA key pair `delete` removes, if any.
 
 ## Adding a harness
 

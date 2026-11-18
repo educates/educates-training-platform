@@ -18,12 +18,17 @@ command: educates tunnel connect --help
 
 Set up an SSH client configuration with one host alias per tunnel client. Each
 alias targets this same session through the tunnel, differing only in the
-`ProxyCommand` used. Write the configuration now:
+`ProxyCommand` used. The tunnel's URL is a `wss://` URL when the session is
+served over HTTPS, and a `ws://` URL when it is served over plain HTTP, so the
+command takes the scheme from the session's ingress protocol. Write the
+configuration now:
 
 ```terminal:execute
 command: |-
   mkdir -p ~/.ssh
-  cat > ~/.ssh/config <<'EOF'
+  ingress_protocol={{< param ingress_protocol >}}
+  tunnel_url="${ingress_protocol/http/ws}://%h/tunnel/"
+  cat > ~/.ssh/config <<EOF
   Host educates-cli
     HostName {{< param session_name >}}.{{< param ingress_domain >}}
     User eduk8s
@@ -32,7 +37,7 @@ command: |-
     LogLevel ERROR
     IdentitiesOnly yes
     IdentityFile ~/.ssh/id_rsa
-    ProxyCommand educates tunnel connect --url wss://%h/tunnel/
+    ProxyCommand educates tunnel connect --url $tunnel_url
   Host python-client
     HostName {{< param session_name >}}.{{< param ingress_domain >}}
     User eduk8s
@@ -41,7 +46,7 @@ command: |-
     LogLevel ERROR
     IdentitiesOnly yes
     IdentityFile ~/.ssh/id_rsa
-    ProxyCommand python3 ~/exercises/python-client/tunnel.py wss://%h/tunnel/
+    ProxyCommand python3 ~/exercises/python-client/tunnel.py $tunnel_url
   EOF
   chmod 600 ~/.ssh/config
 ```

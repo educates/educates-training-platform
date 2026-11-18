@@ -2949,6 +2949,8 @@ Host *.educates-local-dev.xyz
 
 The ``Host`` header should be the wildcard domain corresponding to the ingress domain used for Educates.
 
+The ``wss`` scheme of the URL is for an Educates installation that serves its ingress over HTTPS. When it serves its ingress over plain HTTP, as the default local install on a ``nip.io`` domain does, use ``ws`` instead, as in ``--url ws://%h/tunnel/``, since no TLS connection can be made to it. Inside a workshop session, the ``ingress_protocol`` data variable says which one applies: ``https`` for ``wss``, ``http`` for ``ws``.
+
 The SSH private key for the workshop is still required by the remote client. This could be downloaded by a workshop user as part of the workshop instructions using the clickable action for file download:
 
 ~~~

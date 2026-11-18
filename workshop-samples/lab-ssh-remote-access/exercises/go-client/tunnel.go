@@ -1,6 +1,7 @@
 // This is a reference implementation for ssh proxy command which can tunnel
 // SSH into a workshop session. The argument should be the "wss://*/tunnel/" URL
-// for accessing the tunnelling proxy.
+// for accessing the tunnelling proxy, or the "ws://*/tunnel/" URL when the
+// session is served over plain HTTP.
 
 package main
 

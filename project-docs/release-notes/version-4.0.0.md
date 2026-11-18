@@ -1754,6 +1754,17 @@ Deprecations
 Bugs Fixed
 ----------
 
+* ``educates local registry prune`` looked the registry container up with a
+  Docker name filter, which matches part of a name, and ran the garbage
+  collection in the first running container it found. The names of the
+  registry mirror containers start with that of the registry, as
+  ``educates-registry-mirror-docker.io`` does, so with registry mirrors
+  running the command could garbage collect a mirror and leave the local
+  registry's storage as it was. When no registry was running, it failed with
+  ``unable to create exec command``. The command now looks the registry up by
+  its exact name, and when no local registry exists, or its container is not
+  running, it says so and names the command which creates or starts it.
+
 * Run against a cluster which already ran Educates, ``educates admin platform
   deploy`` could report every component ready before the build it deployed
   had rolled out, so a workshop session requested as soon as the command

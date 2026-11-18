@@ -1766,6 +1766,17 @@ Deprecations
 Bugs Fixed
 ----------
 
+* ``educates docker workshop delete``, which the Docker Desktop extension
+  also uses, removed the workshop's containers and its ``workshop`` volume
+  but left behind the Compose project network and the named volumes of the
+  workshop's Compose services, so every workshop deployed and deleted left
+  a network, and eventually Docker ran out of address pools for new ones.
+  When the ``workshop`` volume was already gone, the command failed before
+  it removed the workshop's configuration from the CLI data home. The
+  command now takes the workshop down as a Compose project, which removes
+  its containers, network and named volumes, and counts a volume which is
+  already gone as removed, so deleting a workshop again succeeds.
+
 * ``educates cluster workshop serve`` applied the workshop definition from
   the local workshop files when it stopped even when ``--patch-workshop``
   was not given, and printed ``Restored workshop``, although it had patched

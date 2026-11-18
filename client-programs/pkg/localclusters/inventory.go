@@ -112,6 +112,12 @@ type ListRow struct {
 	// not a Kubernetes node, so it is not counted.
 	Nodes int
 
+	// KubernetesVersion is the Kubernetes version of the node image of
+	// the cluster's first control-plane node, such as v1.36.4, running or
+	// not: the version kind created the cluster with. It is empty when it
+	// can't be read.
+	KubernetesVersion string
+
 	// ListenAddress is the host address the cluster's control-plane node
 	// is configured to publish ports 80 and 443 on, empty when it
 	// publishes neither.
@@ -139,6 +145,9 @@ func (inv Inventory) List() []ListRow {
 			State:    id.State(inv.observed.Nodes),
 			Nodes:    len(id.kubernetesNodes(inv.observed.Nodes)),
 		}
+		if node, ok := inv.controlPlaneNode(id); ok {
+			row.KubernetesVersion = node.KubernetesVersion
+		}
 		if addrs := inv.ingressAddresses(id); len(addrs) > 0 {
 			row.ListenAddress = addrs[0].String()
 		}
@@ -163,25 +172,36 @@ var ingressPorts = []uint16{80, 443}
 // 80 and 443 on, each once. An address left unset, which means every host
 // address, is the unspecified IPv4 address.
 func (inv Inventory) ingressAddresses(id Identity) []netip.Addr {
+	n, ok := inv.controlPlaneNode(id)
+	if !ok {
+		return nil
+	}
 	var addrs []netip.Addr
-	for _, n := range inv.observed.Nodes {
-		if n.KindCluster != id.KindName || n.Name != id.ControlPlaneNode() {
+	for _, b := range n.PortBindings {
+		if !slices.Contains(ingressPorts, b.HostPort) {
 			continue
 		}
-		for _, b := range n.PortBindings {
-			if !slices.Contains(ingressPorts, b.HostPort) {
-				continue
-			}
-			addr := b.HostIP.Unmap()
-			if !addr.IsValid() {
-				addr = netip.IPv4Unspecified()
-			}
-			if !slices.Contains(addrs, addr) {
-				addrs = append(addrs, addr)
-			}
+		addr := b.HostIP.Unmap()
+		if !addr.IsValid() {
+			addr = netip.IPv4Unspecified()
+		}
+		if !slices.Contains(addrs, addr) {
+			addrs = append(addrs, addr)
 		}
 	}
 	return addrs
+}
+
+// controlPlaneNode returns the first control-plane node container of the
+// local cluster id among the observed ones, and reports whether there is
+// one.
+func (inv Inventory) controlPlaneNode(id Identity) (NodeContainer, bool) {
+	for _, n := range inv.observed.Nodes {
+		if n.KindCluster == id.KindName && n.Name == id.ControlPlaneNode() {
+			return n, true
+		}
+	}
+	return NodeContainer{}, false
 }
 
 // educatesCluster returns the identity of the local cluster whose kind

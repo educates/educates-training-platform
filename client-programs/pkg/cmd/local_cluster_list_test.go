@@ -33,12 +33,14 @@ func TestLocalClusterListShowsEveryEducatesClusterWithTheDefaultMarked(t *testin
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.2\n")
+	defaultNode := listControlPlane("educates", "10.10.10.1", true)
+	defaultNode.KubernetesVersion = "v1.36.4"
 	inventory := localclusters.NewInventory(localclusters.Observed{Nodes: []localclusters.NodeContainer{
 		listControlPlane("educates-test2", "10.10.10.2", false),
 		{Name: "educates-test2-worker", KindCluster: "educates-test2", Role: "worker"},
 		{Name: "educates-test2-worker2", KindCluster: "educates-test2", Role: "worker"},
 		listControlPlane("educates-x", "10.10.10.9", true),
-		listControlPlane("educates", "10.10.10.1", true),
+		defaultNode,
 	}}, dataHome)
 	var out, errOut bytes.Buffer
 
@@ -49,9 +51,9 @@ func TestLocalClusterListShowsEveryEducatesClusterWithTheDefaultMarked(t *testin
 		t.Fatalf("got %d lines, want a header and 2 rows:\n%s", len(lines), out.String())
 	}
 	wantRows := [][]string{
-		{"NAME", "STATE", "NODES", "LISTEN", "IP", "DOMAIN", "CONTEXT"},
-		{"(default)", "running", "1", "10.10.10.1", "educates.test", "kind-educates"},
-		{"test2", "stopped", "3", "10.10.10.2", "10-10-10-2.nip.io", "kind-educates-test2"},
+		{"NAME", "STATE", "NODES", "KUBERNETES", "LISTEN", "IP", "DOMAIN", "CONTEXT"},
+		{"(default)", "running", "1", "v1.36.4", "10.10.10.1", "educates.test", "kind-educates"},
+		{"test2", "stopped", "3", "-", "10.10.10.2", "10-10-10-2.nip.io", "kind-educates-test2"},
 	}
 	for i, want := range wantRows {
 		if got := strings.Fields(lines[i]); strings.Join(got, " ") != strings.Join(want, " ") {
@@ -75,8 +77,8 @@ func TestLocalClusterListWarnsAboutAConfigThatDoesNotLoad(t *testing.T) {
 	printLocalClusterList(&out, &errOut, inventory.List())
 
 	if got := strings.Fields(strings.Split(strings.TrimSpace(out.String()), "\n")[1]); strings.Join(got, " ") !=
-		"test2 running 1 10.10.10.2 - kind-educates-test2" {
-		t.Errorf("row = %q, want the domain shown as -", got)
+		"test2 running 1 - 10.10.10.2 - kind-educates-test2" {
+		t.Errorf("row = %q, want the unread version and the domain shown as -", got)
 	}
 	for _, part := range []string{`local cluster "test2"`, "loopback"} {
 		if !strings.Contains(errOut.String(), part) {

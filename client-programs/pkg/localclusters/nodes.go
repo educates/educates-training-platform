@@ -31,6 +31,12 @@ type NodeContainer struct {
 	// publish, whether it runs or not. Only a control-plane node's are
 	// read, and an observation may leave other nodes' out.
 	PortBindings []PortBinding
+
+	// KubernetesVersion is the Kubernetes version of the container's node
+	// image, such as v1.36.4, as kind records it in the image's
+	// /kind/version file, whether the container runs or not. Only a
+	// control-plane node's is read, and it is empty when it can't be read.
+	KubernetesVersion string
 }
 
 // PortBinding is a host address and port a node container is configured

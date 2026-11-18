@@ -25,8 +25,11 @@ func (p *ProjectInfo) NewLocalClusterListCmd() *cobra.Command {
 named one, whatever --local-cluster or EDUCATES_LOCAL_CLUSTER select. Each
 row has the cluster's state (running, stopped, or partly running when only
 some of its nodes run), its number of Kubernetes nodes, running or not, the
-host IP it publishes ports 80 and 443 on, its ingress domain and its kube
-context. Run educates local cluster status to see each node of a cluster.
+Kubernetes version of its node image, the host IP it publishes ports 80 and
+443 on, its ingress domain and its kube context. list reads no cluster's
+API server: the state, nodes, version and listen IP come from the node
+containers as Docker reports them, so a stopped cluster shows them too.
+Run educates local cluster status to see each node of a cluster.
 
 A kind cluster named educates-<name> is a local cluster only when the
 data home holds its folder, clusters/<name>/. Other kind clusters are left
@@ -64,10 +67,12 @@ func printLocalClusterList(w, errW io.Writer, rows []localclusters.ListRow) {
 			name = "(default)"
 		}
 		table = append(table, []string{
-			name, string(r.State), strconv.Itoa(r.Nodes), orDash(r.ListenAddress), orDash(r.Domain), r.Identity.Context,
+			name, string(r.State), strconv.Itoa(r.Nodes), orDash(r.KubernetesVersion),
+			orDash(r.ListenAddress), orDash(r.Domain), r.Identity.Context,
 		})
 	}
-	fmt.Fprintln(w, utils.PrintTable([]string{"NAME", "STATE", "NODES", "LISTEN IP", "DOMAIN", "CONTEXT"}, table))
+	fmt.Fprintln(w, utils.PrintTable(
+		[]string{"NAME", "STATE", "NODES", "KUBERNETES", "LISTEN IP", "DOMAIN", "CONTEXT"}, table))
 
 	for _, r := range rows {
 		if r.ConfigError != nil {

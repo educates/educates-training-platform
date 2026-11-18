@@ -18,6 +18,7 @@ package platform
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -67,8 +68,16 @@ func renderLookupServiceObjects(t *testing.T) ([]renderedObject, []string) {
 // values the operator gives it and returns the pod spec of its Deployment.
 func renderLookupServicePodSpec(t *testing.T) corev1.PodSpec {
 	t.Helper()
+	return renderLookupServicePodSpecFor(t, &platformv1alpha1.LookupService{})
+}
 
-	values := renderLookupServiceValues(&platformv1alpha1.LookupService{}, valuesTestClusterConfig(), testImageRegistryNamespace)
+// renderLookupServicePodSpecFor renders the lookup-service chart with the
+// values the operator gives it for obj and returns the pod spec of its
+// Deployment.
+func renderLookupServicePodSpecFor(t *testing.T, obj *platformv1alpha1.LookupService) corev1.PodSpec {
+	t.Helper()
+
+	values := renderLookupServiceValues(obj, valuesTestClusterConfig(), testImageRegistryNamespace)
 
 	for _, w := range renderWorkloads(t, vendoredcharts.LookupService, values) {
 		if w.Kind == "Deployment" && w.Metadata.Name == lookupServiceDeploymentName {
@@ -77,6 +86,18 @@ func renderLookupServicePodSpec(t *testing.T) corev1.PodSpec {
 	}
 	t.Fatalf("the chart renders no Deployment lookup-service")
 	return corev1.PodSpec{}
+}
+
+// lookupServiceContainer returns the lookup-service container of a pod spec.
+func lookupServiceContainer(t *testing.T, spec corev1.PodSpec) corev1.Container {
+	t.Helper()
+	for _, c := range spec.Containers {
+		if c.Name == "lookup-service" {
+			return c
+		}
+	}
+	t.Fatalf("the chart renders no lookup-service container")
+	return corev1.Container{}
 }
 
 func TestLookupServiceChart_CreatesConfigNamespaceKeptOnUninstall(t *testing.T) {
@@ -112,6 +133,73 @@ func TestLookupServiceChart_ProbesLivenessEndpoint(t *testing.T) {
 	t.Fatalf("the chart renders no lookup-service container")
 }
 
+// The service reports ready once it has loaded its own configuration, so
+// the Deployment becomes Available, and the LookupService Ready, only then.
+func TestLookupServiceChart_ProbesReadinessEndpoint(t *testing.T) {
+	probe := lookupServiceContainer(t, renderLookupServicePodSpec(t)).ReadinessProbe
+	if probe == nil || probe.HTTPGet == nil {
+		t.Fatalf("container lookup-service has readiness probe %+v, want an HTTP GET", probe)
+	}
+	if probe.HTTPGet.Path != "/readyz" || probe.HTTPGet.Port.IntValue() != 8081 {
+		t.Errorf("readiness probe gets %s on port %s, want /readyz on 8081",
+			probe.HTTPGet.Path, probe.HTTPGet.Port.String())
+	}
+}
+
+func TestLookupServiceChart_RunsNonRoot(t *testing.T) {
+	spec := renderLookupServicePodSpec(t)
+	if spec.SecurityContext == nil || spec.SecurityContext.RunAsNonRoot == nil || !*spec.SecurityContext.RunAsNonRoot {
+		t.Errorf("Deployment lookup-service has pod security context %+v, want runAsNonRoot true", spec.SecurityContext)
+	}
+	sc := lookupServiceContainer(t, spec).SecurityContext
+	if sc == nil || sc.AllowPrivilegeEscalation == nil || *sc.AllowPrivilegeEscalation {
+		t.Errorf("container lookup-service has security context %+v, want allowPrivilegeEscalation false", sc)
+	}
+}
+
+// The service loads the CA trust Secret's ca.crt itself, from the file its
+// --ingress-ca-file flag names, so the flag must name the file the chart
+// mounts.
+func TestLookupServiceChart_PointsServiceAtMountedCA(t *testing.T) {
+	spec := renderLookupServicePodSpec(t)
+	caSecret := valuesTestClusterConfig().Status.Ingress.CACertificateSecretRef.Name
+
+	caVolume := ""
+	for _, v := range spec.Volumes {
+		if v.Secret != nil && v.Secret.SecretName == caSecret {
+			caVolume = v.Name
+		}
+	}
+	if caVolume == "" {
+		t.Fatalf("Deployment lookup-service mounts no CA trust Secret %q", caSecret)
+	}
+
+	c := lookupServiceContainer(t, spec)
+	for _, m := range c.VolumeMounts {
+		if m.Name != caVolume {
+			continue
+		}
+		want := "--ingress-ca-file=" + m.MountPath + "/ca.crt"
+		if !slices.Contains(c.Args, want) {
+			t.Errorf("container lookup-service has args %q, want them to hold %q", c.Args, want)
+		}
+		return
+	}
+	t.Fatalf("container lookup-service does not mount volume %q", caVolume)
+}
+
+func TestLookupServiceChart_PassesLogLevelToService(t *testing.T) {
+	for _, level := range []platformv1alpha1.LogLevel{platformv1alpha1.LogLevelDebug, platformv1alpha1.LogLevelError} {
+		obj := &platformv1alpha1.LookupService{Spec: platformv1alpha1.LookupServiceSpec{LogLevel: level}}
+		c := lookupServiceContainer(t, renderLookupServicePodSpecFor(t, obj))
+
+		want := "--log-level=" + string(level)
+		if !slices.Contains(c.Args, want) {
+			t.Errorf("with logLevel %s, container lookup-service has args %q, want them to hold %q", level, c.Args, want)
+		}
+	}
+}
+
 // The remote-access-token Secret exists only while SessionManager installs
 // remote access, so lookup-service's pod has to start without it.
 func TestLookupServiceChart_MountsRemoteAccessTokenOptionally(t *testing.T) {
@@ -128,41 +216,31 @@ func TestLookupServiceChart_MountsRemoteAccessTokenOptionally(t *testing.T) {
 	t.Fatalf("Deployment lookup-service mounts no remote-access-token Secret")
 }
 
-func TestLookupServiceChart_GrantsOnlyInConfigNamespace(t *testing.T) {
+// lookupServiceRBAC renders the lookup-service chart with the values the
+// operator gives it and returns its Roles and RoleBindings, keyed by
+// namespace/name. It fails the test when the chart binds anything cluster
+// wide to lookup-service.
+func lookupServiceRBAC(t *testing.T) (map[string]*rbacv1.Role, map[string]*rbacv1.RoleBinding) {
+	t.Helper()
 	objects, docs := renderLookupServiceObjects(t)
 
-	wantRules := []rbacv1.PolicyRule{
-		{APIGroups: []string{""}, Resources: []string{"secrets"}, Verbs: []string{"list", "watch"}},
-		{
-			APIGroups: []string{"lookup.educates.dev"},
-			Resources: []string{"clusterconfigs", "clientconfigs", "tenantconfigs"},
-			Verbs:     []string{"list", "watch", "patch"},
-		},
-		{APIGroups: []string{""}, Resources: []string{"events"}, Verbs: []string{"create"}},
-	}
-	wantRoleRef := rbacv1.RoleRef{
-		APIGroup: "rbac.authorization.k8s.io",
-		Kind:     "Role",
-		Name:     "educates-lookup-service",
-	}
-	wantSubjects := []rbacv1.Subject{
-		{Kind: "ServiceAccount", Name: "lookup-service", Namespace: platformNamespace},
-	}
-
-	var role *rbacv1.Role
-	var binding *rbacv1.RoleBinding
+	roles := map[string]*rbacv1.Role{}
+	bindings := map[string]*rbacv1.RoleBinding{}
 	for i, o := range objects {
+		key := o.Metadata.Namespace + "/" + o.Metadata.Name
 		switch o.Kind {
 		case "Role":
-			role = &rbacv1.Role{}
+			role := &rbacv1.Role{}
 			if err := yaml.Unmarshal([]byte(docs[i]), role); err != nil {
 				t.Fatalf("parse Role: %v", err)
 			}
+			roles[key] = role
 		case "RoleBinding":
-			binding = &rbacv1.RoleBinding{}
+			binding := &rbacv1.RoleBinding{}
 			if err := yaml.Unmarshal([]byte(docs[i]), binding); err != nil {
 				t.Fatalf("parse RoleBinding: %v", err)
 			}
+			bindings[key] = binding
 		case "ClusterRoleBinding":
 			t.Errorf("the chart renders ClusterRoleBinding %q", o.Metadata.Name)
 		case "ClusterRole":
@@ -171,27 +249,65 @@ func TestLookupServiceChart_GrantsOnlyInConfigNamespace(t *testing.T) {
 			}
 		}
 	}
+	return roles, bindings
+}
 
-	if role == nil {
-		t.Fatalf("the chart renders no Role")
-	}
-	if role.Name != "educates-lookup-service" || role.Namespace != lookupServiceConfigNamespace {
-		t.Errorf("Role is %s/%s, want educates-config/educates-lookup-service", role.Namespace, role.Name)
+// assertRoleGrantedToLookupService fails unless the chart renders the Role
+// namespace/name with exactly the given rules, and a RoleBinding of the same
+// name binding it to lookup-service's service account.
+func assertRoleGrantedToLookupService(t *testing.T, namespace, name string, wantRules []rbacv1.PolicyRule) {
+	t.Helper()
+	roles, bindings := lookupServiceRBAC(t)
+	key := namespace + "/" + name
+
+	role, ok := roles[key]
+	if !ok {
+		t.Fatalf("the chart renders no Role %s", key)
 	}
 	if !reflect.DeepEqual(role.Rules, wantRules) {
-		t.Errorf("Role rules are %+v, want %+v", role.Rules, wantRules)
+		t.Errorf("Role %s rules are %+v, want %+v", key, role.Rules, wantRules)
 	}
 
-	if binding == nil {
-		t.Fatalf("the chart renders no RoleBinding")
+	binding, ok := bindings[key]
+	if !ok {
+		t.Fatalf("the chart renders no RoleBinding %s", key)
 	}
-	if binding.Name != "educates-lookup-service" || binding.Namespace != lookupServiceConfigNamespace {
-		t.Errorf("RoleBinding is %s/%s, want educates-config/educates-lookup-service", binding.Namespace, binding.Name)
-	}
+	wantRoleRef := rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "Role", Name: name}
 	if binding.RoleRef != wantRoleRef {
-		t.Errorf("RoleBinding roleRef is %+v, want %+v", binding.RoleRef, wantRoleRef)
+		t.Errorf("RoleBinding %s roleRef is %+v, want %+v", key, binding.RoleRef, wantRoleRef)
+	}
+	wantSubjects := []rbacv1.Subject{
+		{Kind: "ServiceAccount", Name: "lookup-service", Namespace: platformNamespace},
 	}
 	if !reflect.DeepEqual(binding.Subjects, wantSubjects) {
-		t.Errorf("RoleBinding subjects are %+v, want %+v", binding.Subjects, wantSubjects)
+		t.Errorf("RoleBinding %s subjects are %+v, want %+v", key, binding.Subjects, wantSubjects)
 	}
+}
+
+func TestLookupServiceChart_GrantsConfigNamespaceAccess(t *testing.T) {
+	assertRoleGrantedToLookupService(t, lookupServiceConfigNamespace, "educates-lookup-service", []rbacv1.PolicyRule{
+		{APIGroups: []string{""}, Resources: []string{"secrets"}, Verbs: []string{"list", "watch"}},
+		{
+			APIGroups: []string{"lookup.educates.dev"},
+			Resources: []string{"clusterconfigs", "clientconfigs", "tenantconfigs"},
+			Verbs:     []string{"list", "watch", "patch"},
+		},
+		{APIGroups: []string{""}, Resources: []string{"events"}, Verbs: []string{"create"}},
+	})
+}
+
+// The service keeps its token signing key and the clients' revocation state
+// in the Secret lookup-service-tokens of its own namespace, which it creates
+// on its first start. Kubernetes cannot restrict create by name, so create
+// covers the namespace's Secrets, and get and update only that one.
+func TestLookupServiceChart_GrantsItsTokenSecret(t *testing.T) {
+	assertRoleGrantedToLookupService(t, platformNamespace, "educates-lookup-service-tokens", []rbacv1.PolicyRule{
+		{APIGroups: []string{""}, Resources: []string{"secrets"}, Verbs: []string{"create"}},
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: []string{"lookup-service-tokens"},
+			Verbs:         []string{"get", "update"},
+		},
+	})
 }

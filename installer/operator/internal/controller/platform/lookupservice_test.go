@@ -417,6 +417,37 @@ var _ = Describe("LookupService reconciler", func() {
 		Expect(ci["caCertificateRef"]).To(Equal(ingressCAChartRef()))
 	})
 
+	It("passes spec.logLevel to the chart's log level, following a change", func() {
+		helmRelease := func() (*release.Release, error) {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return nil, err
+			}
+			return hc.Status(lookupServiceReleaseName)
+		}
+		releaseLogLevel := func() any {
+			rel, err := helmRelease()
+			if err != nil {
+				return err
+			}
+			return rel.Config["logLevel"]
+		}
+
+		ls := installLookupService(helmFac)
+		Eventually(releaseLogLevel, 30*time.Second, 200*time.Millisecond).Should(Equal("info"))
+
+		Eventually(func() error {
+			live := &platformv1alpha1.LookupService{}
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(ls), live); err != nil {
+				return err
+			}
+			live.Spec.LogLevel = platformv1alpha1.LogLevelDebug
+			return k8sClient.Update(ctx, live)
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		Eventually(releaseLogLevel, 30*time.Second, 200*time.Millisecond).Should(Equal("debug"))
+	})
+
 	It("lets the release take over an educates-config namespace created by hand, keeping its configurations", func() {
 		// envtest has no namespace controller, so a deleted namespace
 		// never goes: the namespace is reset to how a hand-made one

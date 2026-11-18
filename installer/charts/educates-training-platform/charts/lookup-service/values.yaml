@@ -23,6 +23,10 @@ imagePullSecrets: []
 
 resources: {}
 
+# The service's log level: debug, info, warn or error. The operator sets it
+# from the LookupService's `spec.logLevel`.
+logLevel: info
+
 # Cluster-wide ingress identity. Same shape as the umbrella's
 # `global.clusterIngress`; under the umbrella, set values there and they
 # propagate here automatically. This subchart consumes:
@@ -32,8 +36,8 @@ resources: {}
 #     hostname). Empty disables TLS on the Ingress.
 #   - `caCertificateRef` — CA Secret. When set, the chart mounts its
 #     `ca.crt` key, and only that key, at
-#     `/opt/app-root/certs/ingress-ca` and the image's start script appends
-#     the CA to the bundle its TLS environment variables point at. Required
+#     `/opt/app-root/certs/ingress-ca`, and the service trusts that CA
+#     besides the system roots when it calls training portals. Required
 #     when the lookup-service must verify TLS against a private/self-signed
 #     CA when calling other clusters' training portals.
 #

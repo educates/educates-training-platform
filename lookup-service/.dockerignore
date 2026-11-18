@@ -1,21 +1,24 @@
+# The image builds the service from go.mod, go.sum, api, cmd and internal.
+# Everything else stays out of the build context.
 **/*.swp
-**/__pycache__
-**/.pytest_cache
 .git
 .gitignore
-.venv
-venv
+bin
+cover.out
+test
 testdata
-
-# The Go service and its build tooling, which this image does not run.
 .custom-gcl.yml
 .golangci.yml
 Makefile
-api
-bin
-cmd
-cover.out
-go.mod
-go.sum
-internal
-test
+README.md
+
+# The Python implementation, which the image does not run.
+**/__pycache__
+**/.pytest_cache
+.venv
+venv
+.python-version
+pyproject.toml
+uv.lock
+service
+start-service.sh

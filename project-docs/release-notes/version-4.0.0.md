@@ -646,6 +646,17 @@ New Features
   or not anything would change. It replaces the ``--show-changes`` option
   of the 3.x installer, which printed the changes and applied them at once.
 
+* ``educates admin platform export`` writes the configuration of Educates
+  deployed to a cluster as an ``EducatesConfig``: the spec of each platform
+  custom resource as the cluster holds it, and the values of the operator
+  release as the ``operator`` block. Deployed with ``educates admin
+  platform deploy --config``, the file reproduces that configuration, on
+  the same cluster or on another one. It holds no Secret, and a comment
+  names each Secret the custom resources reference. It replaces reading
+  the deployed configuration back with ``educates admin platform config
+  --from-cluster`` and ``educates admin platform values --from-cluster`` in
+  the 3.x installer.
+
 Features Changed
 ----------------
 

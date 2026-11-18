@@ -39,11 +39,11 @@ current-context: "` + currentContext + `"
 	return path
 }
 
-// reachForTest runs reachDeployCluster with the kubeconfig at path and
+// reachForTest runs reachCluster with the kubeconfig at path and
 // the --context value context, and returns its error.
 func reachForTest(path, context string) error {
 	flags := deployPipelineFlags{Kubeconfig: path, Context: context}
-	_, err := reachDeployCluster(deployConfigFlags(flags), flags)
+	_, err := reachCluster(deployConfigFlags(flags), flags)
 	return err
 }
 
@@ -104,7 +104,7 @@ func TestReachDeployClusterNamesAMissingKubeconfig(t *testing.T) {
 
 		err := reachForTest("", "")
 
-		wantErrorParts(t, err, "there is no kubeconfig to deploy with", "$KUBECONFIG names "+missing+", which does not exist", "--local-cluster")
+		wantErrorParts(t, err, "there is no kubeconfig:", "$KUBECONFIG names "+missing+", which does not exist", "--local-cluster")
 		if strings.Contains(err.Error(), "no kube context is selected") {
 			t.Errorf("error %q reports the missing kubeconfig as selecting no context", err)
 		}

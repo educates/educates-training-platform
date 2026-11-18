@@ -168,6 +168,11 @@ func (c *Client) Uninstall(name string) error {
 	return nil
 }
 
+// Release returns the deployed release name, or ErrReleaseNotFound.
+func (c *Client) Release(name string) (*release.Release, error) {
+	return c.status(name)
+}
+
 func (c *Client) status(name string) (*release.Release, error) {
 	rel, err := action.NewStatus(c.cfg).Run(name)
 	if err != nil {

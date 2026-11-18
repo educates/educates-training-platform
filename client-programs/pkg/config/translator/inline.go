@@ -1,6 +1,9 @@
 package translator
 
 import (
+	"fmt"
+	"sort"
+
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
@@ -155,4 +158,65 @@ func operatorChartValuesFor(op v1alpha1.LocalOperatorConfig) map[string]interfac
 		values["logLevel"] = op.LogLevel
 	}
 	return values
+}
+
+// OperatorConfigFromChartValues is the inverse of operatorChartValuesFor,
+// through which every config kind sets the operator chart values: it
+// returns the operator block of a CLI config whose chart values are
+// values. It also returns, by dotted path and sorted, the values that
+// block cannot express, such as ones a helm install of the chart set
+// directly, which a config deployed from the block would leave unset.
+func OperatorConfigFromChartValues(values map[string]interface{}) (v1alpha1.LocalOperatorConfig, []string) {
+	var op v1alpha1.LocalOperatorConfig
+	var unmapped []string
+
+	for key, value := range values {
+		switch key {
+		case "image":
+			image, ok := value.(map[string]interface{})
+			if !ok {
+				unmapped = append(unmapped, key)
+				continue
+			}
+			for field, v := range image {
+				s, ok := v.(string)
+				switch {
+				case ok && field == "repository":
+					op.Image.Repository = s
+				case ok && field == "tag":
+					op.Image.Tag = s
+				case ok && field == "pullPolicy":
+					op.Image.PullPolicy = s
+				default:
+					unmapped = append(unmapped, key+"."+field)
+				}
+			}
+		case "imagePullSecrets":
+			secrets, ok := value.([]interface{})
+			if !ok {
+				unmapped = append(unmapped, key)
+				continue
+			}
+			for i, entry := range secrets {
+				secret, ok := entry.(map[string]interface{})
+				name, named := secret["name"].(string)
+				if !ok || !named || len(secret) != 1 {
+					unmapped = append(unmapped, fmt.Sprintf("%s[%d]", key, i))
+					continue
+				}
+				op.ImagePullSecrets = append(op.ImagePullSecrets, name)
+			}
+		case "logLevel":
+			if s, ok := value.(string); ok {
+				op.LogLevel = s
+			} else {
+				unmapped = append(unmapped, key)
+			}
+		default:
+			unmapped = append(unmapped, key)
+		}
+	}
+
+	sort.Strings(unmapped)
+	return op, unmapped
 }

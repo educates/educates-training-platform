@@ -602,3 +602,11 @@ educates admin platform deploy --config config.yaml --diff
 ```
 
 It changes nothing, in the cluster or in the local secrets cache, and exits with status 0 whether or not anything would change. It lists the cached Secrets a local configuration would sync into the `educates-secrets` namespace, by name and never with their values, the CRDs, and the operator release with its chart version and a diff of its values. For each platform custom resource it shows a diff against the resource as the API server would leave it after the deploy, defaults included. A change the API server would refuse, such as one to how a cluster service is provided, shows as refused, with the reason. Add `--verbose` for the full diffs of the CRDs and of the other objects of the operator release. What the operator then changes in the components and cluster services it installs is not shown.
+
+To see the configuration a cluster runs, export it:
+
+```
+educates admin platform export > educates.yaml
+```
+
+The command writes an `EducatesConfig` with the spec of each platform custom resource as the cluster holds it, including the defaults the API server added and any change another tool such as `kubectl edit` made, and with the values of the operator release as its `operator` block. Deployed with `educates admin platform deploy --config educates.yaml`, it reproduces that configuration, so `--diff` against the same cluster shows nothing would change, and it can be deployed to another cluster. The file holds no Secret: a comment at the top names each Secret the custom resources reference, which a cluster needs before the file is deployed there. It has no `target` block, as the settings of a local cluster's kind cluster and DNS resolver are not stored in the cluster. Operator chart values the `operator` block cannot express, such as ones a `helm install` of the chart set, are named in a comment and a warning.

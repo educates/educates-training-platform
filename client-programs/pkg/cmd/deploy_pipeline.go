@@ -66,7 +66,7 @@ func translateAndDeploy(
 
 	// Before the plan writes to the local secrets cache, or anything
 	// reaches the cluster.
-	if _, err := reachDeployCluster(cf, flags); err != nil {
+	if _, err := reachCluster(cf, flags); err != nil {
 		return err
 	}
 
@@ -120,7 +120,7 @@ func translateAndDiff(
 
 	cf := deployConfigFlags(flags)
 
-	kubeContext, err := reachDeployCluster(cf, flags)
+	kubeContext, err := reachCluster(cf, flags)
 	if err != nil {
 		return err
 	}
@@ -148,8 +148,9 @@ func translateAndDiff(
 // its cluster.
 const clusterReachTimeout = 15 * time.Second
 
-// reachDeployCluster returns the name of the kube context a deploy or its
-// preview reaches its cluster through, with cf and flags, once the
+// reachCluster returns the name of the kube context a command that
+// deploys to or reads a cluster, such as a deploy, its preview or an
+// export, reaches the cluster through, with cf and flags, once the
 // cluster has answered, or why it can't: the kubeconfig selects no kube
 // context, as when it has no current context and --context names none,
 // it lacks the context named, or the cluster's API server does not
@@ -157,7 +158,7 @@ const clusterReachTimeout = 15 * time.Second
 // reads which context and server are wrong rather than the first request
 // that fails, which, with no context, goes to client-go's default
 // server, localhost:8080.
-func reachDeployCluster(cf *genericclioptions.ConfigFlags, flags deployPipelineFlags) (string, error) {
+func reachCluster(cf *genericclioptions.ConfigFlags, flags deployPipelineFlags) (string, error) {
 	if err := missingKubeconfigError(cf, flags); err != nil {
 		return "", err
 	}
@@ -181,8 +182,8 @@ func reachDeployCluster(cf *genericclioptions.ConfigFlags, flags deployPipelineF
 		// cluster through the pod's service account.
 		name = "(in-cluster service account)"
 	default:
-		return "", fmt.Errorf("no kube context is selected to deploy to: the kubeconfig sets no current context, and holds %s. "+
-			"Pass --context to name one, or --local-cluster to deploy to a local cluster", kubeContextChoices(raw))
+		return "", fmt.Errorf("no kube context is selected: the kubeconfig sets no current context, and holds %s. "+
+			"Pass --context to name one, or --local-cluster for a local cluster", kubeContextChoices(raw))
 	}
 
 	cfg, err := cf.ToRESTConfig()
@@ -207,7 +208,7 @@ func reachDeployCluster(cf *genericclioptions.ConfigFlags, flags deployPipelineF
 	return name, nil
 }
 
-// missingKubeconfigError returns why a deploy has no kubeconfig to read,
+// missingKubeconfigError returns why a command has no kubeconfig to read,
 // when no file of those cf loads exists: the one --kubeconfig names, those
 // $KUBECONFIG names, or else ~/.kube/config. client-go takes a missing
 // file for an empty kubeconfig, which would then be reported as selecting
@@ -238,12 +239,12 @@ func missingKubeconfigError(cf *genericclioptions.ConfigFlags, flags deployPipel
 		default:
 			which = "none of which exists"
 		}
-		return fmt.Errorf("there is no kubeconfig to deploy with: %s names %s, %s. "+
-			"Point %s at a kubeconfig that exists, pass --kubeconfig, or pass --local-cluster to deploy to a local cluster, "+
+		return fmt.Errorf("there is no kubeconfig: %s names %s, %s. "+
+			"Point %s at a kubeconfig that exists, pass --kubeconfig, or pass --local-cluster for a local cluster, "+
 			"whose kube context is in %s",
 			env, joinedWithAnd(files), which, env, clientcmd.RecommendedHomeFile)
 	default:
-		return fmt.Errorf("there is no kubeconfig to deploy with: %s does not exist. "+
+		return fmt.Errorf("there is no kubeconfig: %s does not exist. "+
 			"Create it, point $%s at a kubeconfig, or pass --kubeconfig",
 			joinedWithAnd(files), clientcmd.RecommendedConfigPathEnvVar)
 	}

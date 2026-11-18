@@ -414,9 +414,6 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInput
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
 		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
-		if err := validateClusterNodes(c.Cluster.Nodes); err != nil {
-			return nil, err
-		}
 		// A secure install (the default; ingress.insecure not set)
 		// serves HTTPS from a cached wildcard TLS certificate or a cached
 		// root CA. The local cluster rules have already run, so an empty
@@ -439,9 +436,6 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInput
 		}, nil
 	case *v1alpha1.EducatesConfig:
 		clusterCfg := c.Target.Cluster
-		if err := validateClusterNodes(clusterCfg.Nodes); err != nil {
-			return nil, err
-		}
 		return &localCreateInputs{
 			Deploy:  c,
 			Cluster: clusterCfg,
@@ -450,38 +444,6 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInput
 	default:
 		return nil, fmt.Errorf("unsupported kind %q for local cluster create", cfg.GetKind())
 	}
-}
-
-// validateClusterNodes checks a user-declared cluster.nodes list: when set,
-// it must contain exactly one control-plane node and use only the roles
-// kind understands. kind cannot bootstrap without a control-plane node, and
-// the control-plane node publishes ports 80 and 443 on the listen address,
-// which a second one could not also bind. An empty list keeps the default
-// single control-plane cluster and needs no validation.
-func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
-	if len(nodes) == 0 {
-		return nil
-	}
-
-	controlPlanes := 0
-	for _, n := range nodes {
-		switch n.Role {
-		case "control-plane":
-			controlPlanes++
-		case "worker":
-		default:
-			return fmt.Errorf("cluster.nodes: invalid node role %q (must be \"control-plane\" or \"worker\")", n.Role)
-		}
-	}
-
-	switch {
-	case controlPlanes == 0:
-		return fmt.Errorf("cluster.nodes: one node must have role \"control-plane\"")
-	case controlPlanes > 1:
-		return fmt.Errorf("cluster.nodes: %d nodes have role \"control-plane\", but a local cluster has exactly one, as only one node can publish ports 80 and 443 on the listen address; give the other nodes role \"worker\"", controlPlanes)
-	}
-
-	return nil
 }
 
 // kindBootstrapFromConfig pulls the kind-template inputs from the cluster

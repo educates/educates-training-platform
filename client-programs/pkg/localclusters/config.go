@@ -37,6 +37,39 @@ func ValidateListenAddress(address string) error {
 	return nil
 }
 
+// validateClusterNodes checks a declared node list: when set, it must
+// contain exactly one control-plane node and use only the roles kind
+// understands. kind cannot bootstrap without a control-plane node, and the
+// control-plane node publishes ports 80 and 443 on the listen address,
+// which a second one could not also bind. An empty list keeps the default
+// single control-plane cluster and needs no validation. The error gives
+// the reason, without naming the field the list came from.
+func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	controlPlanes := 0
+	for _, n := range nodes {
+		switch n.Role {
+		case "control-plane":
+			controlPlanes++
+		case "worker":
+		default:
+			return fmt.Errorf("invalid node role %q, which must be \"control-plane\" or \"worker\"", n.Role)
+		}
+	}
+
+	switch {
+	case controlPlanes == 0:
+		return fmt.Errorf("one node must have role \"control-plane\"")
+	case controlPlanes > 1:
+		return fmt.Errorf("%d nodes have role \"control-plane\", but a local cluster has exactly one, as only one node can publish ports 80 and 443 on the listen address; give the other nodes role \"worker\"", controlPlanes)
+	}
+
+	return nil
+}
+
 // LoadConfigFile loads the config of the local cluster id from the file
 // at path and applies the rules a local cluster's config follows.
 //
@@ -46,7 +79,8 @@ func ValidateListenAddress(address string) error {
 // taken as it is.
 //
 // A config that declares a local cluster declares a listen address that
-// passes ValidateListenAddress. An EducatesLocalConfig that declares no
+// passes ValidateListenAddress, and a node list, when it declares one,
+// that passes validateClusterNodes. An EducatesLocalConfig that declares no
 // ingress.domain gets the nip.io name of its listen address, with dashes,
 // and ingress.insecure set to true, so it is served over plain HTTP with
 // no CA to manage. It then gets the static defaults config.Load gives it.
@@ -88,6 +122,9 @@ func parseConfig(id Identity, data []byte, source string) (v1alpha1.Config, erro
 	if err := ValidateListenAddress(declared.listenAddress); err != nil {
 		return nil, fmt.Errorf("%s: %s: %w. %s", source, declared.listenAddressField, err,
 			listenAddressAdvice(id, source, declared.listenAddressField))
+	}
+	if err := validateClusterNodes(declared.nodes); err != nil {
+		return nil, fmt.Errorf("%s: %s: %w", source, declared.nodesField, err)
 	}
 	if c, ok := cfg.(*v1alpha1.EducatesLocalConfig); ok {
 		if err := DeriveDomain(c); err != nil {

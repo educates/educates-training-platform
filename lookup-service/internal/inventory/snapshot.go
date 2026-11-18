@@ -122,6 +122,8 @@ type Portal struct {
 	Capacity int64
 	// Allocated is the sum of its environments' allocated sessions.
 	Allocated int
+	// InFlight is the sum of its environments' requests in flight.
+	InFlight int
 	// Environments are the portal's workshop environments, ordered by name.
 	Environments []*Environment
 
@@ -156,6 +158,11 @@ type Environment struct {
 	// Allocated counts the sessions that are taken: awaiting activation,
 	// in use or stopping.
 	Allocated int
+	// InFlight counts the session requests the service has sent to the
+	// environment whose session the inventory does not show as taken yet.
+	// The environment's allocated count, as placement reckons it, is
+	// Allocated plus InFlight.
+	InFlight int
 	// Available counts the reserved sessions waiting for a user.
 	Available int
 	// Sessions are the environment's sessions, ordered by name.

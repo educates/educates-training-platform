@@ -1753,6 +1753,22 @@ Removed Features
   3 configuration settings onto their version 4 equivalents is included in
   the documentation.
 
+* The commands and options of the CLI which served the version 3 installer
+  have been removed: ``educates admin platform config``, ``educates admin
+  platform values`` and ``educates local config reset``, the ``--dry-run``,
+  ``--show-changes``, ``--domain``, ``--version``, ``--package-repository``
+  and ``--skip-image-resolution`` options of ``educates admin platform
+  deploy``, the ``--version``, ``--package-repository`` and
+  ``--skip-image-resolution`` options of ``educates local cluster create``,
+  the ``--config`` and ``--domain`` options of ``educates local config
+  view``, and the ``--domain`` option of ``educates local secrets add ca``
+  and ``educates local secrets add tls``. A removed option fails as an
+  unknown flag, and a removed command, as any unknown command of a command
+  group does, shows the help of its group. The migration guide names what
+  replaces each, such as ``educates admin platform render`` and ``educates
+  admin platform deploy --diff`` for ``--dry-run``, and ``educates admin
+  platform export`` for reading the deployed configuration back.
+
 * The CLI binaries are no longer published as the ``educates-client-programs``
   imgpkg bundle. Download the binaries from the GitHub release for the
   version, or use the ``educates-cli`` container image when embedding the CLI

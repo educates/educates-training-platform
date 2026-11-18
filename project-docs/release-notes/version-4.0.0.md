@@ -1771,6 +1771,14 @@ Deprecations
 Bugs Fixed
 ----------
 
+* The help of every ``educates`` command with options showed ``[options]``
+  after ``[flags]`` in its usage line, and the help of every command below a
+  command group ended by pointing at a command such as ``educates cluster
+  portal options`` for a list of global command-line options. No such
+  command exists, and the CLI has no global options. Both came from the
+  kubectl help templates the CLI renders its help with, and both are gone
+  from the help of every command.
+
 * ``educates docker workshop delete``, which the Docker Desktop extension
   also uses, removed the workshop's containers and its ``workshop`` volume
   but left behind the Compose project network and the named volumes of the

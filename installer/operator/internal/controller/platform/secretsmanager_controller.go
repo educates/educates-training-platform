@@ -42,6 +42,7 @@ import (
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
 	"github.com/educates/educates-training-platform/installer/operator/internal/platformnamespace"
+	"github.com/educates/educates-training-platform/installer/operator/internal/rollout"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -85,6 +86,14 @@ const (
 // manager's Deployment informer can be scoped to it instead of caching every
 // Deployment in the cluster.
 func DeploymentWatchNamespaces() []string {
+	return []string{platformNamespace}
+}
+
+// DaemonSetWatchNamespaces returns the namespaces the platform reconcilers
+// read DaemonSets in: SessionManager reads the node-ca-injector DaemonSet
+// in the shared platform namespace. Exposed so the manager's DaemonSet
+// informer can be scoped to it.
+func DaemonSetWatchNamespaces() []string {
 	return []string{platformNamespace}
 }
 
@@ -255,7 +264,7 @@ func (r *SecretsManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// RequeueAfter pattern as the cluster-services reconcilers — the
 	// Deployment watch should fire, but cache-vs-watch races have
 	// bitten us before.
-	rolledOut, err := deploymentRolledOut(ctx, r.APIReader, platformNamespace, secretsManagerDeploymentName)
+	rolledOut, err := rollout.DeploymentComplete(ctx, r.APIReader, platformNamespace, secretsManagerDeploymentName)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("read secrets-manager Deployment: %w", err)
 	}
@@ -273,7 +282,7 @@ func (r *SecretsManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		Name:      secretsManagerDeploymentName,
 	}
 	r.markReady(obj, metav1.ConditionTrue, "SecretsManagerReady",
-		"secrets-manager is installed and Available")
+		"secrets-manager is installed and rolled out")
 	r.markPhase(obj, platformv1alpha1.ComponentPhaseReady)
 	obj.Status.ObservedGeneration = obj.Generation
 	return ctrl.Result{}, r.updateStatusWithTransitionLog(ctx, obj)

@@ -45,6 +45,7 @@ import (
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
 	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno"
 	"github.com/educates/educates-training-platform/installer/operator/internal/platformnamespace"
+	"github.com/educates/educates-training-platform/installer/operator/internal/rollout"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -72,6 +73,12 @@ const (
 	// optional node-ca-injector subchart installed by SessionManager
 	// when nodeCATrust resolves to Install.
 	nodeCAInjectorReleaseName = "node-ca-injector"
+
+	// nodeCAInjectorControllerDeploymentName and
+	// nodeCAInjectorDaemonSetName match the node-ca-injector chart
+	// template's fixed-name workloads.
+	nodeCAInjectorControllerDeploymentName = "node-ca-injector-controller"
+	nodeCAInjectorDaemonSetName            = "node-ca-injector"
 
 	// remoteAccessReleaseName is the Helm release name for the
 	// optional remote-access subchart installed by SessionManager when
@@ -128,6 +135,7 @@ type SessionManagerReconciler struct {
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=sessionmanagers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=secretsmanagers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=lookupservices,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch
 
 // Secrets: read the CA override's Secret in any namespace and write its
 // key-free copy, educates-session-manager-ingress-ca, in the operator
@@ -244,7 +252,7 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		fmt.Sprintf("session-manager chart %s installed in namespace %s",
 			vendoredcharts.SessionManagerChartVersion, platformNamespace))
 
-	rolledOut, err := deploymentRolledOut(ctx, r.APIReader, platformNamespace, sessionManagerDeploymentName)
+	rolledOut, err := rollout.DeploymentComplete(ctx, r.APIReader, platformNamespace, sessionManagerDeploymentName)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("read session-manager Deployment: %w", err)
 	}
@@ -263,10 +271,8 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Optional extras: node-ca-injector and remote-access. These ride
 	// on the main install lifecycle but each has its own tri-state
-	// (Auto|Enabled|Disabled) and prerequisite check. Refuse outcomes
-	// (Enabled + missing prerequisite) demote the aggregate Ready to
-	// False so the user notices their misconfiguration; Skip /
-	// Install outcomes leave Ready=True.
+	// (Auto|Enabled|Disabled) and prerequisite check; readinessWithExtras
+	// folds their outcomes into the aggregate Ready.
 	nctIntent, nctReason, nctMessage := resolveNodeCATrust(obj, cfg)
 	nctOut, err := r.reconcileExtra(ctx, obj,
 		conditionNodeCATrustDeployed,
@@ -275,6 +281,7 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		func(sm *platformv1alpha1.SessionManager, cc *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
 			return renderNodeCAInjectorValues(sm, cc, r.OperatorNamespace, imageRegistryNamespace)
 		},
+		r.nodeCAInjectorRolledOut,
 		cfg, nctIntent, nctReason, nctMessage,
 	)
 	if err != nil {
@@ -293,6 +300,7 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		remoteAccessReleaseName,
 		vendoredcharts.RemoteAccess,
 		renderRemoteAccessValues,
+		nil, // the remote-access release runs no workload
 		cfg, raIntent, raReason, raMessage,
 	)
 	if err != nil {
@@ -303,32 +311,17 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// A mid-repair rollback on either extra needs a requeue to drive its
-	// follow-up upgrade — neither the CR nor the component Deployment emits
-	// a watch event for it.
+	// follow-up upgrade — neither the CR nor the component Deployment
+	// emits a watch event for it. A rolling-out extra's requeue is a
+	// fallback to the watches on its workloads.
 	requeueAfter := max(nctOut.requeueAfter, raOut.requeueAfter)
 
-	// Refuse outcomes (user wrote Mode=Enabled but the prerequisite is
-	// missing) and not-ready outcomes (an extra is wanted but its release is
-	// failed or mid-repair) both downgrade the aggregate Ready so the problem
-	// is surfaced even though the main install succeeded. A Refuse keeps the
-	// existing reason; a failed/repairing release reports ExtraNotReady.
-	refused := nctIntent == intentRefuse || raIntent == intentRefuse
-	if refused || nctOut.notReady || raOut.notReady {
-		reason, message := "ExtraNotReady",
-			"one or more optional extras is not ready (failed or mid-repair release); see per-component conditions"
-		if refused {
-			reason, message = "ExtraRefused",
-				"one or more optional extras is Mode=Enabled with a missing prerequisite; see per-component conditions"
-		}
-		r.markSMReady(obj, metav1.ConditionFalse, reason, message)
-		r.markSMPhase(obj, platformv1alpha1.ComponentPhaseDegraded)
-		obj.Status.ObservedGeneration = obj.Generation
-		return ctrl.Result{RequeueAfter: requeueAfter}, r.updateSMStatusWithTransitionLog(ctx, obj)
-	}
-
-	r.markSMReady(obj, metav1.ConditionTrue, "SessionManagerReady",
-		"session-manager is installed and Available")
-	r.markSMPhase(obj, platformv1alpha1.ComponentPhaseReady)
+	readiness := readinessWithExtras(
+		[]extrasIntent{nctIntent, raIntent},
+		[]extraOutcome{nctOut, raOut},
+	)
+	r.markSMReady(obj, readiness.status, readiness.reason, readiness.message)
+	r.markSMPhase(obj, readiness.phase)
 	obj.Status.ObservedGeneration = obj.Generation
 	return ctrl.Result{RequeueAfter: requeueAfter}, r.updateSMStatusWithTransitionLog(ctx, obj)
 }
@@ -1010,6 +1003,8 @@ func (r *SessionManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(mapLookupServiceToSessionManager)).
 		Watches(&appsv1.Deployment{},
 			handler.EnqueueRequestsFromMapFunc(mapSessionManagerDeployment)).
+		Watches(&appsv1.DaemonSet{},
+			handler.EnqueueRequestsFromMapFunc(mapSessionManagerDaemonSet)).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.mapSecretToSessionManager)).
 		Named("platform-sessionmanager").
@@ -1045,7 +1040,20 @@ func mapLookupServiceToSessionManager(_ context.Context, obj client.Object) []re
 }
 
 func mapSessionManagerDeployment(_ context.Context, obj client.Object) []reconcile.Request {
-	if obj.GetNamespace() != platformNamespace || obj.GetName() != sessionManagerDeploymentName {
+	if obj.GetNamespace() != platformNamespace {
+		return nil
+	}
+	switch obj.GetName() {
+	case sessionManagerDeploymentName, nodeCAInjectorControllerDeploymentName:
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: singletonName}}}
+	}
+	return nil
+}
+
+// mapSessionManagerDaemonSet maps the node-ca-injector DaemonSet, whose
+// rollout gates SessionManager's Ready, to the singleton.
+func mapSessionManagerDaemonSet(_ context.Context, obj client.Object) []reconcile.Request {
+	if obj.GetNamespace() != platformNamespace || obj.GetName() != nodeCAInjectorDaemonSetName {
 		return nil
 	}
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: singletonName}}}

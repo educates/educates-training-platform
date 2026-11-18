@@ -1752,11 +1752,19 @@ Bugs Fixed
   the operator has reconciled the configuration the command applied. The
   operator reports ``SecretsManager``, ``LookupService`` and
   ``SessionManager`` ready only once the deployment of the component has
-  rolled out, so ``kubectl wait --for=condition=Ready`` after a change to
-  the resource also waits for the new pods. A redeploy which leaves a
-  resource unchanged, such as one with a newer release of the command and
-  the same configuration, or an upgrade of the operator chart alone, still
-  accepts the resource's existing ``Ready`` condition.
+  rolled out, and ``SessionManager`` only once the ``node-ca-injector``
+  deployment and daemon set have too, when it installs them. Likewise it
+  reports each cluster service it installs, cert-manager, Contour,
+  external-dns and Kyverno, ready only once its deployments, and the Envoy
+  daemon set of Contour, have rolled out. So ``kubectl wait
+  --for=condition=Ready`` after a change to the resource also waits for the
+  new pods. A node on which the ``node-ca-injector`` pod cannot run, such as
+  one which is not ready, now keeps ``SessionManager`` from reporting ready,
+  as a node on which the Envoy pod cannot run already kept the
+  ``IngressReady`` condition of ``EducatesClusterConfig`` false. A redeploy
+  which leaves a resource unchanged, such as one with a newer release of the
+  command and the same configuration, or an upgrade of the operator chart
+  alone, still accepts the resource's existing ``Ready`` condition.
 
 * ``educates cluster workshop deploy`` could fail with ``the object has been
   modified; please apply your changes to the latest version and try again``

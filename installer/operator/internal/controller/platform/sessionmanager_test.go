@@ -218,6 +218,7 @@ var _ = Describe("SessionManager reconciler", func() {
 		}
 		_ = k8sClient.DeleteAllOf(ctx, &configv1alpha1.EducatesClusterConfig{})
 		_ = k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, client.InNamespace(platformNamespace))
+		_ = k8sClient.DeleteAllOf(ctx, &appsv1.DaemonSet{}, client.InNamespace(platformNamespace))
 		_ = k8sClient.DeleteAllOf(ctx, &corev1.Secret{}, client.InNamespace(testOperatorNamespace))
 		_ = k8sClient.DeleteAllOf(ctx, &corev1.Secret{}, client.InNamespace(testCAOverrideNamespace))
 	})
@@ -818,6 +819,15 @@ var _ = Describe("SessionManager reconciler", func() {
 		return c.Reason
 	}
 
+	// markNodeCAInjectorRolledOut stands in for the node-ca-injector
+	// release's workloads rolling out, which envtest has no controllers
+	// for.
+	markNodeCAInjectorRolledOut := func() {
+		GinkgoHelper()
+		markDeploymentRolledOut(nodeCAInjectorControllerDeploymentName)
+		markDaemonSetRolledOut(nodeCAInjectorDaemonSetName)
+	}
+
 	It("nodeCATrust Auto installs when ECC publishes a CA cert ref", func() {
 		makeReadyClusterConfig()
 		makeReadySecretsManager()
@@ -836,6 +846,7 @@ var _ = Describe("SessionManager reconciler", func() {
 			rel, err = hc.Status(nodeCAInjectorReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+		markNodeCAInjectorRolledOut()
 		Eventually(func() string {
 			return extraConditionReason(conditionNodeCATrustDeployed)
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("Installed"))
@@ -844,6 +855,53 @@ var _ = Describe("SessionManager reconciler", func() {
 		ci, ok := rel.Config["clusterIngress"].(map[string]any)
 		Expect(ok).To(BeTrue(), "clusterIngress missing from node-ca-injector values")
 		Expect(ci["caCertificateRef"]).To(Equal(ingressCAChartRef()))
+	})
+
+	// expectNodeCATrustHeldWaiting waits for NodeCATrustDeployed to
+	// report WaitingForRollout, then checks that it keeps reporting it
+	// and that SessionManager stays not Ready, waiting for its extras.
+	expectNodeCATrustHeldWaiting := func() {
+		GinkgoHelper()
+		Eventually(func() string {
+			return extraConditionReason(conditionNodeCATrustDeployed)
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal("WaitingForRollout"))
+		Consistently(func() bool {
+			return extraConditionReason(conditionNodeCATrustDeployed) == "WaitingForRollout" &&
+				extraConditionReason(conditionReady) == "WaitingForExtras"
+		}, 3*time.Second, 200*time.Millisecond).Should(BeTrue())
+	}
+
+	It("keeps Ready=False until node-ca-injector has rolled out", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		withCAOnClusterConfig()
+
+		driveSessionManagerReady(&platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+		})
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(nodeCAInjectorReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		// Each workload holds node-ca-injector back while its status
+		// still describes a previous spec, Available or not.
+		markDaemonSetRolledOut(nodeCAInjectorDaemonSetName)
+		markDeploymentRollingOut(nodeCAInjectorControllerDeploymentName)
+		expectNodeCATrustHeldWaiting()
+		markDaemonSetRollingOut(nodeCAInjectorDaemonSetName)
+		markDeploymentRolledOut(nodeCAInjectorControllerDeploymentName)
+		expectNodeCATrustHeldWaiting()
+
+		markNodeCAInjectorRolledOut()
+		Eventually(func() string {
+			return extraConditionReason(conditionNodeCATrustDeployed)
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal("Installed"))
+		Eventually(smgrReadyStatus, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 	})
 
 	nodeCAInjectorCACertificateRefValue := caCertificateRefValue(nodeCAInjectorReleaseName)
@@ -872,6 +930,7 @@ var _ = Describe("SessionManager reconciler", func() {
 
 		Eventually(nodeCAInjectorCACertificateRefValue, 30*time.Second, 200*time.Millisecond).
 			Should(Equal(overrideCAChartRef))
+		markNodeCAInjectorRolledOut()
 		Eventually(func() string {
 			return extraConditionReason(conditionNodeCATrustDeployed)
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("Installed"))
@@ -915,6 +974,7 @@ var _ = Describe("SessionManager reconciler", func() {
 
 		driveSessionManagerReady(smgr)
 
+		markNodeCAInjectorRolledOut()
 		Eventually(func() string {
 			return extraConditionReason(conditionNodeCATrustDeployed)
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("Installed"))

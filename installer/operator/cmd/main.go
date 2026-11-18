@@ -256,10 +256,23 @@ func main() {
 		deploymentNamespaceConfigs[ns] = cache.Config{}
 	}
 
+	// The DaemonSet informer is scoped the same way, to the namespaces of
+	// the DaemonSets whose rollout gates readiness: Contour's envoy and the
+	// node-ca-injector.
+	daemonSetCacheNamespaces := append(
+		configcontroller.DaemonSetWatchNamespaces(),
+		platformcontroller.DaemonSetWatchNamespaces()...,
+	)
+	daemonSetNamespaceConfigs := make(map[string]cache.Config, len(daemonSetCacheNamespaces))
+	for _, ns := range daemonSetCacheNamespaces {
+		daemonSetNamespaceConfigs[ns] = cache.Config{}
+	}
+
 	cacheOpts := cache.Options{
 		ByObject: map[client.Object]cache.ByObject{
 			&corev1.Secret{}:     {Namespaces: namespaceConfigs},
 			&appsv1.Deployment{}: {Namespaces: deploymentNamespaceConfigs},
+			&appsv1.DaemonSet{}:  {Namespaces: daemonSetNamespaceConfigs},
 			// Nodes are read only to work out whether the cluster can mount
 			// package images. A platform with many nodes would otherwise hold
 			// every node object in memory, so the cache keeps just the Linux

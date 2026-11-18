@@ -168,9 +168,7 @@ func ingressCAChartRef() map[string]any {
 // specs drive the transition manually.
 func markDeploymentRolledOut(name string) {
 	GinkgoHelper()
-	setDeploymentStatus(name, func(generation int64) appsv1.DeploymentStatus {
-		return rolledOutStatus(generation)
-	})
+	setDeploymentStatus(name, rolledOutDeploymentStatus)
 }
 
 // markDeploymentRollingOut creates (if missing) the named Deployment and
@@ -181,13 +179,13 @@ func markDeploymentRolledOut(name string) {
 func markDeploymentRollingOut(name string) {
 	GinkgoHelper()
 	setDeploymentStatus(name, func(generation int64) appsv1.DeploymentStatus {
-		return rolledOutStatus(generation - 1)
+		return rolledOutDeploymentStatus(generation - 1)
 	})
 }
 
-// rolledOutStatus is the status of a one-replica Deployment that has
-// rolled out the spec of observedGeneration.
-func rolledOutStatus(observedGeneration int64) appsv1.DeploymentStatus {
+// rolledOutDeploymentStatus is the status of a one-replica Deployment
+// that has rolled out the spec of observedGeneration.
+func rolledOutDeploymentStatus(observedGeneration int64) appsv1.DeploymentStatus {
 	return appsv1.DeploymentStatus{
 		ObservedGeneration: observedGeneration,
 		Replicas:           1,
@@ -199,6 +197,65 @@ func rolledOutStatus(observedGeneration int64) appsv1.DeploymentStatus {
 			Status: corev1.ConditionTrue,
 		}},
 	}
+}
+
+// markDaemonSetRolledOut creates (if missing) the named DaemonSet and
+// gives it the status of a completed rollout on one node.
+func markDaemonSetRolledOut(name string) {
+	GinkgoHelper()
+	setDaemonSetStatus(name, rolledOutDaemonSetStatus)
+}
+
+// markDaemonSetRollingOut creates (if missing) the named DaemonSet and
+// gives it the status it has right after a Helm upgrade changed its
+// spec: the status still describes the previous spec, with its pod
+// ready and available.
+func markDaemonSetRollingOut(name string) {
+	GinkgoHelper()
+	setDaemonSetStatus(name, func(generation int64) appsv1.DaemonSetStatus {
+		return rolledOutDaemonSetStatus(generation - 1)
+	})
+}
+
+// rolledOutDaemonSetStatus is the status of a DaemonSet on one node that
+// has rolled out the spec of observedGeneration.
+func rolledOutDaemonSetStatus(observedGeneration int64) appsv1.DaemonSetStatus {
+	return appsv1.DaemonSetStatus{
+		ObservedGeneration:     observedGeneration,
+		DesiredNumberScheduled: 1,
+		CurrentNumberScheduled: 1,
+		UpdatedNumberScheduled: 1,
+		NumberReady:            1,
+		NumberAvailable:        1,
+	}
+}
+
+// setDaemonSetStatus creates (if missing) the named DaemonSet in the
+// platform namespace and sets its status to what status returns for the
+// DaemonSet's generation.
+func setDaemonSetStatus(name string, status func(generation int64) appsv1.DaemonSetStatus) {
+	GinkgoHelper()
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: platformNamespace},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": name},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": name}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "c", Image: "stub:latest"}},
+				},
+			},
+		},
+	}
+	err := k8sClient.Create(ctx, ds)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: platformNamespace, Name: name}, ds)).To(Succeed())
+	ds.Status = status(ds.Generation)
+	Expect(k8sClient.Status().Update(ctx, ds)).To(Succeed())
 }
 
 // setDeploymentStatus creates (if missing) the named Deployment in the

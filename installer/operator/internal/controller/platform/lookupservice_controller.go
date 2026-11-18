@@ -41,6 +41,7 @@ import (
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
 	"github.com/educates/educates-training-platform/installer/operator/internal/platformnamespace"
+	"github.com/educates/educates-training-platform/installer/operator/internal/rollout"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -215,7 +216,7 @@ func (r *LookupServiceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		fmt.Sprintf("lookup-service chart %s installed in namespace %s",
 			vendoredcharts.LookupServiceChartVersion, platformNamespace))
 
-	rolledOut, err := deploymentRolledOut(ctx, r.APIReader, platformNamespace, lookupServiceDeploymentName)
+	rolledOut, err := rollout.DeploymentComplete(ctx, r.APIReader, platformNamespace, lookupServiceDeploymentName)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("read lookup-service Deployment: %w", err)
 	}
@@ -234,7 +235,7 @@ func (r *LookupServiceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		Name:      lookupServiceDeploymentName,
 	}
 	r.markLSReady(obj, metav1.ConditionTrue, "LookupServiceReady",
-		"lookup-service is installed and Available")
+		"lookup-service is installed and rolled out")
 	r.markLSPhase(obj, platformv1alpha1.ComponentPhaseReady)
 	obj.Status.ObservedGeneration = obj.Generation
 	return ctrl.Result{}, r.updateLSStatusWithTransitionLog(ctx, obj)

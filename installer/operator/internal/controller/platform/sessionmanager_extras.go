@@ -19,6 +19,7 @@ package platform
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -31,6 +32,7 @@ import (
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
+	"github.com/educates/educates-training-platform/installer/operator/internal/rollout"
 )
 
 // extrasIntent is the resolved install intent for an optional extra.
@@ -147,11 +149,16 @@ func (r *SessionManagerReconciler) lookupServiceExists(ctx context.Context) (boo
 //     release is not actually running — a held failure or a mid-repair
 //     rollback. The caller folds this into the aggregate Ready demotion,
 //     mirroring an intentRefuse, so a broken extra does not report Ready.
-//   - requeueAfter is non-zero when the extra is mid-repair (a rollback) and
-//     the caller should requeue to drive the follow-up upgrade, since neither
-//     the CR nor the component Deployment will produce a watch event for it.
+//   - rollingOut is true when the extra's release is installed but its
+//     workloads have not rolled it out yet. The caller holds Ready=False
+//     while the install is still in progress, without calling it degraded.
+//   - requeueAfter is non-zero when the extra is mid-repair (a rollback) or
+//     rolling out, and the caller should requeue to drive the follow-up
+//     upgrade or check the rollout again, since neither the CR nor the
+//     component Deployment will produce a watch event for it.
 type extraOutcome struct {
 	notReady     bool
+	rollingOut   bool
 	requeueAfter time.Duration
 }
 
@@ -166,9 +173,12 @@ type extraOutcome struct {
 // The intent → action mapping:
 //   - Install: converge the release via convergeRelease (install, upgrade
 //     on drift, self-heal a failed release once its inputs change, or hold a
-//     failed release whose inputs are unchanged). Publish condition: True with
-//     reason `Installed` on success; False with reason `ReleaseFailed`
-//     (held failure) or `RepairingRelease` (mid-repair rollback) otherwise.
+//     failed release whose inputs are unchanged), then, when rolledOut is not
+//     nil, check that the release's workloads have rolled out. Publish
+//     condition: True with reason `Installed` on success; False with reason
+//     `ReleaseFailed` (held failure), `RepairingRelease` (mid-repair
+//     rollback) or `WaitingForRollout` (workloads still rolling out)
+//     otherwise.
 //   - Skip:    if a release exists from a previous reconcile, drain it.
 //     Publish condition: type, Status=False, reason from resolver. False
 //     because the extra isn't running; users grep for True to confirm it's up.
@@ -181,6 +191,7 @@ func (r *SessionManagerReconciler) reconcileExtra(
 	releaseName string,
 	loadChart func() (*chart.Chart, error),
 	renderValues func(sm *platformv1alpha1.SessionManager, cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any,
+	rolledOut func(ctx context.Context) (bool, error),
 	cfg *configv1alpha1.EducatesClusterConfig,
 	intent extrasIntent, reason, message string,
 ) (extraOutcome, error) {
@@ -211,10 +222,20 @@ func (r *SessionManagerReconciler) reconcileExtra(
 			setExtraCondition(obj, conditionType, metav1.ConditionFalse, "RepairingRelease",
 				fmt.Sprintf("rolled %s release back to its last deployed revision; re-applying desired configuration", releaseName))
 			return extraOutcome{notReady: true, requeueAfter: 15 * time.Second}, nil
-		default:
-			setExtraCondition(obj, conditionType, metav1.ConditionTrue, reason, message)
-			return extraOutcome{}, nil
 		}
+		if rolledOut != nil {
+			done, err := rolledOut(ctx)
+			if err != nil {
+				return extraOutcome{}, fmt.Errorf("check rollout of %s: %w", releaseName, err)
+			}
+			if !done {
+				setExtraCondition(obj, conditionType, metav1.ConditionFalse, "WaitingForRollout",
+					fmt.Sprintf("%s workloads have not rolled out yet", releaseName))
+				return extraOutcome{rollingOut: true, requeueAfter: 15 * time.Second}, nil
+			}
+		}
+		setExtraCondition(obj, conditionType, metav1.ConditionTrue, reason, message)
+		return extraOutcome{}, nil
 
 	case intentSkip:
 		// Idempotent uninstall: drains any release from a prior
@@ -233,6 +254,58 @@ func (r *SessionManagerReconciler) reconcileExtra(
 		return extraOutcome{}, nil
 	}
 	return extraOutcome{}, nil
+}
+
+// extrasReadiness is the aggregate Ready, and the phase, SessionManager
+// reports once its main install has rolled out, as its extras decide.
+type extrasReadiness struct {
+	status          metav1.ConditionStatus
+	reason, message string
+	phase           platformv1alpha1.ComponentPhase
+}
+
+// readinessWithExtras folds the extras' intents and outcomes into
+// SessionManager's aggregate Ready:
+//   - A Refuse (the user wrote Mode=Enabled but the prerequisite is
+//     missing) or a not-ready outcome (an extra is wanted but its release
+//     is failed or mid-repair) demotes Ready, phase Degraded, so the
+//     problem is surfaced even though the main install succeeded. A
+//     Refuse reports ExtraRefused; a failed/repairing release
+//     ExtraNotReady.
+//   - An extra whose workloads are still rolling out its release keeps
+//     Ready=False with WaitingForExtras, phase Installing: the install
+//     is in progress rather than degraded.
+//   - Otherwise SessionManager is Ready.
+func readinessWithExtras(intents []extrasIntent, outcomes []extraOutcome) extrasReadiness {
+	refused := slices.Contains(intents, intentRefuse)
+	notReady := slices.ContainsFunc(outcomes, func(o extraOutcome) bool { return o.notReady })
+	switch {
+	case refused:
+		return extrasReadiness{metav1.ConditionFalse, "ExtraRefused",
+			"one or more optional extras is Mode=Enabled with a missing prerequisite; see per-component conditions",
+			platformv1alpha1.ComponentPhaseDegraded}
+	case notReady:
+		return extrasReadiness{metav1.ConditionFalse, "ExtraNotReady",
+			"one or more optional extras is not ready (failed or mid-repair release); see per-component conditions",
+			platformv1alpha1.ComponentPhaseDegraded}
+	case slices.ContainsFunc(outcomes, func(o extraOutcome) bool { return o.rollingOut }):
+		return extrasReadiness{metav1.ConditionFalse, "WaitingForExtras",
+			"one or more optional extras has not rolled out yet; see per-component conditions",
+			platformv1alpha1.ComponentPhaseInstalling}
+	}
+	return extrasReadiness{metav1.ConditionTrue, "SessionManagerReady",
+		"session-manager is installed and rolled out", platformv1alpha1.ComponentPhaseReady}
+}
+
+// nodeCAInjectorRolledOut reports whether the node-ca-injector release's
+// controller Deployment and DaemonSet have both rolled out, read
+// uncached (see package rollout).
+func (r *SessionManagerReconciler) nodeCAInjectorRolledOut(ctx context.Context) (bool, error) {
+	done, err := rollout.DeploymentComplete(ctx, r.APIReader, platformNamespace, nodeCAInjectorControllerDeploymentName)
+	if err != nil || !done {
+		return false, err
+	}
+	return rollout.DaemonSetComplete(ctx, r.APIReader, platformNamespace, nodeCAInjectorDaemonSetName)
 }
 
 // setExtraCondition writes a condition on the obj's status without

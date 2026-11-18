@@ -190,6 +190,7 @@ type EducatesClusterConfigReconciler struct {
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=cert-manager.io,resources=clusterissuers,verbs=create;update;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 
@@ -713,6 +714,7 @@ func (r *EducatesClusterConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToSingleton)).
 		Watches(&networkingv1.IngressClass{}, handler.EnqueueRequestsFromMapFunc(r.mapIngressClassToSingleton)).
 		Watches(&appsv1.Deployment{}, handler.EnqueueRequestsFromMapFunc(r.mapDeploymentToSingleton)).
+		Watches(&appsv1.DaemonSet{}, handler.EnqueueRequestsFromMapFunc(r.mapDaemonSetToSingleton)).
 		// A node joining, leaving or being upgraded can change whether the
 		// cluster can mount package images. The predicate keeps node
 		// heartbeats from reconciling the singleton.

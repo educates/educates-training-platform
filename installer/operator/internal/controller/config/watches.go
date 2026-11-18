@@ -215,6 +215,22 @@ func DeploymentWatchNamespaces() []string {
 	return slices.Clone(clusterServiceDeploymentNamespaces)
 }
 
+// DaemonSetWatchNamespaces returns the namespaces the EducatesClusterConfig
+// reconciler reads DaemonSets in: Contour's, for the envoy DaemonSet. The
+// manager's DaemonSet informer is scoped to these.
+func DaemonSetWatchNamespaces() []string {
+	return []string{contourNamespace}
+}
+
+// mapDaemonSetToSingleton fires only for the envoy DaemonSet, whose
+// rollout gates IngressReady.
+func (r *EducatesClusterConfigReconciler) mapDaemonSetToSingleton(_ context.Context, obj client.Object) []reconcile.Request {
+	if obj.GetNamespace() == contourNamespace && obj.GetName() == envoyDaemonSet {
+		return singletonRequest
+	}
+	return nil
+}
+
 // mapDeploymentToSingleton fires only for Deployments in namespaces the
 // operator manages cluster-services in.
 func (r *EducatesClusterConfigReconciler) mapDeploymentToSingleton(_ context.Context, obj client.Object) []reconcile.Request {

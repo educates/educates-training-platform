@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"slices"
 	"time"
@@ -150,11 +151,16 @@ var _ = Describe("The workshop catalog", func() {
 		client.Name = "pattern-client"
 		client.Spec.Tenants = []string{"tenant-[0-9]", "tenant-?ll"}
 		createClientConfig(sc.session, client, "")
+		Eventually(func() int {
+			return loginStatusWith("pattern-client", "golden-tenant-password", sc.service)
+		}).WithTimeout(inventoryTimeout).Should(Equal(http.StatusOK), "the service has not seen the new client")
 		token := sc.login("pattern-client", "golden-tenant-password")
 
 		for _, tenant := range []string{"tenant-all", "tenant-1"} {
-			status, _ := apiRequest(sc.service.url, http.MethodGet, "/api/v1/tenants/"+tenant+"/workshops", token, "")
-			Expect(status).To(Equal(http.StatusOK), "tenant %s", tenant)
+			Eventually(func() int {
+				status, _ := apiRequest(sc.service.url, http.MethodGet, "/api/v1/tenants/"+tenant+"/workshops", token, "")
+				return status
+			}).WithTimeout(inventoryTimeout).Should(Equal(http.StatusOK), "tenant %s", tenant)
 		}
 		for _, tenant := range []string{"tenant-x", "tenant-names", "tenant-all-but"} {
 			status, body := apiRequest(sc.service.url, http.MethodGet, "/api/v1/workshops?tenant="+tenant, token, "")
@@ -184,6 +190,15 @@ var _ = Describe("The workshop catalog", func() {
 	})
 })
 
+// loginStatusWith returns the status of a login to svc with that name and
+// password.
+func loginStatusWith(name, password string, svc *lookupService) int {
+	GinkgoHelper()
+	status, _ := apiRequest(svc.url, http.MethodPost, "/auth/login", "",
+		`{"username": "`+name+`", "password": "`+password+`"}`)
+	return status
+}
+
 // adminToken logs admin-client in and returns its token, for a spec that
 // reads the service's state through an admin route.
 func (sc *scenario) adminToken() string {
@@ -199,7 +214,11 @@ func (sc *scenario) adminToken() string {
 func (sc *scenario) workshops(tenant string) []string {
 	GinkgoHelper()
 	status, body := apiRequest(sc.service.url, http.MethodGet, "/api/v1/tenants/"+tenant+"/workshops", sc.adminToken(), "")
-	Expect(status).To(Equal(http.StatusOK), body)
+	if status != http.StatusOK {
+		// The service has not seen the tenant yet. The answer stands in for
+		// the list, so that a spec waiting for one tries again.
+		return []string{fmt.Sprintf("%d: %s", status, body)}
+	}
 	return workshopNames(body)
 }
 

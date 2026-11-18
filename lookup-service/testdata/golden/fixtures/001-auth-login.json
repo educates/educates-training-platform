@@ -1,0 +1,38 @@
+{
+  "id": "001-auth-login",
+  "step": "initial",
+  "description": "A tenant client logs in.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"username\": \"tenant-client\", \"password\": \"golden-tenant-password\"}"
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "access_token": "<token:tenant-client>",
+      "token_type": "Bearer",
+      "expires_at": "<expires-at>"
+    }
+  },
+  "issuedToken": {
+    "name": "<token:tenant-client>",
+    "header": {
+      "alg": "HS256",
+      "typ": "JWT"
+    },
+    "claims": {
+      "sub": "tenant-client",
+      "jti": "client@educates:<uid:cluster-a/ClientConfig/tenant-client>#1",
+      "exp": "<expires-at>"
+    },
+    "lifetimeSeconds": 259200
+  }
+}

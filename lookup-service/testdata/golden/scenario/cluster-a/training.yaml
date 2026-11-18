@@ -1,0 +1,59 @@
+# The training resources of cluster-a, the cluster the Lookup Service runs
+# on. portal-a allows at most 4 sessions and offers lab-alpha, with one
+# reserved session, and lab-beta, which only this cluster offers. Neither
+# workshop has content: the capture needs the portal's session phases, not
+# a working workshop.
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: lab-alpha
+spec:
+  title: Lab Alpha
+  description: A workshop both clusters offer.
+  labels:
+  - name: track
+    value: golden
+  session:
+    applications: {}
+---
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: lab-beta
+spec:
+  title: Lab Beta
+  description: A workshop only cluster-a offers.
+  labels:
+  - name: track
+    value: golden
+  - name: level
+    value: advanced
+  session:
+    applications: {}
+---
+apiVersion: training.educates.dev/v1beta1
+kind: TrainingPortal
+metadata:
+  name: portal-a
+spec:
+  portal:
+    labels:
+    - name: region
+      value: east
+    sessions:
+      maximum: 4
+    registration:
+      type: anonymous
+    updates:
+      workshop: true
+  workshops:
+  - name: lab-alpha
+    capacity: 2
+    reserved: 1
+    initial: 1
+    expires: 60m
+  - name: lab-beta
+    capacity: 2
+    reserved: 0
+    initial: 0
+    expires: 60m

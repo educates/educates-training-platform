@@ -1,0 +1,51 @@
+{
+  "id": "128-remote-allocating-portal-b-w01",
+  "step": "remote-allocating",
+  "description": "The admin reads portal-b-w01 while user-2's session is Allocating.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-b/portals/portal-b/environments/portal-b-w01",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "portal-b-w01",
+      "uid": "<uid:cluster-b/WorkshopEnvironment/portal-b-w01>",
+      "generation": "<generation>",
+      "workshop": "lab-alpha",
+      "title": "Lab Alpha",
+      "description": "A workshop both clusters offer.",
+      "labels": [
+        {
+          "name": "track",
+          "value": "golden"
+        }
+      ],
+      "cluster": "cluster-b",
+      "portal": "portal-b",
+      "capacity": 2,
+      "reserved": 0,
+      "allocated": 0,
+      "available": 0,
+      "phase": "Running"
+    }
+  },
+  "change": {
+    "summary": "The allocated count includes the session the Python service does not count.",
+    "spec": "Counting and ordering: an environment's and a portal's allocated count include sessions in the Allocating phase",
+    "expected": {
+      "status": 200,
+      "fields": {
+        "allocated": 1
+      }
+    }
+  }
+}

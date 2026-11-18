@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-11-18T20:39:49Z",
+  "commit": "38515f3d83dcd933ec428940cfc2aae0c5c46192",
+  "lookupServiceSourceCommit": "b4493ebbf354938a7a12dc0a7b503dde463dc36f",
+  "lookupServiceSourceClean": true,
+  "cliVersion": "lsg-02",
+  "image": "localhost:5001/educates-lookup-service:lsg-02",
+  "imageID": "localhost:5001/educates-lookup-service@sha256:5ac2743f8f1d48a2fdd5ed7c89566a7fa58bd4a57039d9ee9948be52689fe464",
+  "kubernetesVersion": "v1.36.4",
+  "clusters": {
+    "cluster-a": {
+      "localCluster": "lsg-golden-a",
+      "domain": "lsg-golden-a.educates.test",
+      "lookupHost": "lookup.lsg-golden-a.educates.test"
+    },
+    "cluster-b": {
+      "localCluster": "lsg-golden-b",
+      "domain": "lsg-golden-b.educates.test",
+      "server": "https://educates-lsg-golden-b-control-plane:6443"
+    }
+  },
+  "fixtures": 198
+}

@@ -1,0 +1,86 @@
+{
+  "id": "027-clients-list",
+  "step": "initial",
+  "description": "The admin lists the clients.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clients",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "clients": [
+        {
+          "name": "admin-client",
+          "roles": [
+            "admin"
+          ],
+          "tenants": []
+        },
+        {
+          "name": "tenant-client",
+          "roles": [
+            "tenant"
+          ],
+          "tenants": [
+            "tenant-*"
+          ]
+        },
+        {
+          "name": "both-client",
+          "roles": [
+            "admin",
+            "tenant"
+          ],
+          "tenants": [
+            "tenant-all"
+          ]
+        },
+        {
+          "name": "user-client",
+          "roles": [
+            "tenant"
+          ],
+          "tenants": [
+            "tenant-all"
+          ]
+        },
+        {
+          "name": "revoke-client",
+          "roles": [
+            "tenant"
+          ],
+          "tenants": [
+            "tenant-all"
+          ]
+        },
+        {
+          "name": "rotate-client",
+          "roles": [
+            "tenant"
+          ],
+          "tenants": [
+            "tenant-all"
+          ]
+        },
+        {
+          "name": "doomed-client",
+          "roles": [
+            "tenant"
+          ],
+          "tenants": [
+            "tenant-all"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "018-auth-verify-no-token",
+  "step": "initial",
+  "description": "A verify without a token.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/auth/verify",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "JWT token not supplied"
+  }
+}

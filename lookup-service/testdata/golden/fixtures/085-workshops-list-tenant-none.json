@@ -1,0 +1,23 @@
+{
+  "id": "085-workshops-list-tenant-none",
+  "step": "initial",
+  "description": "A tenant client lists tenant-none's workshops.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workshops?tenant=tenant-none",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "workshops": []
+    }
+  }
+}

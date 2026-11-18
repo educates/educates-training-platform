@@ -1,0 +1,36 @@
+{
+  "id": "067-initial-portal-b",
+  "step": "initial",
+  "description": "The admin reads portal-b.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-b/portals/portal-b",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "portal-b",
+      "uid": "<uid:cluster-b/TrainingPortal/portal-b>",
+      "generation": "<generation>",
+      "labels": [
+        {
+          "name": "region",
+          "value": "west"
+        }
+      ],
+      "cluster": "cluster-b",
+      "url": "https://portal-b-ui.lsg-golden-b.educates.test",
+      "capacity": 0,
+      "allocated": 0,
+      "phase": "Running"
+    }
+  }
+}

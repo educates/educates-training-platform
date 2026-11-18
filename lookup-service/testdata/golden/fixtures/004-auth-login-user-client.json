@@ -1,0 +1,38 @@
+{
+  "id": "004-auth-login-user-client",
+  "step": "initial",
+  "description": "user-client logs in.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"username\": \"user-client\", \"password\": \"golden-user-password\"}"
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "access_token": "<token:user-client>",
+      "token_type": "Bearer",
+      "expires_at": "<expires-at>"
+    }
+  },
+  "issuedToken": {
+    "name": "<token:user-client>",
+    "header": {
+      "alg": "HS256",
+      "typ": "JWT"
+    },
+    "claims": {
+      "sub": "user-client",
+      "jti": "client@educates:<uid:cluster-a/ClientConfig/user-client>#1",
+      "exp": "<expires-at>"
+    },
+    "lifetimeSeconds": 259200
+  }
+}

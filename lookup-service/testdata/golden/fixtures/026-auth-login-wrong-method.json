@@ -1,0 +1,19 @@
+{
+  "id": "026-auth-login-wrong-method",
+  "step": "initial",
+  "description": "A GET on the login route.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/auth/login",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 405,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "405: Method Not Allowed"
+  }
+}

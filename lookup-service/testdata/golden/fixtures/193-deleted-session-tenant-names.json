@@ -1,0 +1,22 @@
+{
+  "id": "193-deleted-session-tenant-names",
+  "step": "cluster-b-deleted",
+  "description": "A tenant client requests lab-alpha for user-4 through tenant-names, which only cluster-b served.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenantName\": \"tenant-names\", \"workshopName\": \"lab-alpha\", \"clientUserId\": \"user-4\", \"clientIndexUrl\": \"https://sites.example.test/index\"}"
+  },
+  "response": {
+    "status": 503,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Workshop not available"
+  }
+}

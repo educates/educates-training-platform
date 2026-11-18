@@ -1,0 +1,33 @@
+{
+  "id": "110-session-missing-index-url",
+  "step": "initial",
+  "description": "A session request without clientIndexUrl: every candidate portal refuses it.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenantName\": \"tenant-all\", \"workshopName\": \"lab-alpha\"}"
+  },
+  "response": {
+    "status": 503,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Workshop not available"
+  },
+  "change": {
+    "summary": "A request without clientIndexUrl answers 400 with a plain-text body naming the field, before any portal is contacted.",
+    "spec": "REST API contract: the changes; user story 18",
+    "expected": {
+      "status": 400,
+      "contentType": "text/plain; charset=utf-8",
+      "bodyFormat": "text",
+      "body": "Missing clientIndexUrl",
+      "bodyContains": "clientIndexUrl"
+    }
+  }
+}

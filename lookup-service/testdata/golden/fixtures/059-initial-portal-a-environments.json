@@ -1,0 +1,70 @@
+{
+  "id": "059-initial-portal-a-environments",
+  "step": "initial",
+  "description": "The admin lists portal-a's environments.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a/environments",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "environments": [
+        {
+          "name": "portal-a-w01",
+          "uid": "<uid:cluster-a/WorkshopEnvironment/portal-a-w01>",
+          "generation": "<generation>",
+          "workshop": "lab-alpha",
+          "title": "Lab Alpha",
+          "description": "A workshop both clusters offer.",
+          "labels": [
+            {
+              "name": "track",
+              "value": "golden"
+            }
+          ],
+          "cluster": "cluster-a",
+          "portal": "portal-a",
+          "capacity": 2,
+          "reserved": 1,
+          "allocated": 0,
+          "available": 1,
+          "phase": "Running"
+        },
+        {
+          "name": "portal-a-w02",
+          "uid": "<uid:cluster-a/WorkshopEnvironment/portal-a-w02>",
+          "generation": "<generation>",
+          "workshop": "lab-beta",
+          "title": "Lab Beta",
+          "description": "A workshop only cluster-a offers.",
+          "labels": [
+            {
+              "name": "track",
+              "value": "golden"
+            },
+            {
+              "name": "level",
+              "value": "advanced"
+            }
+          ],
+          "cluster": "cluster-a",
+          "portal": "portal-a",
+          "capacity": 2,
+          "reserved": 0,
+          "allocated": 0,
+          "available": 0,
+          "phase": "Running"
+        }
+      ]
+    }
+  }
+}

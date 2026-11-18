@@ -1,0 +1,32 @@
+{
+  "id": "135-session-request-no-user",
+  "step": "remote-allocating",
+  "description": "A tenant client requests lab-beta without clientUserId.",
+  "source": "captured",
+  "actions": [
+    "activate session <session:alpha-reserved>"
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenantName\": \"tenant-all\", \"workshopName\": \"lab-beta\", \"clientIndexUrl\": \"https://sites.example.test/index\"}"
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "clusterName": "cluster-a",
+      "portalName": "portal-a",
+      "environmentName": "portal-a-w02",
+      "sessionName": "<session:beta-anonymous>",
+      "clientUserId": "",
+      "sessionActivationUrl": "https://portal-a-ui.lsg-golden-a.educates.test/workshops/session/<session:beta-anonymous>/activate/?token=<activation-token>&index_url=https%3A%2F%2Fsites.example.test%2Findex",
+      "tenantName": "tenant-all"
+    }
+  }
+}

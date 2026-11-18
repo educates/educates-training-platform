@@ -1,0 +1,50 @@
+{
+  "id": "084-workshops-list-tenant-labels",
+  "step": "initial",
+  "description": "A tenant client lists tenant-labels's workshops.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workshops?tenant=tenant-labels",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "workshops": [
+        {
+          "name": "lab-alpha",
+          "title": "Lab Alpha",
+          "description": "A workshop both clusters offer.",
+          "labels": [
+            {
+              "name": "track",
+              "value": "golden"
+            }
+          ]
+        },
+        {
+          "name": "lab-beta",
+          "title": "Lab Beta",
+          "description": "A workshop only cluster-a offers.",
+          "labels": [
+            {
+              "name": "track",
+              "value": "golden"
+            },
+            {
+              "name": "level",
+              "value": "advanced"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

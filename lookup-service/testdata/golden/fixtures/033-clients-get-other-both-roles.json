@@ -1,0 +1,21 @@
+{
+  "id": "033-clients-get-other-both-roles",
+  "step": "initial",
+  "description": "A client with both roles reads another client: the tenant role's restriction applies.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clients/tenant-client",
+    "headers": {
+      "Authorization": "Bearer <token:both-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Client access not permitted"
+  }
+}

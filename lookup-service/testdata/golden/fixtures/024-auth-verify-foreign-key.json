@@ -1,0 +1,21 @@
+{
+  "id": "024-auth-verify-foreign-key",
+  "step": "initial",
+  "description": "A token signed with another key, as a token issued before a restart of the Python service is.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/auth/verify",
+    "headers": {
+      "Authorization": "Bearer <token:foreign>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "JWT token is invalid"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "id": "124-session-reacquire-allocated",
+  "step": "beta-allocated",
+  "description": "The same request again, once the session is Allocated, returns the same session.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenantName\": \"tenant-all\", \"workshopName\": \"lab-beta\", \"clientUserId\": \"user-1\", \"clientActionId\": \"action-1\", \"clientIndexUrl\": \"https://sites.example.test/index\", \"userEmailAddress\": \"user-1@example.test\", \"userFirstName\": \"User\", \"userLastName\": \"One\", \"workshopParams\": [{\"name\": \"greeting\", \"value\": \"hello\"}]}"
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "clusterName": "cluster-a",
+      "portalName": "portal-a",
+      "environmentName": "portal-a-w02",
+      "sessionName": "<session:beta-user-1>",
+      "clientUserId": "user-1",
+      "sessionActivationUrl": "https://portal-a-ui.lsg-golden-a.educates.test/workshops/session/<session:beta-user-1>/activate/?token=<activation-token>&index_url=https%3A%2F%2Fsites.example.test%2Findex",
+      "tenantName": "tenant-all"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "019-auth-verify-bearer-without-token",
+  "step": "initial",
+  "description": "An Authorization header of one word.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/auth/verify",
+    "headers": {
+      "Authorization": "Bearer"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Invalid Authorization header"
+  }
+}

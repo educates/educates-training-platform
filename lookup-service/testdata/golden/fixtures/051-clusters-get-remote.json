@@ -1,0 +1,33 @@
+{
+  "id": "051-clusters-get-remote",
+  "step": "initial",
+  "description": "The admin reads cluster-b.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-b",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "cluster-b",
+      "labels": [
+        {
+          "name": "location",
+          "value": "b"
+        },
+        {
+          "name": "environment",
+          "value": "golden"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "192-deleted-workshops-tenant-names",
+  "step": "cluster-b-deleted",
+  "description": "A tenant client lists tenant-names' workshops, which only cluster-b offered.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workshops?tenant=tenant-names",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "workshops": []
+    }
+  }
+}

@@ -1,6 +1,7 @@
 // Package service composes the Lookup Service: the config watcher, the
-// cluster registry and its inventory, the token store, the REST API and the
-// probes, run as one process.
+// cluster registry and its inventory, the token store, the placement of
+// session requests through the training portal client, the REST API and
+// the probes, run as one process.
 package service
 
 import (
@@ -31,7 +32,9 @@ import (
 	"github.com/educates/educates-training-platform/lookup-service/internal/clusters"
 	"github.com/educates/educates-training-platform/lookup-service/internal/config"
 	"github.com/educates/educates-training-platform/lookup-service/internal/inventory"
+	"github.com/educates/educates-training-platform/lookup-service/internal/placement"
 	"github.com/educates/educates-training-platform/lookup-service/internal/tokens"
+	"github.com/educates/educates-training-platform/lookup-service/internal/trainingportal"
 )
 
 const (
@@ -81,6 +84,12 @@ type Options struct {
 	// cluster is the in-cluster API server, reached with the remote-access
 	// token mounted under /opt/cluster-access-token.
 	Clusters clusters.Options
+
+	// Portals configure how the service reaches the training portals it
+	// requests sessions from. Unset fields take their defaults: calls time
+	// out after seconds, and TLS trusts the system roots and the ingress CA
+	// mounted under /opt/app-root/certs/ingress-ca.
+	Portals trainingportal.Options
 
 	// Logger receives the service's logs.
 	Logger logr.Logger
@@ -178,8 +187,14 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
+	portals, err := trainingportal.NewClient(opts.Portals, registry.APIReader, log.WithName("portals"))
+	if err != nil {
+		return nil, err
+	}
+	placer := placement.NewPlacer(portals, log.WithName("placement"))
+
 	s.api = &http.Server{
-		Handler:           api.NewServer(model, inv, store, log.WithName("api")),
+		Handler:           api.NewServer(model, inv, store, placer, log.WithName("api")),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	s.probes = &http.Server{

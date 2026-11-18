@@ -18,14 +18,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/educates/educates-training-platform/lookup-service/internal/service"
+	"github.com/educates/educates-training-platform/lookup-service/internal/trainingportal"
 )
 
 func main() {
-	var apiAddress, probeAddress, logLevel string
+	var apiAddress, probeAddress, logLevel, caFile string
 	flag.StringVar(&apiAddress, "api-bind-address", ":8080", "The address the REST API binds to.")
 	flag.StringVar(&probeAddress, "health-probe-bind-address", ":8081",
 		"The address the liveness probe, /healthz, and the readiness probe, /readyz, bind to.")
 	flag.StringVar(&logLevel, "log-level", "info", "The log level: debug, info, warn or error.")
+	flag.StringVar(&caFile, "ingress-ca-file", trainingportal.DefaultCAFile,
+		"The PEM file of the ingress CA, trusted besides the system roots when calling training portals. "+
+			"Without the file only the system roots are trusted.")
 	flag.Parse()
 
 	level, err := parseLogLevel(logLevel)
@@ -37,13 +41,13 @@ func main() {
 	ctrl.SetLogger(log)
 	setupLog := log.WithName("setup")
 
-	if err := run(apiAddress, probeAddress); err != nil {
+	if err := run(apiAddress, probeAddress, caFile); err != nil {
 		setupLog.Error(err, "The Lookup Service failed")
 		os.Exit(1)
 	}
 }
 
-func run(apiAddress, probeAddress string) error {
+func run(apiAddress, probeAddress, caFile string) error {
 	restConfig, err := ctrl.GetConfig()
 	if err != nil {
 		return fmt.Errorf("loading the Kubernetes client configuration: %w", err)
@@ -62,6 +66,7 @@ func run(apiAddress, probeAddress string) error {
 		RESTConfig:    restConfig,
 		APIListener:   apiListener,
 		ProbeListener: probeListener,
+		Portals:       trainingportal.Options{CAFile: caFile},
 		Logger:        ctrl.Log,
 	})
 	if err != nil {

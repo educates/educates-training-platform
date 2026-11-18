@@ -112,6 +112,9 @@ var _ = BeforeSuite(func() {
 	localTokenDirectory = GinkgoT().TempDir()
 	writeLocalToken()
 
+	By("starting the training portals' fake REST APIs")
+	startFakePortals()
+
 	var err error
 	fixtures, err = golden.Load(filepath.Join("..", "..", "testdata", "golden"))
 	Expect(err).NotTo(HaveOccurred())

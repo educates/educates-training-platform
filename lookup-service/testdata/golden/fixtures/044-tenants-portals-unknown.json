@@ -1,0 +1,21 @@
+{
+  "id": "044-tenants-portals-unknown",
+  "step": "initial",
+  "description": "The admin lists the portals of a tenant that does not exist.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tenants/tenant-unknown/portals",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Tenant not available"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "115-allocating-portal-a",
+  "step": "beta-allocating",
+  "description": "The admin reads portal-a while a session is Allocating.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "portal-a",
+      "uid": "<uid:cluster-a/TrainingPortal/portal-a>",
+      "generation": "<generation>",
+      "labels": [
+        {
+          "name": "region",
+          "value": "east"
+        }
+      ],
+      "cluster": "cluster-a",
+      "url": "https://portal-a-ui.lsg-golden-a.educates.test",
+      "capacity": 4,
+      "allocated": 0,
+      "phase": "Running"
+    }
+  },
+  "change": {
+    "summary": "The allocated count includes the session the Python service does not count.",
+    "spec": "Counting and ordering: an environment's and a portal's allocated count include sessions in the Allocating phase",
+    "expected": {
+      "status": 200,
+      "fields": {
+        "allocated": 1
+      }
+    }
+  }
+}

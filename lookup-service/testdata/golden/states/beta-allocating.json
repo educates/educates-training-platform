@@ -1,0 +1,225 @@
+{
+  "step": "beta-allocating",
+  "description": "user-1's lab-beta session on portal-a waits for activation in phase Allocating.",
+  "clusters": {
+    "cluster-a": {
+      "trainingPortals": [
+        {
+          "name": "portal-a",
+          "uid": "<uid:cluster-a/TrainingPortal/portal-a>",
+          "generation": 2,
+          "spec": {
+            "portal": {
+              "labels": [
+                {
+                  "name": "region",
+                  "value": "east"
+                }
+              ],
+              "sessions": {
+                "maximum": 4
+              }
+            }
+          },
+          "status": {
+            "educates": {
+              "phase": "Running",
+              "url": "https://portal-a-ui.lsg-golden-a.educates.test",
+              "namespace": "portal-a-ui",
+              "credentialSecrets": {
+                "robot": "training-portal-robot-credentials"
+              }
+            }
+          }
+        }
+      ],
+      "workshopEnvironments": [
+        {
+          "name": "portal-a-w01",
+          "uid": "<uid:cluster-a/WorkshopEnvironment/portal-a-w01>",
+          "labels": {
+            "training.educates.dev/portal.name": "portal-a",
+            "training.educates.dev/portal.uid": "<uid:cluster-a/TrainingPortal/portal-a>",
+            "training.educates.dev/portal.workshop": "lab-alpha"
+          },
+          "spec": {
+            "workshop": {
+              "name": "lab-alpha"
+            }
+          },
+          "status": {
+            "educates": {
+              "phase": "Running",
+              "capacity": 2,
+              "reserved": 1,
+              "workshop": {
+                "generation": 1,
+                "spec": {
+                  "title": "Lab Alpha",
+                  "description": "A workshop both clusters offer.",
+                  "labels": [
+                    {
+                      "name": "track",
+                      "value": "golden"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "portal-a-w02",
+          "uid": "<uid:cluster-a/WorkshopEnvironment/portal-a-w02>",
+          "labels": {
+            "training.educates.dev/portal.name": "portal-a",
+            "training.educates.dev/portal.uid": "<uid:cluster-a/TrainingPortal/portal-a>",
+            "training.educates.dev/portal.workshop": "lab-beta"
+          },
+          "spec": {
+            "workshop": {
+              "name": "lab-beta"
+            }
+          },
+          "status": {
+            "educates": {
+              "phase": "Running",
+              "capacity": 2,
+              "reserved": 0,
+              "workshop": {
+                "generation": 1,
+                "spec": {
+                  "title": "Lab Beta",
+                  "description": "A workshop only cluster-a offers.",
+                  "labels": [
+                    {
+                      "name": "track",
+                      "value": "golden"
+                    },
+                    {
+                      "name": "level",
+                      "value": "advanced"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "workshopSessions": [
+        {
+          "name": "<session:alpha-reserved>",
+          "generation": 3,
+          "labels": {
+            "training.educates.dev/environment.name": "portal-a-w01",
+            "training.educates.dev/environment.uid": "<uid:cluster-a/WorkshopEnvironment/portal-a-w01>",
+            "training.educates.dev/portal.name": "portal-a",
+            "training.educates.dev/portal.uid": "<uid:cluster-a/TrainingPortal/portal-a>"
+          },
+          "spec": {
+            "workshop": {
+              "name": "lab-alpha"
+            }
+          },
+          "status": {
+            "educates": {
+              "phase": "Available",
+              "user": null
+            }
+          }
+        },
+        {
+          "name": "<session:beta-user-1>",
+          "generation": 3,
+          "labels": {
+            "training.educates.dev/environment.name": "portal-a-w02",
+            "training.educates.dev/environment.uid": "<uid:cluster-a/WorkshopEnvironment/portal-a-w02>",
+            "training.educates.dev/portal.name": "portal-a",
+            "training.educates.dev/portal.uid": "<uid:cluster-a/TrainingPortal/portal-a>"
+          },
+          "spec": {
+            "workshop": {
+              "name": "lab-beta"
+            }
+          },
+          "status": {
+            "educates": {
+              "phase": "Allocating",
+              "user": "user-1"
+            }
+          }
+        }
+      ]
+    },
+    "cluster-b": {
+      "trainingPortals": [
+        {
+          "name": "portal-b",
+          "uid": "<uid:cluster-b/TrainingPortal/portal-b>",
+          "generation": 2,
+          "spec": {
+            "portal": {
+              "labels": [
+                {
+                  "name": "region",
+                  "value": "west"
+                }
+              ],
+              "sessions": {
+                "maximum": null
+              }
+            }
+          },
+          "status": {
+            "educates": {
+              "phase": "Running",
+              "url": "https://portal-b-ui.lsg-golden-b.educates.test",
+              "namespace": "portal-b-ui",
+              "credentialSecrets": {
+                "robot": "training-portal-robot-credentials"
+              }
+            }
+          }
+        }
+      ],
+      "workshopEnvironments": [
+        {
+          "name": "portal-b-w01",
+          "uid": "<uid:cluster-b/WorkshopEnvironment/portal-b-w01>",
+          "labels": {
+            "training.educates.dev/portal.name": "portal-b",
+            "training.educates.dev/portal.uid": "<uid:cluster-b/TrainingPortal/portal-b>",
+            "training.educates.dev/portal.workshop": "lab-alpha"
+          },
+          "spec": {
+            "workshop": {
+              "name": "lab-alpha-b"
+            }
+          },
+          "status": {
+            "educates": {
+              "phase": "Running",
+              "capacity": 2,
+              "reserved": 0,
+              "workshop": {
+                "generation": 1,
+                "spec": {
+                  "title": "Lab Alpha",
+                  "description": "A workshop both clusters offer.",
+                  "labels": [
+                    {
+                      "name": "track",
+                      "value": "golden"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "workshopSessions": []
+    }
+  }
+}

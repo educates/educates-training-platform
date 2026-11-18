@@ -1,0 +1,21 @@
+{
+  "id": "088-workshops-list-tenant-unknown",
+  "step": "initial",
+  "description": "A tenant client lists the workshops of a tenant that does not exist.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workshops?tenant=tenant-unknown",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 503,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Tenant not available"
+  }
+}

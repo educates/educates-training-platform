@@ -1,0 +1,38 @@
+{
+  "id": "005-auth-login-revoke-client",
+  "step": "initial",
+  "description": "revoke-client logs in.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"username\": \"revoke-client\", \"password\": \"golden-revoke-password\"}"
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "access_token": "<token:revoke-client>",
+      "token_type": "Bearer",
+      "expires_at": "<expires-at>"
+    }
+  },
+  "issuedToken": {
+    "name": "<token:revoke-client>",
+    "header": {
+      "alg": "HS256",
+      "typ": "JWT"
+    },
+    "claims": {
+      "sub": "revoke-client",
+      "jti": "client@educates:<uid:cluster-a/ClientConfig/revoke-client>#1",
+      "exp": "<expires-at>"
+    },
+    "lifetimeSeconds": 259200
+  }
+}

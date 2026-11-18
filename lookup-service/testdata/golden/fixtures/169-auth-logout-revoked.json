@@ -1,0 +1,21 @@
+{
+  "id": "169-auth-logout-revoked",
+  "step": "sessions-settled",
+  "description": "A logout with the revoked token.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/logout",
+    "headers": {
+      "Authorization": "Bearer <token:revoke-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Client identity does not match"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "id": "061-initial-portal-a-w01-sessions",
+  "step": "initial",
+  "description": "The admin lists portal-a-w01's sessions.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a/environments/portal-a-w01/sessions",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "sessions": [
+        {
+          "name": "<session:alpha-reserved>",
+          "generation": "<generation>",
+          "cluster": "cluster-a",
+          "portal": "portal-a",
+          "environment": "portal-a-w01",
+          "workshop": "lab-alpha",
+          "phase": "Available",
+          "user": null
+        }
+      ]
+    }
+  }
+}

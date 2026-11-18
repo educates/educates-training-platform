@@ -1,0 +1,21 @@
+{
+  "id": "075-environments-unknown-portal",
+  "step": "initial",
+  "description": "The environments of a portal that does not exist.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-z/environments",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Portal not available"
+  }
+}

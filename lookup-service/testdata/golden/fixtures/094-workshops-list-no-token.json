@@ -1,0 +1,19 @@
+{
+  "id": "094-workshops-list-no-token",
+  "step": "initial",
+  "description": "The workshop list without a token.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workshops?tenant=tenant-all",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "JWT token not supplied"
+  }
+}

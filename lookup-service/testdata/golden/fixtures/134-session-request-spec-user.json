@@ -1,0 +1,30 @@
+{
+  "id": "134-session-request-spec-user",
+  "step": "remote-allocating",
+  "description": "A client whose ClientConfig sets spec.user requests lab-alpha through tenant-all with another clientUserId: spec.user wins, and portal-a's reserved session is handed out.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:user-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenantName\": \"tenant-all\", \"workshopName\": \"lab-alpha\", \"clientUserId\": \"someone-else\", \"clientIndexUrl\": \"https://sites.example.test/index\"}"
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "clusterName": "cluster-a",
+      "portalName": "portal-a",
+      "environmentName": "portal-a-w01",
+      "sessionName": "<session:alpha-reserved>",
+      "clientUserId": "fixed-user",
+      "sessionActivationUrl": "https://portal-a-ui.lsg-golden-a.educates.test/workshops/session/<session:alpha-reserved>/activate/?token=<activation-token>&index_url=https%3A%2F%2Fsites.example.test%2Findex",
+      "tenantName": "tenant-all"
+    }
+  }
+}

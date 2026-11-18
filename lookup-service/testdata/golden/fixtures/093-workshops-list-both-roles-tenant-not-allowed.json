@@ -1,0 +1,21 @@
+{
+  "id": "093-workshops-list-both-roles-tenant-not-allowed",
+  "step": "initial",
+  "description": "A client with both roles lists the workshops of a tenant its patterns do not match.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workshops?tenant=tenant-names",
+    "headers": {
+      "Authorization": "Bearer <token:both-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Client not allowed access to tenant"
+  }
+}

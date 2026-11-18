@@ -1,0 +1,38 @@
+{
+  "id": "121-allocated-portal-a",
+  "step": "beta-allocated",
+  "description": "The admin reads portal-a once its session is Allocated.",
+  "source": "captured",
+  "actions": [
+    "activate session <session:beta-user-1>"
+  ],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "portal-a",
+      "uid": "<uid:cluster-a/TrainingPortal/portal-a>",
+      "generation": "<generation>",
+      "labels": [
+        {
+          "name": "region",
+          "value": "east"
+        }
+      ],
+      "cluster": "cluster-a",
+      "url": "https://portal-a-ui.lsg-golden-a.educates.test",
+      "capacity": 4,
+      "allocated": 1,
+      "phase": "Running"
+    }
+  }
+}

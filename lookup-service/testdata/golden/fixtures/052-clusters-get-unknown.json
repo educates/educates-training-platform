@@ -1,0 +1,21 @@
+{
+  "id": "052-clusters-get-unknown",
+  "step": "initial",
+  "description": "The admin reads a cluster that does not exist.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/nowhere",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Cluster not available"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "170-auth-logout-no-token",
+  "step": "sessions-settled",
+  "description": "A logout without a token.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/logout",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "JWT token not supplied"
+  }
+}

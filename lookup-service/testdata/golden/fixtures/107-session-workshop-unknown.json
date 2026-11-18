@@ -1,0 +1,22 @@
+{
+  "id": "107-session-workshop-unknown",
+  "step": "initial",
+  "description": "A session request for a workshop no portal offers.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"clientIndexUrl\": \"https://sites.example.test/index\", \"tenantName\": \"tenant-all\", \"workshopName\": \"lab-gamma\"}"
+  },
+  "response": {
+    "status": 503,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Workshop not available"
+  }
+}

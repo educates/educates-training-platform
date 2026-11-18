@@ -1,0 +1,22 @@
+{
+  "id": "109-session-admin-without-tenants",
+  "step": "initial",
+  "description": "The admin, whose ClientConfig names no tenants, requests a session.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"clientIndexUrl\": \"https://sites.example.test/index\", \"tenantName\": \"tenant-all\", \"workshopName\": \"lab-alpha\"}"
+  },
+  "response": {
+    "status": 403,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Client not allowed access to tenant"
+  }
+}

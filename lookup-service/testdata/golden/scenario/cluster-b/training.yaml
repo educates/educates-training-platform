@@ -1,0 +1,40 @@
+# The training resources of cluster-b, the remote cluster. portal-b sets no
+# session maximum, so its capacity is unlimited, and offers the Workshop
+# lab-alpha-b under the alias lab-alpha, so that its environment's
+# training.educates.dev/portal.workshop label, which the Lookup Service
+# prefers, differs from spec.workshop.name. Its title, description and
+# labels are those of cluster-a's lab-alpha, so the workshop lists do not
+# depend on which cluster's environment is listed last.
+apiVersion: training.educates.dev/v1beta1
+kind: Workshop
+metadata:
+  name: lab-alpha-b
+spec:
+  title: Lab Alpha
+  description: A workshop both clusters offer.
+  labels:
+  - name: track
+    value: golden
+  session:
+    applications: {}
+---
+apiVersion: training.educates.dev/v1beta1
+kind: TrainingPortal
+metadata:
+  name: portal-b
+spec:
+  portal:
+    labels:
+    - name: region
+      value: west
+    registration:
+      type: anonymous
+    updates:
+      workshop: true
+  workshops:
+  - name: lab-alpha-b
+    alias: lab-alpha
+    capacity: 2
+    reserved: 0
+    initial: 0
+    expires: 60m

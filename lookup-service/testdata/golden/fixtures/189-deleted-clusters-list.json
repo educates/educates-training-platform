@@ -1,0 +1,41 @@
+{
+  "id": "189-deleted-clusters-list",
+  "step": "cluster-b-deleted",
+  "description": "The admin lists the clusters once cluster-b's ClusterConfig is deleted.",
+  "source": "captured",
+  "actions": [
+    "update TrainingPortal portal-b on cluster-b: remove the featured label again",
+    "delete ClusterConfig cluster-b",
+    "wait up to 60 seconds for cluster-b to leave GET /api/v1/clusters"
+  ],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "clusters": [
+        {
+          "name": "cluster-a",
+          "labels": [
+            {
+              "name": "location",
+              "value": "a"
+            },
+            {
+              "name": "environment",
+              "value": "golden"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

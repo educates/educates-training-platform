@@ -1,0 +1,21 @@
+{
+  "id": "113-session-no-token",
+  "step": "initial",
+  "description": "A session request without a token.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"clientIndexUrl\": \"https://sites.example.test/index\", \"tenantName\": \"tenant-all\", \"workshopName\": \"lab-alpha\"}"
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "JWT token not supplied"
+  }
+}

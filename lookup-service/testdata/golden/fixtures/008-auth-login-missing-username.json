@@ -1,0 +1,21 @@
+{
+  "id": "008-auth-login-missing-username",
+  "step": "initial",
+  "description": "A login without a username.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"password\": \"golden-tenant-password\"}"
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "No username provided"
+  }
+}

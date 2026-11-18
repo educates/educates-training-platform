@@ -1,0 +1,101 @@
+# The API clients. The passwords are test data for a throwaway cluster.
+#
+# - admin-client holds the admin role and no tenants.
+# - tenant-client holds the tenant role, for every tenant named tenant-*.
+# - both-client holds both roles, for tenant-all only.
+# - user-client holds the tenant role and sets spec.user, which overrides
+#   the clientUserId of every session request it makes.
+# - revoke-client, rotate-client and doomed-client hold the tenant role for
+#   tenant-all, and are changed during the capture: revoke-client logs out
+#   and is then updated, rotate-client has its password changed, and
+#   doomed-client is deleted and created again.
+apiVersion: lookup.educates.dev/v1beta1
+kind: ClientConfig
+metadata:
+  name: admin-client
+  namespace: educates-config
+spec:
+  client:
+    password: golden-admin-password
+  roles:
+  - admin
+---
+apiVersion: lookup.educates.dev/v1beta1
+kind: ClientConfig
+metadata:
+  name: tenant-client
+  namespace: educates-config
+spec:
+  client:
+    password: golden-tenant-password
+  roles:
+  - tenant
+  tenants:
+  - tenant-*
+---
+apiVersion: lookup.educates.dev/v1beta1
+kind: ClientConfig
+metadata:
+  name: both-client
+  namespace: educates-config
+spec:
+  client:
+    password: golden-both-password
+  roles:
+  - admin
+  - tenant
+  tenants:
+  - tenant-all
+---
+apiVersion: lookup.educates.dev/v1beta1
+kind: ClientConfig
+metadata:
+  name: user-client
+  namespace: educates-config
+spec:
+  client:
+    password: golden-user-password
+  roles:
+  - tenant
+  tenants:
+  - tenant-all
+  user: fixed-user
+---
+apiVersion: lookup.educates.dev/v1beta1
+kind: ClientConfig
+metadata:
+  name: revoke-client
+  namespace: educates-config
+spec:
+  client:
+    password: golden-revoke-password
+  roles:
+  - tenant
+  tenants:
+  - tenant-all
+---
+apiVersion: lookup.educates.dev/v1beta1
+kind: ClientConfig
+metadata:
+  name: rotate-client
+  namespace: educates-config
+spec:
+  client:
+    password: golden-rotate-password
+  roles:
+  - tenant
+  tenants:
+  - tenant-all
+---
+apiVersion: lookup.educates.dev/v1beta1
+kind: ClientConfig
+metadata:
+  name: doomed-client
+  namespace: educates-config
+spec:
+  client:
+    password: golden-doomed-password
+  roles:
+  - tenant
+  tenants:
+  - tenant-all

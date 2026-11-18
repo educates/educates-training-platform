@@ -1,0 +1,38 @@
+{
+  "id": "006-auth-login-rotate-client",
+  "step": "initial",
+  "description": "rotate-client logs in.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"username\": \"rotate-client\", \"password\": \"golden-rotate-password\"}"
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "access_token": "<token:rotate-client>",
+      "token_type": "Bearer",
+      "expires_at": "<expires-at>"
+    }
+  },
+  "issuedToken": {
+    "name": "<token:rotate-client>",
+    "header": {
+      "alg": "HS256",
+      "typ": "JWT"
+    },
+    "claims": {
+      "sub": "rotate-client",
+      "jti": "client@educates:<uid:cluster-a/ClientConfig/rotate-client>#1",
+      "exp": "<expires-at>"
+    },
+    "lifetimeSeconds": 259200
+  }
+}

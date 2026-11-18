@@ -1,0 +1,44 @@
+{
+  "id": "140-busy-portal-a-w01-sessions",
+  "step": "portal-a-busy",
+  "description": "The admin lists portal-a-w01's sessions.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a/environments/portal-a-w01/sessions",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "sessions": [
+        {
+          "name": "<session:alpha-reserved>",
+          "generation": "<generation>",
+          "cluster": "cluster-a",
+          "portal": "portal-a",
+          "environment": "portal-a-w01",
+          "workshop": "lab-alpha",
+          "phase": "Allocated",
+          "user": "fixed-user"
+        },
+        {
+          "name": "<session:portal-a-w01-1>",
+          "generation": "<generation>",
+          "cluster": "cluster-a",
+          "portal": "portal-a",
+          "environment": "portal-a-w01",
+          "workshop": "lab-alpha",
+          "phase": "Available",
+          "user": null
+        }
+      ]
+    }
+  }
+}

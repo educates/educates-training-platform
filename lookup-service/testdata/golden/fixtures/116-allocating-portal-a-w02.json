@@ -1,0 +1,55 @@
+{
+  "id": "116-allocating-portal-a-w02",
+  "step": "beta-allocating",
+  "description": "The admin reads portal-a-w02 while its session is Allocating.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a/environments/portal-a-w02",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "portal-a-w02",
+      "uid": "<uid:cluster-a/WorkshopEnvironment/portal-a-w02>",
+      "generation": "<generation>",
+      "workshop": "lab-beta",
+      "title": "Lab Beta",
+      "description": "A workshop only cluster-a offers.",
+      "labels": [
+        {
+          "name": "track",
+          "value": "golden"
+        },
+        {
+          "name": "level",
+          "value": "advanced"
+        }
+      ],
+      "cluster": "cluster-a",
+      "portal": "portal-a",
+      "capacity": 2,
+      "reserved": 0,
+      "allocated": 0,
+      "available": 0,
+      "phase": "Running"
+    }
+  },
+  "change": {
+    "summary": "The allocated count includes the session the Python service does not count.",
+    "spec": "Counting and ordering: an environment's and a portal's allocated count include sessions in the Allocating phase",
+    "expected": {
+      "status": 200,
+      "fields": {
+        "allocated": 1
+      }
+    }
+  }
+}

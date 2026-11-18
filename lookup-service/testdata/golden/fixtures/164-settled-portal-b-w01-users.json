@@ -1,0 +1,25 @@
+{
+  "id": "164-settled-portal-b-w01-users",
+  "step": "sessions-settled",
+  "description": "The admin lists portal-b-w01's users.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-b/portals/portal-b/environments/portal-b-w01/users",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "users": [
+        "user-2"
+      ]
+    }
+  }
+}

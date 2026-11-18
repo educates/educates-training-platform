@@ -1,0 +1,50 @@
+{
+  "id": "185-label-workshops-admin",
+  "step": "label-without-value",
+  "description": "The admin lists every workshop, which needs no tenant matching.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "workshops": [
+        {
+          "name": "lab-alpha",
+          "title": "Lab Alpha",
+          "description": "A workshop both clusters offer.",
+          "labels": [
+            {
+              "name": "track",
+              "value": "golden"
+            }
+          ]
+        },
+        {
+          "name": "lab-beta",
+          "title": "Lab Beta",
+          "description": "A workshop only cluster-a offers.",
+          "labels": [
+            {
+              "name": "track",
+              "value": "golden"
+            },
+            {
+              "name": "level",
+              "value": "advanced"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

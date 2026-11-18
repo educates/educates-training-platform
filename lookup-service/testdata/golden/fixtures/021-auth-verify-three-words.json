@@ -1,0 +1,21 @@
+{
+  "id": "021-auth-verify-three-words",
+  "step": "initial",
+  "description": "An Authorization header of three words.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/auth/verify",
+    "headers": {
+      "Authorization": "Bearer one two"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Invalid Authorization header"
+  }
+}

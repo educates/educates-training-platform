@@ -1,0 +1,42 @@
+{
+  "id": "150-settled-cluster-a-portals",
+  "step": "sessions-settled",
+  "description": "The admin lists cluster-a's portals.",
+  "source": "captured",
+  "actions": [
+    "wait for the terminated reserved session's WorkshopSession to be deleted"
+  ],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "portals": [
+        {
+          "name": "portal-a",
+          "uid": "<uid:cluster-a/TrainingPortal/portal-a>",
+          "generation": "<generation>",
+          "labels": [
+            {
+              "name": "region",
+              "value": "east"
+            }
+          ],
+          "cluster": "cluster-a",
+          "url": "https://portal-a-ui.lsg-golden-a.educates.test",
+          "capacity": 3,
+          "allocated": 3,
+          "phase": "Running"
+        }
+      ]
+    }
+  }
+}

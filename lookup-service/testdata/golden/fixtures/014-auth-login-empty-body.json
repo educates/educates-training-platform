@@ -1,0 +1,30 @@
+{
+  "id": "014-auth-login-empty-body",
+  "step": "initial",
+  "description": "A login with an empty JSON body.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": ""
+  },
+  "response": {
+    "status": 500,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "500 Internal Server Error\n\nServer got itself in trouble"
+  },
+  "change": {
+    "summary": "A body on /auth/login that is not a JSON object answers 400 instead of crashing the handler with a 500.",
+    "spec": "REST API contract: the changes; user story 19",
+    "expected": {
+      "status": 400,
+      "contentType": "text/plain; charset=utf-8",
+      "bodyFormat": "text"
+    }
+  }
+}

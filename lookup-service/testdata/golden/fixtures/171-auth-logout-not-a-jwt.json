@@ -1,0 +1,21 @@
+{
+  "id": "171-auth-logout-not-a-jwt",
+  "step": "sessions-settled",
+  "description": "A logout with a bearer token that is not a JWT.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/logout",
+    "headers": {
+      "Authorization": "Bearer not-a-jwt"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "JWT token is invalid"
+  }
+}

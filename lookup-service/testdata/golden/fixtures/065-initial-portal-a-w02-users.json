@@ -1,0 +1,23 @@
+{
+  "id": "065-initial-portal-a-w02-users",
+  "step": "initial",
+  "description": "The admin lists portal-a-w02's users.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a/environments/portal-a-w02/users",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "users": []
+    }
+  }
+}

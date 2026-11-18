@@ -1,0 +1,21 @@
+{
+  "id": "178-auth-logout-deleted-client",
+  "step": "sessions-settled",
+  "description": "doomed-client logs out once its ClientConfig is deleted.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/logout",
+    "headers": {
+      "Authorization": "Bearer <token:doomed-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Client details not found"
+  }
+}

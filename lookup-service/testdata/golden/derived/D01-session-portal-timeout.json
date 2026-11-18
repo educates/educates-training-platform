@@ -1,0 +1,39 @@
+{
+  "id": "D01-session-portal-timeout",
+  "step": null,
+  "description": "A session request whose only candidate environment is on a portal that accepts connections and never answers its OAuth token endpoint. The Python service logs in to the portal with aiohttp's default client timeout, 300 seconds in total. The timeout that ends the login is not the ClientConnectorError the login catches, so it propagates out of the handler, and aiohttp answers with its default 500 after 300 seconds. A client behind the ingress may see the ingress's own timeout first.",
+  "source": "derived",
+  "derivedFrom": [
+    "jorgemoralespou/educates-training-platform@38515f3d:lookup-service/service/caches/portals.py:327-377",
+    "jorgemoralespou/educates-training-platform@38515f3d:lookup-service/service/caches/environments.py:124-140",
+    "jorgemoralespou/educates-training-platform@38515f3d:lookup-service/service/routes/workshops.py:221-236",
+    "aiohttp 3.14.5, the version the image installs: DEFAULT_TIMEOUT is ClientTimeout(total=300, sock_connect=30), and ServerTimeoutError and asyncio.TimeoutError are not subclasses of ClientConnectorError"
+  ],
+  "scenario": "tenant-client requests lab-beta for user-5 through tenant-all, as in the captured scenario, with portal-a-w02 the only candidate environment and portal-a's /oauth2/token/ endpoint accepting the connection and never responding.",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenantName\": \"tenant-all\", \"workshopName\": \"lab-beta\", \"clientUserId\": \"user-5\", \"clientIndexUrl\": \"https://sites.example.test/index\"}"
+  },
+  "response": {
+    "status": 500,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "500 Internal Server Error\n\nServer got itself in trouble"
+  },
+  "change": {
+    "summary": "A timeout reaching a portal moves on to the next candidate, and every portal call is bounded by a timeout measured in seconds. With no other candidate, the request answers 503 within seconds.",
+    "spec": "Counting and ordering: candidates are tried in order, and any failure, a timeout included, moves on to the next; Training portal client: every portal call has a bounded timeout; user stories 21 and 22",
+    "expected": {
+      "status": 503,
+      "contentType": "text/plain; charset=utf-8",
+      "bodyFormat": "text",
+      "body": "Workshop not available"
+    }
+  }
+}

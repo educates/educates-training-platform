@@ -1,0 +1,33 @@
+{
+  "id": "050-clusters-get",
+  "step": "initial",
+  "description": "The admin reads cluster-a.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "cluster-a",
+      "labels": [
+        {
+          "name": "location",
+          "value": "a"
+        },
+        {
+          "name": "environment",
+          "value": "golden"
+        }
+      ]
+    }
+  }
+}

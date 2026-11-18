@@ -87,8 +87,10 @@ const (
 
 	// conditionNodeCATrustDeployed and conditionRemoteAccessDeployed
 	// report the outcome of each optional install. Status=True with
-	// reason `Installed` or `Skipped`; Status=False with reason
-	// `Refused` when an explicit Enabled fails its prerequisite check.
+	// reason `Installed`; Status=False with the mode resolver's reason
+	// when the extra is skipped or refused, or with `ReleaseFailed`,
+	// `RepairingRelease` or `WaitingForRollout` while an installed extra
+	// is not running.
 	conditionNodeCATrustDeployed  = "NodeCATrustDeployed"
 	conditionRemoteAccessDeployed = "RemoteAccessDeployed"
 

@@ -619,6 +619,14 @@ New Features
   panel as before. The button is shown only when the workshop instructions
   are displayed in the left hand side panel.
 
+* The backend of the Docker Desktop extension logs what the extension asks
+  of it, so the log of the extension's backend container, which ``docker
+  logs`` shows, says why a workshop failed to deploy from the extension. It
+  logs its version, socket and image repository when it starts, each request
+  to deploy or delete a workshop when it arrives and when it finishes, with
+  the status and the response, and any other request only when it fails.
+  Before, the error of a failed deploy reached only the extension.
+
 Features Changed
 ----------------
 

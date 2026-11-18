@@ -13,6 +13,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/educates/educates-training-platform/lookup-service/internal/config"
+	"github.com/educates/educates-training-platform/lookup-service/internal/inventory"
 	"github.com/educates/educates-training-platform/lookup-service/internal/tokens"
 )
 
@@ -26,16 +27,17 @@ const (
 
 // Server is the REST API's HTTP handler.
 type Server struct {
-	config *config.Model
-	tokens *tokens.Store
-	log    logr.Logger
-	mux    *http.ServeMux
+	config    *config.Model
+	inventory *inventory.Inventory
+	tokens    *tokens.Store
+	log       logr.Logger
+	mux       *http.ServeMux
 }
 
-// NewServer returns the REST API over the configuration model and the token
-// store.
-func NewServer(model *config.Model, store *tokens.Store, log logr.Logger) *Server {
-	s := &Server{config: model, tokens: store, log: log, mux: http.NewServeMux()}
+// NewServer returns the REST API over the configuration model, the
+// inventory of the clusters' training resources and the token store.
+func NewServer(model *config.Model, inv *inventory.Inventory, store *tokens.Store, log logr.Logger) *Server {
+	s := &Server{config: model, inventory: inv, tokens: store, log: log, mux: http.NewServeMux()}
 
 	s.mux.HandleFunc("POST /auth/login", s.login)
 	s.mux.HandleFunc("POST /login", s.login)
@@ -44,6 +46,10 @@ func NewServer(model *config.Model, store *tokens.Store, log logr.Logger) *Serve
 
 	s.mux.Handle("GET /api/v1/clients", s.loginRequired(rolesAccepted(s.listClients, roleAdmin)))
 	s.mux.Handle("GET /api/v1/clients/{client}", s.loginRequired(rolesAccepted(s.getClient, roleAdmin, roleTenant)))
+
+	s.mux.Handle("GET /api/v1/workshops", s.loginRequired(rolesAccepted(s.listWorkshops, roleAdmin, roleTenant)))
+	s.mux.Handle("GET /api/v1/tenants/{tenant}/workshops",
+		s.loginRequired(rolesAccepted(s.listTenantWorkshops, roleAdmin, roleTenant)))
 
 	return s
 }

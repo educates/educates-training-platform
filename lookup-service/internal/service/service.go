@@ -1,5 +1,6 @@
-// Package service composes the Lookup Service: the config watcher, the token
-// store, the REST API and the probes, run as one process.
+// Package service composes the Lookup Service: the config watcher, the
+// cluster registry and its inventory, the token store, the REST API and the
+// probes, run as one process.
 package service
 
 import (
@@ -27,7 +28,9 @@ import (
 
 	lookupv1beta1 "github.com/educates/educates-training-platform/lookup-service/api/v1beta1"
 	"github.com/educates/educates-training-platform/lookup-service/internal/api"
+	"github.com/educates/educates-training-platform/lookup-service/internal/clusters"
 	"github.com/educates/educates-training-platform/lookup-service/internal/config"
+	"github.com/educates/educates-training-platform/lookup-service/internal/inventory"
 	"github.com/educates/educates-training-platform/lookup-service/internal/tokens"
 )
 
@@ -72,6 +75,12 @@ type Options struct {
 	// ProbeListener is where the liveness probe, /healthz, and the readiness
 	// probe, /readyz, are served.
 	ProbeListener net.Listener
+
+	// Clusters configure how the service reaches the clusters its
+	// ClusterConfigs name. Unset fields take their defaults: the local
+	// cluster is the in-cluster API server, reached with the remote-access
+	// token mounted under /opt/cluster-access-token.
+	Clusters clusters.Options
 
 	// Logger receives the service's logs.
 	Logger logr.Logger
@@ -139,8 +148,17 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
+	inv := inventory.New()
+	registry, err := clusters.NewRegistry(inv, opts.Clusters, log.WithName("clusters"))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.manager.Add(registry); err != nil {
+		return nil, err
+	}
+
 	model := config.NewModel(s.manager.GetClient(), opts.ConfigNamespace)
-	watcher, err := config.NewWatcher(s.manager, model, store)
+	watcher, err := config.NewWatcher(s.manager, model, store, registry)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +179,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	s.api = &http.Server{
-		Handler:           api.NewServer(model, store, log.WithName("api")),
+		Handler:           api.NewServer(model, inv, store, log.WithName("api")),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 	s.probes = &http.Server{

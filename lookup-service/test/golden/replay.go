@@ -51,6 +51,12 @@ func (s *Session) Value(placeholder string) (string, bool) {
 	return value, ok
 }
 
+// Expand replaces every placeholder in text by the value it is bound to. A
+// placeholder that is not bound is an error.
+func (s *Session) Expand(text string) (string, error) {
+	return s.bindings.expand(text)
+}
+
 // Option adjusts what a replay expects.
 type Option func(*replay)
 

@@ -31,17 +31,19 @@ func Candidates(portals []*inventory.Portal, workshop string) []*inventory.Envir
 	return candidates
 }
 
-// Placer requests sessions from training portals.
+// Placer requests sessions from training portals, recording each request in
+// the inventory while it is in flight.
 type Placer struct {
-	portals  *trainingportal.Client
-	ordering Ordering
-	log      logr.Logger
+	inventory *inventory.Inventory
+	portals   *trainingportal.Client
+	ordering  Ordering
+	log       logr.Logger
 }
 
 // NewPlacer returns a placer that requests sessions through the portal
-// client.
-func NewPlacer(portals *trainingportal.Client, log logr.Logger) *Placer {
-	return &Placer{portals: portals, ordering: NewOrdering(), log: log}
+// client and records them in inv.
+func NewPlacer(inv *inventory.Inventory, portals *trainingportal.Client, log logr.Logger) *Placer {
+	return &Placer{inventory: inv, portals: portals, ordering: NewOrdering(), log: log}
 }
 
 // Placement is a session a portal gave, and the environment it is of.
@@ -65,13 +67,17 @@ func (p *Placer) Place(ctx context.Context, portals []*inventory.Portal, worksho
 		if ctx.Err() != nil {
 			return Placement{}, false
 		}
+		portal := environment.Portal
+		inFlight := p.inventory.StartRequest(portal.Cluster.Name, portal.Name, environment.Name)
 		session, err := p.portals.RequestSession(ctx, environment, request)
 		if err != nil {
+			inFlight.Failed()
 			p.log.Error(err, "The portal did not give a session",
-				"cluster", environment.Portal.Cluster.Name, "portal", environment.Portal.Name,
-				"environment", environment.Name, "workshop", workshop)
+				"cluster", portal.Cluster.Name, "portal", portal.Name, "environment", environment.Name,
+				"workshop", workshop)
 			continue
 		}
+		inFlight.Placed(session.Name)
 		return Placement{Environment: environment, Session: session}, true
 	}
 	return Placement{}, false

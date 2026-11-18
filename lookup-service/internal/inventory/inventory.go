@@ -9,6 +9,10 @@
 // environment or portal, need no special handling: a portal or environment
 // known only from the resources that belong to it is shown in phase
 // Unknown until its own resource arrives.
+//
+// The inventory also counts the session requests the service has in flight
+// to each environment, until the session a request gave shows as taken, so
+// that requests sent one after another see where the earlier ones went.
 package inventory
 
 import (
@@ -36,6 +40,8 @@ type clusterEntry struct {
 	info ClusterInfo
 	// feed is the feed of the cluster's current cache, nil when none runs.
 	feed *Feed
+	// requests are the session requests in flight to the cluster's portals.
+	requests map[*Request]struct{}
 }
 
 // ClusterInfo is what the configuration says about a cluster, and whether
@@ -195,15 +201,23 @@ func (f *Feed) DeleteEnvironment(name string) {
 	f.update(func() { delete(f.environments, name) })
 }
 
-// SetSession records a WorkshopSession as the watch delivered it.
+// SetSession records a WorkshopSession as the watch delivered it. A request
+// in flight that gave the session ends once the session is taken.
 func (f *Feed) SetSession(u *unstructured.Unstructured) {
 	record := projectSession(u)
-	f.update(func() { f.sessions[record.name] = record })
+	f.update(func() {
+		f.sessions[record.name] = record
+		f.inventory.settleRequests(f.cluster, record.name, &record)
+	})
 }
 
-// DeleteSession forgets the WorkshopSession of that name.
+// DeleteSession forgets the WorkshopSession of that name, ending a request
+// in flight that gave it.
 func (f *Feed) DeleteSession(name string) {
-	f.update(func() { delete(f.sessions, name) })
+	f.update(func() {
+		delete(f.sessions, name)
+		f.inventory.settleRequests(f.cluster, name, nil)
+	})
 }
 
 // assemble builds a snapshot of the current state. It is called with the
@@ -223,7 +237,7 @@ func (i *Inventory) assemble() *Snapshot {
 		}
 		if entry.feed != nil && entry.feed.synced {
 			c.Synced = true
-			entry.feed.assemble(c)
+			entry.feed.assemble(c, entry.requests)
 		}
 		s.clusters = append(s.clusters, c)
 		s.byName[name] = c
@@ -233,8 +247,9 @@ func (i *Inventory) assemble() *Snapshot {
 
 // assemble builds the cluster's tree of portals, environments and sessions
 // from the feed's resources, standing in a portal or environment in phase
-// Unknown for one known only from the resources that belong to it.
-func (f *Feed) assemble(c *Cluster) {
+// Unknown for one known only from the resources that belong to it, and
+// counts the requests in flight against their environments.
+func (f *Feed) assemble(c *Cluster, requests map[*Request]struct{}) {
 	portal := func(name, uid string) *Portal {
 		if p, ok := c.portals[name]; ok {
 			return p
@@ -298,6 +313,14 @@ func (f *Feed) assemble(c *Cluster) {
 		}
 	}
 
+	for r := range requests {
+		if p, ok := c.portals[r.portal]; ok {
+			if e, ok := p.environments[r.environment]; ok {
+				e.InFlight++
+			}
+		}
+	}
+
 	for _, name := range slices.Sorted(maps.Keys(c.portals)) {
 		p := c.portals[name]
 		c.Portals = append(c.Portals, p)
@@ -309,6 +332,7 @@ func (f *Feed) assemble(c *Cluster) {
 			}
 			p.Environments = append(p.Environments, e)
 			p.Allocated += e.Allocated
+			p.InFlight += e.InFlight
 		}
 	}
 }

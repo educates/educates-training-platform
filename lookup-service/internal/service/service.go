@@ -191,7 +191,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	placer := placement.NewPlacer(portals, log.WithName("placement"))
+	placer := placement.NewPlacer(inv, portals, log.WithName("placement"))
 
 	s.api = &http.Server{
 		Handler:           api.NewServer(model, inv, store, placer, log.WithName("api")),

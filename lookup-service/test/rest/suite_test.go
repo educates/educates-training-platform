@@ -50,6 +50,7 @@ var servedRoutes = []string{
 	"GET /api/v1/clients",
 	"GET /api/v1/clients/{client}",
 	"GET /api/v1/workshops",
+	"POST /api/v1/workshops",
 	"GET /api/v1/tenants/{tenant}/workshops",
 }
 

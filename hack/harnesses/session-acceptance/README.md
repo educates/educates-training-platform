@@ -37,7 +37,8 @@ out to alter, so read them against what the change intends.
 
 - A running local cluster with Educates installed, the default one or a
   named one. [local-cluster.sh](../local-cluster.sh) creates a named one
-  from a local build; see the [harnesses README](../README.md).
+  from a local build, served over HTTPS, or over plain HTTP with
+  `--insecure`; see the [harnesses README](../README.md).
 - The `educates` CLI of the build under test. It defaults to this checkout's
   `client-programs/bin/educates-<os>-<arch>`, which `make local-build`
   writes. The `educates` on your `PATH` may be another build.
@@ -48,9 +49,10 @@ out to alter, so read them against what the change intends.
   `run.sh` installs the dependencies from `package-lock.json` on first use.
 - For the SSH fixture, the cluster's names must resolve on this host, as
   they do for a cluster under `educates.test` with the local DNS resolver
-  running, and its CA must be trusted, as `educates local secrets add ca`
-  arranges. Chrome needs neither: the harness maps the cluster's names to
-  its listen address in Chrome itself and accepts its certificate.
+  running, or on its `nip.io` name, and over HTTPS its CA must be trusted,
+  as `educates local secrets add ca` arranges. Chrome needs neither: the
+  harness maps the cluster's names to its listen address in Chrome itself
+  and accepts its certificate.
 
 ## Running it
 

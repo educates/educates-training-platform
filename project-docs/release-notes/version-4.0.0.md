@@ -1754,6 +1754,15 @@ Deprecations
 Bugs Fixed
 ----------
 
+* When ``educates cluster workshop serve`` stops, it applies the workshop
+  definition again, undoing the change ``--patch-workshop`` makes so that
+  sessions proxy to the local server. When applying it failed, the command
+  still printed ``Restored workshop``, and when it could not reach the
+  cluster it printed nothing, so a patched workshop could go on proxying to
+  a server which no longer ran. The command now reports the failure, and
+  says to run ``educates cluster workshop update`` with the same options to
+  apply the definition again.
+
 * ``educates cluster workshop deploy --open-browser`` waited up to 60
   seconds for the training portal to report its URL, and when it did not, it
   went on with an empty URL, waited another five minutes for it to answer,

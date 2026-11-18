@@ -234,19 +234,24 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 	}
 
 	var cleanupFunc = func() {
-		// Do our best to revert workshop configuration and ignore errors.
+		// Do our best to revert the workshop configuration. A failure is
+		// reported rather than returned, as the server is already stopping,
+		// with the command that applies the workshop definition again.
 
 		clusterConfig := cluster.NewClusterConfig(o.Kubeconfig, o.Context)
 
 		dynamicClient, err := clusterConfig.GetDynamicClient()
 
 		if err == nil {
-			// Update the workshop resource in the Kubernetes cluster.
-
-			updateWorkshopResource(dynamicClient, workshop)
-
-			fmt.Printf("Restored workshop %q.\n", workshop.GetName())
+			err = updateWorkshopResource(dynamicClient, workshop)
 		}
+
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to restore workshop %q: %v\nRun \"educates cluster workshop update\" with the same options to apply its definition again.\n", workshop.GetName(), err)
+			return
+		}
+
+		fmt.Printf("Restored workshop %q.\n", workshop.GetName())
 	}
 
 	// Run the proxy server and Hugo server.

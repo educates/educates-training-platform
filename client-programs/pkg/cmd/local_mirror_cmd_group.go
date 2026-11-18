@@ -9,8 +9,9 @@ import (
 
 func (p *ProjectInfo) NewLocalMirrorCmdGroup() *cobra.Command {
 	var c = &cobra.Command{
-		Use:   "mirror",
-		Short: "Manage local image registry mirrors",
+		Use:     "mirror",
+		Aliases: []string{"mirrors"},
+		Short:   "Manage local image registry mirrors",
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			return docker.CheckDaemonRunning()
 		},

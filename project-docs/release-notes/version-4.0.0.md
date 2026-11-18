@@ -257,6 +257,10 @@ New Features
   declares whose container is missing, and says in a ``DECLARED`` column
   whether the file declares each mirror.
 
+* The ``educates local mirror`` command group is also available as
+  ``educates local mirrors``, as other command groups are under their
+  plural, such as ``educates cluster portals``.
+
 * The ``educates cluster portal export`` command exports a training portal
   and the workshops it references as Kubernetes resource YAML, either to
   standard output as a single document stream or, with ``--as-files``, as

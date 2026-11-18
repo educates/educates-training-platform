@@ -125,6 +125,10 @@ func envelopeProperties() map[string]interface{} {
 					"properties": map[string]interface{}{
 						"repository": map[string]interface{}{"type": "string"},
 						"tag":        map[string]interface{}{"type": "string"},
+						"pullPolicy": map[string]interface{}{
+							"type": "string",
+							"enum": []string{"Always", "IfNotPresent", "Never"},
+						},
 					},
 				},
 				"imagePullSecrets": map[string]interface{}{

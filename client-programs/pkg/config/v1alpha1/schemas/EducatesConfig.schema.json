@@ -1528,6 +1528,14 @@
         "image": {
           "additionalProperties": false,
           "properties": {
+            "pullPolicy": {
+              "enum": [
+                "Always",
+                "IfNotPresent",
+                "Never"
+              ],
+              "type": "string"
+            },
             "repository": {
               "type": "string"
             },

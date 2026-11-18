@@ -635,6 +635,16 @@ New Features
 Features Changed
 ----------------
 
+* ``educates admin diagnostics collect`` also collects the Educates platform
+  resources the operator reconciles, ``EducatesClusterConfig``,
+  ``SecretsManager``, ``LookupService`` and ``SessionManager``, whose status
+  conditions say which part of an install is not ready and why, in
+  ``educates-cluster-configs.yaml``, ``secrets-managers.yaml``,
+  ``lookup-services.yaml`` and ``session-managers.yaml``. It also collects
+  the logs of the Educates operator, in ``educates-installer.log``, finding
+  its pods by their labels in whichever namespace it runs in, and the logs
+  of the lookup service, in ``lookup-service.log``.
+
 * When deploying a workshop with ``educates docker workshop deploy``, a
   workshop image using the ``:main``, ``:master``, ``:develop`` or ``:latest``
   tag, or no tag, is now pulled each time the workshop is deployed, as it is

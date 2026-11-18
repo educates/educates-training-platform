@@ -34,3 +34,4 @@ Records
 * [0008 - Image names are resolved by the session-manager chart's inventory, never by the operator](0008-image-names-are-resolved-by-the-session-manager-chart.md)
 * [0009 - Local clusters share one data home and host services, each on its own address](0009-local-clusters-share-one-data-home-and-host-services.md)
 * [0010 - Training portals are confined by admission policy, not by RBAC alone](0010-training-portals-are-confined-by-admission-policy.md)
+* [0011 - Educates server components are ported to Go one at a time](0011-server-components-are-ported-to-go-one-at-a-time.md)

@@ -90,7 +90,7 @@ func (p *ProjectInfo) NewEducatesCmdGroup() *cobra.Command {
 
 	c.AddCommand(p.NewProjectVersionCmd())
 
-	removeOptionsHints(c)
+	correctKubectlHelp(c)
 
 	return c
 }

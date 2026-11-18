@@ -1777,7 +1777,10 @@ Bugs Fixed
   portal options`` for a list of global command-line options. No such
   command exists, and the CLI has no global options. Both came from the
   kubectl help templates the CLI renders its help with, and both are gone
-  from the help of every command.
+  from the help of every command. The help of a command group also ended
+  by naming the group alone, as ``Use "portal <command> --help"`` for
+  ``educates cluster portal``, and now names it in full, as ``Use
+  "educates cluster portal <command> --help"``.
 
 * ``educates docker workshop delete``, which the Docker Desktop extension
   also uses, removed the workshop's containers and its ``workshop`` volume

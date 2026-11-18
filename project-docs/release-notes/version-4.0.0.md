@@ -1758,6 +1758,14 @@ Deprecations
 Bugs Fixed
 ----------
 
+* ``educates cluster workshop serve`` applied the workshop definition from
+  the local workshop files when it stopped even when ``--patch-workshop``
+  was not given, and printed ``Restored workshop``, although it had patched
+  nothing. Edits to the local workshop files so reached the cluster when the
+  command stopped, without ``educates cluster workshop update``. The command
+  now applies the definition again only to undo the patch of
+  ``--patch-workshop``.
+
 * When ``educates cluster workshop serve`` stops, it applies the workshop
   definition again, undoing the change ``--patch-workshop`` makes so that
   sessions proxy to the local server. When applying it failed, the command

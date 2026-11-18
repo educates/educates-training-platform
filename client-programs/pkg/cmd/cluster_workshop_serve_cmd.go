@@ -233,25 +233,32 @@ func (o *ClusterWorkshopServeOptions) Run() error {
 		fmt.Printf("Patched workshop %q.\n", workshop.GetName())
 	}
 
-	var cleanupFunc = func() {
-		// Do our best to revert the workshop configuration. A failure is
-		// reported rather than returned, as the server is already stopping,
-		// with the command that applies the workshop definition again.
+	// When the server stops, undo the patch by applying the workshop
+	// definition again. Without the patch there is nothing to undo, and
+	// applying the definition would push edits to the local workshop files
+	// into the cluster. A failure is reported rather than returned, as the
+	// server is already stopping, with the command that applies the
+	// workshop definition again.
 
-		clusterConfig := cluster.NewClusterConfig(o.Kubeconfig, o.Context)
+	var cleanupFunc renderer.ServerCleanupFunc
 
-		dynamicClient, err := clusterConfig.GetDynamicClient()
+	if o.PatchWorkshop {
+		cleanupFunc = func() {
+			clusterConfig := cluster.NewClusterConfig(o.Kubeconfig, o.Context)
 
-		if err == nil {
-			err = updateWorkshopResource(dynamicClient, workshop)
+			dynamicClient, err := clusterConfig.GetDynamicClient()
+
+			if err == nil {
+				err = updateWorkshopResource(dynamicClient, workshop)
+			}
+
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Unable to restore workshop %q: %v\nRun \"educates cluster workshop update\" with the same options to apply its definition again.\n", workshop.GetName(), err)
+				return
+			}
+
+			fmt.Printf("Restored workshop %q.\n", workshop.GetName())
 		}
-
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to restore workshop %q: %v\nRun \"educates cluster workshop update\" with the same options to apply its definition again.\n", workshop.GetName(), err)
-			return
-		}
-
-		fmt.Printf("Restored workshop %q.\n", workshop.GetName())
 	}
 
 	// Run the proxy server and Hugo server.

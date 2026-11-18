@@ -102,6 +102,30 @@ func TestLookupServiceChart_ProbesLivenessEndpoint(t *testing.T) {
 	t.Fatalf("the chart renders no lookup-service container")
 }
 
+// The remote-access-token Secret exists only while SessionManager installs
+// remote access, so lookup-service's pod has to start without it.
+func TestLookupServiceChart_MountsRemoteAccessTokenOptionally(t *testing.T) {
+	values := renderLookupServiceValues(&platformv1alpha1.LookupService{}, valuesTestClusterConfig(), testImageRegistryNamespace)
+
+	for _, w := range renderWorkloads(t, vendoredcharts.LookupService, values) {
+		if w.Kind != "Deployment" || w.Metadata.Name != lookupServiceDeploymentName {
+			continue
+		}
+		for _, v := range w.Spec.Template.Spec.Volumes {
+			if v.Secret == nil || v.Secret.SecretName != "remote-access-token" {
+				continue
+			}
+			if v.Secret.Optional == nil || !*v.Secret.Optional {
+				t.Errorf("volume %q mounts Secret remote-access-token with optional %v, want true",
+					v.Name, v.Secret.Optional)
+			}
+			return
+		}
+		t.Fatalf("Deployment lookup-service mounts no remote-access-token Secret")
+	}
+	t.Fatalf("the chart renders no Deployment lookup-service")
+}
+
 func TestLookupServiceChart_GrantsOnlyInConfigNamespace(t *testing.T) {
 	objects, docs := renderLookupServiceObjects(t)
 

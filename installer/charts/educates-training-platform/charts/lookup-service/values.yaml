@@ -55,11 +55,13 @@ ingress:
   # IngressClass name. Empty leaves the cluster default.
   className: ""
 
-# When true, the Deployment mounts the `remote-access-token` Secret at
-# /opt/cluster-access-token. Set true automatically by the operator when
-# the umbrella's `remote-access.enabled` is on; can be set explicitly when
-# installing this subchart standalone. The lookup-service runtime only
-# requires this when serving a "local" ClusterConfig target (no kubeconfig
-# secretRef).
+# When true, the Deployment mounts the `remote-access-token` Secret, the
+# token of the `remote-access` service account, at /opt/cluster-access-token.
+# The lookup-service runtime uses it only for a ClusterConfig of the local
+# cluster (one without a kubeconfig secretRef). The mount is optional: the
+# Secret exists only while remote access is installed on this cluster (the
+# umbrella's `remote-access.enabled`, or the SessionManager's
+# `spec.remoteAccess.mode`), and without it the pod still starts, but the
+# local cluster is not connected and contributes no training portals.
 remoteAccessTokenMount:
   enabled: true

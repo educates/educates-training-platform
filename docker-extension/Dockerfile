@@ -6,7 +6,10 @@ ARG TAG=latest
 
 FROM ${REPOSITORY}/${CLI_IMAGE_NAME}:${TAG} AS client-programs
 
-FROM node:24-alpine AS client-builder
+# The UI build output is static files, the same for every platform, so the
+# UI is built once, natively on the build platform, rather than under
+# emulation for each target platform of a multi-platform build.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS client-builder
 WORKDIR /ui
 # cache packages in layer
 COPY ui/package.json /ui/package.json

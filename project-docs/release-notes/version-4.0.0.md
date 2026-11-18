@@ -332,8 +332,9 @@ New Features
   ``KUBECONFIG`` or the current kube context say.
 
   ``educates local cluster list`` shows every local cluster, the default
-  one marked, with its state, listen address, ingress domain, declared or
-  derived as the DNS resolver serves it, and kube context. A Kind cluster
+  one marked, with its state, number of nodes, listen address, ingress
+  domain, declared or derived as the DNS resolver serves it, and kube
+  context. A Kind cluster
   named ``educates-<name>`` counts as a local cluster only when its folder
   ``clusters/<name>/`` exists in the data home, so Kind clusters made by
   hand are left out of the list and of every check, and ``delete``,

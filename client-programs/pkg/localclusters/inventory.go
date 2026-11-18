@@ -106,6 +106,12 @@ type ListRow struct {
 	// State is whether the cluster's node containers run.
 	State State
 
+	// Nodes is the number of the cluster's Kubernetes nodes, its
+	// control-plane and worker node containers, running or not. The
+	// external load balancer of a cluster with several control planes is
+	// not a Kubernetes node, so it is not counted.
+	Nodes int
+
 	// ListenAddress is the host address the cluster's control-plane node
 	// is configured to publish ports 80 and 443 on, empty when it
 	// publishes neither.
@@ -128,7 +134,11 @@ type ListRow struct {
 func (inv Inventory) List() []ListRow {
 	rows := make([]ListRow, 0, len(inv.clusters))
 	for _, id := range inv.clusters {
-		row := ListRow{Identity: id, State: id.State(inv.observed.Nodes)}
+		row := ListRow{
+			Identity: id,
+			State:    id.State(inv.observed.Nodes),
+			Nodes:    len(id.kubernetesNodes(inv.observed.Nodes)),
+		}
 		if addrs := inv.ingressAddresses(id); len(addrs) > 0 {
 			row.ListenAddress = addrs[0].String()
 		}

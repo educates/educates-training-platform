@@ -60,6 +60,16 @@ const (
 	portalNameLabel     = "training.educates.dev/portal.name"
 	portalUIDLabel      = "training.educates.dev/portal.uid"
 	environmentUIDLabel = "training.educates.dev/environment.uid"
+
+	// The phases of training resources the fake portal reads and writes.
+	phaseAvailable  = "Available"
+	phaseAllocating = "Allocating"
+	phaseAllocated  = "Allocated"
+	phaseStopping   = "Stopping"
+
+	// creationDelay is how long after answering a portal whose creations are
+	// delayed creates a session's WorkshopSession.
+	creationDelay = 3 * time.Second
 )
 
 // The fake training portals of the scenario's two portals, and the CA their
@@ -311,12 +321,12 @@ func (p *fakePortal) behavior() portalBehavior {
 	return p.answer
 }
 
-// delayCreation makes the portal create the WorkshopSession of a session it
-// gives that long after answering.
-func (p *fakePortal) delayCreation(delay time.Duration) {
+// delayCreations makes the portal create the WorkshopSession of a session
+// it gives creationDelay after answering.
+func (p *fakePortal) delayCreations() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.creationDelay = delay
+	p.creationDelay = creationDelay
 }
 
 // accept makes the portal accept those credentials only.
@@ -512,18 +522,18 @@ func (p *fakePortal) giveSession(ctx context.Context, environment, user string) 
 		}
 		phase, _, _ := unstructured.NestedString(session.Object, "status", "educates", "phase")
 		owner, _, _ := unstructured.NestedString(session.Object, "status", "educates", "user")
-		if phase == "Allocating" || phase == "Allocated" {
+		if phase == phaseAllocating || phase == phaseAllocated {
 			inPortal++
 		}
 		if labels[environmentNameLabel] != environment {
 			continue
 		}
 		switch {
-		case phase == "Stopping":
+		case phase == phaseStopping:
 			continue
-		case owner == user && (phase == "Allocating" || phase == "Allocated"):
+		case owner == user && (phase == phaseAllocating || phase == phaseAllocated):
 			return session.GetName(), http.StatusOK, nil
-		case phase == "Available" && owner == "" && reserved == nil:
+		case phase == phaseAvailable && owner == "" && reserved == nil:
 			reserved = session
 		}
 		inEnvironment++
@@ -531,7 +541,7 @@ func (p *fakePortal) giveSession(ctx context.Context, environment, user string) 
 
 	if reserved != nil {
 		if err := unstructured.SetNestedStringMap(reserved.Object,
-			map[string]string{"phase": "Allocating", "user": user}, "status", "educates"); err != nil {
+			map[string]string{"phase": phaseAllocating, "user": user}, "status", "educates"); err != nil {
 			return "", 0, err
 		}
 		return reserved.GetName(), http.StatusOK, c.Update(ctx, reserved)
@@ -572,7 +582,7 @@ func (p *fakePortal) newSession(env *unstructured.Unstructured, name, user strin
 			"workshop":    map[string]any{"name": workshop},
 			"environment": map[string]any{"name": env.GetName()},
 		},
-		"status": map[string]any{"educates": map[string]any{"phase": "Allocating", "user": user}},
+		"status": map[string]any{"educates": map[string]any{"phase": phaseAllocating, "user": user}},
 	}}
 	session.SetGroupVersionKind(workshopSessionKind)
 	session.SetName(name)

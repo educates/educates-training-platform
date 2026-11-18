@@ -112,7 +112,6 @@ var _ = Describe("Session requests", func() {
 		// The portals create each session's WorkshopSession some time after
 		// answering, so that only the requests in flight tell the service
 		// where the sessions it asked for went.
-		const creationDelay = 3 * time.Second
 		AfterEach(func() {
 			portalA.awaitCreations()
 			portalB.awaitCreations()
@@ -120,8 +119,8 @@ var _ = Describe("Session requests", func() {
 
 		It("alternates between clusters of equal capacity", func() {
 			sc.prepareSpreading(3, 3)
-			portalA.delayCreation(creationDelay)
-			portalB.delayCreation(creationDelay)
+			portalA.delayCreations()
+			portalB.delayCreations()
 
 			placed := sc.requestSessions("lab-alpha", 6)
 			for i := 0; i < len(placed); i += 2 {
@@ -141,8 +140,8 @@ var _ = Describe("Session requests", func() {
 			time.Sleep(time.Second)
 
 			By("placing the rest while their sessions do not show yet")
-			portalA.delayCreation(creationDelay)
-			portalB.delayCreation(creationDelay)
+			portalA.delayCreations()
+			portalB.delayCreations()
 			placed := sc.requestSessions("lab-alpha", 4)
 			for i := 0; i < len(placed); i += 2 {
 				Expect(placed[i]).NotTo(Equal(placed[i+1]), "placed %v: sessions %d and %d", placed, i+3, i+4)
@@ -205,7 +204,7 @@ var _ = Describe("Session requests", func() {
 
 		By("stopping portal-b's environment")
 		updateTraining(clusterB, workshopEnvironmentKind, "portal-b-w01", func(environment map[string]any) {
-			environment["status"].(map[string]any)["educates"].(map[string]any)["phase"] = "Stopping"
+			environment["status"].(map[string]any)["educates"].(map[string]any)["phase"] = phaseStopping
 		})
 		Eventually(sc.workshops).WithArguments("tenant-names").WithTimeout(inventoryTimeout).Should(BeEmpty())
 		status, body := sc.requestSession("tenant-all", "lab-alpha", "user-8")
@@ -387,7 +386,7 @@ func (sc *scenario) activate(cluster *testCluster, placeholder string) {
 	name, ok := sc.session.Value(placeholder)
 	Expect(ok).To(BeTrue(), "no session is bound as %s", placeholder)
 	updateTraining(cluster, workshopSessionKind, name, func(session map[string]any) {
-		session["status"].(map[string]any)["educates"].(map[string]any)["phase"] = "Allocated"
+		session["status"].(map[string]any)["educates"].(map[string]any)["phase"] = phaseAllocated
 	})
 }
 

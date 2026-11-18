@@ -95,10 +95,9 @@ win where set; subchart-local defaults pass through otherwise.
 {{/*
 True when the resolved clusterIngress.caCertificateRef.name is set — drives
 mounting of the CA Secret at /opt/app-root/certs/ingress-ca in the
-lookup-service Deployment. The image's start script appends that CA to the
-system bundle at /opt/app-root/ca-bundle.crt, which SSL_CERT_FILE,
-REQUESTS_CA_BUNDLE and related variables in the image point at, so no init
-container and no root access are needed.
+lookup-service Deployment. The service reads ca.crt from there itself, its
+--ingress-ca-file flag naming the file, and trusts it besides the system
+roots, so no init container and no root access are needed.
 
 Required when lookup-service must verify TLS against a private/self-signed
 CA when calling other clusters' training portals.

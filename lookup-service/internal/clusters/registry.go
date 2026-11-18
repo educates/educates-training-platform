@@ -58,8 +58,11 @@ type Options struct {
 	// LocalTokenDirectory is where the remote-access token the local
 	// cluster is reached with is mounted, as the files token and ca.crt.
 	LocalTokenDirectory string
-	// LocalServer is the URL of the local cluster's API server.
+	// LocalServer is the URL the local cluster's API server is reached at.
 	LocalServer string
+	// LocalKubeconfigServer is the server the local cluster's kubeconfig
+	// names, as the REST API shows it: LocalServer unless set.
+	LocalKubeconfigServer string
 	// SyncTimeout bounds the wait for a cluster's cache to sync before the
 	// cache is started again.
 	SyncTimeout time.Duration
@@ -74,6 +77,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.LocalServer == "" {
 		o.LocalServer = DefaultLocalServer
+	}
+	if o.LocalKubeconfigServer == "" {
+		o.LocalKubeconfigServer = o.LocalServer
 	}
 	if o.SyncTimeout <= 0 {
 		o.SyncTimeout = DefaultSyncTimeout
@@ -315,7 +321,7 @@ func (r *Registry) kubeconfig(c config.Cluster) (*kubeconfig.Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		return kubeconfig.Local(c.Name, r.opts.LocalServer, token, ca), nil
+		return kubeconfig.Local(c.Name, r.opts.LocalKubeconfigServer, token, ca), nil
 	}
 	if c.Kubeconfig.Problem != "" {
 		return nil, errors.New(c.Kubeconfig.Problem)
@@ -348,6 +354,9 @@ func (r *Registry) run(ctx context.Context, m *member, connection *kubeconfig.Co
 	if err != nil {
 		log.Error(err, "The cluster is not connected")
 		return false
+	}
+	if m.cluster.Local() {
+		restConfig.Host = r.opts.LocalServer
 	}
 	c, err := r.newCluster(restConfig, log)
 	if err != nil {

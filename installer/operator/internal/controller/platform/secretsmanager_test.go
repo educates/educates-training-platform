@@ -162,12 +162,51 @@ func ingressCAChartRef() map[string]any {
 	return map[string]any{"name": "educates-ingress-ca", "namespace": "educates-installer"}
 }
 
-// markDeploymentAvailable creates (if missing) and patches the named
-// Deployment to Available=True. envtest has no controllers, so specs
-// drive the transition manually.
-func markDeploymentAvailable(name string) {
-	namespace := platformNamespace
+// markDeploymentRolledOut creates (if missing) the named Deployment and
+// gives it the status of a completed rollout: its spec observed, and
+// its one replica updated and available. envtest has no controllers, so
+// specs drive the transition manually.
+func markDeploymentRolledOut(name string) {
 	GinkgoHelper()
+	setDeploymentStatus(name, func(generation int64) appsv1.DeploymentStatus {
+		return rolledOutStatus(generation)
+	})
+}
+
+// markDeploymentRollingOut creates (if missing) the named Deployment and
+// gives it the status it has right after a Helm upgrade changed its
+// spec: the deployment controller hasn't observed the new spec yet, so
+// the status still describes the previous one, rolled out and
+// Available.
+func markDeploymentRollingOut(name string) {
+	GinkgoHelper()
+	setDeploymentStatus(name, func(generation int64) appsv1.DeploymentStatus {
+		return rolledOutStatus(generation - 1)
+	})
+}
+
+// rolledOutStatus is the status of a one-replica Deployment that has
+// rolled out the spec of observedGeneration.
+func rolledOutStatus(observedGeneration int64) appsv1.DeploymentStatus {
+	return appsv1.DeploymentStatus{
+		ObservedGeneration: observedGeneration,
+		Replicas:           1,
+		UpdatedReplicas:    1,
+		ReadyReplicas:      1,
+		AvailableReplicas:  1,
+		Conditions: []appsv1.DeploymentCondition{{
+			Type:   appsv1.DeploymentAvailable,
+			Status: corev1.ConditionTrue,
+		}},
+	}
+}
+
+// setDeploymentStatus creates (if missing) the named Deployment in the
+// platform namespace and sets its status to what status returns for
+// the Deployment's generation.
+func setDeploymentStatus(name string, status func(generation int64) appsv1.DeploymentStatus) {
+	GinkgoHelper()
+	namespace := platformNamespace
 	one := int32(1)
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -189,12 +228,7 @@ func markDeploymentAvailable(name string) {
 		Expect(err).NotTo(HaveOccurred())
 	}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, dep)).To(Succeed())
-	dep.Status = appsv1.DeploymentStatus{
-		Conditions: []appsv1.DeploymentCondition{{
-			Type:   appsv1.DeploymentAvailable,
-			Status: corev1.ConditionTrue,
-		}},
-	}
+	dep.Status = status(dep.Generation)
 	Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
 }
 
@@ -207,9 +241,9 @@ func ensureNamespace(name string) {
 	}
 }
 
-func smReadyStatus(name string) metav1.ConditionStatus {
+func smReadyStatus() metav1.ConditionStatus {
 	got := &platformv1alpha1.SecretsManager{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: name}, got); err != nil {
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, got); err != nil {
 		return metav1.ConditionUnknown
 	}
 	c := meta.FindStatusCondition(got.Status.Conditions, conditionReady)
@@ -242,6 +276,7 @@ var _ = Describe("SecretsManager reconciler", func() {
 
 		Expect((&SecretsManagerReconciler{
 			Client:        mgr.GetClient(),
+			APIReader:     mgr.GetAPIReader(),
 			Scheme:        mgr.GetScheme(),
 			HelmClientFor: helmFac.For,
 		}).SetupWithManager(mgr)).To(Succeed())
@@ -289,10 +324,10 @@ var _ = Describe("SecretsManager reconciler", func() {
 			return c.Reason
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("ClusterConfigNotReady"))
 
-		Expect(smReadyStatus(singletonName)).To(Equal(metav1.ConditionFalse))
+		Expect(smReadyStatus()).To(Equal(metav1.ConditionFalse))
 	})
 
-	It("installs the chart and reaches Ready=True when the Deployment is Available", func() {
+	It("installs the chart and reaches Ready=True when the Deployment has rolled out", func() {
 		makeReadyClusterConfig()
 
 		sm := &platformv1alpha1.SecretsManager{
@@ -313,11 +348,11 @@ var _ = Describe("SecretsManager reconciler", func() {
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 
 		// envtest has no Deployment controller, so simulate the
-		// upstream secrets-manager Deployment becoming Available.
-		markDeploymentAvailable(secretsManagerDeploymentName)
+		// upstream secrets-manager Deployment rolling out.
+		markDeploymentRolledOut(secretsManagerDeploymentName)
 
 		Eventually(func() metav1.ConditionStatus {
-			return smReadyStatus(singletonName)
+			return smReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 
 		got := &platformv1alpha1.SecretsManager{}
@@ -327,6 +362,36 @@ var _ = Describe("SecretsManager reconciler", func() {
 		Expect(got.Status.DeploymentRef).NotTo(BeNil())
 		Expect(got.Status.DeploymentRef.Namespace).To(Equal(platformNamespace))
 		Expect(got.Status.DeploymentRef.Name).To(Equal(secretsManagerDeploymentName))
+	})
+
+	It("keeps Ready=False until the Deployment has rolled out its spec", func() {
+		makeReadyClusterConfig()
+
+		sm := &platformv1alpha1.SecretsManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec:       platformv1alpha1.SecretsManagerSpec{},
+		}
+		Expect(k8sClient.Create(ctx, sm)).To(Succeed())
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(secretsManagerReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		// Available=True here describes the replica of the previous
+		// spec, which the rollout is about to replace.
+		markDeploymentRollingOut(secretsManagerDeploymentName)
+		Consistently(func() metav1.ConditionStatus {
+			return smReadyStatus()
+		}, 3*time.Second, 200*time.Millisecond).ShouldNot(Equal(metav1.ConditionTrue))
+
+		markDeploymentRolledOut(secretsManagerDeploymentName)
+		Eventually(func() metav1.ConditionStatus {
+			return smReadyStatus()
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 	})
 
 	// A changed or removed spec.imageRegistry reaches the runtime only
@@ -456,9 +521,9 @@ var _ = Describe("SecretsManager reconciler", func() {
 			_, err = hc.Status(secretsManagerReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(secretsManagerDeploymentName)
+		markDeploymentRolledOut(secretsManagerDeploymentName)
 		Eventually(func() metav1.ConditionStatus {
-			return smReadyStatus(singletonName)
+			return smReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 
 		// Trigger the finalizer drain.

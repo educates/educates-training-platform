@@ -489,7 +489,7 @@ var _ = Describe("SessionManager reconciler", func() {
 		}, 10*time.Second, 200*time.Millisecond).Should(Equal("SecretsManagerReady"))
 	})
 
-	It("installs the chart and reaches Ready when both gates pass + Deployment Available", func() {
+	It("installs the chart and reaches Ready when both gates pass and the Deployment has rolled out", func() {
 		makeReadyClusterConfig()
 		makeReadySecretsManager()
 
@@ -508,7 +508,7 @@ var _ = Describe("SessionManager reconciler", func() {
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 
-		markDeploymentAvailable(sessionManagerDeploymentName)
+		markDeploymentRolledOut(sessionManagerDeploymentName)
 
 		Eventually(func() metav1.ConditionStatus {
 			return smgrReadyStatus()
@@ -521,6 +521,37 @@ var _ = Describe("SessionManager reconciler", func() {
 		Expect(got.Status.DeploymentRef).NotTo(BeNil())
 		Expect(got.Status.DeploymentRef.Namespace).To(Equal(platformNamespace))
 		Expect(got.Status.DeploymentRef.Name).To(Equal(sessionManagerDeploymentName))
+	})
+
+	It("keeps Ready=False until the Deployment has rolled out its spec", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+
+		smgr := &platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec:       platformv1alpha1.SessionManagerSpec{},
+		}
+		Expect(k8sClient.Create(ctx, smgr)).To(Succeed())
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(sessionManagerReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		// Available=True here describes the replica of the previous
+		// spec, which the rollout is about to replace.
+		markDeploymentRollingOut(sessionManagerDeploymentName)
+		Consistently(func() metav1.ConditionStatus {
+			return smgrReadyStatus()
+		}, 3*time.Second, 200*time.Millisecond).ShouldNot(Equal(metav1.ConditionTrue))
+
+		markDeploymentRolledOut(sessionManagerDeploymentName)
+		Eventually(func() metav1.ConditionStatus {
+			return smgrReadyStatus()
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 	})
 
 	It("upgrades the subchart's stale CRDs to the chart's schemas", func() {
@@ -731,7 +762,7 @@ var _ = Describe("SessionManager reconciler", func() {
 			_, err = hc.Status(sessionManagerReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(sessionManagerDeploymentName)
+		markDeploymentRolledOut(sessionManagerDeploymentName)
 		Eventually(func() metav1.ConditionStatus {
 			return smgrReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
@@ -772,7 +803,7 @@ var _ = Describe("SessionManager reconciler", func() {
 			_, err = hc.Status(sessionManagerReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(sessionManagerDeploymentName)
+		markDeploymentRolledOut(sessionManagerDeploymentName)
 	}
 
 	extraConditionReason := func(condType string) string {

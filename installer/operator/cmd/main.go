@@ -314,8 +314,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&platformcontroller.SecretsManagerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		APIReader: mgr.GetAPIReader(),
+		Scheme:    mgr.GetScheme(),
 		HelmClientFor: func(ns string) (*helm.Client, error) {
 			return helm.NewClient(restCfg, ns)
 		},
@@ -324,8 +325,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&platformcontroller.LookupServiceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		APIReader: mgr.GetAPIReader(),
+		Scheme:    mgr.GetScheme(),
 		HelmClientFor: func(ns string) (*helm.Client, error) {
 			return helm.NewClient(restCfg, ns)
 		},

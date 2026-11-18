@@ -101,7 +101,9 @@ type SessionManagerReconciler struct {
 
 	// APIReader is an uncached reader for the CA override's Secret,
 	// which may live in a namespace outside the operator's Secret
-	// cache. Production wiring uses mgr.GetAPIReader().
+	// cache, and for the session-manager Deployment, read straight
+	// after the Helm upgrade that wrote it. Production wiring uses
+	// mgr.GetAPIReader().
 	APIReader client.Reader
 
 	// OperatorNamespace is where the reconciler writes the key-free copy
@@ -242,13 +244,13 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		fmt.Sprintf("session-manager chart %s installed in namespace %s",
 			vendoredcharts.SessionManagerChartVersion, platformNamespace))
 
-	avail, err := r.deploymentAvailableSM(ctx)
+	rolledOut, err := deploymentRolledOut(ctx, r.APIReader, platformNamespace, sessionManagerDeploymentName)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("read session-manager Deployment: %w", err)
 	}
-	if !avail {
+	if !rolledOut {
 		r.markSMReady(obj, metav1.ConditionFalse, "WaitingForDeployment",
-			"session-manager Deployment not yet Available")
+			"session-manager Deployment has not rolled out yet")
 		r.markSMPhase(obj, platformv1alpha1.ComponentPhaseInstalling)
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, r.updateSMStatusWithTransitionLog(ctx, obj)
 	}
@@ -875,23 +877,6 @@ func validateSessionManagerSpec(obj *platformv1alpha1.SessionManager) error {
 		return fmt.Errorf("spec.defaultTheme: no entry named %q in spec.themes", obj.Spec.DefaultTheme)
 	}
 	return nil
-}
-
-func (r *SessionManagerReconciler) deploymentAvailableSM(ctx context.Context) (bool, error) {
-	dep := &appsv1.Deployment{}
-	key := types.NamespacedName{Namespace: platformNamespace, Name: sessionManagerDeploymentName}
-	if err := r.Get(ctx, key, dep); err != nil {
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	for _, c := range dep.Status.Conditions {
-		if c.Type == appsv1.DeploymentAvailable {
-			return c.Status == corev1.ConditionTrue, nil
-		}
-	}
-	return false, nil
 }
 
 func (r *SessionManagerReconciler) cleanupSM(ctx context.Context) error {

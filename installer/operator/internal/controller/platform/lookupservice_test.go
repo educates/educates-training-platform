@@ -45,9 +45,9 @@ import (
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
-func lsReadyStatus(name string) metav1.ConditionStatus {
+func lsReadyStatus() metav1.ConditionStatus {
 	got := &platformv1alpha1.LookupService{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: name}, got); err != nil {
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, got); err != nil {
 		return metav1.ConditionUnknown
 	}
 	c := meta.FindStatusCondition(got.Status.Conditions, conditionReady)
@@ -188,6 +188,7 @@ var _ = Describe("LookupService reconciler", func() {
 
 		Expect((&LookupServiceReconciler{
 			Client:        mgr.GetClient(),
+			APIReader:     mgr.GetAPIReader(),
 			Scheme:        mgr.GetScheme(),
 			HelmClientFor: helmFac.For,
 		}).SetupWithManager(mgr)).To(Succeed())
@@ -234,7 +235,7 @@ var _ = Describe("LookupService reconciler", func() {
 			return c.Reason
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("ClusterConfigNotReady"))
 
-		Expect(lsReadyStatus(singletonName)).To(Equal(metav1.ConditionFalse))
+		Expect(lsReadyStatus()).To(Equal(metav1.ConditionFalse))
 	})
 
 	It("installs the chart, derives status.url, and reaches Ready", func() {
@@ -258,10 +259,10 @@ var _ = Describe("LookupService reconciler", func() {
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 
-		markDeploymentAvailable(lookupServiceDeploymentName)
+		markDeploymentRolledOut(lookupServiceDeploymentName)
 
 		Eventually(func() metav1.ConditionStatus {
-			return lsReadyStatus(singletonName)
+			return lsReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 
 		got := &platformv1alpha1.LookupService{}
@@ -272,6 +273,39 @@ var _ = Describe("LookupService reconciler", func() {
 		Expect(got.Status.DeploymentRef).NotTo(BeNil())
 		Expect(got.Status.DeploymentRef.Namespace).To(Equal(platformNamespace))
 		Expect(got.Status.DeploymentRef.Name).To(Equal(lookupServiceDeploymentName))
+	})
+
+	It("keeps Ready=False until the Deployment has rolled out its spec", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+
+		ls := &platformv1alpha1.LookupService{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec: platformv1alpha1.LookupServiceSpec{
+				Ingress: platformv1alpha1.LookupServiceIngress{Prefix: "lookup"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, ls)).To(Succeed())
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(lookupServiceReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		// Available=True here describes the replica of the previous
+		// spec, which the rollout is about to replace.
+		markDeploymentRollingOut(lookupServiceDeploymentName)
+		Consistently(func() metav1.ConditionStatus {
+			return lsReadyStatus()
+		}, 3*time.Second, 200*time.Millisecond).ShouldNot(Equal(metav1.ConditionTrue))
+
+		markDeploymentRolledOut(lookupServiceDeploymentName)
+		Eventually(func() metav1.ConditionStatus {
+			return lsReadyStatus()
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 	})
 
 	It("waits for SecretsManager to run the embedded secrets-manager chart before installing", func() {
@@ -441,9 +475,9 @@ var _ = Describe("LookupService reconciler", func() {
 			_, err = hc.Status(lookupServiceReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(lookupServiceDeploymentName)
+		markDeploymentRolledOut(lookupServiceDeploymentName)
 		Eventually(func() metav1.ConditionStatus {
-			return lsReadyStatus(singletonName)
+			return lsReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 
 		Expect(k8sClient.Delete(ctx, ls)).To(Succeed())

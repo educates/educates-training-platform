@@ -22,7 +22,6 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,7 +60,7 @@ const (
 
 	// An IngressReady condition is reserved in the status contract
 	// but not yet published. v1alpha1 doesn't gate on
-	// it separately — Deployment.Available is sufficient signal
+	// it separately — the Deployment's rollout is sufficient signal
 	// because the chart renders the Ingress alongside the Deployment
 	// in the same helm install. A future probe (LoadBalancer
 	// resolution, HTTP reachability) reintroduces the condition.
@@ -74,6 +73,11 @@ const (
 type LookupServiceReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// APIReader is an uncached reader for the lookup-service
+	// Deployment, read straight after the Helm upgrade that wrote it.
+	// Production wiring uses mgr.GetAPIReader().
+	APIReader client.Reader
 
 	// HelmClientFor returns a Helm client scoped to the given
 	// namespace. Production: REST-config-backed. Envtest: in-memory.
@@ -211,13 +215,13 @@ func (r *LookupServiceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		fmt.Sprintf("lookup-service chart %s installed in namespace %s",
 			vendoredcharts.LookupServiceChartVersion, platformNamespace))
 
-	avail, err := r.deploymentAvailableLS(ctx)
+	rolledOut, err := deploymentRolledOut(ctx, r.APIReader, platformNamespace, lookupServiceDeploymentName)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("read lookup-service Deployment: %w", err)
 	}
-	if !avail {
+	if !rolledOut {
 		r.markLSReady(obj, metav1.ConditionFalse, "WaitingForDeployment",
-			"lookup-service Deployment not yet Available")
+			"lookup-service Deployment has not rolled out yet")
 		r.markLSPhase(obj, platformv1alpha1.ComponentPhaseInstalling)
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, r.updateLSStatusWithTransitionLog(ctx, obj)
 	}
@@ -343,23 +347,6 @@ func renderLookupServiceValues(obj *platformv1alpha1.LookupService, cfg *configv
 	}
 
 	return values
-}
-
-func (r *LookupServiceReconciler) deploymentAvailableLS(ctx context.Context) (bool, error) {
-	dep := &appsv1.Deployment{}
-	key := types.NamespacedName{Namespace: platformNamespace, Name: lookupServiceDeploymentName}
-	if err := r.Get(ctx, key, dep); err != nil {
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	for _, c := range dep.Status.Conditions {
-		if c.Type == appsv1.DeploymentAvailable {
-			return c.Status == corev1.ConditionTrue, nil
-		}
-	}
-	return false, nil
 }
 
 // cleanupLS uninstalls the helm release, then removes kopf's finalizer

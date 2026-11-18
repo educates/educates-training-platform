@@ -127,7 +127,7 @@ func sessionListOf(sessions []*inventory.Session) sessionList {
 }
 
 // optional returns a string the status of a training resource gives, nil
-// when it gives none, which the admin routes show as null.
+// when it gives none, which the REST API shows as null.
 func optional(value string) *string {
 	if value == "" {
 		return nil

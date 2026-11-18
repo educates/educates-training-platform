@@ -302,8 +302,8 @@ func driveStaticCertificateToReady() {
 	Eventually(func() error {
 		return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, &corev1.Namespace{})
 	}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-	markDeploymentAvailable(contourControllerDeployment, contourNamespace)
-	markDaemonSetReady()
+	markDeploymentRolledOut(contourControllerDeployment, contourNamespace)
+	markEnvoyRolledOut()
 	Eventually(readyConditionStatus, 30*time.Second, 200*time.Millisecond).
 		Should(Equal(metav1.ConditionTrue))
 }
@@ -332,12 +332,46 @@ func setSpecImageRegistry(registry *configv1alpha1.ImageRegistry) {
 	}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
 }
 
-// markDeploymentAvailable creates the named Deployment (if missing) and
-// sets Status.Conditions[Available]=True. cert-manager would normally
-// drive this; envtest has no controllers, so the spec drives the
-// transition manually. Replicas/selector are nominal — the operator's
-// readiness gate only inspects the Available condition.
-func markDeploymentAvailable(name, namespace string) {
+// markDeploymentRolledOut creates the named Deployment (if missing) and
+// gives it the status of a completed rollout: its spec observed, and its
+// one replica updated and available. cert-manager would normally drive
+// this; envtest has no controllers, so the spec drives the transition
+// manually. Replicas/selector are nominal.
+func markDeploymentRolledOut(name, namespace string) {
+	GinkgoHelper()
+	setDeploymentStatus(name, namespace, rolledOutDeploymentStatus)
+}
+
+// markDeploymentRollingOut creates the named Deployment (if missing) and
+// gives it the status it has right after a Helm upgrade changed its
+// spec: the deployment controller hasn't observed the new spec yet, so
+// the status still describes the previous one, rolled out and Available.
+func markDeploymentRollingOut(name, namespace string) {
+	GinkgoHelper()
+	setDeploymentStatus(name, namespace, func(generation int64) appsv1.DeploymentStatus {
+		return rolledOutDeploymentStatus(generation - 1)
+	})
+}
+
+// rolledOutDeploymentStatus is the status of a one-replica Deployment
+// that has rolled out the spec of observedGeneration.
+func rolledOutDeploymentStatus(observedGeneration int64) appsv1.DeploymentStatus {
+	return appsv1.DeploymentStatus{
+		ObservedGeneration: observedGeneration,
+		Replicas:           1,
+		UpdatedReplicas:    1,
+		ReadyReplicas:      1,
+		AvailableReplicas:  1,
+		Conditions: []appsv1.DeploymentCondition{{
+			Type:   appsv1.DeploymentAvailable,
+			Status: corev1.ConditionTrue,
+		}},
+	}
+}
+
+// setDeploymentStatus creates the named Deployment (if missing) and sets
+// its status to what status returns for the Deployment's generation.
+func setDeploymentStatus(name, namespace string, status func(generation int64) appsv1.DeploymentStatus) {
 	GinkgoHelper()
 	one := int32(1)
 	dep := &appsv1.Deployment{
@@ -360,22 +394,48 @@ func markDeploymentAvailable(name, namespace string) {
 		Expect(err).NotTo(HaveOccurred())
 	}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, dep)).To(Succeed())
-	dep.Status = appsv1.DeploymentStatus{
-		Conditions: []appsv1.DeploymentCondition{{
-			Type:   appsv1.DeploymentAvailable,
-			Status: corev1.ConditionTrue,
-		}},
-	}
+	dep.Status = status(dep.Generation)
 	Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
 }
 
-// markDaemonSetReady creates the named DaemonSet (if missing) and
-// sets its Status to DesiredNumberScheduled=NumberReady=1 so the
-// reconciler's ensureContourReady sees envoy as Ready. envtest runs
-// no DaemonSet controller, hence this helper.
-func markDaemonSetReady() {
-	name, namespace := envoyDaemonSet, contourNamespace
+// markEnvoyRolledOut creates the envoy DaemonSet (if missing) and
+// gives it the status of a completed rollout on one node, so the
+// reconciler's ensureContourReady sees envoy as rolled out. envtest
+// runs no DaemonSet controller, hence this helper.
+func markEnvoyRolledOut() {
 	GinkgoHelper()
+	setEnvoyDaemonSetStatus(rolledOutDaemonSetStatus)
+}
+
+// markEnvoyRollingOut creates the envoy DaemonSet (if missing) and
+// gives it the status it has right after a Helm upgrade changed its
+// spec: the status still describes the previous spec, with its pod
+// ready and available.
+func markEnvoyRollingOut() {
+	GinkgoHelper()
+	setEnvoyDaemonSetStatus(func(generation int64) appsv1.DaemonSetStatus {
+		return rolledOutDaemonSetStatus(generation - 1)
+	})
+}
+
+// rolledOutDaemonSetStatus is the status of a DaemonSet on one node that
+// has rolled out the spec of observedGeneration.
+func rolledOutDaemonSetStatus(observedGeneration int64) appsv1.DaemonSetStatus {
+	return appsv1.DaemonSetStatus{
+		ObservedGeneration:     observedGeneration,
+		DesiredNumberScheduled: 1,
+		CurrentNumberScheduled: 1,
+		UpdatedNumberScheduled: 1,
+		NumberReady:            1,
+		NumberAvailable:        1,
+	}
+}
+
+// setEnvoyDaemonSetStatus creates the envoy DaemonSet (if missing) and
+// sets its status to what status returns for the DaemonSet's generation.
+func setEnvoyDaemonSetStatus(status func(generation int64) appsv1.DaemonSetStatus) {
+	GinkgoHelper()
+	name, namespace := envoyDaemonSet, contourNamespace
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: appsv1.DaemonSetSpec{
@@ -395,11 +455,82 @@ func markDaemonSetReady() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, ds)).To(Succeed())
-	ds.Status = appsv1.DaemonSetStatus{
-		DesiredNumberScheduled: 1,
-		NumberReady:            1,
-	}
+	ds.Status = status(ds.Generation)
 	Expect(k8sClient.Status().Update(ctx, ds)).To(Succeed())
+}
+
+// expectConditionReasonHeld waits for the singleton's condType condition
+// to report reason, then checks that it keeps reporting it: the
+// reconciler has seen the state the spec set up and doesn't move past it.
+func expectConditionReasonHeld(condType, reason string) {
+	GinkgoHelper()
+	Eventually(func() string { return conditionReason(condType) }, 30*time.Second, 200*time.Millisecond).
+		Should(Equal(reason))
+	Consistently(func() string { return conditionReason(condType) }, 3*time.Second, 200*time.Millisecond).
+		Should(Equal(reason))
+}
+
+// markNodeNotReadyReady turns the node addDaemonSetPodOnNodeNotReady made
+// Ready again, its pod still unavailable: a change only the Node watch
+// reports, since the DaemonSet's status stays as it was.
+func markNodeNotReadyReady() {
+	GinkgoHelper()
+	node := &corev1.Node{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "node-not-ready"}, node)).To(Succeed())
+	node.Status.Conditions = []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}
+	Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+}
+
+// addDaemonSetPodOnNodeNotReady stands in for a node that has gone not
+// Ready: it creates a Node whose Ready condition is False, carrying an
+// unavailable pod of the namespace/name DaemonSet, and removes both when
+// the spec ends. envtest runs no kubelet or node controller.
+func addDaemonSetPodOnNodeNotReady(namespace, name string) {
+	GinkgoHelper()
+	nodeName := "node-not-ready"
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}
+	Expect(k8sClient.Create(ctx, node)).To(Succeed())
+	node.Status.Conditions = []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionFalse}}
+	Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+	DeferCleanup(func() { _ = k8sClient.Delete(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}) })
+
+	ds := &appsv1.DaemonSet{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, ds)).To(Succeed())
+	controller := true
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name + "-on-" + nodeName, Namespace: namespace,
+			Labels: ds.Spec.Selector.MatchLabels,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "apps/v1", Kind: "DaemonSet", Name: ds.Name, UID: ds.UID, Controller: &controller,
+			}},
+		},
+		Spec: corev1.PodSpec{
+			NodeName:   nodeName,
+			Containers: []corev1.Container{{Name: "c", Image: "stub:latest"}},
+		},
+	}
+	Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+	pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionFalse}}
+	Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+	DeferCleanup(func() {
+		_ = k8sClient.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: namespace}},
+			client.GracePeriodSeconds(0))
+	})
+}
+
+// conditionReason returns the reason of the singleton's condType
+// condition, or "" when it is not set yet.
+func conditionReason(condType string) string {
+	got := &configv1alpha1.EducatesClusterConfig{}
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got); err != nil {
+		return ""
+	}
+	cond := meta.FindStatusCondition(got.Status.Conditions, condType)
+	if cond == nil {
+		return ""
+	}
+	return cond.Reason
 }
 
 // podSecurityLabelKeys are the namespace labels that set Pod Security
@@ -546,7 +677,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		// Previous specs that exercised cleanupManaged leave the
 		// cert-manager + contour namespaces in Terminating; envtest
 		// has no namespace controller to actually delete them.
-		// Resurrect so markDeploymentAvailable / markDaemonSetReady
+		// Resurrect so markDeploymentRolledOut / markEnvoyRolledOut
 		// in subsequent specs can create resources inside.
 		resurrectStuckNamespace(certManagerNamespace)
 		resurrectStuckNamespace(contourNamespace)
@@ -664,7 +795,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 
 		// With cert-manager Deployments absent (no controller in envtest),
 		// readiness gate keeps CertificatesReady=False/WaitingForCertManager.
-		// The happy-path "Deployments Available + Certificate Ready" flow
+		// The happy-path "Deployments rolled out + Certificate Ready" flow
 		// is covered by the dedicated spec below.
 		got := &configv1alpha1.EducatesClusterConfig{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
@@ -963,8 +1094,8 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Eventually(func() error {
 			return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, &corev1.Namespace{})
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
-		markDaemonSetReady()
+		markDeploymentRolledOut(contourControllerDeployment, contourNamespace)
+		markEnvoyRolledOut()
 		Eventually(readyConditionStatus, 30*time.Second, 200*time.Millisecond).
 			Should(Equal(metav1.ConditionTrue))
 
@@ -1204,7 +1335,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Expect(readyConditionStatus()).To(Equal(metav1.ConditionFalse))
 	})
 
-	It("reaches Ready=True once cert-manager Deployments are Available and the wildcard Certificate is Issued", func() {
+	It("reaches Ready=True once cert-manager and Contour have rolled out and the wildcard Certificate is Issued", func() {
 		Expect(k8sClient.Create(ctx, makeCustomCASecret())).To(Succeed())
 
 		obj := &configv1alpha1.EducatesClusterConfig{
@@ -1221,12 +1352,16 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			return k8sClient.Get(ctx, types.NamespacedName{Name: certManagerNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 
-		// envtest has no controllers to roll out Deployments, so stand
-		// up the three cert-manager Deployments with Available=True
-		// manually. The operator's readiness gate observes them via the
-		// Deployment watch.
+		// envtest has no controllers to roll out Deployments, so the
+		// spec drives the three cert-manager Deployments by hand. While
+		// their status still describes a previous spec, Available=True
+		// does not make cert-manager ready.
 		for _, name := range certManagerDeployments {
-			markDeploymentAvailable(name, certManagerNamespace)
+			markDeploymentRollingOut(name, certManagerNamespace)
+		}
+		expectConditionReasonHeld(conditionCertificatesReady, "WaitingForCertManager")
+		for _, name := range certManagerDeployments {
+			markDeploymentRolledOut(name, certManagerNamespace)
 		}
 
 		// Wait for the operator to apply the wildcard Certificate.
@@ -1241,13 +1376,19 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 
 		// Wait for the operator to reach the Contour phase + create
 		// its namespace, then drive the contour Deployment + envoy
-		// DaemonSet to Ready (no controllers in envtest).
+		// DaemonSet (no controllers in envtest). Each holds Contour back
+		// while its status still describes a previous spec.
 		Eventually(func() error {
 			ns := &corev1.Namespace{}
 			return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
-		markDaemonSetReady()
+		markDeploymentRollingOut(contourControllerDeployment, contourNamespace)
+		markEnvoyRolledOut()
+		expectConditionReasonHeld(conditionIngressReady, "WaitingForContour")
+		markEnvoyRollingOut()
+		markDeploymentRolledOut(contourControllerDeployment, contourNamespace)
+		expectConditionReasonHeld(conditionIngressReady, "WaitingForContour")
+		markEnvoyRolledOut()
 
 		Eventually(readyConditionStatus, 30*time.Second, 200*time.Millisecond).
 			Should(Equal(metav1.ConditionTrue))
@@ -1286,6 +1427,44 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Expect(copied.Data).To(HaveKey("tls.key"))
 	})
 
+	It("keeps IngressReady while the envoy pod on a node that is not Ready is unavailable, and not once the node is Ready again", func() {
+		root := testpki.NewRootCA()
+		leaf := root.NewLeaf(testpki.WithDNSNames("*.educates.test"))
+		Expect(k8sClient.Create(ctx, makeSecret(testCASecretsNamespace, "wildcard-tls", map[string][]byte{
+			"tls.crt": leaf.ChainPEM(),
+			"tls.key": leaf.KeyPEM,
+		}))).To(Succeed())
+		Expect(k8sClient.Create(ctx, makeSecret(testCASecretsNamespace, "wildcard-ca", map[string][]byte{
+			"ca.crt": root.CertPEM,
+		}))).To(Succeed())
+		Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       staticCertificateSpec(),
+		})).To(Succeed())
+		driveStaticCertificateToReady()
+
+		// A second node goes not Ready: its envoy pod is unavailable, and
+		// the DaemonSet counts one of its two pods available.
+		addDaemonSetPodOnNodeNotReady(contourNamespace, envoyDaemonSet)
+		setEnvoyDaemonSetStatus(func(generation int64) appsv1.DaemonSetStatus {
+			return appsv1.DaemonSetStatus{
+				ObservedGeneration:     generation,
+				DesiredNumberScheduled: 2,
+				CurrentNumberScheduled: 2,
+				UpdatedNumberScheduled: 2,
+				NumberReady:            1,
+				NumberAvailable:        1,
+			}
+		})
+		Consistently(func() string { return conditionReason(conditionIngressReady) }, 5*time.Second, 200*time.Millisecond).
+			Should(Equal("BundledContourReady"))
+		Expect(readyConditionStatus()).To(Equal(metav1.ConditionTrue))
+
+		markNodeNotReadyReady()
+		Eventually(func() string { return conditionReason(conditionIngressReady) }, 30*time.Second, 200*time.Millisecond).
+			Should(Equal("WaitingForContour"))
+	})
+
 	It("labels the contour namespace privileged for Pod Security admission and leaves cert-manager's to the cluster default", func() {
 		// The namespace already exists at a level that refuses Envoy's
 		// hostPort, as an administrator or an earlier install left it.
@@ -1313,7 +1492,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			return k8sClient.Get(ctx, types.NamespacedName{Name: certManagerNamespace}, &corev1.Namespace{})
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 		for _, name := range certManagerDeployments {
-			markDeploymentAvailable(name, certManagerNamespace)
+			markDeploymentRolledOut(name, certManagerNamespace)
 		}
 		Eventually(func() error {
 			return k8sClient.Get(ctx, types.NamespacedName{Namespace: testOperatorNamespace, Name: wildcardCertificate}, &cmv1.Certificate{})
@@ -1352,7 +1531,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			return k8sClient.Get(ctx, types.NamespacedName{Name: certManagerNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 		for _, name := range certManagerDeployments {
-			markDeploymentAvailable(name, certManagerNamespace)
+			markDeploymentRolledOut(name, certManagerNamespace)
 		}
 		Eventually(func() error {
 			cert := &cmv1.Certificate{}
@@ -1363,8 +1542,8 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ns := &corev1.Namespace{}
 			return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
-		markDaemonSetReady()
+		markDeploymentRolledOut(contourControllerDeployment, contourNamespace)
+		markEnvoyRolledOut()
 		Eventually(readyConditionStatus, 30*time.Second, 200*time.Millisecond).
 			Should(Equal(metav1.ConditionTrue))
 
@@ -1571,7 +1750,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			return k8sClient.Get(ctx, types.NamespacedName{Name: certManagerNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 		for _, name := range certManagerDeployments {
-			markDeploymentAvailable(name, certManagerNamespace)
+			markDeploymentRolledOut(name, certManagerNamespace)
 		}
 		Eventually(func() error {
 			cert := &cmv1.Certificate{}
@@ -1582,8 +1761,8 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ns := &corev1.Namespace{}
 			return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
-		markDaemonSetReady()
+		markDeploymentRolledOut(contourControllerDeployment, contourNamespace)
+		markEnvoyRolledOut()
 		Eventually(readyConditionStatus, 30*time.Second, 200*time.Millisecond).
 			Should(Equal(metav1.ConditionTrue))
 
@@ -1634,7 +1813,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseDegraded))
 	})
 
-	It("installs external-dns (Route53/IRSA) and reaches Ready when DNS+ingress+cert are all up", func() {
+	It("installs external-dns (Route53/IRSA) and reaches Ready once DNS, ingress and certificates have rolled out", func() {
 		Expect(k8sClient.Create(ctx, makeCustomCASecret())).To(Succeed())
 
 		spec := validManagedSpec()
@@ -1662,7 +1841,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			return k8sClient.Get(ctx, types.NamespacedName{Name: certManagerNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 		for _, name := range certManagerDeployments {
-			markDeploymentAvailable(name, certManagerNamespace)
+			markDeploymentRolledOut(name, certManagerNamespace)
 		}
 		Eventually(func() error {
 			cert := &cmv1.Certificate{}
@@ -1674,16 +1853,20 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ns := &corev1.Namespace{}
 			return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
-		markDaemonSetReady()
+		markDeploymentRolledOut(contourControllerDeployment, contourNamespace)
+		markEnvoyRolledOut()
 
 		// Now the external-dns phase should fire and create its
-		// namespace + Deployment; drive the Deployment to Available.
+		// namespace + Deployment; while the Deployment's status still
+		// describes a previous spec, DNS is not ready, then drive its
+		// rollout to completion.
 		Eventually(func() error {
 			ns := &corev1.Namespace{}
 			return k8sClient.Get(ctx, types.NamespacedName{Name: externalDNSNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(externalDNSControllerDeploy, externalDNSNamespace)
+		markDeploymentRollingOut(externalDNSControllerDeploy, externalDNSNamespace)
+		expectConditionReasonHeld(conditionDNSReady, "WaitingForExternalDNS")
+		markDeploymentRolledOut(externalDNSControllerDeploy, externalDNSNamespace)
 
 		Eventually(readyConditionStatus, 30*time.Second, 200*time.Millisecond).
 			Should(Equal(metav1.ConditionTrue))
@@ -1737,7 +1920,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			return k8sClient.Get(ctx, types.NamespacedName{Name: certManagerNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 		for _, name := range certManagerDeployments {
-			markDeploymentAvailable(name, certManagerNamespace)
+			markDeploymentRolledOut(name, certManagerNamespace)
 		}
 		Eventually(func() error {
 			cert := &cmv1.Certificate{}
@@ -1748,8 +1931,8 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ns := &corev1.Namespace{}
 			return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
-		markDaemonSetReady()
+		markDeploymentRolledOut(contourControllerDeployment, contourNamespace)
+		markEnvoyRolledOut()
 
 		// Validator surfaces a Degraded with a useful message.
 		Eventually(func() string {
@@ -1917,7 +2100,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		// service, since the platform reconcilers wait for Ready.
 		expectPullSecretCopy(platformnamespace.Name, source)
 		for _, name := range certManagerDeployments {
-			markDeploymentAvailable(name, certManagerNamespace)
+			markDeploymentRolledOut(name, certManagerNamespace)
 		}
 		Eventually(func() error {
 			return k8sClient.Get(ctx, types.NamespacedName{Namespace: testOperatorNamespace, Name: wildcardCertificate}, &cmv1.Certificate{})
@@ -1925,15 +2108,15 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		markCertificateReady()
 
 		expectCopiedWithRelease(contourRelease)
-		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
-		markDaemonSetReady()
+		markDeploymentRolledOut(contourControllerDeployment, contourNamespace)
+		markEnvoyRolledOut()
 
 		expectCopiedWithRelease(externalDNSRelease)
-		markDeploymentAvailable(externalDNSControllerDeploy, externalDNSNamespace)
+		markDeploymentRolledOut(externalDNSControllerDeploy, externalDNSNamespace)
 
 		expectCopiedWithRelease(kyvernoRelease)
 		for _, name := range kyvernoDeployments {
-			markDeploymentAvailable(name, kyvernoNamespace)
+			markDeploymentRolledOut(name, kyvernoNamespace)
 		}
 		Eventually(readyConditionStatus, 45*time.Second, 200*time.Millisecond).
 			Should(Equal(metav1.ConditionTrue))
@@ -1983,8 +2166,8 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Eventually(func() error {
 			return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, &corev1.Namespace{})
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
-		markDaemonSetReady()
+		markDeploymentRolledOut(contourControllerDeployment, contourNamespace)
+		markEnvoyRolledOut()
 
 		Eventually(policyEnforcementReadyCondition, 30*time.Second, 200*time.Millisecond).Should(And(
 			Not(BeNil()),
@@ -2020,7 +2203,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		expectNoReleaseInstalled(helmFac, kyvernoRelease)
 	})
 
-	It("installs Kyverno and reaches Ready once its controllers are Available and its policy kinds are served", func() {
+	It("installs Kyverno and reaches Ready once its controllers have rolled out and its policy kinds are served", func() {
 		// The controllers can be Available before Kyverno's CRDs are
 		// established; start with the policy kinds not yet served.
 		kyvernoDiscovery.SetServed(false)
@@ -2051,7 +2234,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			return k8sClient.Get(ctx, types.NamespacedName{Name: certManagerNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 		for _, name := range certManagerDeployments {
-			markDeploymentAvailable(name, certManagerNamespace)
+			markDeploymentRolledOut(name, certManagerNamespace)
 		}
 		Eventually(func() error {
 			cert := &cmv1.Certificate{}
@@ -2062,17 +2245,23 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ns := &corev1.Namespace{}
 			return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(contourControllerDeployment, contourNamespace)
-		markDaemonSetReady()
+		markDeploymentRolledOut(contourControllerDeployment, contourNamespace)
+		markEnvoyRolledOut()
 
-		// Now wait for Kyverno's namespace to appear, then drive
-		// each of the four controller Deployments to Available.
+		// Now wait for Kyverno's namespace to appear. While the four
+		// controller Deployments' status still describes a previous
+		// spec, Kyverno is not ready; then drive each rollout to
+		// completion.
 		Eventually(func() error {
 			ns := &corev1.Namespace{}
 			return k8sClient.Get(ctx, types.NamespacedName{Name: kyvernoNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 		for _, name := range kyvernoDeployments {
-			markDeploymentAvailable(name, kyvernoNamespace)
+			markDeploymentRollingOut(name, kyvernoNamespace)
+		}
+		expectConditionReasonHeld(conditionPolicyEnforcementReady, "WaitingForKyverno")
+		for _, name := range kyvernoDeployments {
+			markDeploymentRolledOut(name, kyvernoNamespace)
 		}
 
 		Eventually(policyEnforcementReadyCondition, 30*time.Second, 200*time.Millisecond).Should(And(
@@ -2136,7 +2325,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			return k8sClient.Get(ctx, types.NamespacedName{Name: certManagerNamespace}, ns)
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 		for _, name := range certManagerDeployments {
-			markDeploymentAvailable(name, certManagerNamespace)
+			markDeploymentRolledOut(name, certManagerNamespace)
 		}
 
 		Eventually(func(g Gomega) {

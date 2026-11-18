@@ -39,6 +39,10 @@ const (
 	// OperatorReleaseName is the helm release name.
 	OperatorReleaseName = "educates-installer"
 
+	// OperatorDeploymentName is the operator Deployment the chart
+	// installs in OperatorNamespace (templates/deployment.yaml).
+	OperatorDeploymentName = "educates-installer"
+
 	// DefaultTimeout caps the wait on each CR's Ready=True condition.
 	DefaultTimeout = 5 * time.Minute
 )
@@ -56,7 +60,8 @@ type Options struct {
 	// HelmLog receives helm SDK debug output. io.Discard by default.
 	HelmLog io.Writer
 
-	// Timeout overrides DefaultTimeout per CR wait.
+	// Timeout overrides DefaultTimeout per CR wait, and bounds the
+	// wait for the operator Deployment to roll out.
 	Timeout time.Duration
 
 	// SkipCRDApply bypasses the operator CRD apply step. The default
@@ -90,7 +95,9 @@ type Options struct {
 // Deploy executes the install pipeline against the cluster reachable
 // via opts.Getter:
 //
-//  1. Helm install/upgrade the operator chart in the operator namespace.
+//  1. Helm install/upgrade the operator chart in the operator namespace,
+//     and wait for the operator Deployment to roll out, so the operator
+//     the chart names is the one that reconciles what follows.
 //  2. Apply EducatesClusterConfig → wait Ready.
 //  3. Apply SecretsManager → wait Ready.
 //  4. Apply LookupService (if present) → wait Ready.
@@ -98,8 +105,12 @@ type Options struct {
 //  6. Point the loopback service of a local cluster, when it has one, at
 //     the ingress domain.
 //
-// Returns the last LookupService/SessionManager objects observed so the
-// caller can print URLs from .status.
+// Each wait on Ready accepts only a Ready condition the operator
+// concluded for the generation the apply produced: on a redeploy that
+// changes a resource, the condition from its previous spec is still
+// there until the operator reconciles the new one. A redeploy that
+// leaves a resource's spec unchanged keeps its generation, so its wait
+// accepts the Ready condition already there.
 func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 	if opts.Out == nil {
 		opts.Out = io.Discard
@@ -160,6 +171,14 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 		step.Fail(err)
 		return err
 	}
+	// Helm doesn't wait for the operator to roll out, and the Deployment
+	// replaces its pod (Recreate): until the rollout is done, the
+	// operator of the previous install, or none, would reconcile the
+	// resources applied next.
+	if err := waiter.WaitRolledOut(ctx, OperatorNamespace, OperatorDeploymentName, opts.Timeout, step.Update); err != nil {
+		step.Fail(err)
+		return err
+	}
 	step.Done("")
 
 	// 3. Apply EducatesClusterConfig + wait.
@@ -204,10 +223,11 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", t.label, err)
 		}
-		if _, err := applier.Apply(ctx, u); err != nil {
+		applied, err := applier.Apply(ctx, u)
+		if err != nil {
 			return fmt.Errorf("apply %s: %w", t.label, err)
 		}
-		objs[i] = u
+		objs[i] = applied
 	}
 
 	// Wait on all concurrently, each reporting to its own line in the group.
@@ -223,8 +243,8 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			u, step := objs[i], steps[i]
-			if _, err := waiter.WaitReadyWithPhase(ctx, u.GroupVersionKind(), u.GetNamespace(), u.GetName(), opts.Timeout, step.Update); err != nil {
+			step := steps[i]
+			if _, err := waiter.WaitReady(ctx, objs[i], opts.Timeout, step.Update); err != nil {
 				step.Fail(err)
 				errs[i] = err
 				return
@@ -260,12 +280,13 @@ func installStep(ctx context.Context, opts Options, applier *apply.Client, waite
 	}
 	step := opts.Progress.Start("Installing " + label)
 	step.Update("applying")
-	if _, err := applier.Apply(ctx, u); err != nil {
+	applied, err := applier.Apply(ctx, u)
+	if err != nil {
 		err = explainApplyRejection(err)
 		step.Fail(err)
 		return nil, err
 	}
-	ready, err := waiter.WaitReadyWithPhase(ctx, u.GroupVersionKind(), u.GetNamespace(), u.GetName(), opts.Timeout, step.Update)
+	ready, err := waiter.WaitReady(ctx, applied, opts.Timeout, step.Update)
 	if err != nil {
 		step.Fail(err)
 		return nil, err

@@ -162,12 +162,158 @@ func ingressCAChartRef() map[string]any {
 	return map[string]any{"name": "educates-ingress-ca", "namespace": "educates-installer"}
 }
 
-// markDeploymentAvailable creates (if missing) and patches the named
-// Deployment to Available=True. envtest has no controllers, so specs
-// drive the transition manually.
-func markDeploymentAvailable(name string) {
-	namespace := platformNamespace
+// markDeploymentRolledOut creates (if missing) the named Deployment and
+// gives it the status of a completed rollout: its spec observed, and
+// its one replica updated and available. envtest has no controllers, so
+// specs drive the transition manually.
+func markDeploymentRolledOut(name string) {
 	GinkgoHelper()
+	setDeploymentStatus(name, rolledOutDeploymentStatus)
+}
+
+// markDeploymentRollingOut creates (if missing) the named Deployment and
+// gives it the status it has right after a Helm upgrade changed its
+// spec: the deployment controller hasn't observed the new spec yet, so
+// the status still describes the previous one, rolled out and
+// Available.
+func markDeploymentRollingOut(name string) {
+	GinkgoHelper()
+	setDeploymentStatus(name, func(generation int64) appsv1.DeploymentStatus {
+		return rolledOutDeploymentStatus(generation - 1)
+	})
+}
+
+// rolledOutDeploymentStatus is the status of a one-replica Deployment
+// that has rolled out the spec of observedGeneration.
+func rolledOutDeploymentStatus(observedGeneration int64) appsv1.DeploymentStatus {
+	return appsv1.DeploymentStatus{
+		ObservedGeneration: observedGeneration,
+		Replicas:           1,
+		UpdatedReplicas:    1,
+		ReadyReplicas:      1,
+		AvailableReplicas:  1,
+		Conditions: []appsv1.DeploymentCondition{{
+			Type:   appsv1.DeploymentAvailable,
+			Status: corev1.ConditionTrue,
+		}},
+	}
+}
+
+// markDaemonSetRolledOut creates (if missing) the named DaemonSet and
+// gives it the status of a completed rollout on one node.
+func markDaemonSetRolledOut(name string) {
+	GinkgoHelper()
+	setDaemonSetStatus(name, rolledOutDaemonSetStatus)
+}
+
+// markDaemonSetRollingOut creates (if missing) the named DaemonSet and
+// gives it the status it has right after a Helm upgrade changed its
+// spec: the status still describes the previous spec, with its pod
+// ready and available.
+func markDaemonSetRollingOut(name string) {
+	GinkgoHelper()
+	setDaemonSetStatus(name, func(generation int64) appsv1.DaemonSetStatus {
+		return rolledOutDaemonSetStatus(generation - 1)
+	})
+}
+
+// rolledOutDaemonSetStatus is the status of a DaemonSet on one node that
+// has rolled out the spec of observedGeneration.
+func rolledOutDaemonSetStatus(observedGeneration int64) appsv1.DaemonSetStatus {
+	return appsv1.DaemonSetStatus{
+		ObservedGeneration:     observedGeneration,
+		DesiredNumberScheduled: 1,
+		CurrentNumberScheduled: 1,
+		UpdatedNumberScheduled: 1,
+		NumberReady:            1,
+		NumberAvailable:        1,
+	}
+}
+
+// setDaemonSetStatus creates (if missing) the named DaemonSet in the
+// platform namespace and sets its status to what status returns for the
+// DaemonSet's generation.
+func setDaemonSetStatus(name string, status func(generation int64) appsv1.DaemonSetStatus) {
+	GinkgoHelper()
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: platformNamespace},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": name},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": name}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "c", Image: "stub:latest"}},
+				},
+			},
+		},
+	}
+	err := k8sClient.Create(ctx, ds)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: platformNamespace, Name: name}, ds)).To(Succeed())
+	ds.Status = status(ds.Generation)
+	Expect(k8sClient.Status().Update(ctx, ds)).To(Succeed())
+}
+
+// markNodeNotReadyReady turns the node addDaemonSetPodOnNodeNotReady made
+// Ready again, its pod still unavailable: a change only the Node watch
+// reports, since the DaemonSet's status stays as it was.
+func markNodeNotReadyReady() {
+	GinkgoHelper()
+	node := &corev1.Node{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "node-not-ready"}, node)).To(Succeed())
+	node.Status.Conditions = []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}
+	Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+}
+
+// addDaemonSetPodOnNodeNotReady stands in for a node that has gone not
+// Ready: it creates a Node whose Ready condition is False, carrying an
+// unavailable pod of the named DaemonSet in the platform namespace, and
+// removes both when the spec ends. envtest runs no kubelet or node
+// controller.
+func addDaemonSetPodOnNodeNotReady(name string) {
+	GinkgoHelper()
+	nodeName := "node-not-ready"
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}
+	Expect(k8sClient.Create(ctx, node)).To(Succeed())
+	node.Status.Conditions = []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionFalse}}
+	Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+	DeferCleanup(func() { _ = k8sClient.Delete(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}) })
+
+	ds := &appsv1.DaemonSet{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: platformNamespace, Name: name}, ds)).To(Succeed())
+	controller := true
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name + "-on-" + nodeName, Namespace: platformNamespace,
+			Labels: ds.Spec.Selector.MatchLabels,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "apps/v1", Kind: "DaemonSet", Name: ds.Name, UID: ds.UID, Controller: &controller,
+			}},
+		},
+		Spec: corev1.PodSpec{
+			NodeName:   nodeName,
+			Containers: []corev1.Container{{Name: "c", Image: "stub:latest"}},
+		},
+	}
+	Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+	pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionFalse}}
+	Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+	DeferCleanup(func() {
+		_ = k8sClient.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: platformNamespace}},
+			client.GracePeriodSeconds(0))
+	})
+}
+
+// setDeploymentStatus creates (if missing) the named Deployment in the
+// platform namespace and sets its status to what status returns for
+// the Deployment's generation.
+func setDeploymentStatus(name string, status func(generation int64) appsv1.DeploymentStatus) {
+	GinkgoHelper()
+	namespace := platformNamespace
 	one := int32(1)
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -189,12 +335,7 @@ func markDeploymentAvailable(name string) {
 		Expect(err).NotTo(HaveOccurred())
 	}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, dep)).To(Succeed())
-	dep.Status = appsv1.DeploymentStatus{
-		Conditions: []appsv1.DeploymentCondition{{
-			Type:   appsv1.DeploymentAvailable,
-			Status: corev1.ConditionTrue,
-		}},
-	}
+	dep.Status = status(dep.Generation)
 	Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
 }
 
@@ -207,9 +348,9 @@ func ensureNamespace(name string) {
 	}
 }
 
-func smReadyStatus(name string) metav1.ConditionStatus {
+func smReadyStatus() metav1.ConditionStatus {
 	got := &platformv1alpha1.SecretsManager{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: name}, got); err != nil {
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, got); err != nil {
 		return metav1.ConditionUnknown
 	}
 	c := meta.FindStatusCondition(got.Status.Conditions, conditionReady)
@@ -242,6 +383,7 @@ var _ = Describe("SecretsManager reconciler", func() {
 
 		Expect((&SecretsManagerReconciler{
 			Client:        mgr.GetClient(),
+			APIReader:     mgr.GetAPIReader(),
 			Scheme:        mgr.GetScheme(),
 			HelmClientFor: helmFac.For,
 		}).SetupWithManager(mgr)).To(Succeed())
@@ -289,10 +431,10 @@ var _ = Describe("SecretsManager reconciler", func() {
 			return c.Reason
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("ClusterConfigNotReady"))
 
-		Expect(smReadyStatus(singletonName)).To(Equal(metav1.ConditionFalse))
+		Expect(smReadyStatus()).To(Equal(metav1.ConditionFalse))
 	})
 
-	It("installs the chart and reaches Ready=True when the Deployment is Available", func() {
+	It("installs the chart and reaches Ready=True when the Deployment has rolled out", func() {
 		makeReadyClusterConfig()
 
 		sm := &platformv1alpha1.SecretsManager{
@@ -313,11 +455,11 @@ var _ = Describe("SecretsManager reconciler", func() {
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 
 		// envtest has no Deployment controller, so simulate the
-		// upstream secrets-manager Deployment becoming Available.
-		markDeploymentAvailable(secretsManagerDeploymentName)
+		// upstream secrets-manager Deployment rolling out.
+		markDeploymentRolledOut(secretsManagerDeploymentName)
 
 		Eventually(func() metav1.ConditionStatus {
-			return smReadyStatus(singletonName)
+			return smReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 
 		got := &platformv1alpha1.SecretsManager{}
@@ -327,6 +469,36 @@ var _ = Describe("SecretsManager reconciler", func() {
 		Expect(got.Status.DeploymentRef).NotTo(BeNil())
 		Expect(got.Status.DeploymentRef.Namespace).To(Equal(platformNamespace))
 		Expect(got.Status.DeploymentRef.Name).To(Equal(secretsManagerDeploymentName))
+	})
+
+	It("keeps Ready=False until the Deployment has rolled out its spec", func() {
+		makeReadyClusterConfig()
+
+		sm := &platformv1alpha1.SecretsManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec:       platformv1alpha1.SecretsManagerSpec{},
+		}
+		Expect(k8sClient.Create(ctx, sm)).To(Succeed())
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(secretsManagerReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		// Available=True here describes the replica of the previous
+		// spec, which the rollout is about to replace.
+		markDeploymentRollingOut(secretsManagerDeploymentName)
+		Consistently(func() metav1.ConditionStatus {
+			return smReadyStatus()
+		}, 3*time.Second, 200*time.Millisecond).ShouldNot(Equal(metav1.ConditionTrue))
+
+		markDeploymentRolledOut(secretsManagerDeploymentName)
+		Eventually(func() metav1.ConditionStatus {
+			return smReadyStatus()
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 	})
 
 	// A changed or removed spec.imageRegistry reaches the runtime only
@@ -456,9 +628,9 @@ var _ = Describe("SecretsManager reconciler", func() {
 			_, err = hc.Status(secretsManagerReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(secretsManagerDeploymentName)
+		markDeploymentRolledOut(secretsManagerDeploymentName)
 		Eventually(func() metav1.ConditionStatus {
-			return smReadyStatus(singletonName)
+			return smReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 
 		// Trigger the finalizer drain.

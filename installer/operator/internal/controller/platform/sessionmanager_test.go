@@ -218,6 +218,7 @@ var _ = Describe("SessionManager reconciler", func() {
 		}
 		_ = k8sClient.DeleteAllOf(ctx, &configv1alpha1.EducatesClusterConfig{})
 		_ = k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, client.InNamespace(platformNamespace))
+		_ = k8sClient.DeleteAllOf(ctx, &appsv1.DaemonSet{}, client.InNamespace(platformNamespace))
 		_ = k8sClient.DeleteAllOf(ctx, &corev1.Secret{}, client.InNamespace(testOperatorNamespace))
 		_ = k8sClient.DeleteAllOf(ctx, &corev1.Secret{}, client.InNamespace(testCAOverrideNamespace))
 	})
@@ -489,7 +490,7 @@ var _ = Describe("SessionManager reconciler", func() {
 		}, 10*time.Second, 200*time.Millisecond).Should(Equal("SecretsManagerReady"))
 	})
 
-	It("installs the chart and reaches Ready when both gates pass + Deployment Available", func() {
+	It("installs the chart and reaches Ready when both gates pass and the Deployment has rolled out", func() {
 		makeReadyClusterConfig()
 		makeReadySecretsManager()
 
@@ -508,7 +509,7 @@ var _ = Describe("SessionManager reconciler", func() {
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 
-		markDeploymentAvailable(sessionManagerDeploymentName)
+		markDeploymentRolledOut(sessionManagerDeploymentName)
 
 		Eventually(func() metav1.ConditionStatus {
 			return smgrReadyStatus()
@@ -521,6 +522,37 @@ var _ = Describe("SessionManager reconciler", func() {
 		Expect(got.Status.DeploymentRef).NotTo(BeNil())
 		Expect(got.Status.DeploymentRef.Namespace).To(Equal(platformNamespace))
 		Expect(got.Status.DeploymentRef.Name).To(Equal(sessionManagerDeploymentName))
+	})
+
+	It("keeps Ready=False until the Deployment has rolled out its spec", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+
+		smgr := &platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec:       platformv1alpha1.SessionManagerSpec{},
+		}
+		Expect(k8sClient.Create(ctx, smgr)).To(Succeed())
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(sessionManagerReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		// Available=True here describes the replica of the previous
+		// spec, which the rollout is about to replace.
+		markDeploymentRollingOut(sessionManagerDeploymentName)
+		Consistently(func() metav1.ConditionStatus {
+			return smgrReadyStatus()
+		}, 3*time.Second, 200*time.Millisecond).ShouldNot(Equal(metav1.ConditionTrue))
+
+		markDeploymentRolledOut(sessionManagerDeploymentName)
+		Eventually(func() metav1.ConditionStatus {
+			return smgrReadyStatus()
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 	})
 
 	It("upgrades the subchart's stale CRDs to the chart's schemas", func() {
@@ -731,7 +763,7 @@ var _ = Describe("SessionManager reconciler", func() {
 			_, err = hc.Status(sessionManagerReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(sessionManagerDeploymentName)
+		markDeploymentRolledOut(sessionManagerDeploymentName)
 		Eventually(func() metav1.ConditionStatus {
 			return smgrReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
@@ -772,7 +804,7 @@ var _ = Describe("SessionManager reconciler", func() {
 			_, err = hc.Status(sessionManagerReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(sessionManagerDeploymentName)
+		markDeploymentRolledOut(sessionManagerDeploymentName)
 	}
 
 	extraConditionReason := func(condType string) string {
@@ -785,6 +817,15 @@ var _ = Describe("SessionManager reconciler", func() {
 			return ""
 		}
 		return c.Reason
+	}
+
+	// markNodeCAInjectorRolledOut stands in for the node-ca-injector
+	// release's workloads rolling out, which envtest has no controllers
+	// for.
+	markNodeCAInjectorRolledOut := func() {
+		GinkgoHelper()
+		markDeploymentRolledOut(nodeCAInjectorControllerDeploymentName)
+		markDaemonSetRolledOut(nodeCAInjectorDaemonSetName)
 	}
 
 	It("nodeCATrust Auto installs when ECC publishes a CA cert ref", func() {
@@ -805,6 +846,7 @@ var _ = Describe("SessionManager reconciler", func() {
 			rel, err = hc.Status(nodeCAInjectorReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+		markNodeCAInjectorRolledOut()
 		Eventually(func() string {
 			return extraConditionReason(conditionNodeCATrustDeployed)
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("Installed"))
@@ -813,6 +855,196 @@ var _ = Describe("SessionManager reconciler", func() {
 		ci, ok := rel.Config["clusterIngress"].(map[string]any)
 		Expect(ok).To(BeTrue(), "clusterIngress missing from node-ca-injector values")
 		Expect(ci["caCertificateRef"]).To(Equal(ingressCAChartRef()))
+	})
+
+	// expectNodeCATrustHeldWaiting waits for NodeCATrustDeployed to
+	// report WaitingForRollout, then checks that it keeps reporting it
+	// and that SessionManager stays not Ready, waiting for its extras.
+	expectNodeCATrustHeldWaiting := func() {
+		GinkgoHelper()
+		Eventually(func() string {
+			return extraConditionReason(conditionNodeCATrustDeployed)
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal("WaitingForRollout"))
+		Consistently(func() bool {
+			return extraConditionReason(conditionNodeCATrustDeployed) == "WaitingForRollout" &&
+				extraConditionReason(conditionReady) == "WaitingForExtras"
+		}, 3*time.Second, 200*time.Millisecond).Should(BeTrue())
+	}
+
+	It("keeps Ready=False until node-ca-injector has rolled out", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		withCAOnClusterConfig()
+
+		driveSessionManagerReady(&platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+		})
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(nodeCAInjectorReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		// Each workload holds node-ca-injector back while its status
+		// still describes a previous spec, Available or not.
+		markDaemonSetRolledOut(nodeCAInjectorDaemonSetName)
+		markDeploymentRollingOut(nodeCAInjectorControllerDeploymentName)
+		expectNodeCATrustHeldWaiting()
+		markDaemonSetRollingOut(nodeCAInjectorDaemonSetName)
+		markDeploymentRolledOut(nodeCAInjectorControllerDeploymentName)
+		expectNodeCATrustHeldWaiting()
+
+		markNodeCAInjectorRolledOut()
+		Eventually(func() string {
+			return extraConditionReason(conditionNodeCATrustDeployed)
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal("Installed"))
+		Eventually(smgrReadyStatus, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
+	})
+
+	// --- Image pre-puller progress ---------------------------------
+
+	imagesPrePulledCondition := func() *metav1.Condition {
+		got := &platformv1alpha1.SessionManager{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, got); err != nil {
+			return nil
+		}
+		return meta.FindStatusCondition(got.Status.Conditions, conditionImagesPrePulled)
+	}
+
+	withImagePrePuller := func() *platformv1alpha1.SessionManager {
+		return &platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec: platformv1alpha1.SessionManagerSpec{
+				ImagePrePuller: &platformv1alpha1.ImagePrePuller{Enabled: true},
+			},
+		}
+	}
+
+	It("reports ImagesPrePulled once the image-puller has pulled every image, without holding Ready back", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		driveSessionManagerReady(withImagePrePuller())
+
+		// The release is installed but no node has pulled anything yet:
+		// the session manager is Ready all the same.
+		Eventually(imagesPrePulledCondition, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionFalse),
+			HaveField("Reason", "Pulling")))
+		Eventually(smgrReadyStatus, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
+
+		imagesPrePulledReason := func() string { return smgrConditionReason(conditionImagesPrePulled) }
+
+		// Pods of a previous spec having pulled their images doesn't
+		// count for the current one, whether the DaemonSet controller
+		// has yet to observe the new spec or the node's pod still runs
+		// the previous list.
+		markDaemonSetRollingOut(imagePullerDaemonSetName)
+		Consistently(imagesPrePulledReason, 3*time.Second, 200*time.Millisecond).Should(Equal("Pulling"))
+		setDaemonSetStatus(imagePullerDaemonSetName, func(generation int64) appsv1.DaemonSetStatus {
+			return appsv1.DaemonSetStatus{
+				ObservedGeneration:     generation,
+				DesiredNumberScheduled: 1,
+				CurrentNumberScheduled: 1,
+				UpdatedNumberScheduled: 0,
+				NumberReady:            1,
+				NumberAvailable:        1,
+			}
+		})
+		Consistently(imagesPrePulledReason, 3*time.Second, 200*time.Millisecond).Should(Equal("Pulling"))
+
+		markDaemonSetRolledOut(imagePullerDaemonSetName)
+		Eventually(imagesPrePulledCondition, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionTrue),
+			HaveField("Reason", "Pulled")))
+		Expect(smgrReadyStatus()).To(Equal(metav1.ConditionTrue))
+
+		// Turning the pre-puller off replaces what it reported.
+		Eventually(func() error {
+			smgr := &platformv1alpha1.SessionManager{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, smgr); err != nil {
+				return err
+			}
+			smgr.Spec.ImagePrePuller.Enabled = false
+			return k8sClient.Update(ctx, smgr)
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+		Eventually(imagesPrePulledReason, 30*time.Second, 200*time.Millisecond).Should(Equal("PrePullerDisabled"))
+	})
+
+	It("reports ImagesPrePulled as NoEligibleNodes when the image-puller runs on no node", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		driveSessionManagerReady(withImagePrePuller())
+
+		// Every node carries a taint the DaemonSet doesn't tolerate.
+		setDaemonSetStatus(imagePullerDaemonSetName, func(generation int64) appsv1.DaemonSetStatus {
+			return appsv1.DaemonSetStatus{ObservedGeneration: generation}
+		})
+		Eventually(imagesPrePulledCondition, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionFalse),
+			HaveField("Reason", "NoEligibleNodes")))
+	})
+
+	It("reports ImagesPrePulled as PrePullerDisabled while the pre-puller is off", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		driveSessionManagerReady(&platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+		})
+
+		Eventually(imagesPrePulledCondition, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionFalse),
+			HaveField("Reason", "PrePullerDisabled")))
+		Eventually(smgrReadyStatus, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
+	})
+
+	It("keeps Ready while the node-ca-injector pod on a node that is not Ready is unavailable, and not once the node is Ready again", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		withCAOnClusterConfig()
+		driveSessionManagerReady(&platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+		})
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(nodeCAInjectorReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+		markNodeCAInjectorRolledOut()
+		Eventually(smgrReadyStatus, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
+
+		// A second node goes not Ready: its node-ca-injector pod is
+		// unavailable, and the DaemonSet counts one of its two pods
+		// available.
+		addDaemonSetPodOnNodeNotReady(nodeCAInjectorDaemonSetName)
+		setDaemonSetStatus(nodeCAInjectorDaemonSetName, func(generation int64) appsv1.DaemonSetStatus {
+			return appsv1.DaemonSetStatus{
+				ObservedGeneration:     generation,
+				DesiredNumberScheduled: 2,
+				CurrentNumberScheduled: 2,
+				UpdatedNumberScheduled: 2,
+				NumberReady:            1,
+				NumberAvailable:        1,
+			}
+		})
+		Consistently(func() bool {
+			return extraConditionReason(conditionNodeCATrustDeployed) == "Installed" &&
+				smgrReadyStatus() == metav1.ConditionTrue
+		}, 5*time.Second, 200*time.Millisecond).Should(BeTrue())
+
+		markNodeNotReadyReady()
+		Eventually(func() string {
+			return extraConditionReason(conditionNodeCATrustDeployed)
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal("WaitingForRollout"))
 	})
 
 	nodeCAInjectorCACertificateRefValue := caCertificateRefValue(nodeCAInjectorReleaseName)
@@ -841,6 +1073,7 @@ var _ = Describe("SessionManager reconciler", func() {
 
 		Eventually(nodeCAInjectorCACertificateRefValue, 30*time.Second, 200*time.Millisecond).
 			Should(Equal(overrideCAChartRef))
+		markNodeCAInjectorRolledOut()
 		Eventually(func() string {
 			return extraConditionReason(conditionNodeCATrustDeployed)
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("Installed"))
@@ -884,6 +1117,7 @@ var _ = Describe("SessionManager reconciler", func() {
 
 		driveSessionManagerReady(smgr)
 
+		markNodeCAInjectorRolledOut()
 		Eventually(func() string {
 			return extraConditionReason(conditionNodeCATrustDeployed)
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("Installed"))

@@ -458,9 +458,14 @@ type SessionManagerStatus struct {
 	//   - Ready                    (aggregate)
 	//   - ClusterConfigAvailable   (EducatesClusterConfig.Ready gate)
 	//   - SecretsManagerAvailable  (SecretsManager.Ready gate)
-	//   - Deployed                 (session-manager helm release + Deployment Available)
+	//   - KyvernoAvailable         (Kyverno gate; True with reason NotRequired
+	//                               when no effective policy engine is Kyverno)
+	//   - Deployed                 (session-manager Helm release installed; Ready
+	//                               also waits for its Deployment to roll out)
 	//   - NodeCATrustDeployed      (optional extra; reflects mode evaluation outcome)
 	//   - RemoteAccessDeployed     (optional extra; reflects mode evaluation outcome)
+	//   - ImagesPrePulled          (informational; the image pre-puller has pulled
+	//                               every image on every node it runs on)
 	// +listType=map
 	// +listMapKey=type
 	// +optional

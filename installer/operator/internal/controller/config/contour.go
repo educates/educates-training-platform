@@ -22,17 +22,15 @@ import (
 	"fmt"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
 	"github.com/educates/educates-training-platform/installer/operator/internal/podsecurity"
+	"github.com/educates/educates-training-platform/installer/operator/internal/rollout"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -56,9 +54,8 @@ const (
 // standard fullname helper). With release name "contour" and
 // chart name "contour", fullname == "contour", so the final
 // resource names are `contour-contour` (Deployment) and
-// `contour-envoy` (DaemonSet). Readiness is gated on the
-// Deployment reporting Available and the DaemonSet reporting
-// NumberReady >= DesiredNumberScheduled.
+// `contour-envoy` (DaemonSet). Readiness is gated on both having
+// rolled out their current spec.
 const (
 	contourControllerDeployment = "contour-contour"
 	envoyDaemonSet              = "contour-envoy"
@@ -68,12 +65,12 @@ const (
 // when the install is in flight but not yet fully serving. Same
 // shape as errCertManagerNotReady so the phase function can
 // classify cleanly.
-var errContourNotReady = errors.New("contour install not yet Available")
+var errContourNotReady = errors.New("contour install has not rolled out yet")
 
 // reconcileContourPhase runs the Contour install pipeline:
 //
 //  1. helm install/upgrade the vendored Contour chart.
-//  2. Wait for the contour Deployment + envoy DaemonSet to be Ready.
+//  2. Wait for the contour Deployment + envoy DaemonSet to roll out.
 //
 // Contour does NOT install an admission webhook (verified against
 // the vendored chart templates), so there is no cainjector-style
@@ -112,18 +109,15 @@ func (r *EducatesClusterConfigReconciler) reconcileContourPhase(ctx context.Cont
 
 	if err := r.ensureContourReady(ctx); err != nil {
 		if errors.Is(err, errContourNotReady) {
-			r.markIngressProgressing(obj, "WaitingForContour", "contour Deployment + envoy DaemonSet not yet Ready")
+			r.markIngressProgressing(obj, "WaitingForContour", "contour Deployment and envoy DaemonSet have not rolled out yet")
 			r.markManagedPhase(obj, configv1alpha1.ClusterConfigPhaseInstalling)
-			// RequeueAfter is required here: with only one Deployment
-			// + one DaemonSet, Contour's final Available/Ready
-			// transitions produce only ~2 watch events. If this
-			// reconcile observed not-yet-Ready from a cache snapshot
-			// taken a hair before the apiserver-side transition,
-			// the workload watch may not fire again (the workload's
-			// status is now stable) and we'd be stuck. cert-manager
-			// avoids this naturally by staggering 3 Deployments;
-			// Contour can't. 15s of self-poll matches the
-			// WaitingForWebhook pattern.
+			// RequeueAfter as a fallback: with only one Deployment
+			// + one DaemonSet, Contour's final rollout transitions
+			// produce only ~2 watch events, and a missed one would
+			// leave the gate waiting with the workloads' status now
+			// stable. cert-manager has more events behind it by
+			// staggering 3 Deployments; Contour can't. 15s of
+			// self-poll matches the WaitingForWebhook pattern.
 			return false, ctrl.Result{RequeueAfter: 15 * time.Second}, r.updateStatusWithTransitionLog(ctx, obj)
 		}
 		return phaseStop(ctrl.Result{}, err)
@@ -299,42 +293,29 @@ func renderContourValues(obj *configv1alpha1.EducatesClusterConfig) map[string]a
 }
 
 // ensureContourReady gates the rest of the pipeline on Contour's
-// data plane being live. Two checks:
-//
-//  1. The contour Deployment has Available=True. A missing
-//     Deployment (404) maps to "not ready" rather than a hard
-//     error — Helm may not have finished applying manifests yet.
-//  2. The envoy DaemonSet has DesiredNumberScheduled > 0 and
-//     NumberReady >= DesiredNumberScheduled. DaemonSets don't have
-//     an Available condition the way Deployments do; the canonical
-//     "ready" signal is "all desired pods ready". A 0/0 state is
-//     treated as not-ready — a fresh cluster with no node-readiness
-//     hasn't rolled out the DaemonSet yet.
+// data plane being live: the contour Deployment and the envoy DaemonSet
+// have both rolled out their current spec, read uncached (see package
+// rollout). The envoy pod on a node that is not Ready doesn't count:
+// such a node serves no traffic Contour could route. A missing workload
+// (404) maps to "not ready" rather than a hard error — Helm may not have
+// finished applying manifests yet. An envoy DaemonSet no node should run
+// is not ready either: a fresh cluster with no node-readiness hasn't
+// rolled it out.
 func (r *EducatesClusterConfigReconciler) ensureContourReady(ctx context.Context) error {
-	dep := &appsv1.Deployment{}
-	depKey := types.NamespacedName{Namespace: contourNamespace, Name: contourControllerDeployment}
-	if err := r.Get(ctx, depKey, dep); err != nil {
-		if apierrors.IsNotFound(err) {
-			return errContourNotReady
-		}
-		return fmt.Errorf("get Deployment %s: %w", depKey, err)
+	rolledOut, err := r.deploymentsRolledOut(ctx, contourNamespace, contourControllerDeployment)
+	if err != nil {
+		return err
 	}
-	if !deploymentAvailable(dep) {
+	if !rolledOut {
 		return errContourNotReady
 	}
-
-	ds := &appsv1.DaemonSet{}
-	dsKey := types.NamespacedName{Namespace: contourNamespace, Name: envoyDaemonSet}
-	if err := r.Get(ctx, dsKey, ds); err != nil {
-		if apierrors.IsNotFound(err) {
-			return errContourNotReady
-		}
-		return fmt.Errorf("get DaemonSet %s: %w", dsKey, err)
+	rolledOut, err = rollout.DaemonSetCompleteOnReadyNodes(ctx, r.APIReader, contourNamespace, envoyDaemonSet)
+	if err != nil {
+		return err
 	}
-	if ds.Status.DesiredNumberScheduled == 0 || ds.Status.NumberReady < ds.Status.DesiredNumberScheduled {
+	if !rolledOut {
 		return errContourNotReady
 	}
-
 	return nil
 }
 

@@ -588,8 +588,13 @@ New Features
   it was, and the ``SessionManager`` reports ``Ready`` as ``False`` with
   reason ``InstallFailed`` and a message naming the entry. ``enabled`` remains
   the only switch: while it is ``false`` nothing is pulled, and the list can
-  stay in place. See [pre-pulling workshop
-  images](pre-pulling-workshop-images).
+  stay in place. The ``SessionManager`` reports the pre-puller's progress on
+  its ``ImagesPrePulled`` condition, ``True`` with reason ``Pulled`` once
+  every image is pulled on every node the ``image-puller`` daemon set runs on.
+  The condition is informational: neither the ``Ready`` condition of the
+  ``SessionManager`` nor ``educates admin platform deploy`` waits for it,
+  since a workshop session starts without pre-pulled images, only more
+  slowly. See [pre-pulling workshop images](pre-pulling-workshop-images).
 
 * The workshop dashboard has a button at the start of its tabs for collapsing
   the panel holding the workshop instructions out of the way. When the panel
@@ -1737,6 +1742,36 @@ Deprecations
 
 Bugs Fixed
 ----------
+
+* Run against a cluster which already ran Educates, ``educates admin platform
+  deploy`` could report every component ready before the build it deployed
+  had rolled out, so a workshop session requested as soon as the command
+  returned could reach the previous build's session manager, or one which
+  was restarting. The command took the ``Ready`` condition a resource had
+  before the command changed it for the outcome of the change, and applied
+  the resources without waiting for the new Educates operator to replace the
+  old one, while the operator reported a component ready as soon as its
+  deployment was available, even when the available pod was the previous
+  build's. The command now waits for the operator deployment to roll out
+  before it applies the resources, and accepts a resource as ready only once
+  the operator has reconciled the configuration the command applied. The
+  operator reports ``SecretsManager``, ``LookupService`` and
+  ``SessionManager`` ready only once the deployment of the component has
+  rolled out, and ``SessionManager`` only once the ``node-ca-injector``
+  deployment and daemon set have too, when it installs them. Likewise it
+  reports each cluster service it installs, cert-manager, Contour,
+  external-dns and Kyverno, ready only once its deployments, and the Envoy
+  daemon set of Contour, have rolled out. So ``kubectl wait
+  --for=condition=Ready`` after a change to the resource also waits for the
+  new pods. For the ``node-ca-injector`` and Envoy daemon sets, a pod which
+  is not available because its node is not ready, or no longer exists, does
+  not count, so such a node does not keep the ``IngressReady`` condition of
+  ``EducatesClusterConfig`` false, nor ``SessionManager`` from reporting
+  ready. During an upgrade it does keep the daemon set from rolling out,
+  since Kubernetes cannot replace that node's pod. A redeploy
+  which leaves a resource unchanged, such as one with a newer release of the
+  command and the same configuration, or an upgrade of the operator chart
+  alone, still accepts the resource's existing ``Ready`` condition.
 
 * ``educates cluster workshop deploy`` could fail with ``the object has been
   modified; please apply your changes to the latest version and try again``

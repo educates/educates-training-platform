@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -45,6 +46,7 @@ import (
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
 	"github.com/educates/educates-training-platform/installer/operator/internal/kyverno"
 	"github.com/educates/educates-training-platform/installer/operator/internal/platformnamespace"
+	"github.com/educates/educates-training-platform/installer/operator/internal/rollout"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -73,6 +75,12 @@ const (
 	// when nodeCATrust resolves to Install.
 	nodeCAInjectorReleaseName = "node-ca-injector"
 
+	// nodeCAInjectorControllerDeploymentName and
+	// nodeCAInjectorDaemonSetName match the node-ca-injector chart
+	// template's fixed-name workloads.
+	nodeCAInjectorControllerDeploymentName = "node-ca-injector-controller"
+	nodeCAInjectorDaemonSetName            = "node-ca-injector"
+
 	// remoteAccessReleaseName is the Helm release name for the
 	// optional remote-access subchart installed by SessionManager when
 	// remoteAccess resolves to Install.
@@ -80,10 +88,22 @@ const (
 
 	// conditionNodeCATrustDeployed and conditionRemoteAccessDeployed
 	// report the outcome of each optional install. Status=True with
-	// reason `Installed` or `Skipped`; Status=False with reason
-	// `Refused` when an explicit Enabled fails its prerequisite check.
+	// reason `Installed`; Status=False with the mode resolver's reason
+	// when the extra is skipped or refused, or with `ReleaseFailed`,
+	// `RepairingRelease` or `WaitingForRollout` while an installed extra
+	// is not running.
 	conditionNodeCATrustDeployed  = "NodeCATrustDeployed"
 	conditionRemoteAccessDeployed = "RemoteAccessDeployed"
+
+	// conditionImagesPrePulled reports whether the image pre-puller has
+	// pulled every image on every node its DaemonSet runs on. It is
+	// informational: Ready does not wait for it, since sessions start
+	// without pre-pulled images, only more slowly.
+	conditionImagesPrePulled = "ImagesPrePulled"
+
+	// imagePullerDaemonSetName matches the session-manager chart
+	// template's fixed-name image pre-puller DaemonSet.
+	imagePullerDaemonSetName = "image-puller"
 
 	// conditionKyvernoAvailable is the third gate. Status=True with
 	// reason `KyvernoServed`, or `NotRequired` when no effective policy
@@ -101,7 +121,11 @@ type SessionManagerReconciler struct {
 
 	// APIReader is an uncached reader for the CA override's Secret,
 	// which may live in a namespace outside the operator's Secret
-	// cache. Production wiring uses mgr.GetAPIReader().
+	// cache, and for the workloads the reconciler reports on, read
+	// straight after the Helm upgrade that wrote them: the
+	// session-manager and node-ca-injector Deployments and the
+	// node-ca-injector and image-puller DaemonSets. Production wiring
+	// uses mgr.GetAPIReader().
 	APIReader client.Reader
 
 	// OperatorNamespace is where the reconciler writes the key-free copy
@@ -126,6 +150,9 @@ type SessionManagerReconciler struct {
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=sessionmanagers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=secretsmanagers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=lookupservices,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 // Secrets: read the CA override's Secret in any namespace and write its
 // key-free copy, educates-session-manager-ingress-ca, in the operator
@@ -179,6 +206,10 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, err
 		}
 	}
+
+	// Informational, so ahead of the gates: every status write below
+	// carries the current pre-pull progress.
+	r.reportImagesPrePulled(ctx, obj)
 
 	// Gate 1: EducatesClusterConfig.Ready
 	cfg, ready, err := r.clusterConfigReadySM(ctx)
@@ -242,13 +273,13 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		fmt.Sprintf("session-manager chart %s installed in namespace %s",
 			vendoredcharts.SessionManagerChartVersion, platformNamespace))
 
-	avail, err := r.deploymentAvailableSM(ctx)
+	rolledOut, err := rollout.DeploymentComplete(ctx, r.APIReader, platformNamespace, sessionManagerDeploymentName)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("read session-manager Deployment: %w", err)
 	}
-	if !avail {
+	if !rolledOut {
 		r.markSMReady(obj, metav1.ConditionFalse, "WaitingForDeployment",
-			"session-manager Deployment not yet Available")
+			"session-manager Deployment has not rolled out yet")
 		r.markSMPhase(obj, platformv1alpha1.ComponentPhaseInstalling)
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, r.updateSMStatusWithTransitionLog(ctx, obj)
 	}
@@ -261,10 +292,8 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Optional extras: node-ca-injector and remote-access. These ride
 	// on the main install lifecycle but each has its own tri-state
-	// (Auto|Enabled|Disabled) and prerequisite check. Refuse outcomes
-	// (Enabled + missing prerequisite) demote the aggregate Ready to
-	// False so the user notices their misconfiguration; Skip /
-	// Install outcomes leave Ready=True.
+	// (Auto|Enabled|Disabled) and prerequisite check; readinessWithExtras
+	// folds their outcomes into the aggregate Ready.
 	nctIntent, nctReason, nctMessage := resolveNodeCATrust(obj, cfg)
 	nctOut, err := r.reconcileExtra(ctx, obj,
 		conditionNodeCATrustDeployed,
@@ -273,6 +302,7 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		func(sm *platformv1alpha1.SessionManager, cc *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
 			return renderNodeCAInjectorValues(sm, cc, r.OperatorNamespace, imageRegistryNamespace)
 		},
+		r.nodeCAInjectorRolledOut,
 		cfg, nctIntent, nctReason, nctMessage,
 	)
 	if err != nil {
@@ -291,6 +321,7 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		remoteAccessReleaseName,
 		vendoredcharts.RemoteAccess,
 		renderRemoteAccessValues,
+		nil, // the remote-access release runs no workload
 		cfg, raIntent, raReason, raMessage,
 	)
 	if err != nil {
@@ -301,32 +332,17 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// A mid-repair rollback on either extra needs a requeue to drive its
-	// follow-up upgrade — neither the CR nor the component Deployment emits
-	// a watch event for it.
+	// follow-up upgrade — neither the CR nor the component Deployment
+	// emits a watch event for it. A rolling-out extra's requeue is a
+	// fallback to the watches on its workloads.
 	requeueAfter := max(nctOut.requeueAfter, raOut.requeueAfter)
 
-	// Refuse outcomes (user wrote Mode=Enabled but the prerequisite is
-	// missing) and not-ready outcomes (an extra is wanted but its release is
-	// failed or mid-repair) both downgrade the aggregate Ready so the problem
-	// is surfaced even though the main install succeeded. A Refuse keeps the
-	// existing reason; a failed/repairing release reports ExtraNotReady.
-	refused := nctIntent == intentRefuse || raIntent == intentRefuse
-	if refused || nctOut.notReady || raOut.notReady {
-		reason, message := "ExtraNotReady",
-			"one or more optional extras is not ready (failed or mid-repair release); see per-component conditions"
-		if refused {
-			reason, message = "ExtraRefused",
-				"one or more optional extras is Mode=Enabled with a missing prerequisite; see per-component conditions"
-		}
-		r.markSMReady(obj, metav1.ConditionFalse, reason, message)
-		r.markSMPhase(obj, platformv1alpha1.ComponentPhaseDegraded)
-		obj.Status.ObservedGeneration = obj.Generation
-		return ctrl.Result{RequeueAfter: requeueAfter}, r.updateSMStatusWithTransitionLog(ctx, obj)
-	}
-
-	r.markSMReady(obj, metav1.ConditionTrue, "SessionManagerReady",
-		"session-manager is installed and Available")
-	r.markSMPhase(obj, platformv1alpha1.ComponentPhaseReady)
+	readiness := readinessWithExtras(
+		[]extrasIntent{nctIntent, raIntent},
+		[]extraOutcome{nctOut, raOut},
+	)
+	r.markSMReady(obj, readiness.status, readiness.reason, readiness.message)
+	r.markSMPhase(obj, readiness.phase)
 	obj.Status.ObservedGeneration = obj.Generation
 	return ctrl.Result{RequeueAfter: requeueAfter}, r.updateSMStatusWithTransitionLog(ctx, obj)
 }
@@ -877,23 +893,6 @@ func validateSessionManagerSpec(obj *platformv1alpha1.SessionManager) error {
 	return nil
 }
 
-func (r *SessionManagerReconciler) deploymentAvailableSM(ctx context.Context) (bool, error) {
-	dep := &appsv1.Deployment{}
-	key := types.NamespacedName{Namespace: platformNamespace, Name: sessionManagerDeploymentName}
-	if err := r.Get(ctx, key, dep); err != nil {
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	for _, c := range dep.Status.Conditions {
-		if c.Type == appsv1.DeploymentAvailable {
-			return c.Status == corev1.ConditionTrue, nil
-		}
-	}
-	return false, nil
-}
-
 func (r *SessionManagerReconciler) cleanupSM(ctx context.Context) error {
 	_ = ctx
 	log := logf.FromContext(ctx)
@@ -1002,7 +1001,12 @@ func (r *SessionManagerReconciler) updateSMStatusWithTransitionLog(ctx context.C
 //   - SecretsManager (cross-CR gate 2).
 //   - LookupService (Auto-mode signal for remoteAccess: presence
 //     of a LookupService CR causes Auto to install remote-access).
-//   - apps/v1 Deployment, narrowed to platform-ns + session-manager.
+//   - apps/v1 Deployment, narrowed to platform-ns + session-manager
+//     and node-ca-injector-controller.
+//   - apps/v1 DaemonSet, narrowed to platform-ns + node-ca-injector
+//     and image-puller.
+//   - Node, narrowed to a node turning Ready or not, which changes
+//     which node-ca-injector pods count towards Ready.
 //   - Secret, narrowed to the CA override's source and its key-free
 //     copy. Events arrive only from the namespaces the operator's
 //     Secret cache covers.
@@ -1025,6 +1029,11 @@ func (r *SessionManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(mapLookupServiceToSessionManager)).
 		Watches(&appsv1.Deployment{},
 			handler.EnqueueRequestsFromMapFunc(mapSessionManagerDeployment)).
+		Watches(&appsv1.DaemonSet{},
+			handler.EnqueueRequestsFromMapFunc(mapSessionManagerDaemonSet)).
+		Watches(&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(mapNodeToSessionManager),
+			builder.WithPredicates(nodeReadinessChanged())).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.mapSecretToSessionManager)).
 		Named("platform-sessionmanager").
@@ -1060,8 +1069,56 @@ func mapLookupServiceToSessionManager(_ context.Context, obj client.Object) []re
 }
 
 func mapSessionManagerDeployment(_ context.Context, obj client.Object) []reconcile.Request {
-	if obj.GetNamespace() != platformNamespace || obj.GetName() != sessionManagerDeploymentName {
+	if obj.GetNamespace() != platformNamespace {
 		return nil
 	}
+	switch obj.GetName() {
+	case sessionManagerDeploymentName, nodeCAInjectorControllerDeploymentName:
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: singletonName}}}
+	}
+	return nil
+}
+
+// mapNodeToSessionManager maps a node turning Ready or not to the
+// singleton: the node-ca-injector pod on a node that is not Ready doesn't
+// count towards Ready, and a node turning Ready again with its pod still
+// down changes nothing in the DaemonSet's status.
+func mapNodeToSessionManager(_ context.Context, _ client.Object) []reconcile.Request {
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: singletonName}}}
+}
+
+// nodeReadinessChanged passes only a node update that turns it Ready or
+// not, so node heartbeats don't reconcile the singleton. A node joining or
+// leaving changes the DaemonSet's status, whose watch covers it.
+func nodeReadinessChanged() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return false },
+		DeleteFunc:  func(event.DeleteEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldNode, ok := e.ObjectOld.(*corev1.Node)
+			if !ok {
+				return false
+			}
+			newNode, ok := e.ObjectNew.(*corev1.Node)
+			if !ok {
+				return false
+			}
+			return rollout.NodeReady(oldNode) != rollout.NodeReady(newNode)
+		},
+	}
+}
+
+// mapSessionManagerDaemonSet maps the DaemonSets SessionManager reports
+// on to the singleton: node-ca-injector, whose rollout gates Ready, and
+// the image pre-puller, whose rollout sets ImagesPrePulled.
+func mapSessionManagerDaemonSet(_ context.Context, obj client.Object) []reconcile.Request {
+	if obj.GetNamespace() != platformNamespace {
+		return nil
+	}
+	switch obj.GetName() {
+	case nodeCAInjectorDaemonSetName, imagePullerDaemonSetName:
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: singletonName}}}
+	}
+	return nil
 }

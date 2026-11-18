@@ -385,6 +385,27 @@ on how many nodes:
 kubectl get daemonset image-puller -n educates
 ```
 
+The ``SessionManager`` reports the pre-puller's progress on its
+``ImagesPrePulled`` condition. It is ``True``, with reason ``Pulled``, once
+every image is pulled on every node the DaemonSet runs on. It is ``False``
+with reason ``Pulling`` while any of those nodes has not pulled every image of
+the current list: before the DaemonSet exists, while a node is still pulling,
+including after a change to the list or an upgrade of Educates, and while a
+node is not ready, since the DaemonSet still counts that node. It is ``False``
+with reason ``NoEligibleNodes`` when every node carries a taint the DaemonSet
+does not tolerate, and with reason ``PrePullerDisabled`` while the pre-puller
+is off. It is ``Unknown``, with reason ``DaemonSetUnreadable``, when the
+operator cannot read the DaemonSet. To read it:
+
+```
+kubectl get sessionmanager cluster \
+  -o jsonpath='{.status.conditions[?(@.type=="ImagesPrePulled")]}'
+```
+
+The condition is informational. The session manager's ``Ready`` condition does
+not wait for it, and neither does ``educates admin platform deploy``, since a
+workshop session starts without pre-pulled images, only more slowly.
+
 ### Choosing the images to pre-pull
 
 The ``images`` field lists further images to pull. Each entry gives exactly
@@ -527,6 +548,16 @@ kubectl get sessionmanager cluster \
 
 With the runtime chart installed without the operator, the same message fails
 the ``helm install`` or ``helm upgrade``.
+
+An image that cannot be pulled, such as a tag that does not exist, or an image
+from a registry a node holds no credentials for, stops that node's
+``image-puller`` pod at the image's init container, and the images after it in
+the list are not pulled on that node. The ``ImagesPrePulled`` condition then
+stays ``False`` with reason ``Pulling``. The pod's events name the image:
+
+```
+kubectl describe pod -n educates -l app=image-puller
+```
 
 ### The pre-puller's own image
 

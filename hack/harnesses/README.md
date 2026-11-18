@@ -9,7 +9,7 @@ run in CI.
 
 | Harness | What it checks |
 |---|---|
-| [session-acceptance](session-acceptance/README.md) | Real workshop sessions, requested from a test portal and walked in Chrome: instruction actions, kubectl inside the workshop container, the console, the SSH tunnel. |
+| [session-acceptance](session-acceptance/README.md) | Real workshop sessions, requested from a test portal and walked in Chrome: instruction actions, kubectl inside the workshop container, the console, the SSH tunnel, and the terminals' copy and paste shortcuts under each platform. |
 
 ## Running a harness on a cluster of its own
 

@@ -265,7 +265,8 @@ New Features
   status and metadata are stripped and the portal password is removed. The
   ``--image-repository`` and ``--workshop-version`` options substitute the
   ``$(image_repository)`` and ``$(workshop_version)`` variables in the
-  exported workshops.
+  exported workshops. The command is also available as the top-level alias
+  ``educates export-portal``, alongside the other training portal aliases.
 
 * ``educates local cluster create`` accepts a ``--kubernetes-version`` flag
   to choose the Kubernetes version of the local Kind cluster. The supported

@@ -258,8 +258,9 @@ New Features
   whether the file declares each mirror.
 
 * The ``educates local mirror`` command group is also available as
-  ``educates local mirrors``, as other command groups are under their
-  plural, such as ``educates cluster portals``.
+  ``educates local mirrors``, and ``educates local secrets`` as
+  ``educates local secret``, so both answer to their singular and their
+  plural, as other command groups such as ``educates cluster portal`` do.
 
 * The ``educates cluster portal export`` command exports a training portal
   and the workshops it references as Kubernetes resource YAML, either to

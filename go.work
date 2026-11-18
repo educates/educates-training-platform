@@ -3,5 +3,6 @@ go 1.26.10
 use (
 	./client-programs/
 	./installer/operator/
+	./lookup-service/
 	./node-ca-injector/
 )

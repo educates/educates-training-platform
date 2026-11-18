@@ -1754,6 +1754,14 @@ Deprecations
 Bugs Fixed
 ----------
 
+* ``educates cluster workshop deploy --open-browser`` waited up to 60
+  seconds for the training portal to report its URL, and when it did not, it
+  went on with an empty URL, waited another five minutes for it to answer,
+  and then asked the operating system to open an empty URL. The command now
+  fails as soon as the 60 seconds pass, saying that the workshop is deployed
+  and that ``educates cluster portal open`` opens the portal once it is
+  ready.
+
 * ``educates local registry prune`` looked the registry container up with a
   Docker name filter, which matches part of a name, and ran the garbage
   collection in the first running container it found. The names of the

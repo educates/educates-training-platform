@@ -624,13 +624,17 @@ func deployWorkshopResource(client dynamic.Interface, workshop *unstructured.Uns
 				return errors.Wrapf(err, "unable to fetch training portal %q in cluster", portal)
 			}
 
-			var found bool
+			targetUrl, _, _ = unstructured.NestedString(trainingPortal.Object, "status", "educates", "url")
 
-			targetUrl, found, _ = unstructured.NestedString(trainingPortal.Object, "status", "educates", "url")
-
-			if found {
+			if targetUrl != "" {
 				break
 			}
+		}
+
+		if targetUrl == "" {
+			fmt.Print("\r              \r")
+
+			return errors.Errorf("training portal %q reported no URL within 60 seconds, so no web browser was opened; the workshop is deployed, and \"educates cluster portal open --portal %s\" opens it once the portal is ready", portal, portal)
 		}
 
 		rootUrl := targetUrl

@@ -1763,11 +1763,11 @@ Removed Features
   the ``--config`` and ``--domain`` options of ``educates local config
   view``, and the ``--domain`` option of ``educates local secrets add ca``
   and ``educates local secrets add tls``. A removed option fails as an
-  unknown flag, and a removed command, as any unknown command of a command
-  group does, shows the help of its group. The migration guide names what
-  replaces each, such as ``educates admin platform render`` and ``educates
-  admin platform deploy --diff`` for ``--dry-run``, and ``educates admin
-  platform export`` for reading the deployed configuration back.
+  unknown flag, and a removed command as an unknown command. The migration
+  guide names what replaces each, such as ``educates admin platform render``
+  and ``educates admin platform deploy --diff`` for ``--dry-run``, and
+  ``educates admin platform export`` for reading the deployed configuration
+  back.
 
 * The CLI binaries are no longer published as the ``educates-client-programs``
   imgpkg bundle. Download the binaries from the GitHub release for the
@@ -1844,6 +1844,13 @@ Deprecations
 
 Bugs Fixed
 ----------
+
+* An unknown command of an ``educates`` command group, such as the mistyped
+  ``educates admin platform deplyo`` or a command removed in this release,
+  printed the help of the group and exited with status 0, so a script
+  running it reported success. It now fails with status 1, saying the
+  command is unknown to the group and suggesting the commands of the group
+  it is close to, as an unknown top-level command already did.
 
 * The help of every ``educates`` command with options showed ``[options]``
   after ``[flags]`` in its usage line, and the help of every command below a

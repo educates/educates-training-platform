@@ -51,6 +51,8 @@ func NewServer(model *config.Model, inv *inventory.Inventory, store *tokens.Stor
 	s.mux.Handle("GET /api/v1/clients", s.loginRequired(rolesAccepted(s.listClients, roleAdmin)))
 	s.mux.Handle("GET /api/v1/clients/{client}", s.loginRequired(rolesAccepted(s.getClient, roleAdmin, roleTenant)))
 
+	s.handleAdminRoutes()
+
 	s.mux.Handle("GET /api/v1/workshops", s.loginRequired(rolesAccepted(s.listWorkshops, roleAdmin, roleTenant)))
 	s.mux.Handle("POST /api/v1/workshops", s.loginRequired(rolesAccepted(s.requestSession, roleAdmin, roleTenant)))
 	s.mux.Handle("GET /api/v1/tenants/{tenant}/workshops",

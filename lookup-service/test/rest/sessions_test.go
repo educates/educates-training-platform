@@ -4,13 +4,17 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/educates/educates-training-platform/lookup-service/internal/service"
 )
 
 var _ = Describe("Session requests", func() {
@@ -146,6 +150,148 @@ var _ = Describe("Session requests", func() {
 		})
 	})
 
+	DescribeTable("fail over to the next candidate within seconds, logging why the portal gave no session",
+		func(behavior portalBehavior, reason string) {
+			sc.replay("auth-login")
+			sc.awaitClusters()
+			portalA.behave(behavior)
+
+			// portal-a, with sessions left under its maximum, ranks before
+			// portal-b, which has no maximum.
+			started := time.Now()
+			Expect(sc.requestSessions("lab-alpha", 1)).To(Equal([]string{"cluster-b"}))
+			Expect(time.Since(started)).To(BeNumerically("<", 2*portalTimeout))
+			Expect(sc.service.logs.Lines()).To(ContainElement(And(
+				ContainSubstring("The portal did not give a session"), ContainSubstring(reason),
+				ContainSubstring("cluster=cluster-a"), ContainSubstring("portal=portal-a"),
+				ContainSubstring("environment=portal-a-w01"))))
+		},
+		Entry("when the portal refuses the request", portalRefuses,
+			`the portal answered 503 Service Unavailable: {"error":"No session available"}`),
+		Entry("when the portal answers an error", portalFails, "the portal answered 500 Internal Server Error"),
+		Entry("when the portal does not answer in time", portalHangs, "the portal did not answer within 2s"),
+		Entry("when the portal cannot be reached", portalUnreachable, "connection refused"),
+	)
+
+	It("answer that the workshop is not available once every candidate failed", func() {
+		sc.replay("auth-login")
+		sc.awaitClusters()
+		portalA.behave(portalRefuses)
+		portalB.behave(portalFails)
+		status, body := sc.requestSession("tenant-all", "lab-alpha", "user-7")
+		Expect(status).To(Equal(http.StatusServiceUnavailable))
+		Expect(body).To(Equal("Workshop not available"))
+		Expect(portalA.receivedRequests()).To(HaveLen(1))
+		Expect(portalB.receivedRequests()).To(HaveLen(1))
+	})
+
+	It("try only the running environments of the workshop, never one with a capacity of 0", func() {
+		sc.replay("auth-login")
+		updateTraining(clusterA, workshopEnvironmentKind, "portal-a-w01", func(environment map[string]any) {
+			Expect(unstructured.SetNestedField(environment, int64(0), "status", "educates", "capacity")).To(Succeed())
+		})
+		updateTraining(clusterA, workshopEnvironmentKind, "portal-a-w02", func(environment map[string]any) {
+			unstructured.RemoveNestedField(environment, "metadata", "labels", "training.educates.dev/portal.workshop")
+		})
+		sc.restart()
+		sc.awaitClusters()
+
+		By("requesting lab-alpha, which portal-b's environment offers under the name its label gives")
+		Expect(sc.requestSessions("lab-alpha", 1)).To(Equal([]string{"cluster-b"}))
+		Expect(portalA.receivedRequests()).To(BeEmpty())
+
+		By("requesting lab-beta, which portal-a's environment without the label offers under its workshop's name")
+		Expect(sc.requestSessions("lab-beta", 1)).To(Equal([]string{"cluster-a"}))
+
+		By("stopping portal-b's environment")
+		updateTraining(clusterB, workshopEnvironmentKind, "portal-b-w01", func(environment map[string]any) {
+			environment["status"].(map[string]any)["educates"].(map[string]any)["phase"] = "Stopping"
+		})
+		Eventually(sc.workshops).WithArguments("tenant-names").WithTimeout(inventoryTimeout).Should(BeEmpty())
+		status, body := sc.requestSession("tenant-all", "lab-alpha", "user-8")
+		Expect(status).To(Equal(http.StatusServiceUnavailable))
+		Expect(body).To(Equal("Workshop not available"))
+		Expect(portalA.receivedRequests()).To(HaveLen(1))
+		Expect(portalB.receivedRequests()).To(HaveLen(1))
+	})
+
+	It("pass the analytics webhook URL to the portal, and no workshop parameters as an empty list", func() {
+		sc.replay("auth-login")
+		sc.awaitClusters()
+		status, body := apiRequest(sc.service.url, http.MethodPost, "/api/v1/workshops", sc.token("tenant-client"),
+			`{"tenantName": "tenant-all", "workshopName": "lab-beta", "clientIndexUrl": "https://sites.example.test/index",`+
+				` "clientUserId": "user-9", "analyticsWebhookUrl": "https://sites.example.test/analytics"}`)
+		Expect(status).To(Equal(http.StatusOK), body)
+		requests := portalA.receivedRequests()
+		Expect(requests).To(HaveLen(1))
+		Expect(requests[0].query.Get("analytics_url")).To(Equal("https://sites.example.test/analytics"))
+		Expect(requests[0].body).To(MatchJSON(`{"parameters": []}`))
+	})
+
+	// The specs of the portal client's caches request lab-beta for one user
+	// again and again, which the portal answers with the user's session.
+	requestBeta := func() {
+		GinkgoHelper()
+		status, body := sc.requestSession("tenant-all", "lab-beta", "user-12")
+		Expect(status).To(Equal(http.StatusOK), body)
+	}
+
+	It("obtain a portal's OAuth token once, and a new one after the portal refuses it", func() {
+		sc.replay("auth-login")
+		sc.awaitClusters()
+		requestBeta()
+		requestBeta()
+		Expect(portalA.receivedTokenRequests()).To(HaveLen(1))
+
+		portalA.revokeTokens()
+		requestBeta()
+		Expect(portalA.receivedTokenRequests()).To(HaveLen(2))
+		// The request the portal refused for its token, and the same again.
+		Expect(portalA.receivedRequests()).To(HaveLen(4))
+	})
+
+	It("read a portal's robot credentials once, and again once its status names another Secret", func() {
+		sc.replay("auth-login")
+		sc.awaitClusters()
+		requestBeta()
+
+		By("changing the robot credentials Secret, which the service has read already")
+		setRobotCredentials(portalA, robotCredentialsSecret, portalA.rotated)
+		DeferCleanup(setRobotCredentials, portalA, robotCredentialsSecret, portalA.credentials)
+		portalA.revokeTokens()
+		requestBeta()
+		Expect(portalA.receivedTokenRequests()[1].clientID).To(Equal(portalA.credentials.clientID))
+
+		By("naming another Secret in the portal's status, with the credentials the portal now accepts")
+		portalA.accept(portalA.rotated)
+		portalA.revokeTokens()
+		updateTraining(clusterA, trainingPortalKind, "portal-a", func(portal map[string]any) {
+			Expect(unstructured.SetNestedField(portal, rotatedCredentialsSecret,
+				"status", "educates", "credentialSecrets", "robot")).To(Succeed())
+		})
+		Eventually(func() int {
+			status, _ := sc.requestSession("tenant-all", "lab-beta", "user-12")
+			return status
+		}).WithTimeout(inventoryTimeout).Should(Equal(http.StatusOK))
+		tokenRequests := portalA.receivedTokenRequests()
+		Expect(tokenRequests[len(tokenRequests)-1].clientID).To(Equal(portalA.rotated.clientID))
+	})
+
+	It("trust a remote portal's certificate only through the ingress CA", func() {
+		sc.adjust = append(sc.adjust, func(options *service.Options) {
+			options.Portals.CAFile = filepath.Join(GinkgoT().TempDir(), "ca.crt")
+		})
+		sc.restart()
+		sc.replay("auth-login")
+		sc.awaitClusters()
+		status, _ := sc.requestSession("tenant-names", "lab-alpha", "user-11")
+		Expect(status).To(Equal(http.StatusServiceUnavailable))
+		Expect(sc.service.logs.Lines()).To(ContainElement(And(
+			ContainSubstring("The portal did not give a session"), ContainSubstring("certificate"),
+			ContainSubstring("cluster=cluster-b"))))
+		Expect(portalB.receivedTokenRequests()).To(BeEmpty())
+	})
+
 	It("answer within seconds when the only portal never answers", func() {
 		sc.replay("auth-login")
 		sc.awaitClusters()
@@ -195,6 +341,16 @@ func (sc *scenario) prepareSpreading(maximumA, maximumB int64) {
 	sc.replay("auth-login")
 }
 
+// requestSession has tenant-client request a session of the workshop for
+// the user through the tenant, and returns the status and body of the
+// answer.
+func (sc *scenario) requestSession(tenant, workshop, user string) (int, string) {
+	GinkgoHelper()
+	return apiRequest(sc.service.url, http.MethodPost, "/api/v1/workshops", sc.token("tenant-client"),
+		`{"tenantName": "`+tenant+`", "workshopName": "`+workshop+`", "clientUserId": "`+user+`", `+
+			`"clientIndexUrl": "https://sites.example.test/index"}`)
+}
+
 // requestSessions has tenant-client request count sessions of the workshop
 // through tenant-all, one after another, each for a user of its own, and
 // returns the cluster each was placed on.
@@ -202,10 +358,7 @@ func (sc *scenario) requestSessions(workshop string, count int) []string {
 	GinkgoHelper()
 	placed := make([]string, 0, count)
 	for range count {
-		user := "user-" + randomToken()[:8]
-		status, body := apiRequest(sc.service.url, http.MethodPost, "/api/v1/workshops", sc.token("tenant-client"),
-			`{"tenantName": "tenant-all", "workshopName": "`+workshop+`", "clientUserId": "`+user+`", `+
-				`"clientIndexUrl": "https://sites.example.test/index"}`)
+		status, body := sc.requestSession("tenant-all", workshop, "user-"+randomToken()[:8])
 		Expect(status).To(Equal(http.StatusOK), body)
 		var response struct {
 			ClusterName string `json:"clusterName"`
@@ -214,6 +367,17 @@ func (sc *scenario) requestSessions(workshop string, count int) []string {
 		placed = append(placed, response.ClusterName)
 	}
 	return placed
+}
+
+// setRobotCredentials makes the portal's robot credentials Secret of that
+// name hold the credentials.
+func setRobotCredentials(p *fakePortal, name string, credentials robotCredentials) {
+	GinkgoHelper()
+	var secret corev1.Secret
+	Expect(p.cluster.client.Get(context.Background(), client.ObjectKey{Namespace: p.namespace, Name: name}, &secret)).
+		To(Succeed())
+	secret.Data = credentials.data()
+	Expect(p.cluster.client.Update(context.Background(), &secret)).To(Succeed())
 }
 
 // activate does what a session's user activating it makes the portal do:

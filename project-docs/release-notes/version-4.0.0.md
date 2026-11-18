@@ -288,8 +288,11 @@ New Features
   ``cluster.nodes`` list declares the cluster's nodes, each with a ``role``
   (``control-plane`` or ``worker``), optional Kubernetes node ``labels``, and
   optional ``taints``, so a laptop cluster can model node pools for workshops
-  that schedule across several nodes. Leaving ``cluster.nodes`` unset keeps
-  the default single control-plane cluster. Every node pulls from the local
+  that schedule across several nodes. Exactly one node has the
+  ``control-plane`` role, since that node publishes ports 80 and 443 on the
+  listen address, and ``educates local cluster create`` refuses a list with
+  none or with more than one. Leaving ``cluster.nodes`` unset keeps the
+  default single control-plane cluster. Every node pulls from the local
   image registry and the local registry mirrors: ``educates local cluster
   create``, ``educates local registry deploy`` and ``educates local mirror
   deploy`` configure each node, and ``educates local mirror delete`` removes

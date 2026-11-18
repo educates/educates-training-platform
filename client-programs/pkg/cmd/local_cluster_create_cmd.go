@@ -453,9 +453,11 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInput
 }
 
 // validateClusterNodes checks a user-declared cluster.nodes list: when set,
-// it must contain at least one control-plane node (kind cannot bootstrap
-// without one) and use only the roles kind understands. An empty list keeps
-// the default single control-plane cluster and needs no validation.
+// it must contain exactly one control-plane node and use only the roles
+// kind understands. kind cannot bootstrap without a control-plane node, and
+// the control-plane node publishes ports 80 and 443 on the listen address,
+// which a second one could not also bind. An empty list keeps the default
+// single control-plane cluster and needs no validation.
 func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
 	if len(nodes) == 0 {
 		return nil
@@ -472,8 +474,11 @@ func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
 		}
 	}
 
-	if controlPlanes == 0 {
-		return fmt.Errorf("cluster.nodes: at least one node must have role \"control-plane\"")
+	switch {
+	case controlPlanes == 0:
+		return fmt.Errorf("cluster.nodes: one node must have role \"control-plane\"")
+	case controlPlanes > 1:
+		return fmt.Errorf("cluster.nodes: %d nodes have role \"control-plane\", but a local cluster has exactly one, as only one node can publish ports 80 and 443 on the listen address; give the other nodes role \"worker\"", controlPlanes)
 	}
 
 	return nil

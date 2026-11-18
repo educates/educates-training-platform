@@ -1,0 +1,41 @@
+name: Lookup Service CI
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'lookup-service/**'
+      - 'installer/charts/educates-training-platform/charts/lookup-service/crds/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - '.github/workflows/lookup-service-ci.yaml'
+  pull_request:
+    paths:
+      - 'lookup-service/**'
+      - 'installer/charts/educates-training-platform/charts/lookup-service/crds/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - '.github/workflows/lookup-service-ci.yaml'
+
+jobs:
+  ci:
+    name: Build, vet, drift, envtest, lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: lookup-service/go.mod
+          cache-dependency-path: |
+            go.work.sum
+            lookup-service/go.sum
+
+      # Single source of truth: `make ci-lookup-service` runs exactly the
+      # checks this job gates: go vet and build, the DeepCopy drift check,
+      # the REST suite against envtest, and golangci-lint. Edit the
+      # Makefile, not this list, so local `make ci` and CI never drift
+      # apart. See developer-docs/build-instructions.md.
+      - name: make ci-lookup-service
+        run: make ci-lookup-service

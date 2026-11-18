@@ -198,16 +198,18 @@ Running CI checks locally
 -------------------------
 
 The GitHub Actions workflows that gate pull requests
-(`.github/workflows/client-programs-ci.yaml` and
-`.github/workflows/installer-operator-ci.yaml`) invoke these same make
+(`.github/workflows/client-programs-ci.yaml`,
+`.github/workflows/installer-operator-ci.yaml` and
+`.github/workflows/lookup-service-ci.yaml`) invoke these same make
 targets, so running them locally exercises exactly what CI runs — there is
 no second copy of the step list to drift out of sync. From the repository
 root:
 
 ```
-make ci             # run all CI checks (CLI + operator)
-make ci-cli         # only the client-programs checks
-make ci-operator    # only the installer-operator checks
+make ci                   # run all CI checks (CLI, operator, Lookup Service)
+make ci-cli               # only the client-programs checks
+make ci-operator          # only the installer-operator checks
+make ci-lookup-service    # only the Lookup Service checks
 ```
 
 `make ci-cli` is what the client-programs workflow runs: it stages the
@@ -226,6 +228,14 @@ leave generated files modified in your working tree — review the diff,
 which is exactly what CI is flagging, and commit it if it is a legitimate
 regeneration.
 
+`make ci-lookup-service` is what the lookup-service workflow runs: it runs
+`go vet` and `go build` against `lookup-service`, the DeepCopy drift check
+(`make -C lookup-service generate` followed by a `git diff`), the test
+suites (`make -C lookup-service test`), among them the REST suite, which
+runs the service in process against envtest and compares its responses
+with the golden responses under `lookup-service/testdata/golden`, and
+`golangci-lint` (`make -C lookup-service lint`).
+
 The CLI's Hugo renderer embeds theme files via `//go:embed` from
 `client-programs/pkg/renderer/files/`, but that directory is `.gitignore`d
 and populated at build time from the workshop base environment
@@ -238,14 +248,14 @@ you ever need it on its own, run:
 make stage-renderer-files
 ```
 
-The operator module is pinned to a specific Go version (see
-`installer/operator/go.mod`). If you have more than one Go toolchain
-installed, set `GOTOOLCHAIN` to that version (e.g.
-`GOTOOLCHAIN=go1.26.0 make ci-operator`) or ensure the pinned toolchain is
-the one on your `PATH`, otherwise some build steps may mix toolchains and
-fail with a `compile: version "…" does not match go tool version "…"`
-error. CI is unaffected because it provisions a single Go version via
-`actions/setup-go`.
+The operator and Lookup Service modules are pinned to a specific Go
+version (see `installer/operator/go.mod` and `lookup-service/go.mod`). If
+you have more than one Go toolchain installed, set `GOTOOLCHAIN` to that
+version (e.g. `GOTOOLCHAIN=go1.26.0 make ci-operator`) or ensure the
+pinned toolchain is the one on your `PATH`, otherwise some build steps may
+mix toolchains and fail with a `compile: version "…" does not match go tool
+version "…"` error. CI is unaffected because it provisions a single Go
+version via `actions/setup-go`.
 
 Cleaning up available storage space
 -----------------------------------

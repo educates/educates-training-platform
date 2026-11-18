@@ -290,7 +290,9 @@ func (r *LookupServiceReconciler) installOrUpgradeLS(ctx context.Context, obj *p
 // imageRegistryNamespace is the chart's own image registry namespace, kept
 // under the cluster config's image registry prefix.
 func renderLookupServiceValues(obj *platformv1alpha1.LookupService, cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
-	values := map[string]any{}
+	values := map[string]any{
+		"logLevel": defaultLogLevel(obj.Spec.LogLevel),
+	}
 
 	if dev := developmentImageRegistryValues(cfg, imageRegistryNamespace); dev != nil {
 		values["development"] = dev

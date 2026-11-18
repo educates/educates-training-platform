@@ -295,10 +295,12 @@ func renderContourValues(obj *configv1alpha1.EducatesClusterConfig) map[string]a
 // ensureContourReady gates the rest of the pipeline on Contour's
 // data plane being live: the contour Deployment and the envoy DaemonSet
 // have both rolled out their current spec, read uncached (see package
-// rollout). A missing workload (404) maps to "not ready" rather than a
-// hard error — Helm may not have finished applying manifests yet. An
-// envoy DaemonSet no node should run is not ready either: a fresh
-// cluster with no node-readiness hasn't rolled it out.
+// rollout). The envoy pod on a node that is not Ready doesn't count:
+// such a node serves no traffic Contour could route. A missing workload
+// (404) maps to "not ready" rather than a hard error — Helm may not have
+// finished applying manifests yet. An envoy DaemonSet no node should run
+// is not ready either: a fresh cluster with no node-readiness hasn't
+// rolled it out.
 func (r *EducatesClusterConfigReconciler) ensureContourReady(ctx context.Context) error {
 	rolledOut, err := r.deploymentsRolledOut(ctx, contourNamespace, contourControllerDeployment)
 	if err != nil {
@@ -307,9 +309,9 @@ func (r *EducatesClusterConfigReconciler) ensureContourReady(ctx context.Context
 	if !rolledOut {
 		return errContourNotReady
 	}
-	rolledOut, err = rollout.DaemonSetComplete(ctx, r.APIReader, contourNamespace, envoyDaemonSet)
+	rolledOut, err = rollout.DaemonSetCompleteOnReadyNodes(ctx, r.APIReader, contourNamespace, envoyDaemonSet)
 	if err != nil {
-		return fmt.Errorf("get DaemonSet %s/%s: %w", contourNamespace, envoyDaemonSet, err)
+		return err
 	}
 	if !rolledOut {
 		return errContourNotReady

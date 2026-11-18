@@ -299,13 +299,14 @@ func readinessWithExtras(intents []extrasIntent, outcomes []extraOutcome) extras
 
 // nodeCAInjectorRolledOut reports whether the node-ca-injector release's
 // controller Deployment and DaemonSet have both rolled out, read
-// uncached (see package rollout).
+// uncached (see package rollout). The DaemonSet's pod on a node that is
+// not Ready doesn't count: no new session can be scheduled there.
 func (r *SessionManagerReconciler) nodeCAInjectorRolledOut(ctx context.Context) (bool, error) {
 	done, err := rollout.DeploymentComplete(ctx, r.APIReader, platformNamespace, nodeCAInjectorControllerDeploymentName)
 	if err != nil || !done {
 		return false, err
 	}
-	return rollout.DaemonSetComplete(ctx, r.APIReader, platformNamespace, nodeCAInjectorDaemonSetName)
+	return rollout.DaemonSetCompleteOnReadyNodes(ctx, r.APIReader, platformNamespace, nodeCAInjectorDaemonSetName)
 }
 
 // setExtraCondition writes a condition on the obj's status without

@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
+	"github.com/educates/educates-training-platform/installer/operator/internal/rollout"
 )
 
 // Per-kind mapping functions that filter watch events at the source.
@@ -247,11 +248,12 @@ func (r *EducatesClusterConfigReconciler) mapNodeToSingleton(_ context.Context, 
 	return singletonRequest
 }
 
-// nodeVersionsChanged passes only the node events which can change the
-// outcome of the image volume probe: a node joining or leaving, and an update
-// which alters the reported kubelet or container runtime. Without it every
-// node heartbeat would reconcile the singleton.
-func nodeVersionsChanged() predicate.Predicate {
+// nodeVersionsOrReadinessChanged passes only the node events which can
+// change the outcome of the image volume probe or of the envoy DaemonSet
+// gate: a node joining or leaving, and an update which alters the reported
+// kubelet or container runtime, or turns the node Ready or not. Without it
+// every node heartbeat would reconcile the singleton.
+func nodeVersionsOrReadinessChanged() predicate.Predicate {
 	return predicate.Funcs{
 		// A node joining or leaving changes which nodes the check covers,
 		// so both always reconcile. These are stated rather than left to
@@ -270,7 +272,8 @@ func nodeVersionsChanged() predicate.Predicate {
 			}
 
 			return oldNode.Status.NodeInfo.KubeletVersion != newNode.Status.NodeInfo.KubeletVersion ||
-				oldNode.Status.NodeInfo.ContainerRuntimeVersion != newNode.Status.NodeInfo.ContainerRuntimeVersion
+				oldNode.Status.NodeInfo.ContainerRuntimeVersion != newNode.Status.NodeInfo.ContainerRuntimeVersion ||
+				rollout.NodeReady(oldNode) != rollout.NodeReady(newNode)
 		},
 	}
 }

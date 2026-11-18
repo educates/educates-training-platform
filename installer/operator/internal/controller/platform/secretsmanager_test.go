@@ -258,6 +258,56 @@ func setDaemonSetStatus(name string, status func(generation int64) appsv1.Daemon
 	Expect(k8sClient.Status().Update(ctx, ds)).To(Succeed())
 }
 
+// markNodeNotReadyReady turns the node addDaemonSetPodOnNodeNotReady made
+// Ready again, its pod still unavailable: a change only the Node watch
+// reports, since the DaemonSet's status stays as it was.
+func markNodeNotReadyReady() {
+	GinkgoHelper()
+	node := &corev1.Node{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "node-not-ready"}, node)).To(Succeed())
+	node.Status.Conditions = []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}
+	Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+}
+
+// addDaemonSetPodOnNodeNotReady stands in for a node that has gone not
+// Ready: it creates a Node whose Ready condition is False, carrying an
+// unavailable pod of the named DaemonSet in the platform namespace, and
+// removes both when the spec ends. envtest runs no kubelet or node
+// controller.
+func addDaemonSetPodOnNodeNotReady(name string) {
+	GinkgoHelper()
+	nodeName := "node-not-ready"
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}
+	Expect(k8sClient.Create(ctx, node)).To(Succeed())
+	node.Status.Conditions = []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionFalse}}
+	Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+	DeferCleanup(func() { _ = k8sClient.Delete(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}) })
+
+	ds := &appsv1.DaemonSet{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: platformNamespace, Name: name}, ds)).To(Succeed())
+	controller := true
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name + "-on-" + nodeName, Namespace: platformNamespace,
+			Labels: ds.Spec.Selector.MatchLabels,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "apps/v1", Kind: "DaemonSet", Name: ds.Name, UID: ds.UID, Controller: &controller,
+			}},
+		},
+		Spec: corev1.PodSpec{
+			NodeName:   nodeName,
+			Containers: []corev1.Container{{Name: "c", Image: "stub:latest"}},
+		},
+	}
+	Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+	pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionFalse}}
+	Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+	DeferCleanup(func() {
+		_ = k8sClient.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: platformNamespace}},
+			client.GracePeriodSeconds(0))
+	})
+}
+
 // setDeploymentStatus creates (if missing) the named Deployment in the
 // platform namespace and sets its status to what status returns for
 // the Deployment's generation.

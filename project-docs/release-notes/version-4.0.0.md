@@ -1763,10 +1763,12 @@ Bugs Fixed
   external-dns and Kyverno, ready only once its deployments, and the Envoy
   daemon set of Contour, have rolled out. So ``kubectl wait
   --for=condition=Ready`` after a change to the resource also waits for the
-  new pods. A node on which the ``node-ca-injector`` pod cannot run, such as
-  one which is not ready, now keeps ``SessionManager`` from reporting ready,
-  as a node on which the Envoy pod cannot run already kept the
-  ``IngressReady`` condition of ``EducatesClusterConfig`` false. A redeploy
+  new pods. For the ``node-ca-injector`` and Envoy daemon sets, a pod which
+  is not available because its node is not ready, or no longer exists, does
+  not count, so such a node does not keep the ``IngressReady`` condition of
+  ``EducatesClusterConfig`` false, nor ``SessionManager`` from reporting
+  ready. During an upgrade it does keep the daemon set from rolling out,
+  since Kubernetes cannot replace that node's pod. A redeploy
   which leaves a resource unchanged, such as one with a newer release of the
   command and the same configuration, or an upgrade of the operator chart
   alone, still accepts the resource's existing ``Ready`` condition.

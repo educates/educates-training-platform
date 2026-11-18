@@ -470,6 +470,55 @@ func expectConditionReasonHeld(condType, reason string) {
 		Should(Equal(reason))
 }
 
+// markNodeNotReadyReady turns the node addDaemonSetPodOnNodeNotReady made
+// Ready again, its pod still unavailable: a change only the Node watch
+// reports, since the DaemonSet's status stays as it was.
+func markNodeNotReadyReady() {
+	GinkgoHelper()
+	node := &corev1.Node{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "node-not-ready"}, node)).To(Succeed())
+	node.Status.Conditions = []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}
+	Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+}
+
+// addDaemonSetPodOnNodeNotReady stands in for a node that has gone not
+// Ready: it creates a Node whose Ready condition is False, carrying an
+// unavailable pod of the namespace/name DaemonSet, and removes both when
+// the spec ends. envtest runs no kubelet or node controller.
+func addDaemonSetPodOnNodeNotReady(namespace, name string) {
+	GinkgoHelper()
+	nodeName := "node-not-ready"
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}
+	Expect(k8sClient.Create(ctx, node)).To(Succeed())
+	node.Status.Conditions = []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionFalse}}
+	Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+	DeferCleanup(func() { _ = k8sClient.Delete(ctx, &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}) })
+
+	ds := &appsv1.DaemonSet{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, ds)).To(Succeed())
+	controller := true
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name + "-on-" + nodeName, Namespace: namespace,
+			Labels: ds.Spec.Selector.MatchLabels,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "apps/v1", Kind: "DaemonSet", Name: ds.Name, UID: ds.UID, Controller: &controller,
+			}},
+		},
+		Spec: corev1.PodSpec{
+			NodeName:   nodeName,
+			Containers: []corev1.Container{{Name: "c", Image: "stub:latest"}},
+		},
+	}
+	Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+	pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionFalse}}
+	Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+	DeferCleanup(func() {
+		_ = k8sClient.Delete(ctx, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: namespace}},
+			client.GracePeriodSeconds(0))
+	})
+}
+
 // conditionReason returns the reason of the singleton's condType
 // condition, or "" when it is not set yet.
 func conditionReason(condType string) string {
@@ -1376,6 +1425,44 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Expect(copied.Type).To(Equal(corev1.SecretTypeTLS))
 		Expect(copied.Data).To(HaveKey("tls.crt"))
 		Expect(copied.Data).To(HaveKey("tls.key"))
+	})
+
+	It("keeps IngressReady while the envoy pod on a node that is not Ready is unavailable, and not once the node is Ready again", func() {
+		root := testpki.NewRootCA()
+		leaf := root.NewLeaf(testpki.WithDNSNames("*.educates.test"))
+		Expect(k8sClient.Create(ctx, makeSecret(testCASecretsNamespace, "wildcard-tls", map[string][]byte{
+			"tls.crt": leaf.ChainPEM(),
+			"tls.key": leaf.KeyPEM,
+		}))).To(Succeed())
+		Expect(k8sClient.Create(ctx, makeSecret(testCASecretsNamespace, "wildcard-ca", map[string][]byte{
+			"ca.crt": root.CertPEM,
+		}))).To(Succeed())
+		Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       staticCertificateSpec(),
+		})).To(Succeed())
+		driveStaticCertificateToReady()
+
+		// A second node goes not Ready: its envoy pod is unavailable, and
+		// the DaemonSet counts one of its two pods available.
+		addDaemonSetPodOnNodeNotReady(contourNamespace, envoyDaemonSet)
+		setEnvoyDaemonSetStatus(func(generation int64) appsv1.DaemonSetStatus {
+			return appsv1.DaemonSetStatus{
+				ObservedGeneration:     generation,
+				DesiredNumberScheduled: 2,
+				CurrentNumberScheduled: 2,
+				UpdatedNumberScheduled: 2,
+				NumberReady:            1,
+				NumberAvailable:        1,
+			}
+		})
+		Consistently(func() string { return conditionReason(conditionIngressReady) }, 5*time.Second, 200*time.Millisecond).
+			Should(Equal("BundledContourReady"))
+		Expect(readyConditionStatus()).To(Equal(metav1.ConditionTrue))
+
+		markNodeNotReadyReady()
+		Eventually(func() string { return conditionReason(conditionIngressReady) }, 30*time.Second, 200*time.Millisecond).
+			Should(Equal("WaitingForContour"))
 	})
 
 	It("labels the contour namespace privileged for Pod Security admission and leaves cert-manager's to the cluster default", func() {

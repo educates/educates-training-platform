@@ -1004,6 +1004,49 @@ var _ = Describe("SessionManager reconciler", func() {
 		Eventually(smgrReadyStatus, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 	})
 
+	It("keeps Ready while the node-ca-injector pod on a node that is not Ready is unavailable, and not once the node is Ready again", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		withCAOnClusterConfig()
+		driveSessionManagerReady(&platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+		})
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(nodeCAInjectorReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+		markNodeCAInjectorRolledOut()
+		Eventually(smgrReadyStatus, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
+
+		// A second node goes not Ready: its node-ca-injector pod is
+		// unavailable, and the DaemonSet counts one of its two pods
+		// available.
+		addDaemonSetPodOnNodeNotReady(nodeCAInjectorDaemonSetName)
+		setDaemonSetStatus(nodeCAInjectorDaemonSetName, func(generation int64) appsv1.DaemonSetStatus {
+			return appsv1.DaemonSetStatus{
+				ObservedGeneration:     generation,
+				DesiredNumberScheduled: 2,
+				CurrentNumberScheduled: 2,
+				UpdatedNumberScheduled: 2,
+				NumberReady:            1,
+				NumberAvailable:        1,
+			}
+		})
+		Consistently(func() bool {
+			return extraConditionReason(conditionNodeCATrustDeployed) == "Installed" &&
+				smgrReadyStatus() == metav1.ConditionTrue
+		}, 5*time.Second, 200*time.Millisecond).Should(BeTrue())
+
+		markNodeNotReadyReady()
+		Eventually(func() string {
+			return extraConditionReason(conditionNodeCATrustDeployed)
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal("WaitingForRollout"))
+	})
+
 	nodeCAInjectorCACertificateRefValue := caCertificateRefValue(nodeCAInjectorReleaseName)
 
 	// createOverrideCASecret creates the CA trust Secret "override-ca"

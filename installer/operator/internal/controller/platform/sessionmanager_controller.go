@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -150,6 +151,8 @@ type SessionManagerReconciler struct {
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=secretsmanagers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=platform.educates.dev,resources=lookupservices,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 // Secrets: read the CA override's Secret in any namespace and write its
 // key-free copy, educates-session-manager-ingress-ca, in the operator
@@ -1002,6 +1005,8 @@ func (r *SessionManagerReconciler) updateSMStatusWithTransitionLog(ctx context.C
 //     and node-ca-injector-controller.
 //   - apps/v1 DaemonSet, narrowed to platform-ns + node-ca-injector
 //     and image-puller.
+//   - Node, narrowed to a node turning Ready or not, which changes
+//     which node-ca-injector pods count towards Ready.
 //   - Secret, narrowed to the CA override's source and its key-free
 //     copy. Events arrive only from the namespaces the operator's
 //     Secret cache covers.
@@ -1026,6 +1031,9 @@ func (r *SessionManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(mapSessionManagerDeployment)).
 		Watches(&appsv1.DaemonSet{},
 			handler.EnqueueRequestsFromMapFunc(mapSessionManagerDaemonSet)).
+		Watches(&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(mapNodeToSessionManager),
+			builder.WithPredicates(nodeReadinessChanged())).
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.mapSecretToSessionManager)).
 		Named("platform-sessionmanager").
@@ -1069,6 +1077,36 @@ func mapSessionManagerDeployment(_ context.Context, obj client.Object) []reconci
 		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: singletonName}}}
 	}
 	return nil
+}
+
+// mapNodeToSessionManager maps a node turning Ready or not to the
+// singleton: the node-ca-injector pod on a node that is not Ready doesn't
+// count towards Ready, and a node turning Ready again with its pod still
+// down changes nothing in the DaemonSet's status.
+func mapNodeToSessionManager(_ context.Context, _ client.Object) []reconcile.Request {
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: singletonName}}}
+}
+
+// nodeReadinessChanged passes only a node update that turns it Ready or
+// not, so node heartbeats don't reconcile the singleton. A node joining or
+// leaving changes the DaemonSet's status, whose watch covers it.
+func nodeReadinessChanged() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return false },
+		DeleteFunc:  func(event.DeleteEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldNode, ok := e.ObjectOld.(*corev1.Node)
+			if !ok {
+				return false
+			}
+			newNode, ok := e.ObjectNew.(*corev1.Node)
+			if !ok {
+				return false
+			}
+			return rollout.NodeReady(oldNode) != rollout.NodeReady(newNode)
+		},
+	}
 }
 
 // mapSessionManagerDaemonSet maps the DaemonSets SessionManager reports

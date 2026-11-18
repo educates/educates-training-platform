@@ -257,10 +257,13 @@ New Features
   declares whose container is missing, and says in a ``DECLARED`` column
   whether the file declares each mirror.
 
-* The ``educates local mirror`` command group is also available as
-  ``educates local mirrors``, and ``educates local secrets`` as
-  ``educates local secret``, so both answer to their singular and their
-  plural, as other command groups such as ``educates cluster portal`` do.
+* The ``educates local cluster`` command group is also available as
+  ``educates local clusters``, ``educates local mirror`` as ``educates local
+  mirrors``, and ``educates local secrets`` as ``educates local secret``, so
+  each answers to its singular and its plural, as other command groups such
+  as ``educates cluster portal`` do. The ``educates local registry`` and
+  ``educates local resolver`` groups manage the one local registry and the
+  one DNS resolver, and keep their singular name only.
 
 * The ``educates cluster portal export`` command exports a training portal
   and the workshops it references as Kubernetes resource YAML, either to

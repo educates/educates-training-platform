@@ -247,7 +247,7 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 	// waits, so that one that times out is recorded too.
 	revision := 0
 	if opts.Record != nil {
-		revision = recordDeploy(ctx, opts, out, installs)
+		revision = recordDeploy(ctx, opts, out, chrt.Metadata.Version, installs)
 	}
 
 	// Wait on all concurrently, each reporting to its own line in the group.
@@ -293,9 +293,10 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 
 // recordDeploy records the deploy of out as a revision of the deploy
 // history and returns its number, or 0 when it can't, saying why: a
-// deploy that cannot record its revision still deploys. installs says
-// whether the deploy created the platform.
-func recordDeploy(ctx context.Context, opts Options, out *translator.Output, installs bool) int {
+// deploy that cannot record its revision still deploys. chartVersion is
+// the version of the operator chart it installed, and installs says
+// whether it created the platform.
+func recordDeploy(ctx context.Context, opts Options, out *translator.Output, chartVersion string, installs bool) int {
 	n, err := func() (int, error) {
 		applied, err := ExportOf(out).YAML(nil)
 		if err != nil {
@@ -314,14 +315,15 @@ func recordDeploy(ctx context.Context, opts Options, out *translator.Output, ins
 			action = ActionInstalled
 		}
 		return RecordRevision(ctx, cs, Revision{
-			Deployed:    time.Now().UTC().Truncate(time.Second),
-			Action:      action,
-			CLIVersion:  opts.Record.CLIVersion,
-			KubeContext: opts.Record.KubeContext,
-			Source:      opts.Record.Source,
-			Kind:        opts.Record.Kind,
-			Config:      string(opts.Record.Config),
-			Applied:     string(applied),
+			Deployed:     time.Now().UTC().Truncate(time.Second),
+			Action:       action,
+			CLIVersion:   opts.Record.CLIVersion,
+			ChartVersion: chartVersion,
+			KubeContext:  opts.Record.KubeContext,
+			Source:       opts.Record.Source,
+			Kind:         opts.Record.Kind,
+			Config:       string(opts.Record.Config),
+			Applied:      string(applied),
 		})
 	}()
 	if err != nil {

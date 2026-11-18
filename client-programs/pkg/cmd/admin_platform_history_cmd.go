@@ -35,7 +35,8 @@ func (p *ProjectInfo) NewAdminPlatformHistoryCmd() *cobra.Command {
 		Short: "List the deploys of Educates recorded for a cluster",
 		Long: `List the deploys of Educates the CLI recorded for a cluster, one
 revision each: when it deployed, whether it installed Educates or updated
-it, the CLI version, the kind of its config and where the config came from.
+it, the CLI and operator chart versions, the kind of its config and where
+the config came from.
 
 Every 'educates admin platform deploy', and the deploy of 'educates local
 cluster create', records a revision in the ConfigMap ` + deployer.HistoryConfigMap + `
@@ -79,11 +80,12 @@ func runPlatformHistory(ctx context.Context, w io.Writer, o *PlatformHistoryOpti
 			rev.Deployed.UTC().Format("2006-01-02 15:04:05 MST"),
 			rev.Action,
 			rev.CLIVersion,
+			rev.ChartVersion,
 			rev.Kind,
 			rev.Source,
 		})
 	}
-	fmt.Fprintln(w, utils.PrintTable([]string{"REVISION", "DEPLOYED", "ACTION", "CLI", "KIND", "SOURCE"}, rows))
+	fmt.Fprintln(w, utils.PrintTable([]string{"REVISION", "DEPLOYED", "ACTION", "CLI", "CHART", "KIND", "SOURCE"}, rows))
 
 	if first := revisions[0]; first.Action != deployer.ActionInstalled {
 		fmt.Fprintf(w, "\nRevision %d is the first deploy recorded: Educates was installed before the CLI recorded deploys.\n", first.Number)

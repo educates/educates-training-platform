@@ -669,6 +669,17 @@ New Features
   the configuration a cluster was created with stays available. The history
   keeps revision 1, the original, and the latest 10.
 
+* ``educates admin platform drift`` shows how a cluster has drifted from a
+  revision of its deploy history, the latest by default or, with
+  ``--revision original``, the deploy that installed Educates, and changes
+  nothing. It compares the operator chart version and values the revision
+  recorded with the release's, and shows a diff for each platform custom
+  resource of what a redeploy of the revision would leave against the
+  resource in the cluster, from a server-side dry run, so the defaults the
+  API server adds do not show as drift. It also lists the spec fields a
+  field manager other than the command line tool owns, such as one
+  ``kubectl edit`` changed, with when it wrote them.
+
 Features Changed
 ----------------
 

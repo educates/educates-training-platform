@@ -620,3 +620,12 @@ educates admin platform export --revision original --source
 ```
 
 `--revision` takes `latest`, `original` or a revision number. On a cluster deployed before the command line tool recorded deploys, revision 1 is the first deploy recorded, and the history says that it updated Educates. `educates admin platform delete` keeps the history, and with `--purge`, which deletes the `educates-installer` namespace, removes it.
+
+To see how a cluster has drifted from a revision, such as through changes made with `kubectl edit` or by another tool, run:
+
+```
+educates admin platform drift
+educates admin platform drift --revision original
+```
+
+It changes nothing. With the default `--revision latest` it shows what changed since the last deploy, and with `--revision original` everything that changed since the first deploy the history keeps, redeploys included. For the operator release it compares the chart version and values the revision recorded with the release's. For each platform custom resource it shows a diff of what a redeploy of the revision would leave against the resource in the cluster, from a server-side dry run, so the defaults the API server adds do not show as drift. A field another tool added stays through a redeploy and so shows in no diff, so the command also lists the spec fields each field manager other than the command line tool owns, with when it wrote them. A resource the revision applied that the cluster no longer has, or one it has that the revision did not apply, is reported as such.

@@ -510,11 +510,17 @@ func classify(before, after string) string {
 // unifiedDiff returns the unified diff of before, the cluster, against
 // after, what the deploy would leave.
 func unifiedDiff(before, after string) string {
+	return labelledDiff(before, after, "cluster", "deploy")
+}
+
+// labelledDiff returns the unified diff of before, labelled from, against
+// after, labelled to.
+func labelledDiff(before, after, from, to string) string {
 	text, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
 		A:        splitLines(before),
 		B:        splitLines(after),
-		FromFile: "cluster",
-		ToFile:   "deploy",
+		FromFile: from,
+		ToFile:   to,
 		Context:  3,
 	})
 	if err != nil {

@@ -24,6 +24,7 @@ func (p *ProjectInfo) NewAdminPlatformCmdGroup() *cobra.Command {
 				p.NewAdminPlatformRenderCmd(),
 				p.NewAdminPlatformExportCmd(),
 				p.NewAdminPlatformHistoryCmd(),
+				p.NewAdminPlatformDriftCmd(),
 			},
 		},
 	}

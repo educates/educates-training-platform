@@ -48,6 +48,10 @@ type Revision struct {
 	// CLIVersion is the version of the CLI that deployed.
 	CLIVersion string `yaml:"cliVersion"`
 
+	// ChartVersion is the version of the operator chart the deploy
+	// installed.
+	ChartVersion string `yaml:"chartVersion,omitempty"`
+
 	// KubeContext is the kube context the deploy reached the cluster
 	// through.
 	KubeContext string `yaml:"kubeContext,omitempty"`

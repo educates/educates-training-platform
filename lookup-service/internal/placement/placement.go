@@ -60,7 +60,8 @@ func (p *Placer) Place(ctx context.Context, portals []*inventory.Portal, worksho
 	request trainingportal.SessionRequest) (Placement, bool) {
 	candidates := Candidates(portals, workshop)
 	if len(candidates) == 0 {
-		p.log.Info("No portal the tenant reaches runs the workshop", "workshop", workshop)
+		p.log.Info("No environment of the portals the tenant reaches can give a session of the workshop",
+			"workshop", workshop)
 		return Placement{}, false
 	}
 	for _, environment := range p.ordering.Order(candidates) {

@@ -169,7 +169,8 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	//    mirrors file does not load or a mirror it declares has a
 	//    container with other values, Docker
 	//    Desktop's privileged port setting is off, host 80/443 are bound,
-	//    or a secure install has no certificate source. The clash check
+	//    or a secure install, unless --cluster-only skips it, has no
+	//    certificate source. The clash check
 	//    reads every Educates cluster's configured bindings, so a stopped
 	//    cluster counts too. The host-port case comes last, for holders
 	//    that are not Educates clusters: a probe container tries to
@@ -178,7 +179,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	//    can't publish them. The certificate case is the one the deploy
 	//    resolves later: without this check it would only fail after the
 	//    kind cluster and registry already exist.
-	in, err := p.prepareLocalCreate(cfg)
+	in, err := p.prepareLocalCreate(cfg, !o.ClusterOnly)
 	if err != nil {
 		return err
 	}
@@ -397,8 +398,9 @@ type localCreateInputs struct {
 	// Empty when the config declares none.
 	Domain string
 
-	// Plan is the local certificate plan of an EducatesLocalConfig, and
-	// nil for an EducatesConfig.
+	// Plan is the local certificate plan of an EducatesLocalConfig the
+	// platform is deployed with, and nil for an EducatesConfig or when
+	// no deploy follows.
 	Plan *localcerts.Plan
 }
 
@@ -406,14 +408,24 @@ type localCreateInputs struct {
 // the create flow needs, checking it before anything is created.
 //
 // An EducatesLocalConfig, whose ingress.domain the local cluster rules
-// have already defaulted, gets the CLI defaults and the local certificate
-// plan. An EducatesConfig gets neither: its custom resources are deployed
-// as declared and translated by TranslateEscape, so the CLI neither
-// decides its certificates nor syncs cached Secrets for it.
-func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInputs, error) {
+// have already defaulted, gets the CLI defaults, and the local certificate
+// plan when deploy says the platform is deployed after the cluster is
+// created. Only that deploy uses the plan, so a create with --cluster-only
+// creates the cluster of a secure domain the local secrets cache has no
+// certificate for yet. An EducatesConfig gets neither: its custom resources
+// are deployed as declared and translated by TranslateEscape, so the CLI
+// neither decides its certificates nor syncs cached Secrets for it.
+func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config, deploy bool) (*localCreateInputs, error) {
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
 		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
+		if !deploy {
+			return &localCreateInputs{
+				Deploy:  c,
+				Cluster: c.Cluster,
+				Domain:  c.Ingress.Domain,
+			}, nil
+		}
 		// A secure install (the default; ingress.insecure not set)
 		// serves HTTPS from a cached wildcard TLS certificate or a cached
 		// root CA. The local cluster rules have already run, so an empty

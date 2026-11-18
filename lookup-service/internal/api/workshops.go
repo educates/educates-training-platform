@@ -8,9 +8,10 @@ import (
 )
 
 type workshopDetails struct {
-	Name        string        `json:"name"`
-	Title       string        `json:"title"`
-	Description string        `json:"description"`
+	Name string `json:"name"`
+	// Title and Description are null when the workshop gives none.
+	Title       *string       `json:"title"`
+	Description *string       `json:"description"`
 	Labels      config.Labels `json:"labels"`
 }
 
@@ -91,8 +92,8 @@ func workshopsOf(portals []*inventory.Portal) []workshopDetails {
 			}
 			details := workshopDetails{
 				Name:        environment.Workshop,
-				Title:       environment.Title,
-				Description: environment.Description,
+				Title:       optional(environment.Title),
+				Description: optional(environment.Description),
 				Labels:      environment.Labels,
 			}
 			if i, seen := index[details.Name]; seen {

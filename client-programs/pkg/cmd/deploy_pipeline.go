@@ -14,6 +14,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/translator"
@@ -157,6 +158,10 @@ const clusterReachTimeout = 15 * time.Second
 // that fails, which, with no context, goes to client-go's default
 // server, localhost:8080.
 func reachDeployCluster(cf *genericclioptions.ConfigFlags, flags deployPipelineFlags) (string, error) {
+	if err := missingKubeconfigError(cf, flags); err != nil {
+		return "", err
+	}
+
 	raw, err := cf.ToRawKubeConfigLoader().RawConfig()
 	if err != nil {
 		return "", fmt.Errorf("unable to load the kubeconfig: %w", err)
@@ -202,6 +207,48 @@ func reachDeployCluster(cf *genericclioptions.ConfigFlags, flags deployPipelineF
 	return name, nil
 }
 
+// missingKubeconfigError returns why a deploy has no kubeconfig to read,
+// when no file of those cf loads exists: the one --kubeconfig names, those
+// $KUBECONFIG names, or else ~/.kube/config. client-go takes a missing
+// file for an empty kubeconfig, which would then be reported as selecting
+// no kube context, as if passing --context could help. A pod with no
+// kubeconfig file reaches its cluster through its service account, so
+// with no --kubeconfig and no --context it is no error there.
+func missingKubeconfigError(cf *genericclioptions.ConfigFlags, flags deployPipelineFlags) error {
+	access := cf.ToRawKubeConfigLoader().ConfigAccess()
+	files := access.GetLoadingPrecedence()
+	for _, file := range files {
+		if _, err := os.Stat(file); err == nil {
+			return nil
+		}
+	}
+
+	switch {
+	case access.IsExplicitFile():
+		return fmt.Errorf("the kubeconfig %s, which --kubeconfig names, does not exist", access.GetExplicitFile())
+	case flags.Context == "" && inCluster():
+		return nil
+	case os.Getenv(clientcmd.RecommendedConfigPathEnvVar) != "":
+		env := "$" + clientcmd.RecommendedConfigPathEnvVar
+		which := "which does not exist"
+		switch len(files) {
+		case 1:
+		case 2:
+			which = "neither of which exists"
+		default:
+			which = "none of which exists"
+		}
+		return fmt.Errorf("there is no kubeconfig to deploy with: %s names %s, %s. "+
+			"Point %s at a kubeconfig that exists, pass --kubeconfig, or pass --local-cluster to deploy to a local cluster, "+
+			"whose kube context is in %s",
+			env, joinedWithAnd(files), which, env, clientcmd.RecommendedHomeFile)
+	default:
+		return fmt.Errorf("there is no kubeconfig to deploy with: %s does not exist. "+
+			"Create it, point $%s at a kubeconfig, or pass --kubeconfig",
+			joinedWithAnd(files), clientcmd.RecommendedConfigPathEnvVar)
+	}
+}
+
 // inCluster reports whether the CLI runs in a pod whose service account
 // client-go can reach the cluster through.
 func inCluster() bool {
@@ -224,8 +271,16 @@ func kubeContextChoices(raw clientcmdapi.Config) string {
 	case 1:
 		return "the context " + names[0]
 	default:
-		return fmt.Sprintf("the contexts %s and %s", strings.Join(names[:len(names)-1], ", "), names[len(names)-1])
+		return "the contexts " + joinedWithAnd(names)
 	}
+}
+
+// joinedWithAnd joins items as "a", "a and b" or "a, b and c".
+func joinedWithAnd(items []string) string {
+	if len(items) < 2 {
+		return strings.Join(items, "")
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
 // deployConfigFlags returns the kubectl-style connection flags of a deploy

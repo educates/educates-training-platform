@@ -89,3 +89,30 @@ func TestReachDeployClusterNamesTheContextAndServerItCannotReach(t *testing.T) {
 		t.Errorf("error %q repeats the request URL", err)
 	}
 }
+
+// TestReachDeployClusterNamesAMissingKubeconfig checks that a kubeconfig
+// file that does not exist, which client-go reads as an empty kubeconfig,
+// is reported as missing, with what named it, rather than as one that
+// selects no kube context.
+func TestReachDeployClusterNamesAMissingKubeconfig(t *testing.T) {
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	t.Setenv("KUBERNETES_SERVICE_PORT", "")
+	missing := filepath.Join(t.TempDir(), "missing")
+
+	t.Run("named by KUBECONFIG", func(t *testing.T) {
+		t.Setenv("KUBECONFIG", missing)
+
+		err := reachForTest("", "")
+
+		wantErrorParts(t, err, "there is no kubeconfig to deploy with", "$KUBECONFIG names "+missing+", which does not exist", "--local-cluster")
+		if strings.Contains(err.Error(), "no kube context is selected") {
+			t.Errorf("error %q reports the missing kubeconfig as selecting no context", err)
+		}
+	})
+
+	t.Run("named by --kubeconfig", func(t *testing.T) {
+		err := reachForTest(missing, "kind-educates")
+
+		wantErrorParts(t, err, "the kubeconfig "+missing+", which --kubeconfig names, does not exist")
+	})
+}

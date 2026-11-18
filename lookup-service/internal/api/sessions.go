@@ -19,8 +19,9 @@ type sessionResponse struct {
 }
 
 // requestSession answers POST /api/v1/workshops: a session of a workshop for
-// one of the tenant's users, from a portal the tenant reaches. The client's
-// own user, when its configuration sets one, overrides the request's.
+// one of the tenant's users, from a portal the tenant reaches, the user's
+// live session there when they have one. The client's own user, when its
+// configuration sets one, overrides the request's.
 func (s *Server) requestSession(w http.ResponseWriter, r *http.Request, c caller) {
 	body, err := readJSONObject(w, r)
 	if err != nil {

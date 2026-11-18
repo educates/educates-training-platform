@@ -68,9 +68,13 @@ spec:
       {{- if or .Values.remoteAccessTokenMount.enabled $caEnabled }}
       volumes:
         {{- if .Values.remoteAccessTokenMount.enabled }}
+        # The Secret exists only while remote access is installed on this
+        # cluster. Without it the pod still starts, with the mount empty,
+        # and a ClusterConfig for the local cluster is not connected.
         - name: cluster-access-token
           secret:
             secretName: remote-access-token
+            optional: true
         {{- end }}
         {{- if $caEnabled }}
         - name: cluster-ca

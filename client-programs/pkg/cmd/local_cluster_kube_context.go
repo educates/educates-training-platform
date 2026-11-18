@@ -1,9 +1,15 @@
 package cmd
 
 import (
+	"fmt"
+	"io"
+	"os"
+
+	"al.essio.dev/pkg/shellescape"
 	"github.com/spf13/cobra"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
@@ -57,4 +63,27 @@ func resolveKubeContext(flags KubeconfigOptions, sel localclusters.Selection, da
 // cluster's.
 func localClusterKubeconfig(kubeconfigFlag string) string {
 	return cluster.KindKubeconfigPath(kubeconfigFlag)
+}
+
+// noteKubeContext says, once local cluster create has made the local
+// cluster id, that kind made its kube context the current context of the
+// kubeconfig file kubeconfig, which it wrote the context into, and how to
+// reach the cluster with kubectl. The command names the file when
+// --kubeconfig, given as kubeconfigFlag, or $KUBECONFIG is set, since a
+// kubectl without --kubeconfig may then read other files.
+func noteKubeContext(rep progress.Reporter, w io.Writer, kubeconfigFlag, kubeconfig string, id localclusters.Identity) {
+	namesFile := kubeconfigFlag != "" || os.Getenv("KUBECONFIG") != ""
+	rep.Note(fmt.Sprintf("The current context of %s is now %s. Use the cluster with:", kubeconfig, id.Context))
+	fmt.Fprintf(w, "\n    %s\n", kubeContextUsage(kubeconfig, id.Context, namesFile))
+}
+
+// kubeContextUsage returns the kubectl command that reaches a cluster
+// through the kube context kubeContext, adding the kubeconfig file
+// kubeconfig that holds it when namesFile is set.
+func kubeContextUsage(kubeconfig, kubeContext string, namesFile bool) string {
+	command := "kubectl cluster-info --context " + shellescape.Quote(kubeContext)
+	if namesFile {
+		command += " --kubeconfig " + shellescape.Quote(kubeconfig)
+	}
+	return command
 }

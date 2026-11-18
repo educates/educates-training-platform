@@ -220,13 +220,20 @@ func (o *KindClusterConfig) DeleteCluster() error {
 }
 
 // StopCluster stops every running node container of the local cluster,
-// workers before control-plane nodes.
+// workers before control-plane nodes, printing a line for each node it
+// stops, or one saying the cluster is already stopped.
 func (o *KindClusterConfig) StopCluster() error {
 	ctx := context.Background()
 
 	observed, err := o.observeExistingCluster(ctx)
 	if err != nil {
 		return err
+	}
+
+	nodes := o.Identity.NodesToStop(observed)
+	if len(nodes) == 0 {
+		fmt.Printf("Cluster %s is already stopped\n", o.Identity.KindName)
+		return nil
 	}
 
 	cli, err := docker.NewDockerClient()
@@ -239,23 +246,31 @@ func (o *KindClusterConfig) StopCluster() error {
 
 	timeout := 30
 
-	for _, node := range o.Identity.NodesToStop(observed) {
+	for _, node := range nodes {
 		if _, err := cli.ContainerStop(ctx, node, client.ContainerStopOptions{Timeout: &timeout}); err != nil {
 			return errors.Wrapf(err, "failed to stop cluster: node container %s", node)
 		}
+		fmt.Printf("  Stopped %s\n", node)
 	}
 
 	return nil
 }
 
 // StartCluster starts every node container of the local cluster that is
-// not running, control-plane nodes first.
+// not running, control-plane nodes first, printing a line for each node
+// it starts, or one saying the cluster is already running.
 func (o *KindClusterConfig) StartCluster() error {
 	ctx := context.Background()
 
 	observed, err := o.observeExistingCluster(ctx)
 	if err != nil {
 		return err
+	}
+
+	nodes := o.Identity.NodesToStart(observed)
+	if len(nodes) == 0 {
+		fmt.Printf("Cluster %s is already running\n", o.Identity.KindName)
+		return nil
 	}
 
 	cli, err := docker.NewDockerClient()
@@ -266,10 +281,11 @@ func (o *KindClusterConfig) StartCluster() error {
 
 	fmt.Printf("Starting cluster %s ...\n", o.Identity.KindName)
 
-	for _, node := range o.Identity.NodesToStart(observed) {
+	for _, node := range nodes {
 		if _, err := cli.ContainerStart(ctx, node, client.ContainerStartOptions{}); err != nil {
 			return errors.Wrapf(err, "failed to start cluster: node container %s", node)
 		}
+		fmt.Printf("  Started %s\n", node)
 	}
 
 	return nil

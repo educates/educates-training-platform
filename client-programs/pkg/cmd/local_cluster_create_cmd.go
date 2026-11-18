@@ -315,6 +315,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 
 	if o.ClusterOnly {
 		rep.Note("cluster + registry ready (--cluster-only; skipped platform deploy)")
+		noteKubeContext(rep, w, o.Kubeconfig, clusterConfig.Config.Kubeconfig, id)
 		return nil
 	}
 
@@ -323,7 +324,11 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	//    deployer.Deploy directly.
 	flags := createDeployFlags(o, clusterConfig.Config.Kubeconfig, id)
 	flags.Record = deployRevisionInput(p.Version, in.Deploy.GetKind(), "local cluster create, "+absPath(configPath), configPath)
-	return tailCallDeploy(ctx, w, in.Deploy, in.Plan, flags)
+	if err := tailCallDeploy(ctx, w, in.Deploy, in.Plan, flags); err != nil {
+		return err
+	}
+	noteKubeContext(rep, w, o.Kubeconfig, clusterConfig.Config.Kubeconfig, id)
+	return nil
 }
 
 // loadLocalConfig returns the loaded v4 config of the local cluster id +

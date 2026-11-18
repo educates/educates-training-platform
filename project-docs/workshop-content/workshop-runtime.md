@@ -139,6 +139,13 @@ that reads ``Ctrl+V`` as a key of its own doesn't receive it. In ``vim``, use
 On every platform, the browser's right-click menu in a terminal also offers
 Copy and Paste.
 
+To copy text from the workshop instructions into a terminal, select it and
+copy it with the browser's usual shortcut, ``Ctrl+C``, or ``Cmd+C`` on macOS,
+then paste it into the terminal with the paste shortcut for your platform.
+The workshop instructions are an ordinary web page, so the terminal shortcuts
+don't apply there: on Linux and Windows, ``Ctrl+Shift+C`` in the
+instructions opens the browser's element inspector, as on any web page.
+
 The shortcuts work whether the workshop session is served over HTTPS or
 plain HTTP, including when the dashboard is shown inside the training
 portal, and the browser doesn't ask for permission to use the clipboard.

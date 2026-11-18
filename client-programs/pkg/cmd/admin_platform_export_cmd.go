@@ -143,15 +143,21 @@ func runRevisionExport(ctx context.Context, w io.Writer, o *PlatformExportOption
 		return fmt.Errorf("kube context %s: %w", kubeContext, err)
 	}
 
-	what, body := "applied", rev.Applied
+	what, body := "The EducatesConfig it applied.", rev.Applied
 	if o.Source {
-		what, body = "was given, as given", rev.Config
+		what, body = "The config it was given, as given.", rev.Config
 	}
 
+	deployedBy := "CLI " + rev.CLIVersion
+	if rev.ChartVersion != "" {
+		deployedBy += ", operator chart " + rev.ChartVersion
+	}
 	header := []string{
-		fmt.Sprintf("The config revision %d of the deploy history of the cluster of kube", rev.Number),
-		fmt.Sprintf("context %s %s. It %s Educates on %s, deployed by", kubeContext, what, rev.Action, rev.Deployed.UTC().Format("2006-01-02 15:04:05 MST")),
-		fmt.Sprintf("CLI %s through kube context %s, from %s (%s).", rev.CLIVersion, rev.KubeContext, rev.Source, rev.Kind),
+		fmt.Sprintf("Revision %d of the deploy history of the cluster of kube context %s.", rev.Number, kubeContext),
+		what,
+		fmt.Sprintf("It %s Educates on %s.", rev.Action, rev.Deployed.UTC().Format("2006-01-02 15:04:05 MST")),
+		fmt.Sprintf("Deployed by %s, through kube context %s,", deployedBy, rev.KubeContext),
+		fmt.Sprintf("from %s (%s).", rev.Source, rev.Kind),
 		"",
 	}
 	for _, line := range header {

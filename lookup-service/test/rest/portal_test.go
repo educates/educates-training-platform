@@ -190,9 +190,11 @@ type sessionRequest struct {
 
 // fakePortal stands in for a training portal's REST API: it answers the
 // OAuth token endpoint and the session request endpoint, records what it
-// receives, and gives sessions as the portal does, handing out a reserved
-// session when the environment has one and otherwise creating the
-// WorkshopSession, in the Allocating phase, on its cluster.
+// receives, and gives sessions as the portal does: the user's own session
+// when the user has one, else a reserved session when the environment has
+// one, else a new WorkshopSession, in the Allocating phase, on its cluster.
+// A request that names a session is given that session of the user's or
+// refused.
 type fakePortal struct {
 	name      string
 	cluster   *testCluster
@@ -458,7 +460,7 @@ func (p *fakePortal) requestSession(w http.ResponseWriter, r *http.Request) {
 		user = string(uuid.NewUUID())
 	}
 
-	session, status, err := p.giveSession(r.Context(), received.environment, user)
+	session, status, err := p.giveSession(r.Context(), received.environment, user, received.query.Get("session"))
 	switch {
 	case err != nil:
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -480,10 +482,12 @@ func (p *fakePortal) requestSession(w http.ResponseWriter, r *http.Request) {
 
 // giveSession gives user a session of the environment: the session the user
 // has already, a reserved session, or a new one while the environment and
-// the portal have room. It returns the session's name, or the status
+// the portal have room. A request that names a session, reacquire, is given
+// only the user's session of that name, which is never created and is given
+// however full the portal is. It returns the session's name, or the status
 // refusing the request. The portal gives one session at a time, as the
 // training portal does.
-func (p *fakePortal) giveSession(ctx context.Context, environment, user string) (string, int, error) {
+func (p *fakePortal) giveSession(ctx context.Context, environment, user, reacquire string) (string, int, error) {
 	p.giving.Lock()
 	defer p.giving.Unlock()
 
@@ -532,6 +536,9 @@ func (p *fakePortal) giveSession(ctx context.Context, environment, user string) 
 		case phase == phaseStopping:
 			continue
 		case owner == user && (phase == phaseAllocating || phase == phaseAllocated):
+			if reacquire != "" && session.GetName() != reacquire {
+				return "", http.StatusServiceUnavailable, nil
+			}
 			return session.GetName(), http.StatusOK, nil
 		case phase == phaseAvailable && owner == "" && reserved == nil:
 			reserved = session
@@ -539,6 +546,9 @@ func (p *fakePortal) giveSession(ctx context.Context, environment, user string) 
 		inEnvironment++
 	}
 
+	if reacquire != "" {
+		return "", http.StatusServiceUnavailable, nil
+	}
 	if reserved != nil {
 		if err := unstructured.SetNestedStringMap(reserved.Object,
 			map[string]string{"phase": phaseAllocating, "user": user}, "status", "educates"); err != nil {

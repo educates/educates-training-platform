@@ -1,7 +1,7 @@
 // Package trainingportal is the Lookup Service's client of the training
 // portals' REST API. It reads each portal's robot credentials from the
 // Secret the portal's status names, obtains and caches the portal's OAuth
-// tokens, and requests workshop sessions.
+// tokens, requests workshop sessions and reacquires a user's session.
 //
 // A portal on the cluster the service runs on is reached through its
 // in-cluster service, and a portal on another cluster through its public
@@ -213,10 +213,7 @@ func (c *Client) RequestSession(ctx context.Context, environment *inventory.Envi
 	}
 	endpoint := base + "/workshops/environment/" + url.PathEscape(environment.Name) + "/request/?" + query.Encode()
 
-	var answer struct {
-		Name string `json:"name"`
-		URL  string `json:"url"`
-	}
+	var answer sessionAnswer
 	if err := c.call(ctx, portal, endpoint, body, &answer); err != nil {
 		return Session{}, fmt.Errorf("requesting a session: %w", err)
 	}
@@ -224,6 +221,46 @@ func (c *Client) RequestSession(ctx context.Context, environment *inventory.Envi
 		return Session{}, errors.New("requesting a session: the portal's answer names no session")
 	}
 	return Session{Name: answer.Name, ActivationURL: portal.URL + answer.URL}, nil
+}
+
+// ReacquireSession asks the session's portal to give the session back to its
+// user, who returns to the index URL once done with it. The portal gives only
+// that session, never a new one, and restarts the wait for its activation
+// when the user has not activated it yet.
+func (c *Client) ReacquireSession(ctx context.Context, session *inventory.Session, indexURL string,
+) (Session, error) {
+	environment := session.Environment
+	portal := environment.Portal
+	if portal.URL == "" {
+		return Session{}, errors.New("the portal's status gives no URL yet")
+	}
+	base, err := baseURL(portal)
+	if err != nil {
+		return Session{}, err
+	}
+
+	query := url.Values{
+		"user":      {session.User},
+		"index_url": {indexURL},
+		"session":   {session.Name},
+	}
+	endpoint := base + "/workshops/environment/" + url.PathEscape(environment.Name) + "/request/?" + query.Encode()
+
+	var answer sessionAnswer
+	if err := c.call(ctx, portal, endpoint, nil, &answer); err != nil {
+		return Session{}, fmt.Errorf("reacquiring the session: %w", err)
+	}
+	if answer.Name != session.Name || answer.URL == "" {
+		return Session{}, fmt.Errorf("reacquiring the session: the portal's answer names session %q", answer.Name)
+	}
+	return Session{Name: answer.Name, ActivationURL: portal.URL + answer.URL}, nil
+}
+
+// sessionAnswer is the part of a portal's answer to a session request the
+// client reads: the session's name, and the path its user activates it at.
+type sessionAnswer struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
 }
 
 // baseURL is the URL of the portal's REST API: its in-cluster service on the
@@ -238,21 +275,27 @@ func baseURL(portal *inventory.Portal) (string, error) {
 	return strings.TrimSuffix(portal.URL, "/"), nil
 }
 
-// call POSTs body as JSON to the portal's endpoint with the portal's OAuth
-// token and decodes the answer into out. A token the portal refuses is
-// replaced, once, by a new one.
+// call POSTs body as JSON, or nothing when body is nil, to the portal's
+// endpoint with the portal's OAuth token and decodes the answer into out. A
+// token the portal refuses is replaced, once, by a new one.
 func (c *Client) call(ctx context.Context, portal *inventory.Portal, endpoint string, body []byte, out any) error {
 	for attempt := 0; ; attempt++ {
 		token, err := c.token(ctx, portal)
 		if err != nil {
 			return err
 		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		var content io.Reader = http.NoBody
+		if body != nil {
+			content = bytes.NewReader(body)
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, content)
 		if err != nil {
 			return err
 		}
 		request.Header.Set("Authorization", "Bearer "+token)
-		request.Header.Set("Content-Type", "application/json")
+		if body != nil {
+			request.Header.Set("Content-Type", "application/json")
+		}
 		err = c.do(request, out)
 		var refused *statusError
 		if attempt == 0 && errors.As(err, &refused) && refused.status == http.StatusUnauthorized {

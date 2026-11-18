@@ -276,16 +276,18 @@ func (o *KindClusterConfig) StartCluster() error {
 }
 
 // ClusterStatus prints whether the local cluster's node containers are
-// all running, none running, or only some, naming those that are not.
-func (o *KindClusterConfig) ClusterStatus() error {
+// all running, none running, or only some, naming those that are not, and
+// returns that state, or an error when the cluster does not exist.
+func (o *KindClusterConfig) ClusterStatus() (localclusters.State, error) {
 	ctx := context.Background()
 
 	observed, err := o.observeExistingCluster(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	switch o.Identity.State(observed) {
+	state := o.Identity.State(observed)
+	switch state {
 	case localclusters.Running:
 		fmt.Printf("Educates cluster %s is Running\n", o.Identity.KindName)
 	case localclusters.PartlyRunning:
@@ -295,7 +297,7 @@ func (o *KindClusterConfig) ClusterStatus() error {
 		fmt.Printf("Educates cluster %s is NOT Running\n", o.Identity.KindName)
 	}
 
-	return nil
+	return state, nil
 }
 
 // observeExistingCluster returns the kind node containers on the Docker

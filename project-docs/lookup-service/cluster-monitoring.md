@@ -8,6 +8,8 @@ Local cluster monitoring
 
 To monitor the cluster where the lookup service is deployed, create a ``ClusterConfig`` resource without a ``spec.credentials`` section. The lookup service will then access the Kubernetes API as the ``remote-access`` service account in the ``educates`` namespace, using the token of that service account which is mounted into the lookup service pod. This is the same account a kubeconfig generated for a remote cluster uses, as described below, so the lookup service has the same access to the local cluster as it has to a remote one.
 
+The token of the ``remote-access`` service account exists only while remote access is installed on the cluster. With ``spec.remoteAccess.mode`` at its default of ``Auto`` on the ``SessionManager`` resource, remote access is installed whenever a ``LookupService`` resource exists, so a cluster running the lookup service has it. With ``spec.remoteAccess.mode`` set to ``Disabled``, the lookup service still starts and monitors remote clusters, but a ``ClusterConfig`` without ``spec.credentials`` is not connected, and the training portals of the local cluster are not offered.
+
 In the simplest case the ``spec`` section can be omitted entirely:
 
 ```yaml

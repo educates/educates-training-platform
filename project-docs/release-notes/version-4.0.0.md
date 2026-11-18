@@ -2155,6 +2155,24 @@ Bugs Fixed
   core API group, which granted nothing, since custom resource definitions
   belong to the ``apiextensions.k8s.io`` API group.
 
+* ``LookupService.status.url`` always gave the lookup service's URL with
+  ``https``, also on an installation whose ingress is served over plain HTTP,
+  where that URL could not be reached. It now takes the scheme of the
+  installation's ingress, as ``EducatesClusterConfig.status.ingress.protocol``
+  publishes it, so it is ``http`` on a plain HTTP installation.
+
+* With ``spec.remoteAccess.mode`` set to ``Disabled`` on the
+  ``SessionManager`` resource, the lookup service pod could not start. It
+  mounted the secret ``remote-access-token``, the token of the
+  ``remote-access`` service account, which exists only while remote access is
+  installed, and Kubernetes does not start a pod while a secret it mounts is
+  missing. The secret is now mounted as optional, so the pod starts without
+  it. The lookup service uses that token only to monitor the cluster it runs
+  on, so without remote access a ``ClusterConfig`` for the local cluster, one
+  without ``spec.credentials``, is not connected and the local cluster's
+  training portals are not offered, while remote clusters are monitored as
+  before.
+
 * The Kubernetes console of a workshop session failed to start, and could
   not be opened, when the session's role did not allow reading, creating and
   updating secrets in the session namespace, as with

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -33,6 +34,27 @@ type deployPipelineFlags struct {
 	Context    string
 	Timeout    time.Duration
 	Verbose    bool
+
+	// Record, when set, has the deploy recorded in the deploy history,
+	// with the kube context it reaches the cluster through.
+	Record *deployer.RevisionInput
+}
+
+// deployRevisionInput returns what a deploy of the config kind kind,
+// read from path as source describes, records about itself in the
+// deploy history, with the config file as given: read again, as loading
+// it may have normalised it, and empty when it can no longer be read.
+func deployRevisionInput(version, kind, source, path string) *deployer.RevisionInput {
+	data, _ := os.ReadFile(path)
+	return &deployer.RevisionInput{CLIVersion: version, Kind: kind, Source: source, Config: data}
+}
+
+// absPath returns path as an absolute path, or as it is when it has none.
+func absPath(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
 }
 
 // translateAndDeploy is the shared "config → translator output → deploy"
@@ -66,7 +88,8 @@ func translateAndDeploy(
 
 	// Before the plan writes to the local secrets cache, or anything
 	// reaches the cluster.
-	if _, err := reachCluster(cf, flags); err != nil {
+	kubeContext, err := reachCluster(cf, flags)
+	if err != nil {
 		return err
 	}
 
@@ -92,6 +115,11 @@ func translateAndDeploy(
 		}
 		deployOpts.SyncLocalSecrets = true
 		deployOpts.LocalSecretNames = plan.SyncSecretNames
+	}
+	if flags.Record != nil {
+		record := *flags.Record
+		record.KubeContext = kubeContext
+		deployOpts.Record = &record
 	}
 
 	return deployer.Deploy(ctx, out, deployOpts)

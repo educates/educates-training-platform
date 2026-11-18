@@ -139,6 +139,12 @@ func (p *ProjectInfo) runDeploy(ctx context.Context, w io.Writer, o *PlatformDep
 		Verbose:    o.Verbose,
 	}
 
+	source := "--config " + absPath(path)
+	if o.LocalConfig {
+		source = "--local-config " + absPath(path)
+	}
+	flags.Record = deployRevisionInput(p.Version, cfg.GetKind(), source, path)
+
 	if o.Diff {
 		return translateAndDiff(ctx, w, cfg, plan, flags)
 	}

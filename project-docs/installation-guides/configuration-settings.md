@@ -610,3 +610,13 @@ educates admin platform export > educates.yaml
 ```
 
 The command writes an `EducatesConfig` with the spec of each platform custom resource as the cluster holds it, including the defaults the API server added and any change another tool such as `kubectl edit` made, and with the values of the operator release as its `operator` block. Deployed with `educates admin platform deploy --config educates.yaml`, it reproduces that configuration, so `--diff` against the same cluster shows nothing would change, and it can be deployed to another cluster. The file holds no Secret: a comment at the top names each Secret the custom resources reference, which a cluster needs before the file is deployed there. It has no `target` block, as the settings of a local cluster's kind cluster and DNS resolver are not stored in the cluster. Operator chart values the `operator` block cannot express, such as ones a `helm install` of the chart set, are named in a comment and a warning.
+
+Every `educates admin platform deploy`, and the deploy `educates local cluster create` makes, records a revision in the deploy history of the cluster, the ConfigMap `educates-deploy-history` in the `educates-installer` namespace, which a deploy with `--diff` leaves alone. A revision holds when the deploy ran, whether it installed Educates or updated it, the CLI version, the config file as given and the `EducatesConfig` the deploy applied. The history keeps revision 1, the original, and the latest 10. To list it, and to see what a revision applied or the config it was given:
+
+```
+educates admin platform history
+educates admin platform export --revision original
+educates admin platform export --revision original --source
+```
+
+`--revision` takes `latest`, `original` or a revision number. On a cluster deployed before the command line tool recorded deploys, revision 1 is the first deploy recorded, and the history says that it updated Educates. `educates admin platform delete` keeps the history, and with `--purge`, which deletes the `educates-installer` namespace, removes it.

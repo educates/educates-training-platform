@@ -657,6 +657,18 @@ New Features
   --from-cluster`` and ``educates admin platform values --from-cluster`` in
   the 3.x installer.
 
+* Each deploy of Educates by the command line tool, with ``educates admin
+  platform deploy`` or ``educates local cluster create``, is recorded as a
+  revision in the deploy history of the cluster, the ConfigMap
+  ``educates-deploy-history`` in the ``educates-installer`` namespace. A
+  revision holds when the deploy ran, whether it installed Educates or
+  updated it, the CLI version, the config file as given and the
+  ``EducatesConfig`` the deploy applied. ``educates admin platform history``
+  lists the revisions, and ``educates admin platform export --revision``
+  shows what one applied, or with ``--source`` the config it was given, so
+  the configuration a cluster was created with stays available. The history
+  keeps revision 1, the original, and the latest 10.
+
 Features Changed
 ----------------
 

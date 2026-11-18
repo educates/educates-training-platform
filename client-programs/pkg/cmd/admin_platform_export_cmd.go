@@ -20,11 +20,24 @@ const adminPlatformExportExample = `
 
   # Check that the export deploys back unchanged:
   educates admin platform deploy --config educates.yaml --diff
+
+  # Show what the deploy that installed Educates applied, and the config
+  # it was given:
+  educates admin platform export --revision original
+  educates admin platform export --revision original --source
 `
 
 // PlatformExportOptions are the options of admin platform export.
 type PlatformExportOptions struct {
 	KubeconfigOptions
+
+	// Revision selects a revision of the deploy history to show in place
+	// of the live state: latest, original or a number.
+	Revision string
+
+	// Source shows the revision's config as given in place of what it
+	// applied.
+	Source bool
 }
 
 func (p *ProjectInfo) NewAdminPlatformExportCmd() *cobra.Command {
@@ -49,15 +62,29 @@ the target block, are not stored in the cluster, so the file has none.
 Operator chart values the operator block cannot express, such as ones a
 helm install of the chart set, are named in a comment and a warning.
 
+--revision shows, in place of the live state, the EducatesConfig a
+deploy recorded in the deploy history applied, and with --source the
+config that deploy was given, as given: latest for the last deploy,
+original for the first one the history keeps, or a revision number, as
+'educates admin platform history' lists them.
+
 --local-cluster or EDUCATES_LOCAL_CLUSTER selects a local cluster, whose
 kube context the command reads unless --context names another. With
 neither set, it reads the cluster of the current context.`,
 		Example: adminPlatformExportExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if o.Source && o.Revision == "" {
+				return fmt.Errorf("--source shows the config a revision of the deploy history was given, so it needs --revision")
+			}
+			if o.Revision != "" {
+				return runRevisionExport(cmd.Context(), cmd.OutOrStdout(), &o)
+			}
 			return runPlatformExport(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), &o)
 		},
 	}
 
+	c.Flags().StringVar(&o.Revision, "revision", "", "show what a revision of the deploy history applied: latest, original or a number")
+	c.Flags().BoolVar(&o.Source, "source", false, "with --revision, show the config the revision was given, as given")
 	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file (defaults to $KUBECONFIG / ~/.kube/config)")
 	c.Flags().StringVar(&o.Context, "context", "", "context name to use within the kubeconfig")
 	addLocalClusterContextFlag(c, &o.KubeconfigOptions)
@@ -101,4 +128,42 @@ func runPlatformExport(ctx context.Context, w, errw io.Writer, o *PlatformExport
 
 	_, err = w.Write(data)
 	return err
+}
+
+// runRevisionExport writes what the revision of the deploy history
+// o.Revision selects applied, or with o.Source the config it was given,
+// after a comment saying which deploy it was.
+func runRevisionExport(ctx context.Context, w io.Writer, o *PlatformExportOptions) error {
+	kubeContext, revisions, err := clusterDeployHistory(ctx, o.KubeconfigOptions)
+	if err != nil {
+		return err
+	}
+	rev, err := deployer.SelectRevision(revisions, o.Revision)
+	if err != nil {
+		return fmt.Errorf("kube context %s: %w", kubeContext, err)
+	}
+
+	what, body := "applied", rev.Applied
+	if o.Source {
+		what, body = "was given, as given", rev.Config
+	}
+
+	header := []string{
+		fmt.Sprintf("The config revision %d of the deploy history of the cluster of kube", rev.Number),
+		fmt.Sprintf("context %s %s. It %s Educates on %s, deployed by", kubeContext, what, rev.Action, rev.Deployed.UTC().Format("2006-01-02 15:04:05 MST")),
+		fmt.Sprintf("CLI %s through kube context %s, from %s (%s).", rev.CLIVersion, rev.KubeContext, rev.Source, rev.Kind),
+		"",
+	}
+	for _, line := range header {
+		fmt.Fprint(w, commentLine(line))
+	}
+	_, err = io.WriteString(w, body)
+	return err
+}
+
+func commentLine(line string) string {
+	if line == "" {
+		return "#\n"
+	}
+	return "# " + line + "\n"
 }

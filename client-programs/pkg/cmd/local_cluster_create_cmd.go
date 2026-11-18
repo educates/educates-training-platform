@@ -321,7 +321,9 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	// 5. tail-call the v4 deploy. We have the loaded config, so rather
 	//    than re-loading it inside runDeploy, translate here and call
 	//    deployer.Deploy directly.
-	return tailCallDeploy(ctx, w, in.Deploy, in.Plan, createDeployFlags(o, clusterConfig.Config.Kubeconfig, id))
+	flags := createDeployFlags(o, clusterConfig.Config.Kubeconfig, id)
+	flags.Record = deployRevisionInput(p.Version, in.Deploy.GetKind(), "local cluster create, "+absPath(configPath), configPath)
+	return tailCallDeploy(ctx, w, in.Deploy, in.Plan, flags)
 }
 
 // loadLocalConfig returns the loaded v4 config of the local cluster id +

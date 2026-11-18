@@ -6,3 +6,16 @@
 .venv
 venv
 testdata
+
+# The Go service and its build tooling, which this image does not run.
+.custom-gcl.yml
+.golangci.yml
+Makefile
+api
+bin
+cmd
+cover.out
+go.mod
+go.sum
+internal
+test

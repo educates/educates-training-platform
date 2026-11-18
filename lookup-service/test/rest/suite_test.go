@@ -64,6 +64,7 @@ var servedRoutes = []string{
 	"GET /api/v1/clusters/{cluster}/portals/{portal}/environments/{environment}/users",
 	"GET /api/v1/clusters/{cluster}/portals/{portal}/environments/{environment}/users/{user}/sessions",
 	"GET /api/v1/workshops",
+	"POST /api/v1/workshops",
 	"GET /api/v1/tenants/{tenant}/workshops",
 }
 
@@ -125,6 +126,9 @@ var _ = BeforeSuite(func() {
 	By("writing the local cluster's mounted remote-access token")
 	localTokenDirectory = GinkgoT().TempDir()
 	writeLocalToken()
+
+	By("starting the training portals' fake REST APIs")
+	startFakePortals()
 
 	var err error
 	fixtures, err = golden.Load(filepath.Join("..", "..", "testdata", "golden"))

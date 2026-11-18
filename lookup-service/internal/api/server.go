@@ -14,6 +14,7 @@ import (
 
 	"github.com/educates/educates-training-platform/lookup-service/internal/config"
 	"github.com/educates/educates-training-platform/lookup-service/internal/inventory"
+	"github.com/educates/educates-training-platform/lookup-service/internal/placement"
 	"github.com/educates/educates-training-platform/lookup-service/internal/tokens"
 )
 
@@ -30,14 +31,17 @@ type Server struct {
 	config    *config.Model
 	inventory *inventory.Inventory
 	tokens    *tokens.Store
+	placer    *placement.Placer
 	log       logr.Logger
 	mux       *http.ServeMux
 }
 
 // NewServer returns the REST API over the configuration model, the
-// inventory of the clusters' training resources and the token store.
-func NewServer(model *config.Model, inv *inventory.Inventory, store *tokens.Store, log logr.Logger) *Server {
-	s := &Server{config: model, inventory: inv, tokens: store, log: log, mux: http.NewServeMux()}
+// inventory of the clusters' training resources, the token store and the
+// placer of session requests.
+func NewServer(model *config.Model, inv *inventory.Inventory, store *tokens.Store, placer *placement.Placer,
+	log logr.Logger) *Server {
+	s := &Server{config: model, inventory: inv, tokens: store, placer: placer, log: log, mux: http.NewServeMux()}
 
 	s.mux.HandleFunc("POST /auth/login", s.login)
 	s.mux.HandleFunc("POST /login", s.login)
@@ -50,6 +54,7 @@ func NewServer(model *config.Model, inv *inventory.Inventory, store *tokens.Stor
 	s.handleAdminRoutes()
 
 	s.mux.Handle("GET /api/v1/workshops", s.loginRequired(rolesAccepted(s.listWorkshops, roleAdmin, roleTenant)))
+	s.mux.Handle("POST /api/v1/workshops", s.loginRequired(rolesAccepted(s.requestSession, roleAdmin, roleTenant)))
 	s.mux.Handle("GET /api/v1/tenants/{tenant}/workshops",
 		s.loginRequired(rolesAccepted(s.listTenantWorkshops, roleAdmin, roleTenant)))
 

@@ -40,12 +40,14 @@ educates admin platform deploy --config config.yaml
 
 This performs, in order:
 
-1. `helm upgrade --install` of the `educates-installer` operator chart (CRDs included).
+1. `helm upgrade --install` of the `educates-installer` operator chart (CRDs included), then wait for the operator Deployment to roll out, so the operator the chart names is the one that reconciles the resources applied next.
 2. Apply `EducatesClusterConfig`, wait for `Ready=True` — in Managed mode this is where the operator installs cert-manager, Contour, and the other cluster services.
 3. Apply `SecretsManager`, wait for `Ready=True`.
 4. Apply `LookupService` (if enabled) and `SessionManager`, wait for both.
 
-Progress for each step is reported as it happens. If a step does not become ready within the per-resource timeout (configurable with `--timeout`), the command fails with the failing resource's status conditions — inspect them with `kubectl describe educatesclusterconfig cluster` or the equivalent for the other kinds.
+Each wait accepts `Ready=True` only once the operator has reconciled the configuration the command applied: the condition's `observedGeneration` must have reached the resource's generation. On a redeploy that changes a resource, the `Ready` condition from before the change does not count. A redeploy that leaves a resource unchanged, such as one with a newer release of the CLI and the same configuration, keeps its generation, so the command accepts the resource's existing `Ready` condition while the new operator may still be upgrading the component.
+
+Progress for each step is reported as it happens. If the operator does not roll out, or a step does not become ready, within the per-resource timeout (configurable with `--timeout`), the command fails with the failing resource's status conditions; inspect them with `kubectl describe educatesclusterconfig cluster` or the equivalent for the other kinds.
 
 Use `--verbose` to also stream Helm SDK debug output when troubleshooting.
 

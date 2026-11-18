@@ -1738,6 +1738,26 @@ Deprecations
 Bugs Fixed
 ----------
 
+* Run against a cluster which already ran Educates, ``educates admin platform
+  deploy`` could report every component ready before the build it deployed
+  had rolled out, so a workshop session requested as soon as the command
+  returned could reach the previous build's session manager, or one which
+  was restarting. The command took the ``Ready`` condition a resource had
+  before the command changed it for the outcome of the change, and applied
+  the resources without waiting for the new Educates operator to replace the
+  old one, while the operator reported a component ready as soon as its
+  deployment was available, even when the available pod was the previous
+  build's. The command now waits for the operator deployment to roll out
+  before it applies the resources, and accepts a resource as ready only once
+  the operator has reconciled the configuration the command applied. The
+  operator reports ``SecretsManager``, ``LookupService`` and
+  ``SessionManager`` ready only once the deployment of the component has
+  rolled out, so ``kubectl wait --for=condition=Ready`` after a change to
+  the resource also waits for the new pods. A redeploy which leaves a
+  resource unchanged, such as one with a newer release of the command and
+  the same configuration, or an upgrade of the operator chart alone, still
+  accepts the resource's existing ``Ready`` condition.
+
 * ``educates cluster workshop deploy`` could fail with ``the object has been
   modified; please apply your changes to the latest version and try again``
   when something else changed the training portal between the command

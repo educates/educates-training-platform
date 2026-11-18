@@ -110,8 +110,13 @@ type Registry struct {
 // member is a cluster the configuration names, with the supervisor of its
 // cache.
 type member struct {
+	// cluster is the cluster as first observed, which its supervisor reads
+	// without the lock: it never changes, since an observation that changes
+	// the connection makes a new member.
 	cluster config.Cluster
-	info    inventory.ClusterInfo
+	// info is what the inventory shows of the cluster, its labels as last
+	// observed included.
+	info inventory.ClusterInfo
 	// reader reads the cluster's API server directly, nil while no cache of
 	// the cluster has synced.
 	reader client.Reader
@@ -158,7 +163,6 @@ func (r *Registry) ObserveCluster(_ context.Context, c config.Cluster) {
 
 	if m, ok := r.members[c.Name]; ok {
 		if sameConnection(m.cluster, c) {
-			m.cluster = c
 			m.info.Labels = c.Labels
 			r.inventory.SetCluster(c.Name, m.info)
 			return

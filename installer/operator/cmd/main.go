@@ -257,8 +257,8 @@ func main() {
 	}
 
 	// The DaemonSet informer is scoped the same way, to the namespaces of
-	// the DaemonSets whose rollout gates readiness: Contour's envoy and the
-	// node-ca-injector.
+	// the DaemonSets the reconcilers report on: Contour's envoy, the
+	// node-ca-injector and the image pre-puller.
 	daemonSetCacheNamespaces := append(
 		configcontroller.DaemonSetWatchNamespaces(),
 		platformcontroller.DaemonSetWatchNamespaces()...,

@@ -500,6 +500,8 @@ spec:
                     - Deployed                 (session-manager helm release + Deployment Available)
                     - NodeCATrustDeployed      (optional extra; reflects mode evaluation outcome)
                     - RemoteAccessDeployed     (optional extra; reflects mode evaluation outcome)
+                    - ImagesPrePulled          (informational; the image pre-puller has pulled
+                                                every image on every node it runs on)
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

@@ -904,6 +904,106 @@ var _ = Describe("SessionManager reconciler", func() {
 		Eventually(smgrReadyStatus, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 	})
 
+	// --- Image pre-puller progress ---------------------------------
+
+	imagesPrePulledCondition := func() *metav1.Condition {
+		got := &platformv1alpha1.SessionManager{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, got); err != nil {
+			return nil
+		}
+		return meta.FindStatusCondition(got.Status.Conditions, conditionImagesPrePulled)
+	}
+
+	withImagePrePuller := func() *platformv1alpha1.SessionManager {
+		return &platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec: platformv1alpha1.SessionManagerSpec{
+				ImagePrePuller: &platformv1alpha1.ImagePrePuller{Enabled: true},
+			},
+		}
+	}
+
+	It("reports ImagesPrePulled once the image-puller has pulled every image, without holding Ready back", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		driveSessionManagerReady(withImagePrePuller())
+
+		// The release is installed but no node has pulled anything yet:
+		// the session manager is Ready all the same.
+		Eventually(imagesPrePulledCondition, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionFalse),
+			HaveField("Reason", "Pulling")))
+		Eventually(smgrReadyStatus, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
+
+		imagesPrePulledReason := func() string { return smgrConditionReason(conditionImagesPrePulled) }
+
+		// Pods of a previous spec having pulled their images doesn't
+		// count for the current one, whether the DaemonSet controller
+		// has yet to observe the new spec or the node's pod still runs
+		// the previous list.
+		markDaemonSetRollingOut(imagePullerDaemonSetName)
+		Consistently(imagesPrePulledReason, 3*time.Second, 200*time.Millisecond).Should(Equal("Pulling"))
+		setDaemonSetStatus(imagePullerDaemonSetName, func(generation int64) appsv1.DaemonSetStatus {
+			return appsv1.DaemonSetStatus{
+				ObservedGeneration:     generation,
+				DesiredNumberScheduled: 1,
+				CurrentNumberScheduled: 1,
+				UpdatedNumberScheduled: 0,
+				NumberReady:            1,
+				NumberAvailable:        1,
+			}
+		})
+		Consistently(imagesPrePulledReason, 3*time.Second, 200*time.Millisecond).Should(Equal("Pulling"))
+
+		markDaemonSetRolledOut(imagePullerDaemonSetName)
+		Eventually(imagesPrePulledCondition, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionTrue),
+			HaveField("Reason", "Pulled")))
+		Expect(smgrReadyStatus()).To(Equal(metav1.ConditionTrue))
+
+		// Turning the pre-puller off replaces what it reported.
+		Eventually(func() error {
+			smgr := &platformv1alpha1.SessionManager{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, smgr); err != nil {
+				return err
+			}
+			smgr.Spec.ImagePrePuller.Enabled = false
+			return k8sClient.Update(ctx, smgr)
+		}, 10*time.Second, 200*time.Millisecond).Should(Succeed())
+		Eventually(imagesPrePulledReason, 30*time.Second, 200*time.Millisecond).Should(Equal("PrePullerDisabled"))
+	})
+
+	It("reports ImagesPrePulled as NoEligibleNodes when the image-puller runs on no node", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		driveSessionManagerReady(withImagePrePuller())
+
+		// Every node carries a taint the DaemonSet doesn't tolerate.
+		setDaemonSetStatus(imagePullerDaemonSetName, func(generation int64) appsv1.DaemonSetStatus {
+			return appsv1.DaemonSetStatus{ObservedGeneration: generation}
+		})
+		Eventually(imagesPrePulledCondition, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionFalse),
+			HaveField("Reason", "NoEligibleNodes")))
+	})
+
+	It("reports ImagesPrePulled as PrePullerDisabled while the pre-puller is off", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+		driveSessionManagerReady(&platformv1alpha1.SessionManager{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+		})
+
+		Eventually(imagesPrePulledCondition, 30*time.Second, 200*time.Millisecond).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionFalse),
+			HaveField("Reason", "PrePullerDisabled")))
+		Eventually(smgrReadyStatus, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
+	})
+
 	nodeCAInjectorCACertificateRefValue := caCertificateRefValue(nodeCAInjectorReleaseName)
 
 	// createOverrideCASecret creates the CA trust Secret "override-ca"

@@ -461,6 +461,8 @@ type SessionManagerStatus struct {
 	//   - Deployed                 (session-manager helm release + Deployment Available)
 	//   - NodeCATrustDeployed      (optional extra; reflects mode evaluation outcome)
 	//   - RemoteAccessDeployed     (optional extra; reflects mode evaluation outcome)
+	//   - ImagesPrePulled          (informational; the image pre-puller has pulled
+	//                               every image on every node it runs on)
 	// +listType=map
 	// +listMapKey=type
 	// +optional

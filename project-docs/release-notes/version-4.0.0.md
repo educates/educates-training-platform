@@ -588,8 +588,13 @@ New Features
   it was, and the ``SessionManager`` reports ``Ready`` as ``False`` with
   reason ``InstallFailed`` and a message naming the entry. ``enabled`` remains
   the only switch: while it is ``false`` nothing is pulled, and the list can
-  stay in place. See [pre-pulling workshop
-  images](pre-pulling-workshop-images).
+  stay in place. The ``SessionManager`` reports the pre-puller's progress on
+  its ``ImagesPrePulled`` condition, ``True`` with reason ``Pulled`` once
+  every image is pulled on every node the ``image-puller`` daemon set runs on.
+  The condition is informational: neither the ``Ready`` condition of the
+  ``SessionManager`` nor ``educates admin platform deploy`` waits for it,
+  since a workshop session starts without pre-pulled images, only more
+  slowly. See [pre-pulling workshop images](pre-pulling-workshop-images).
 
 * The workshop dashboard has a button at the start of its tabs for collapsing
   the panel holding the workshop instructions out of the way. When the panel

@@ -66,11 +66,7 @@ func DeploymentComplete(ctx context.Context, reader client.Reader, namespace, na
 }
 
 // DaemonSetComplete reports whether the DaemonSet namespace/name has
-// rolled out its current spec: the DaemonSet controller has observed
-// the spec, and on every node that should run the DaemonSet, a pod of
-// that spec is scheduled and available. A DaemonSet no node should run
-// is not rolled out: on a fresh cluster whose nodes aren't ready yet,
-// the DaemonSet hasn't scheduled anything.
+// rolled out its current spec, as DaemonSetRolledOut judges it.
 func DaemonSetComplete(ctx context.Context, reader client.Reader, namespace, name string) (bool, error) {
 	ds := &appsv1.DaemonSet{}
 	if err := reader.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, ds); err != nil {
@@ -79,11 +75,28 @@ func DaemonSetComplete(ctx context.Context, reader client.Reader, namespace, nam
 		}
 		return false, err
 	}
+	return DaemonSetRolledOut(ds), nil
+}
+
+// DaemonSetScheduledNowhere reports whether ds, its current spec observed,
+// should run on no node, as when every node carries a taint it does not
+// tolerate.
+func DaemonSetScheduledNowhere(ds *appsv1.DaemonSet) bool {
+	return ds.Status.ObservedGeneration >= ds.Generation && ds.Status.DesiredNumberScheduled == 0
+}
+
+// DaemonSetRolledOut reports whether ds has rolled out its current spec:
+// the DaemonSet controller has observed the spec, and on every node that
+// should run the DaemonSet, a pod of that spec is scheduled and
+// available. A DaemonSet no node should run is not rolled out: on a fresh
+// cluster whose nodes aren't ready yet, the DaemonSet hasn't scheduled
+// anything.
+func DaemonSetRolledOut(ds *appsv1.DaemonSet) bool {
 	if ds.Status.ObservedGeneration < ds.Generation {
-		return false, nil
+		return false
 	}
 	desired := ds.Status.DesiredNumberScheduled
 	return desired > 0 &&
 		ds.Status.UpdatedNumberScheduled >= desired &&
-		ds.Status.NumberAvailable >= desired, nil
+		ds.Status.NumberAvailable >= desired
 }

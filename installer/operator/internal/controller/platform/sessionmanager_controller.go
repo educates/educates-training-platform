@@ -94,6 +94,16 @@ const (
 	conditionNodeCATrustDeployed  = "NodeCATrustDeployed"
 	conditionRemoteAccessDeployed = "RemoteAccessDeployed"
 
+	// conditionImagesPrePulled reports whether the image pre-puller has
+	// pulled every image on every node its DaemonSet runs on. It is
+	// informational: Ready does not wait for it, since sessions start
+	// without pre-pulled images, only more slowly.
+	conditionImagesPrePulled = "ImagesPrePulled"
+
+	// imagePullerDaemonSetName matches the session-manager chart
+	// template's fixed-name image pre-puller DaemonSet.
+	imagePullerDaemonSetName = "image-puller"
+
 	// conditionKyvernoAvailable is the third gate. Status=True with
 	// reason `KyvernoServed`, or `NotRequired` when no effective policy
 	// engine is Kyverno; Status=False with reason `KyvernoNotFound` while
@@ -110,9 +120,11 @@ type SessionManagerReconciler struct {
 
 	// APIReader is an uncached reader for the CA override's Secret,
 	// which may live in a namespace outside the operator's Secret
-	// cache, and for the session-manager Deployment, read straight
-	// after the Helm upgrade that wrote it. Production wiring uses
-	// mgr.GetAPIReader().
+	// cache, and for the workloads the reconciler reports on, read
+	// straight after the Helm upgrade that wrote them: the
+	// session-manager and node-ca-injector Deployments and the
+	// node-ca-injector and image-puller DaemonSets. Production wiring
+	// uses mgr.GetAPIReader().
 	APIReader client.Reader
 
 	// OperatorNamespace is where the reconciler writes the key-free copy
@@ -191,6 +203,10 @@ func (r *SessionManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, err
 		}
 	}
+
+	// Informational, so ahead of the gates: every status write below
+	// carries the current pre-pull progress.
+	r.reportImagesPrePulled(ctx, obj)
 
 	// Gate 1: EducatesClusterConfig.Ready
 	cfg, ready, err := r.clusterConfigReadySM(ctx)
@@ -982,7 +998,10 @@ func (r *SessionManagerReconciler) updateSMStatusWithTransitionLog(ctx context.C
 //   - SecretsManager (cross-CR gate 2).
 //   - LookupService (Auto-mode signal for remoteAccess: presence
 //     of a LookupService CR causes Auto to install remote-access).
-//   - apps/v1 Deployment, narrowed to platform-ns + session-manager.
+//   - apps/v1 Deployment, narrowed to platform-ns + session-manager
+//     and node-ca-injector-controller.
+//   - apps/v1 DaemonSet, narrowed to platform-ns + node-ca-injector
+//     and image-puller.
 //   - Secret, narrowed to the CA override's source and its key-free
 //     copy. Events arrive only from the namespaces the operator's
 //     Secret cache covers.
@@ -1052,11 +1071,16 @@ func mapSessionManagerDeployment(_ context.Context, obj client.Object) []reconci
 	return nil
 }
 
-// mapSessionManagerDaemonSet maps the node-ca-injector DaemonSet, whose
-// rollout gates SessionManager's Ready, to the singleton.
+// mapSessionManagerDaemonSet maps the DaemonSets SessionManager reports
+// on to the singleton: node-ca-injector, whose rollout gates Ready, and
+// the image pre-puller, whose rollout sets ImagesPrePulled.
 func mapSessionManagerDaemonSet(_ context.Context, obj client.Object) []reconcile.Request {
-	if obj.GetNamespace() != platformNamespace || obj.GetName() != nodeCAInjectorDaemonSetName {
+	if obj.GetNamespace() != platformNamespace {
 		return nil
 	}
-	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: singletonName}}}
+	switch obj.GetName() {
+	case nodeCAInjectorDaemonSetName, imagePullerDaemonSetName:
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: singletonName}}}
+	}
+	return nil
 }

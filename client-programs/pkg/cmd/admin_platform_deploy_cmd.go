@@ -18,7 +18,8 @@ const adminPlatformDeployExample = `
   # Install Educates from a checked-in config file:
   educates admin platform deploy --config env.yaml
 
-  # Install Educates using the laptop config (~/.educates/config.yaml):
+  # Install Educates using the default local cluster's config
+  # (<data-home>/config.yaml):
   educates admin platform deploy --local-config
 
   # Redeploy the named local cluster test2 from its own config, into its

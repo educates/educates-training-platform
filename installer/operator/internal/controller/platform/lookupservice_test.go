@@ -45,9 +45,10 @@ import (
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
-func lsReadyStatus(name string) metav1.ConditionStatus {
+// lsReadyStatus reports the Ready condition of the LookupService singleton.
+func lsReadyStatus() metav1.ConditionStatus {
 	got := &platformv1alpha1.LookupService{}
-	if err := k8sClient.Get(ctx, types.NamespacedName{Name: name}, got); err != nil {
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: singletonName}, got); err != nil {
 		return metav1.ConditionUnknown
 	}
 	c := meta.FindStatusCondition(got.Status.Conditions, conditionReady)
@@ -138,7 +139,7 @@ func lookupServiceReadyWithURL(helmFac *memoryHelmFactory) string {
 	}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 	markDeploymentAvailable(lookupServiceDeploymentName)
 	Eventually(func() metav1.ConditionStatus {
-		return lsReadyStatus(singletonName)
+		return lsReadyStatus()
 	}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 
 	got := &platformv1alpha1.LookupService{}
@@ -279,7 +280,7 @@ var _ = Describe("LookupService reconciler", func() {
 			return c.Reason
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal("ClusterConfigNotReady"))
 
-		Expect(lsReadyStatus(singletonName)).To(Equal(metav1.ConditionFalse))
+		Expect(lsReadyStatus()).To(Equal(metav1.ConditionFalse))
 	})
 
 	It("publishes an https status.url on an HTTPS install", func() {
@@ -321,7 +322,7 @@ var _ = Describe("LookupService reconciler", func() {
 		markDeploymentAvailable(lookupServiceDeploymentName)
 
 		Eventually(func() metav1.ConditionStatus {
-			return lsReadyStatus(singletonName)
+			return lsReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 
 		got := &platformv1alpha1.LookupService{}
@@ -503,7 +504,7 @@ var _ = Describe("LookupService reconciler", func() {
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 		markDeploymentAvailable(lookupServiceDeploymentName)
 		Eventually(func() metav1.ConditionStatus {
-			return lsReadyStatus(singletonName)
+			return lsReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 
 		Expect(k8sClient.Delete(ctx, ls)).To(Succeed())

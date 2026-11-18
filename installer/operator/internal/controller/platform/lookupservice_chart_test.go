@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/yaml"
 
@@ -62,6 +63,22 @@ func renderLookupServiceObjects(t *testing.T) ([]renderedObject, []string) {
 	return objects, docs
 }
 
+// renderLookupServicePodSpec renders the lookup-service chart with the
+// values the operator gives it and returns the pod spec of its Deployment.
+func renderLookupServicePodSpec(t *testing.T) corev1.PodSpec {
+	t.Helper()
+
+	values := renderLookupServiceValues(&platformv1alpha1.LookupService{}, valuesTestClusterConfig(), testImageRegistryNamespace)
+
+	for _, w := range renderWorkloads(t, vendoredcharts.LookupService, values) {
+		if w.Kind == "Deployment" && w.Metadata.Name == lookupServiceDeploymentName {
+			return w.Spec.Template.Spec
+		}
+	}
+	t.Fatalf("the chart renders no Deployment lookup-service")
+	return corev1.PodSpec{}
+}
+
 func TestLookupServiceChart_CreatesConfigNamespaceKeptOnUninstall(t *testing.T) {
 	objects, _ := renderLookupServiceObjects(t)
 
@@ -78,26 +95,19 @@ func TestLookupServiceChart_CreatesConfigNamespaceKeptOnUninstall(t *testing.T) 
 }
 
 func TestLookupServiceChart_ProbesLivenessEndpoint(t *testing.T) {
-	values := renderLookupServiceValues(&platformv1alpha1.LookupService{}, valuesTestClusterConfig(), testImageRegistryNamespace)
-
-	for _, w := range renderWorkloads(t, vendoredcharts.LookupService, values) {
-		if w.Kind != "Deployment" || w.Metadata.Name != lookupServiceDeploymentName {
+	for _, c := range renderLookupServicePodSpec(t).Containers {
+		if c.Name != "lookup-service" {
 			continue
 		}
-		for _, c := range w.Spec.Template.Spec.Containers {
-			if c.Name != "lookup-service" {
-				continue
-			}
-			probe := c.LivenessProbe
-			if probe == nil || probe.HTTPGet == nil {
-				t.Fatalf("container lookup-service has liveness probe %+v, want an HTTP GET", probe)
-			}
-			if probe.HTTPGet.Path != "/healthz" || probe.HTTPGet.Port.IntValue() != 8081 {
-				t.Errorf("liveness probe gets %s on port %s, want /healthz on 8081",
-					probe.HTTPGet.Path, probe.HTTPGet.Port.String())
-			}
-			return
+		probe := c.LivenessProbe
+		if probe == nil || probe.HTTPGet == nil {
+			t.Fatalf("container lookup-service has liveness probe %+v, want an HTTP GET", probe)
 		}
+		if probe.HTTPGet.Path != "/healthz" || probe.HTTPGet.Port.IntValue() != 8081 {
+			t.Errorf("liveness probe gets %s on port %s, want /healthz on 8081",
+				probe.HTTPGet.Path, probe.HTTPGet.Port.String())
+		}
+		return
 	}
 	t.Fatalf("the chart renders no lookup-service container")
 }
@@ -105,25 +115,17 @@ func TestLookupServiceChart_ProbesLivenessEndpoint(t *testing.T) {
 // The remote-access-token Secret exists only while SessionManager installs
 // remote access, so lookup-service's pod has to start without it.
 func TestLookupServiceChart_MountsRemoteAccessTokenOptionally(t *testing.T) {
-	values := renderLookupServiceValues(&platformv1alpha1.LookupService{}, valuesTestClusterConfig(), testImageRegistryNamespace)
-
-	for _, w := range renderWorkloads(t, vendoredcharts.LookupService, values) {
-		if w.Kind != "Deployment" || w.Metadata.Name != lookupServiceDeploymentName {
+	for _, v := range renderLookupServicePodSpec(t).Volumes {
+		if v.Secret == nil || v.Secret.SecretName != "remote-access-token" {
 			continue
 		}
-		for _, v := range w.Spec.Template.Spec.Volumes {
-			if v.Secret == nil || v.Secret.SecretName != "remote-access-token" {
-				continue
-			}
-			if v.Secret.Optional == nil || !*v.Secret.Optional {
-				t.Errorf("volume %q mounts Secret remote-access-token with optional %v, want true",
-					v.Name, v.Secret.Optional)
-			}
-			return
+		if v.Secret.Optional == nil || !*v.Secret.Optional {
+			t.Errorf("volume %q mounts Secret remote-access-token with optional %v, want true",
+				v.Name, v.Secret.Optional)
 		}
-		t.Fatalf("Deployment lookup-service mounts no remote-access-token Secret")
+		return
 	}
-	t.Fatalf("the chart renders no Deployment lookup-service")
+	t.Fatalf("Deployment lookup-service mounts no remote-access-token Secret")
 }
 
 func TestLookupServiceChart_GrantsOnlyInConfigNamespace(t *testing.T) {

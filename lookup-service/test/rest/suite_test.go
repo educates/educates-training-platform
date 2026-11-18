@@ -49,6 +49,8 @@ var servedRoutes = []string{
 	"GET /auth/verify",
 	"GET /api/v1/clients",
 	"GET /api/v1/clients/{client}",
+	"GET /api/v1/workshops",
+	"GET /api/v1/tenants/{tenant}/workshops",
 }
 
 // unroutedFixtures are the fixtures of requests that no route serves, which
@@ -59,11 +61,20 @@ var unroutedFixtures = []string{
 }
 
 var (
+	// testEnv, restConfig and k8sClient are the lookup cluster's API
+	// server, cluster-a in the scenario, which holds the service's
+	// configuration and runs training portals of its own.
 	testEnv    *envtest.Environment
 	restConfig *rest.Config
 	k8sClient  client.Client
-	scheme     *runtime.Scheme
-	fixtures   *golden.Fixtures
+
+	// clusterA is the lookup cluster, and clusterB the remote cluster the
+	// service reaches through a kubeconfig Secret.
+	clusterA *testCluster
+	clusterB *testCluster
+
+	scheme   *runtime.Scheme
+	fixtures *golden.Fixtures
 )
 
 func TestREST(t *testing.T) {
@@ -83,37 +94,36 @@ var _ = BeforeSuite(func() {
 	Expect(clientgoscheme.AddToScheme(scheme)).To(Succeed())
 	Expect(lookupv1beta1.AddToScheme(scheme)).To(Succeed())
 
+	charts := filepath.Join("..", "..", "..", "installer", "charts", "educates-training-platform", "charts")
+	lookupCRDs := filepath.Join(charts, "lookup-service", "crds")
+	trainingCRDs := filepath.Join(charts, "session-manager", "crds")
+
 	By("starting the lookup cluster's API server")
-	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "..", "installer", "charts", "educates-training-platform",
-				"charts", "lookup-service", "crds"),
-		},
-		ErrorIfCRDPathMissing: true,
-	}
-	if dir := firstEnvTestBinaryDir(); dir != "" {
-		testEnv.BinaryAssetsDirectory = dir
-	}
+	clusterA = startTestCluster("cluster-a", lookupCRDs, trainingCRDs)
+	testEnv, restConfig, k8sClient = clusterA.env, clusterA.config, clusterA.client
+	Expect(k8sClient.Create(context.Background(), &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: configNamespace},
+	})).To(Succeed())
+
+	By("starting the remote cluster's API server")
+	clusterB = startTestCluster("cluster-b", trainingCRDs)
+
+	By("writing the local cluster's mounted remote-access token")
+	localTokenDirectory = GinkgoT().TempDir()
+	writeLocalToken()
+
 	var err error
-	restConfig, err = testEnv.Start()
-	Expect(err).NotTo(HaveOccurred())
-
-	k8sClient, err = client.New(restConfig, client.Options{Scheme: scheme})
-	Expect(err).NotTo(HaveOccurred())
-
-	for _, name := range []string{configNamespace, serviceNamespace} {
-		Expect(k8sClient.Create(context.Background(), &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: name},
-		})).To(Succeed())
-	}
-
 	fixtures, err = golden.Load(filepath.Join("..", "..", "testdata", "golden"))
 	Expect(err).NotTo(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {
-	By("stopping the lookup cluster's API server")
-	Eventually(testEnv.Stop, time.Minute, time.Second).Should(Succeed())
+	By("stopping the API servers")
+	for _, cluster := range []*testCluster{clusterA, clusterB} {
+		if cluster != nil {
+			Eventually(cluster.env.Stop, time.Minute, time.Second).Should(Succeed())
+		}
+	}
 
 	By("checking that every golden response of the served routes was asserted")
 	if suiteRanEverySpec() {

@@ -291,8 +291,9 @@ func (r *Registry) supervise(ctx context.Context, m *member) {
 		}
 		problem = ""
 		r.setConnection(m, connection, "")
-		r.run(ctx, m, connection)
-		sleep(ctx, r.opts.RetryInterval)
+		if !r.run(ctx, m, connection) {
+			sleep(ctx, r.opts.RetryInterval)
+		}
 	}
 }
 
@@ -335,30 +336,31 @@ func readMounted(directory, name string) ([]byte, error) {
 
 // run runs one cache of the member's cluster until ctx is done, the cache
 // does not sync in time or stops, or, for the local cluster, the mounted
-// token changes.
-func (r *Registry) run(ctx context.Context, m *member, connection *kubeconfig.Config) {
+// token changes. It reports whether to connect again at once, as for a new
+// token, rather than after the retry interval.
+func (r *Registry) run(ctx context.Context, m *member, connection *kubeconfig.Config) bool {
 	log := logr.FromContextOrDiscard(ctx)
 	restConfig, err := connection.RESTConfig()
 	if err != nil {
 		log.Error(err, "The cluster is not connected")
-		return
+		return false
 	}
 	c, err := r.newCluster(restConfig, log)
 	if err != nil {
 		log.Error(err, "Cannot create the cluster's cache")
-		return
+		return false
 	}
 
 	var feed *inventory.Feed
 	if !r.current(m, func() { feed = r.inventory.Attach(m.cluster.Name) }) {
-		return
+		return false
 	}
 	defer feed.Detach()
 
 	synced, err := watchTraining(ctx, c.GetCache(), feed)
 	if err != nil {
 		log.Error(err, "Cannot watch the cluster's training resources")
-		return
+		return false
 	}
 
 	cacheCtx, stopCache := context.WithCancel(ctx)
@@ -378,7 +380,7 @@ func (r *Registry) run(ctx context.Context, m *member, connection *kubeconfig.Co
 			log.Info("The cluster's cache has not synced in time: it contributes no portals until it does, and is started again",
 				"timeout", r.opts.SyncTimeout.String())
 		}
-		return
+		return false
 	}
 	feed.MarkSynced()
 	r.current(m, func() { m.reader = c.GetAPIReader() })
@@ -393,16 +395,16 @@ func (r *Registry) run(ctx context.Context, m *member, connection *kubeconfig.Co
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return false
 		case err := <-stopped:
 			stopped <- err
 			log.Error(err, "The cluster's cache stopped")
-			return
+			return false
 		case <-recheck:
 			latest, err := r.kubeconfig(m.cluster)
 			if err != nil || !latest.Equal(connection) {
 				log.Info("The mounted remote-access token changed: connecting again")
-				return
+				return true
 			}
 		}
 	}

@@ -287,7 +287,12 @@ New Features
   the mirror's configuration from each node. ``educates local cluster stop``
   and ``educates local cluster start`` stop and start every node, and
   ``educates local cluster status`` reports a cluster with only some of its
-  nodes running as partly running, naming the nodes which are not.
+  nodes running as partly running, naming the nodes which are not. Unless
+  the cluster is stopped, ``educates local cluster status`` also lists the
+  cluster's Kubernetes nodes, each with its role, status, Kubernetes
+  version, labels and taints, leaving out the labels Kubernetes puts on
+  every node, so the labels ``cluster.nodes`` declares show on their nodes.
+  The ``--all-labels`` option shows every label of each node instead.
 
 * ``educates local cluster status`` now also reports whether Educates is
   installed on the local cluster and whether its platform components are

@@ -24,6 +24,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -83,6 +84,10 @@ type Options struct {
 	// LocalSecretNames names the cached Secrets SyncLocalSecrets copies:
 	// the local certificate resolution plan's SyncSecretNames.
 	LocalSecretNames []string
+
+	// Record, when set, has the deploy recorded as a revision of the
+	// deploy history once it has applied the platform resources.
+	Record *RevisionInput
 
 	// Progress is the structured progress reporter. When nil, plain
 	// io.Discard-backed reporter is used (no progress output, but the
@@ -181,6 +186,14 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 	}
 	step.Done("")
 
+	// Whether this deploy installs the platform, which the deploy
+	// history records.
+	installs := false
+	if opts.Record != nil {
+		_, err := applier.Get(ctx, educatesClusterConfigGVK, "", "cluster")
+		installs = apierrors.IsNotFound(err) || meta.IsNoMatchError(err)
+	}
+
 	// 3. Apply EducatesClusterConfig + wait.
 	ecc, err := installStep(ctx, opts, applier, waiter, out.EducatesClusterConfig, "EducatesClusterConfig")
 	if err != nil {
@@ -230,6 +243,13 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 		objs[i] = applied
 	}
 
+	// Every platform resource is applied: record the deploy, before the
+	// waits, so that one that times out is recorded too.
+	revision := 0
+	if opts.Record != nil {
+		revision = recordDeploy(ctx, opts, out, chrt.Metadata.Version, installs)
+	}
+
 	// Wait on all concurrently, each reporting to its own line in the group.
 	labels := make([]string, len(targets))
 	for i, t := range targets {
@@ -263,8 +283,54 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 	//    domain the EducatesClusterConfig publishes.
 	refreshLoopbackService(ctx, opts, ecc)
 
-	opts.Progress.Note("Educates successfully deployed")
+	if revision > 0 {
+		opts.Progress.Note(fmt.Sprintf("Educates successfully deployed, revision %d of the deploy history", revision))
+	} else {
+		opts.Progress.Note("Educates successfully deployed")
+	}
 	return nil
+}
+
+// recordDeploy records the deploy of out as a revision of the deploy
+// history and returns its number, or 0 when it can't, saying why: a
+// deploy that cannot record its revision still deploys. chartVersion is
+// the version of the operator chart it installed, and installs says
+// whether it created the platform.
+func recordDeploy(ctx context.Context, opts Options, out *translator.Output, chartVersion string, installs bool) int {
+	n, err := func() (int, error) {
+		applied, err := ExportOf(out).YAML(nil)
+		if err != nil {
+			return 0, err
+		}
+		cfg, err := opts.Getter.ToRESTConfig()
+		if err != nil {
+			return 0, fmt.Errorf("REST config: %w", err)
+		}
+		cs, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			return 0, fmt.Errorf("kubernetes client: %w", err)
+		}
+		action := ActionUpdated
+		if installs {
+			action = ActionInstalled
+		}
+		return RecordRevision(ctx, cs, Revision{
+			Deployed:     time.Now().UTC().Truncate(time.Second),
+			Action:       action,
+			CLIVersion:   opts.Record.CLIVersion,
+			ChartVersion: chartVersion,
+			KubeContext:  opts.Record.KubeContext,
+			Source:       opts.Record.Source,
+			Kind:         opts.Record.Kind,
+			Config:       string(opts.Record.Config),
+			Applied:      string(applied),
+		})
+	}()
+	if err != nil {
+		opts.Progress.Note(fmt.Sprintf("warning: the deploy is not recorded in the deploy history: %v", err))
+		return 0
+	}
+	return n
 }
 
 // installStep applies obj and waits for it to become Ready under a

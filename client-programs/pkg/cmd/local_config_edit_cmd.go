@@ -47,7 +47,8 @@ canonical file. A failing validation reopens the editor with the error
 shown inline (kubectl-edit style), preserving your in-progress changes,
 until the configuration is valid or you abort. On save it is also
 validated against the rules of a local cluster's config, such as a
-cluster.listenAddress that is a specific IP address of the host.
+cluster.listenAddress that is a specific IP address of the host, and a
+cluster.nodes list, when declared, with exactly one control-plane node.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, edits the config of a
 named local cluster instead, <data-home>/clusters/<name>/config.yaml,

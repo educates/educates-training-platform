@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -161,10 +163,54 @@ func (b *DockerWorkshopsBackend) DeleteWorkshop(w http.ResponseWriter, r *http.R
 	w.Write(jsonData)
 }
 
+// loggedResponse records the status and body a handler writes, for the
+// request log.
+type loggedResponse struct {
+	http.ResponseWriter
+	status int
+	body   bytes.Buffer
+}
+
+func (l *loggedResponse) WriteHeader(status int) {
+	l.status = status
+	l.ResponseWriter.WriteHeader(status)
+}
+
+func (l *loggedResponse) Write(b []byte) (int, error) {
+	l.body.Write(b)
+	return l.ResponseWriter.Write(b)
+}
+
+// logRequests logs the requests of the extension UI, so that the backend's
+// log, which docker logs shows, says what the UI asked for and what it got
+// back: a failed deploy otherwise reports its error to the UI alone. Deploy
+// and delete are logged when they arrive and when they finish, as the
+// output of a deploy comes in between. List, which the UI polls every few
+// seconds, and version are logged only when they fail.
+func logRequests(logger *log.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		always := r.URL.Path == "/workshop/deploy" || r.URL.Path == "/workshop/delete"
+
+		if always {
+			logger.Printf("request %s %s", r.Method, r.URL.RequestURI())
+		}
+
+		response := &loggedResponse{ResponseWriter: w, status: http.StatusOK}
+
+		next.ServeHTTP(response, r)
+
+		if always || response.status >= http.StatusBadRequest {
+			logger.Printf("response %s %s status=%d body=%s", r.Method, r.URL.RequestURI(), response.status, strings.TrimSpace(response.body.String()))
+		}
+	})
+}
+
 func (o *DockerExtensionBackendOptions) Run(p *ProjectInfo) error {
 	if o.Socket == "" {
 		return errors.New("invalid socket for HTTP server")
 	}
+
+	logger := log.New(os.Stdout, "", log.LstdFlags)
 
 	router := http.NewServeMux()
 
@@ -181,7 +227,7 @@ func (o *DockerExtensionBackendOptions) Run(p *ProjectInfo) error {
 	router.HandleFunc("/workshop/delete", backend.DeleteWorkshop)
 
 	server := http.Server{
-		Handler: router,
+		Handler: logRequests(logger, router),
 	}
 
 	// The socket string can either be of the form host:nnn, or it can be a file
@@ -217,13 +263,19 @@ func (o *DockerExtensionBackendOptions) Run(p *ProjectInfo) error {
 
 	defer listener.Close()
 
+	logger.Printf("extension backend version %s listening on %s, with images from %s", p.Version, o.Socket, p.ImageRepository)
+
 	go func() {
-		server.Serve(listener)
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Printf("extension backend stopped serving: %v", err)
+		}
 	}()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
+
+	logger.Printf("extension backend stopping")
 
 	err = server.Shutdown(context.TODO())
 

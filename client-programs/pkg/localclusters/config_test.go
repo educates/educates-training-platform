@@ -204,3 +204,89 @@ func TestLoadConfigFileOfANamedClusterKeepsADeclaredDomain(t *testing.T) {
 		t.Errorf("ingress.insecure = true, want false as declared")
 	}
 }
+
+// TestValidateClusterNodes checks that a declared node list has exactly one
+// control-plane node, as only one node can publish ports 80 and 443 on the
+// listen address, and uses only the roles kind understands.
+func TestValidateClusterNodes(t *testing.T) {
+	controlPlane := v1alpha1.ClusterNode{Role: "control-plane"}
+	worker := v1alpha1.ClusterNode{Role: "worker"}
+
+	cases := []struct {
+		name    string
+		nodes   []v1alpha1.ClusterNode
+		wantErr string
+	}{
+		{"default cluster", nil, ""},
+		{"single control-plane", []v1alpha1.ClusterNode{controlPlane}, ""},
+		{"control-plane and workers", []v1alpha1.ClusterNode{controlPlane, worker, worker}, ""},
+		{"workers only", []v1alpha1.ClusterNode{worker, worker}, `one node must have role "control-plane"`},
+		{"two control-planes", []v1alpha1.ClusterNode{controlPlane, worker, controlPlane}, `2 nodes have role "control-plane"`},
+		{"unknown role", []v1alpha1.ClusterNode{controlPlane, {Role: "infra"}}, `invalid node role "infra"`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateClusterNodes(tc.nodes)
+
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+
+			wantErrorMentioning(t, err, tc.wantErr)
+		})
+	}
+}
+
+// TestCheckConfigRefusesMoreThanOneControlPlaneNode checks that the rules
+// local config edit and set apply refuse a second control-plane node, in
+// the field each config kind declares the nodes in.
+func TestCheckConfigRefusesMoreThanOneControlPlaneNode(t *testing.T) {
+	cases := []struct {
+		name  string
+		id    Identity
+		body  string
+		field string
+	}{
+		{
+			name: "EducatesLocalConfig of the default cluster",
+			id:   Default(t.TempDir()),
+			body: localConfigHeader +
+				"cluster:\n  listenAddress: 10.10.10.2\n" +
+				"  nodes:\n  - role: control-plane\n  - role: worker\n  - role: control-plane\n",
+			field: "cluster.nodes",
+		},
+		{
+			name: "EducatesConfig for kind of a named cluster",
+			id:   namedID(t, "test2", t.TempDir()),
+			body: escapeConfigHeader +
+				"target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.2\n" +
+				"    nodes:\n    - role: control-plane\n    - role: worker\n    - role: control-plane\n" +
+				"educatesClusterConfig:\n  mode: Managed\n",
+			field: "target.cluster.nodes",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := CheckConfig(tc.id, []byte(tc.body), "config.yaml")
+
+			wantErrorMentioning(t, err, "config.yaml", tc.field, `2 nodes have role "control-plane"`)
+		})
+	}
+}
+
+// TestCheckConfigTakesOneControlPlaneNodeWithWorkers checks that a node
+// list with one control-plane node and workers passes the rules.
+func TestCheckConfigTakesOneControlPlaneNodeWithWorkers(t *testing.T) {
+	body := localConfigHeader +
+		"cluster:\n  listenAddress: 10.10.10.2\n" +
+		"  nodes:\n  - role: control-plane\n  - role: worker\n  - role: worker\n"
+
+	if err := CheckConfig(Default(t.TempDir()), []byte(body), "config.yaml"); err != nil {
+		t.Fatalf("CheckConfig: %v", err)
+	}
+}

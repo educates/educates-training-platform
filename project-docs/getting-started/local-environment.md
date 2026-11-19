@@ -165,7 +165,7 @@ ingress:
   domain: educates-local-dev.test
 ```
 
-When you set a custom ingress domain, the install serves workshop sessions over HTTPS: it installs cert-manager, which issues the wildcard TLS certificate for the ingress domain inside the cluster from a certificate authority (CA) minted for that domain from a root CA kept on your machine. Setting a custom domain turns off the insecure default, so before creating the cluster you provide the root CA, or instead a wildcard certificate as described further below. To generate a root CA:
+When you set a custom ingress domain, the install serves workshop sessions over HTTPS: it installs cert-manager, which issues the wildcard TLS certificate for the ingress domain inside the cluster from a certificate authority (CA) minted for that domain from a root CA kept on your machine. Setting a custom domain turns off the insecure default, so before creating the cluster you provide the root CA, or instead a wildcard certificate as described further below. `educates local cluster create --cluster-only` deploys no platform and so needs neither: you can provide one after creating the cluster, before `educates admin platform deploy --local-config` deploys Educates. To generate a root CA:
 
 ```
 educates local secrets add ca educates-local-ca

@@ -9,8 +9,9 @@ import (
 
 func (p *ProjectInfo) NewLocalClusterCmdGroup() *cobra.Command {
 	var c = &cobra.Command{
-		Use:   "cluster",
-		Short: "Manage local Kubernetes cluster",
+		Use:     "cluster",
+		Aliases: []string{"clusters"},
+		Short:   "Manage local Kubernetes cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			return docker.CheckDaemonRunning()
 		},

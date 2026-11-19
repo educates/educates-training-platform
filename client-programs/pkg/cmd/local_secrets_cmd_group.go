@@ -7,8 +7,9 @@ import (
 
 func (p *ProjectInfo) NewLocalSecretsCmdGroup() *cobra.Command {
 	var c = &cobra.Command{
-		Use:   "secrets",
-		Short: "Manage local secrets cache",
+		Use:     "secrets",
+		Aliases: []string{"secret"},
+		Short:   "Manage local secrets cache",
 	}
 
 	// Use a command group as it allows us to dictate the order in which they

@@ -41,6 +41,13 @@ func main() {
 
 	c := p.NewEducatesCmdGroup()
 
+	// An unknown command of a command group fails, as one of the root
+	// does, rather than showing the group's help.
+
+	if cmd.RejectUnknownCommand(c, os.Args[1:]) {
+		os.Exit(1)
+	}
+
 	// Execute the actual command with arguments sourced from os.Args.
 
 	err := c.Execute()

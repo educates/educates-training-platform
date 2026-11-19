@@ -594,3 +594,38 @@ Updating settings
 -----------------
 
 Configuration is applied by re-running `educates admin platform deploy` with the changed file (or re-applying the custom resources in a GitOps flow). The operator reconciles differences in place. The `EducatesClusterConfig` mode (`Managed` vs `Inline`) and how each of its cluster services is provided are immutable once set: the certificates provider (`ingress.certificates.provider`), the ingress controller provider (`ingress.controller.provider`), the DNS provider (`dns.provider`) and the policy enforcement engines and Kyverno provider (`policyEnforcement`). Switching any of them requires deleting and re-creating the installation, for example with `educates admin platform delete` followed by a new deploy. On the local configuration, switching between plain HTTP and HTTPS, by setting or clearing `ingress.insecure` or by setting a custom `ingress.domain` in place of the `nip.io` default, changes the certificates provider. Configuration changes will not necessarily affect training portals or workshop environments which already exist.
+
+To see what a redeploy would change before running it, add `--diff`:
+
+```
+educates admin platform deploy --config config.yaml --diff
+```
+
+It changes nothing, in the cluster or in the local secrets cache, and exits with status 0 whether or not anything would change. It lists the cached Secrets a local configuration would sync into the `educates-secrets` namespace, by name and never with their values, the CRDs, and the operator release with its chart version and a diff of its values. For each platform custom resource it shows a diff against the resource as the API server would leave it after the deploy, defaults included. A change the API server would refuse, such as one to how a cluster service is provided, shows as refused, with the reason. Add `--verbose` for the full diffs of the CRDs and of the other objects of the operator release. What the operator then changes in the components and cluster services it installs is not shown.
+
+To see the configuration a cluster runs, export it:
+
+```
+educates admin platform export > educates.yaml
+```
+
+The command writes an `EducatesConfig` with the spec of each platform custom resource as the cluster holds it, including the defaults the API server added and any change another tool such as `kubectl edit` made, and with the values of the operator release as its `operator` block. Deployed with `educates admin platform deploy --config educates.yaml`, it reproduces that configuration, so `--diff` against the same cluster shows nothing would change, and it can be deployed to another cluster. The file holds no Secret: a comment at the top names each Secret the custom resources reference, which a cluster needs before the file is deployed there. It has no `target` block, as the settings of a local cluster's kind cluster and DNS resolver are not stored in the cluster. Operator chart values the `operator` block cannot express, such as ones a `helm install` of the chart set, are named in a comment and a warning.
+
+Every `educates admin platform deploy`, and the deploy `educates local cluster create` makes, records a revision in the deploy history of the cluster, the ConfigMap `educates-deploy-history` in the `educates-installer` namespace, which a deploy with `--diff` leaves alone. A revision holds when the deploy ran, whether it installed Educates or updated it, the CLI version, the config file as given and the `EducatesConfig` the deploy applied. The history keeps revision 1, the original, and the latest 10. To list it, and to see what a revision applied or the config it was given:
+
+```
+educates admin platform history
+educates admin platform export --revision original
+educates admin platform export --revision original --source
+```
+
+`--revision` takes `latest`, `original` or a revision number. On a cluster deployed before the command line tool recorded deploys, revision 1 is the first deploy recorded, and the history says that it updated Educates. `educates admin platform delete` keeps the history, and with `--purge`, which deletes the `educates-installer` namespace, removes it.
+
+To see how a cluster has drifted from a revision, such as through changes made with `kubectl edit` or by another tool, run:
+
+```
+educates admin platform drift
+educates admin platform drift --revision original
+```
+
+It changes nothing. With the default `--revision latest` it shows what changed since the last deploy, and with `--revision original` everything that changed since the first deploy the history keeps, redeploys included. For the operator release it compares the chart version and values the revision recorded with the release's. For each platform custom resource it shows a diff of what a redeploy of the revision would leave against the resource in the cluster, from a server-side dry run, so the defaults the API server adds do not show as drift. A field another tool added stays through a redeploy and so shows in no diff, so the command also lists the spec fields each field manager other than the command line tool owns, with when it wrote them. A resource the revision applied that the cluster no longer has, or one it has that the revision did not apply, is reported as such.

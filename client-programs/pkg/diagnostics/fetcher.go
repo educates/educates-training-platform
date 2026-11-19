@@ -19,6 +19,10 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
+var educatesClusterConfigResource = schema.GroupVersionResource{Group: "config.educates.dev", Version: "v1alpha1", Resource: "educatesclusterconfigs"}
+var secretsManagerResource = schema.GroupVersionResource{Group: "platform.educates.dev", Version: "v1alpha1", Resource: "secretsmanagers"}
+var lookupServiceResource = schema.GroupVersionResource{Group: "platform.educates.dev", Version: "v1alpha1", Resource: "lookupservices"}
+var sessionManagerResource = schema.GroupVersionResource{Group: "platform.educates.dev", Version: "v1alpha1", Resource: "sessionmanagers"}
 var workshopResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshops"}
 var trainingportalResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "trainingportals"}
 var workshopsessionsResource = schema.GroupVersionResource{Group: "training.educates.dev", Version: "v1beta1", Resource: "workshopsessions"}

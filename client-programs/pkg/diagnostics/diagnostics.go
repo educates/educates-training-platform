@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type ClusterDiagnostics struct {
@@ -33,6 +35,23 @@ func (c *ClusterDiagnostics) Run() error {
 	defer os.RemoveAll(tempDir)
 
 	clusterDiagnosticsFetcher := &ClusterDiagnosticsFetcher{c.clusterConfig, tempDir, c.verbose}
+
+	// Fetch the Educates platform resources the operator reconciles, whose
+	// status conditions say which part of an install is not ready and why.
+	for _, platform := range []struct {
+		resource schema.GroupVersionResource
+		fileName string
+		kind     string
+	}{
+		{educatesClusterConfigResource, "educates-cluster-configs.yaml", "EducatesClusterConfig"},
+		{secretsManagerResource, "secrets-managers.yaml", "SecretsManager"},
+		{lookupServiceResource, "lookup-services.yaml", "LookupService"},
+		{sessionManagerResource, "session-managers.yaml", "SessionManager"},
+	} {
+		if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(platform.resource, platform.fileName); err != nil {
+			fmt.Printf("Error fetching %s resources: %v\n", platform.kind, err)
+		}
+	}
 
 	// Fetch all Educates training related resources
 	if err = clusterDiagnosticsFetcher.fetchDynamicallyResources(trainingportalResource, "training-portals.yaml"); err != nil {
@@ -73,7 +92,17 @@ func (c *ClusterDiagnostics) Run() error {
 		fmt.Println("Error fetching secret injectors: ", err)
 	}
 
-	// fetch logs for the session-manager, secret-manager deploymentments
+	// Fetch the logs of the Educates operator. The CLI installs it in the
+	// educates-installer namespace, but a helm install of its chart may use
+	// another, so its pods are found by their labels in every namespace.
+	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("app.kubernetes.io/name=educates-installer,app.kubernetes.io/component=operator", metav1.NamespaceAll, "educates-installer.log"); err != nil {
+		fmt.Println("Error fetching logs for the Educates operator: ", err)
+	}
+
+	// fetch logs for the session-manager, secret-manager and lookup-service deployments
+	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("app=lookup-service", "educates", "lookup-service.log"); err != nil {
+		fmt.Println("Error fetching logs for lookup-service: ", err)
+	}
 	if err = clusterDiagnosticsFetcher.fetchLogsForDeployment("deployment=session-manager", "educates", "session-manager.log"); err != nil {
 		fmt.Println("Error fetching logs for session-manager: ", err)
 	}

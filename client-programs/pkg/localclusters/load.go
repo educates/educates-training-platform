@@ -109,6 +109,14 @@ type clusterFields struct {
 	// listenAddress is the declared listen address, empty when none is.
 	listenAddress string
 
+	// nodesField is the path of the field that declares the cluster's
+	// nodes.
+	nodesField string
+
+	// nodes is the declared node list, empty for the default single
+	// control-plane cluster.
+	nodes []v1alpha1.ClusterNode
+
 	// domain is the declared ingress domain, empty when none is.
 	domain string
 
@@ -141,6 +149,8 @@ func clusterFieldsOf(cfg v1alpha1.Config) (clusterFields, bool) {
 		return clusterFields{
 			listenAddressField: "cluster.listenAddress",
 			listenAddress:      c.Cluster.ListenAddress,
+			nodesField:         "cluster.nodes",
+			nodes:              c.Cluster.Nodes,
 			domain:             c.Ingress.Domain,
 			domainField:        "ingress.domain",
 			resolver:           c.Resolver,
@@ -157,6 +167,8 @@ func clusterFieldsOf(cfg v1alpha1.Config) (clusterFields, bool) {
 		}
 		fields.listenAddressField = "target.cluster.listenAddress"
 		fields.listenAddress = c.Target.Cluster.ListenAddress
+		fields.nodesField = "target.cluster.nodes"
+		fields.nodes = c.Target.Cluster.Nodes
 		fields.resolver = c.Target.Resolver
 		fields.extraDomainsField = "target.resolver.extraDomains"
 		return fields, true

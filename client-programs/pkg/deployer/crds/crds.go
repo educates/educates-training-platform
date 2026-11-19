@@ -30,9 +30,10 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/apply"
 )
 
-// crdGVK is apiextensions.k8s.io/v1 CustomResourceDefinition — used to
-// poll Established=True on freshly-applied CRDs.
-var crdGVK = schema.GroupVersionKind{
+// GVK is apiextensions.k8s.io/v1 CustomResourceDefinition — used to
+// poll Established=True on freshly-applied CRDs, and to read the live
+// CRD a deploy preview compares with.
+var GVK = schema.GroupVersionKind{
 	Group:   "apiextensions.k8s.io",
 	Version: "v1",
 	Kind:    "CustomResourceDefinition",
@@ -50,7 +51,31 @@ const (
 // the list of GroupKind+Name strings applied so the deploy summary can
 // log them. Idempotent: re-runs converge on the latest schema.
 func Apply(ctx context.Context, applier *apply.Client, chrt *helmchart.Chart) ([]string, error) {
+	objects, err := Objects(chrt)
+	if err != nil {
+		return nil, err
+	}
 	var applied []string
+	for _, u := range objects {
+		if _, err := applier.Apply(ctx, u); err != nil {
+			return nil, fmt.Errorf("apply CRD %s: %w", u.GetName(), err)
+		}
+		applied = append(applied, u.GetName())
+	}
+	if err := waitEstablished(ctx, applier, applied); err != nil {
+		return applied, err
+	}
+	// The mapper's discovery cache was populated before these CRDs
+	// existed. Invalidate it so the next CR apply re-fetches /apis and
+	// resolves the new kinds.
+	applier.InvalidateDiscovery()
+	return applied, nil
+}
+
+// Objects returns the CRDs in chrt.CRDObjects(), the ones Apply applies,
+// in the order the chart holds them.
+func Objects(chrt *helmchart.Chart) ([]*unstructured.Unstructured, error) {
+	var objects []*unstructured.Unstructured
 	for _, crdEntry := range chrt.CRDObjects() {
 		if crdEntry.File == nil || len(crdEntry.File.Data) == 0 {
 			continue
@@ -70,20 +95,10 @@ func Apply(ctx context.Context, applier *apply.Client, chrt *helmchart.Chart) ([
 				// slip something through.
 				continue
 			}
-			if _, err := applier.Apply(ctx, u); err != nil {
-				return nil, fmt.Errorf("apply CRD %s: %w", u.GetName(), err)
-			}
-			applied = append(applied, u.GetName())
+			objects = append(objects, u)
 		}
 	}
-	if err := waitEstablished(ctx, applier, applied); err != nil {
-		return applied, err
-	}
-	// The mapper's discovery cache was populated before these CRDs
-	// existed. Invalidate it so the next CR apply re-fetches /apis and
-	// resolves the new kinds.
-	applier.InvalidateDiscovery()
-	return applied, nil
+	return objects, nil
 }
 
 // waitEstablished polls each applied CRD until its Established=True
@@ -96,7 +111,7 @@ func waitEstablished(ctx context.Context, applier *apply.Client, names []string)
 	deadline := time.Now().Add(establishedTimeout)
 	for _, name := range names {
 		for {
-			obj, err := applier.Get(ctx, crdGVK, "", name)
+			obj, err := applier.Get(ctx, GVK, "", name)
 			if err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("get CRD %s: %w", name, err)
 			}

@@ -44,7 +44,7 @@ func prepareForTest(t *testing.T, path string) *localCreateInputs {
 		t.Fatalf("loadLocalConfig: %v", err)
 	}
 	p := &ProjectInfo{Version: "latest", ImageRepository: "localhost:5001"}
-	in, err := p.prepareLocalCreate(cfg)
+	in, err := p.prepareLocalCreate(cfg, true)
 	if err != nil {
 		t.Fatalf("prepareLocalCreate: %v", err)
 	}
@@ -221,5 +221,53 @@ func TestKindBootstrapFromConfig_Empty_NoCrash(t *testing.T) {
 	}
 	if got := len(in.VolumeMounts); got != 0 {
 		t.Errorf("empty VolumeMounts len = %d, want 0", got)
+	}
+}
+
+// localSecureDomain is an EducatesLocalConfig serving its domain over
+// HTTPS, which needs a certificate source in the local secrets cache.
+const localSecureDomain = `apiVersion: cli.educates.dev/v1alpha1
+kind: EducatesLocalConfig
+cluster:
+  listenAddress: 10.10.10.1
+ingress:
+  domain: secure.educates.test
+`
+
+// TestPrepareLocalCreate_ClusterOnlyNeedsNoCertificate checks that a
+// create which deploys the platform refuses a secure domain the local
+// secrets cache has no certificate for, while a create with
+// --cluster-only, which deploys nothing, takes it.
+func TestPrepareLocalCreate_ClusterOnlyNeedsNoCertificate(t *testing.T) {
+	t.Setenv("EDUCATES_CLI_DATA_HOME", t.TempDir())
+	path := writeFixture(t, localSecureDomain)
+	p := &ProjectInfo{Version: "latest", ImageRepository: "localhost:5001"}
+
+	prepare := func(deploy bool) (*localCreateInputs, error) {
+		cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
+		if err != nil {
+			t.Fatalf("loadLocalConfig: %v", err)
+		}
+		return p.prepareLocalCreate(cfg, deploy)
+	}
+
+	if _, err := prepare(true); err == nil {
+		t.Fatalf("prepareLocalCreate with a deploy: got no error, want one for the missing certificate source")
+	} else {
+		t.Logf("with a deploy: %v", err)
+	}
+
+	in, err := prepare(false)
+	if err != nil {
+		t.Fatalf("prepareLocalCreate with --cluster-only: %v", err)
+	}
+	if in.Plan != nil {
+		t.Errorf("Plan = %+v, want nil when no deploy follows", in.Plan)
+	}
+	if got, want := in.Domain, "secure.educates.test"; got != want {
+		t.Errorf("Domain = %q, want %q", got, want)
+	}
+	if got, want := in.Cluster.ListenAddress, "10.10.10.1"; got != want {
+		t.Errorf("Cluster.ListenAddress = %q, want %q", got, want)
 	}
 }

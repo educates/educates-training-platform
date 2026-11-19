@@ -2,11 +2,21 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/translator"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
@@ -24,6 +34,27 @@ type deployPipelineFlags struct {
 	Context    string
 	Timeout    time.Duration
 	Verbose    bool
+
+	// Record, when set, has the deploy recorded in the deploy history,
+	// with the kube context it reaches the cluster through.
+	Record *deployer.RevisionInput
+}
+
+// deployRevisionInput returns what a deploy of the config kind kind,
+// read from path as source describes, records about itself in the
+// deploy history, with the config file as given: read again, as loading
+// it may have normalised it, and empty when it can no longer be read.
+func deployRevisionInput(version, kind, source, path string) *deployer.RevisionInput {
+	data, _ := os.ReadFile(path)
+	return &deployer.RevisionInput{CLIVersion: version, Kind: kind, Source: source, Config: data}
+}
+
+// absPath returns path as an absolute path, or as it is when it has none.
+func absPath(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
 }
 
 // translateAndDeploy is the shared "config → translator output → deploy"
@@ -53,15 +84,14 @@ func translateAndDeploy(
 		return err
 	}
 
-	cf := genericclioptions.NewConfigFlags(true)
-	if flags.Kubeconfig != "" {
-		cf.KubeConfig = &flags.Kubeconfig
+	cf := deployConfigFlags(flags)
+
+	// Before the plan writes to the local secrets cache, or anything
+	// reaches the cluster.
+	kubeContext, err := reachCluster(cf, flags)
+	if err != nil {
+		return err
 	}
-	if flags.Context != "" {
-		cf.Context = &flags.Context
-	}
-	ns := deployer.OperatorNamespace
-	cf.Namespace = &ns
 
 	helmLog := io.Discard
 	if flags.Verbose {
@@ -86,8 +116,216 @@ func translateAndDeploy(
 		deployOpts.SyncLocalSecrets = true
 		deployOpts.LocalSecretNames = plan.SyncSecretNames
 	}
+	if flags.Record != nil {
+		record := *flags.Record
+		record.KubeContext = kubeContext
+		deployOpts.Record = &record
+	}
 
 	return deployer.Deploy(ctx, out, deployOpts)
+}
+
+// translateAndDiff is translateAndDeploy as a preview: it translates cfg
+// as a deploy does and shows what the deploy would change in the
+// cluster, changing nothing there or in the local secrets cache. plan is
+// not committed: the CA key pairs it minted, which a deploy writes to the
+// cache before it syncs them, are previewed from the plan itself.
+func translateAndDiff(
+	ctx context.Context,
+	w io.Writer,
+	cfg v1alpha1.Config,
+	plan *localcerts.Plan,
+	flags deployPipelineFlags,
+) error {
+	opts := translator.Options{}
+	if plan != nil {
+		opts = plan.TranslatorOptions()
+	}
+	out, err := translator.Translate(cfg, opts)
+	if err != nil {
+		return err
+	}
+
+	cf := deployConfigFlags(flags)
+
+	kubeContext, err := reachCluster(cf, flags)
+	if err != nil {
+		return err
+	}
+
+	diffOpts := deployer.DiffOptions{
+		Getter:  cf,
+		Out:     w,
+		Context: kubeContext,
+		Verbose: flags.Verbose,
+	}
+	if plan != nil {
+		diffOpts.Notes = append(diffOpts.Notes, plan.Notices...)
+		for _, warning := range plan.Warnings {
+			diffOpts.Notes = append(diffOpts.Notes, "warning: "+warning)
+		}
+		diffOpts.SyncLocalSecrets = true
+		diffOpts.LocalSecretNames = plan.SyncSecretNames
+		diffOpts.PendingSecrets = plan.PendingCAKeyPairs()
+	}
+
+	return deployer.Diff(ctx, out, diffOpts)
+}
+
+// clusterReachTimeout bounds the request that checks a deploy can reach
+// its cluster.
+const clusterReachTimeout = 15 * time.Second
+
+// reachCluster returns the name of the kube context a command that
+// deploys to or reads a cluster, such as a deploy, its preview or an
+// export, reaches the cluster through, with cf and flags, once the
+// cluster has answered, or why it can't: the kubeconfig selects no kube
+// context, as when it has no current context and --context names none,
+// it lacks the context named, or the cluster's API server does not
+// answer. It runs before anything reaches the cluster, so that the user
+// reads which context and server are wrong rather than the first request
+// that fails, which, with no context, goes to client-go's default
+// server, localhost:8080.
+func reachCluster(cf *genericclioptions.ConfigFlags, flags deployPipelineFlags) (string, error) {
+	if err := missingKubeconfigError(cf, flags); err != nil {
+		return "", err
+	}
+
+	raw, err := cf.ToRawKubeConfigLoader().RawConfig()
+	if err != nil {
+		return "", fmt.Errorf("unable to load the kubeconfig: %w", err)
+	}
+
+	name := flags.Context
+	if name == "" {
+		name = raw.CurrentContext
+	}
+	switch {
+	case name != "":
+		if _, ok := raw.Contexts[name]; !ok {
+			return "", fmt.Errorf("kube context %q is not in the kubeconfig, which holds %s", name, kubeContextChoices(raw))
+		}
+	case inCluster():
+		// In a pod without a kubeconfig context, client-go reaches the
+		// cluster through the pod's service account.
+		name = "(in-cluster service account)"
+	default:
+		return "", fmt.Errorf("no kube context is selected: the kubeconfig sets no current context, and holds %s. "+
+			"Pass --context to name one, or --local-cluster for a local cluster", kubeContextChoices(raw))
+	}
+
+	cfg, err := cf.ToRESTConfig()
+	if err != nil {
+		return "", fmt.Errorf("kube context %q: %w", name, err)
+	}
+	cfg = rest.CopyConfig(cfg)
+	cfg.Timeout = clusterReachTimeout
+	dc, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		return "", fmt.Errorf("kube context %q: %w", name, err)
+	}
+	if _, err := dc.ServerVersion(); err != nil {
+		// The URL error repeats the server's address; its cause says why.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		return "", fmt.Errorf("unable to reach the cluster of kube context %q at %s: %w", name, cfg.Host, err)
+	}
+
+	return name, nil
+}
+
+// missingKubeconfigError returns why a command has no kubeconfig to read,
+// when no file of those cf loads exists: the one --kubeconfig names, those
+// $KUBECONFIG names, or else ~/.kube/config. client-go takes a missing
+// file for an empty kubeconfig, which would then be reported as selecting
+// no kube context, as if passing --context could help. A pod with no
+// kubeconfig file reaches its cluster through its service account, so
+// with no --kubeconfig and no --context it is no error there.
+func missingKubeconfigError(cf *genericclioptions.ConfigFlags, flags deployPipelineFlags) error {
+	access := cf.ToRawKubeConfigLoader().ConfigAccess()
+	files := access.GetLoadingPrecedence()
+	for _, file := range files {
+		if _, err := os.Stat(file); err == nil {
+			return nil
+		}
+	}
+
+	switch {
+	case access.IsExplicitFile():
+		return fmt.Errorf("the kubeconfig %s, which --kubeconfig names, does not exist", access.GetExplicitFile())
+	case flags.Context == "" && inCluster():
+		return nil
+	case os.Getenv(clientcmd.RecommendedConfigPathEnvVar) != "":
+		env := "$" + clientcmd.RecommendedConfigPathEnvVar
+		which := "which does not exist"
+		switch len(files) {
+		case 1:
+		case 2:
+			which = "neither of which exists"
+		default:
+			which = "none of which exists"
+		}
+		return fmt.Errorf("there is no kubeconfig: %s names %s, %s. "+
+			"Point %s at a kubeconfig that exists, pass --kubeconfig, or pass --local-cluster for a local cluster, "+
+			"whose kube context is in %s",
+			env, joinedWithAnd(files), which, env, clientcmd.RecommendedHomeFile)
+	default:
+		return fmt.Errorf("there is no kubeconfig: %s does not exist. "+
+			"Create it, point $%s at a kubeconfig, or pass --kubeconfig",
+			joinedWithAnd(files), clientcmd.RecommendedConfigPathEnvVar)
+	}
+}
+
+// inCluster reports whether the CLI runs in a pod whose service account
+// client-go can reach the cluster through.
+func inCluster() bool {
+	_, err := rest.InClusterConfig()
+	return err == nil
+}
+
+// kubeContextChoices names the contexts the kubeconfig raw holds, to
+// choose from in an error, as "the contexts a and b", "the context a" or
+// "no context".
+func kubeContextChoices(raw clientcmdapi.Config) string {
+	names := make([]string, 0, len(raw.Contexts))
+	for name := range raw.Contexts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	switch len(names) {
+	case 0:
+		return "no context"
+	case 1:
+		return "the context " + names[0]
+	default:
+		return "the contexts " + joinedWithAnd(names)
+	}
+}
+
+// joinedWithAnd joins items as "a", "a and b" or "a, b and c".
+func joinedWithAnd(items []string) string {
+	if len(items) < 2 {
+		return strings.Join(items, "")
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
+}
+
+// deployConfigFlags returns the kubectl-style connection flags of a deploy
+// or its preview: flags' kubeconfig and context, and the operator
+// namespace.
+func deployConfigFlags(flags deployPipelineFlags) *genericclioptions.ConfigFlags {
+	cf := genericclioptions.NewConfigFlags(true)
+	if flags.Kubeconfig != "" {
+		cf.KubeConfig = &flags.Kubeconfig
+	}
+	if flags.Context != "" {
+		cf.Context = &flags.Context
+	}
+	ns := deployer.OperatorNamespace
+	cf.Namespace = &ns
+	return cf
 }
 
 // isStdoutTTY tells the progress reporter whether to use \r-based

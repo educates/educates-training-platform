@@ -249,7 +249,7 @@ func renderContourValues(obj *configv1alpha1.EducatesClusterConfig) map[string]a
 	// With a ClusterIP Envoy Service there is no LoadBalancer or
 	// NodePort fronting Envoy, so the only way external traffic reaches
 	// it is by binding the node's 80/443 directly via hostPort. This is
-	// the kind / single-node-local topology (the kind cluster maps host
+	// the kind local-cluster topology (the kind cluster maps host
 	// 80/443 → node 80/443), and mirrors v3's Carvel installer, which
 	// paired `type: ClusterIP` with `useHostPorts: true` for kind. The
 	// chart's envoy.hostPorts already default to 80/443. Cloud installs
@@ -267,6 +267,20 @@ func renderContourValues(obj *configv1alpha1.EducatesClusterConfig) map[string]a
 		// the chart's truthiness guard omits the field; it is only
 		// meaningful for the NodePort / LoadBalancer service types.
 		envoyValues["service"].(map[string]any)["externalTrafficPolicy"] = ""
+		// kind publishes host 80/443 from the control-plane node only,
+		// and keeps that node's NoSchedule taint when the cluster has
+		// workers. Without this toleration the Envoy DaemonSet skips the
+		// control-plane node of a multi-node local cluster, and nothing
+		// answers on the published ports. On other ClusterIP clusters
+		// it lets Envoy also run on any control-plane node the cluster
+		// schedules onto.
+		envoyValues["tolerations"] = []any{
+			map[string]any{
+				"key":      "node-role.kubernetes.io/control-plane",
+				"operator": "Equal",
+				"effect":   "NoSchedule",
+			},
+		}
 	}
 
 	values := map[string]any{

@@ -19,14 +19,14 @@ type Request struct {
 	timer   *time.Timer
 }
 
-// StartRequest records a session request sent to the environment of that
-// name of the portal on the cluster, which counts against it until the
-// request ends.
-func (i *Inventory) StartRequest(cluster, portal, environment string) *Request {
+// StartRequest records a session request sent to the environment, which
+// counts against it until the request ends.
+func (i *Inventory) StartRequest(environment *Environment) *Request {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	r := &Request{inventory: i, cluster: cluster, portal: portal, environment: environment}
-	if entry, ok := i.clusters[cluster]; ok {
+	portal := environment.Portal
+	r := &Request{inventory: i, cluster: portal.Cluster.Name, portal: portal.Name, environment: environment.Name}
+	if entry, ok := i.clusters[r.cluster]; ok {
 		if entry.requests == nil {
 			entry.requests = map[*Request]struct{}{}
 		}

@@ -141,18 +141,16 @@ func (p *Placer) place(ctx context.Context, portals []*inventory.Portal, worksho
 		if ctx.Err() != nil {
 			return Placement{}, false
 		}
-		portal := environment.Portal
 		if unanswered.skip(p.log, environment) {
 			continue
 		}
-		inFlight := p.inventory.StartRequest(portal.Cluster.Name, portal.Name, environment.Name)
+		inFlight := p.inventory.StartRequest(environment)
 		session, err := p.portals.RequestSession(ctx, environment, request)
 		if err != nil {
 			inFlight.Failed()
-			unanswered.record(portal, err)
+			unanswered.record(environment.Portal, err)
 			p.log.Error(err, "The portal did not give a session",
-				"cluster", portal.Cluster.Name, "portal", portal.Name, "environment", environment.Name,
-				"workshop", workshop)
+				append(environmentKeys(environment), "workshop", workshop)...)
 			continue
 		}
 		inFlight.Placed(session.Name)
@@ -171,16 +169,14 @@ func (p *Placer) reacquire(ctx context.Context, portals []*inventory.Portal, wor
 			return Placement{}, false
 		}
 		environment := session.Environment
-		portal := environment.Portal
 		if unanswered.skip(p.log, environment) {
 			continue
 		}
 		reacquired, err := p.portals.ReacquireSession(ctx, session, request.IndexURL)
 		if err != nil {
-			unanswered.record(portal, err)
+			unanswered.record(environment.Portal, err)
 			p.log.Error(err, "The portal did not give the user's session back",
-				"cluster", portal.Cluster.Name, "portal", portal.Name, "environment", environment.Name,
-				"session", session.Name, "workshop", workshop)
+				append(environmentKeys(environment), "session", session.Name, "workshop", workshop)...)
 			continue
 		}
 		return Placement{Environment: environment, Session: reacquired}, true
@@ -203,11 +199,17 @@ func (u unansweredPortals) record(portal *inventory.Portal, err error) {
 // skip reports whether the environment's portal got no answer before, and
 // logs that it is passed over when it did.
 func (u unansweredPortals) skip(log logr.Logger, environment *inventory.Environment) bool {
-	portal := environment.Portal
-	if !u[portal] {
+	if !u[environment.Portal] {
 		return false
 	}
 	log.V(1).Info("Passing over the environment, whose portal did not answer earlier in the session request",
-		"cluster", portal.Cluster.Name, "portal", portal.Name, "environment", environment.Name)
+		environmentKeys(environment)...)
 	return true
+}
+
+// environmentKeys are the keys and values a log line names the environment
+// with: its cluster, its portal and its own name.
+func environmentKeys(environment *inventory.Environment) []any {
+	portal := environment.Portal
+	return []any{"cluster", portal.Cluster.Name, "portal", portal.Name, "environment", environment.Name}
 }

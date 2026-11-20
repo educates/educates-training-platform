@@ -3,6 +3,7 @@ package rest
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -96,6 +97,30 @@ var _ = Describe("Session affinity", func() {
 			ContainSubstring("The portal did not give the user's session back"),
 			ContainSubstring("the portal answered 500 Internal Server Error"),
 			ContainSubstring("workshop=lab-alpha"))))
+	})
+
+	It("contacts a portal that does not answer for the user's session only once", func() {
+		local := sc.placeSession("tenant-labels", "lab-alpha", "user-19")
+		sc.awaitSession("cluster-a", "portal-a", "portal-a-w01", local.SessionName, phaseAllocating)
+		// portal-b's token is obtained here, so that portal-b answers the
+		// request at once.
+		sc.placeSession("tenant-names", "lab-alpha", "user-20")
+		contacted := len(portalA.receivedRequests())
+		portalA.behave(portalHangs)
+
+		// portal-a, with more sessions left under its maximum than portal-b,
+		// which has none, ranks first among the candidates too; were it tried
+		// again, the request would run out of time.
+		started := time.Now()
+		placed := sc.placeSession("tenant-all", "lab-alpha", "user-19")
+		Expect(time.Since(started)).To(BeNumerically("<", sessionRequestTimeout))
+		Expect(placed.ClusterName).To(Equal("cluster-b"))
+		Expect(portalA.receivedRequests()[contacted:]).To(HaveLen(1))
+		expectReacquired(portalA, "portal-a-w01", local.SessionName, "user-19")
+		Expect(sc.service.logs.Lines()).To(ContainElement(And(
+			ContainSubstring("The portal did not give the user's session back"),
+			ContainSubstring("the portal did not answer within 2s"),
+			ContainSubstring("cluster=cluster-a"), ContainSubstring("session="+local.SessionName))))
 	})
 
 	It("requests a new session when no portal gives the user's session back", func() {

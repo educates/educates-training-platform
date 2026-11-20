@@ -186,6 +186,26 @@ var _ = Describe("Session requests", func() {
 		Entry("when the portal cannot be reached", portalUnreachable, "connection refused"),
 	)
 
+	It("answer within the session request's time when several portals never answer", func() {
+		sc.replay("auth-login")
+		sc.awaitClusters()
+		portalA.behave(portalHangs)
+		portalB.behave(portalHangs)
+
+		// Each portal, waited for as long as one call may take, would hold
+		// the request for twice that.
+		started := time.Now()
+		status, body := sc.requestSession("tenant-all", "lab-alpha", "user-19")
+		Expect(time.Since(started)).To(BeNumerically("<", sessionRequestTimeout+portalTimeout/4))
+		Expect(status).To(Equal(http.StatusServiceUnavailable))
+		Expect(body).To(Equal("Workshop not available"))
+		Expect(portalA.receivedRequests()).To(HaveLen(1))
+		Expect(portalB.receivedRequests()).To(HaveLen(1))
+		Expect(sc.service.logs.Lines()).To(ContainElement(And(
+			ContainSubstring("The session request ran out of time before a portal gave a session"),
+			ContainSubstring("workshop=lab-alpha"), ContainSubstring("timeout=3s"))))
+	})
+
 	It("answer that the workshop is not available once every candidate failed", func() {
 		sc.replay("auth-login")
 		sc.awaitClusters()

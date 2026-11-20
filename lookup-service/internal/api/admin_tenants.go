@@ -48,7 +48,7 @@ func (s *Server) listTenants(w http.ResponseWriter, r *http.Request, _ caller) {
 
 // getTenant answers GET /api/v1/tenants/{tenant}, for an admin.
 func (s *Server) getTenant(w http.ResponseWriter, r *http.Request, _ caller) {
-	tenant, ok := s.tenant(w, r)
+	tenant, ok := s.tenant(w, r, r.PathValue("tenant"), http.StatusNotFound)
 	if !ok {
 		return
 	}
@@ -63,24 +63,9 @@ func (s *Server) getTenant(w http.ResponseWriter, r *http.Request, _ caller) {
 // listTenantPortals answers GET /api/v1/tenants/{tenant}/portals, for an
 // admin: the portals the tenant reaches.
 func (s *Server) listTenantPortals(w http.ResponseWriter, r *http.Request, _ caller) {
-	tenant, ok := s.tenant(w, r)
+	tenant, ok := s.tenant(w, r, r.PathValue("tenant"), http.StatusNotFound)
 	if !ok {
 		return
 	}
 	s.writeJSON(w, r, portalListOf(s.inventory.Snapshot().PortalsOf(tenant)))
-}
-
-// tenant returns the tenant the request's path names. It answers the
-// request itself, and returns false, when there is no such tenant.
-func (s *Server) tenant(w http.ResponseWriter, r *http.Request) (config.Tenant, bool) {
-	tenant, found, err := s.config.Tenant(r.Context(), r.PathValue("tenant"))
-	if err != nil {
-		s.internalError(w, r, err)
-		return config.Tenant{}, false
-	}
-	if !found {
-		writeText(w, http.StatusNotFound, "Tenant not available")
-		return config.Tenant{}, false
-	}
-	return tenant, true
 }

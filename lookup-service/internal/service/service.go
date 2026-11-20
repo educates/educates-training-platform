@@ -86,10 +86,15 @@ type Options struct {
 	Clusters clusters.Options
 
 	// Portals configure how the service reaches the training portals it
-	// requests sessions from. Unset fields take their defaults: calls time
-	// out after seconds, and TLS trusts the system roots and the ingress CA
-	// mounted under /opt/app-root/certs/ingress-ca.
+	// requests sessions from. Unset fields take their defaults: each call
+	// times out after 10 seconds, and TLS trusts the system roots and the
+	// ingress CA mounted under /opt/app-root/certs/ingress-ca.
 	Portals trainingportal.Options
+
+	// Placement configures how the service places session requests. Unset
+	// fields take their defaults: a session request is answered within 12
+	// seconds, whichever portals it contacts.
+	Placement placement.Options
 
 	// Logger receives the service's logs.
 	Logger logr.Logger
@@ -191,7 +196,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	placer := placement.NewPlacer(inv, portals, log.WithName("placement"))
+	placer := placement.NewPlacer(inv, portals, opts.Placement, log.WithName("placement"))
 
 	s.api = &http.Server{
 		Handler:           api.NewServer(model, inv, store, placer, log.WithName("api")),

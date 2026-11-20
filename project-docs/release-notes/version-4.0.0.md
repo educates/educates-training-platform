@@ -2250,10 +2250,14 @@ Bugs Fixed
   ended the request instead of moving on to the next candidate. Every call
   to a training portal now times out after 10 seconds, and a training portal
   which refuses the request, answers with an error, cannot be reached or
-  times out is passed over for the next candidate. The request fails, with
-  HTTP 503 and the message ``Workshop not available``, only once no
-  candidate gave a session, and the lookup service logs why each candidate
-  failed, naming the cluster, training portal and workshop environment.
+  times out is passed over for the next candidate. A training portal which
+  cannot be reached or times out is not contacted again for the same
+  request, and a session request is answered within 12 seconds, however
+  many training portals it contacts. The request fails, with HTTP 503 and
+  the message ``Workshop not available``, once no candidate gave a session
+  or its 12 seconds ran out, and the lookup service logs why each candidate
+  failed, naming the cluster, training portal and workshop environment, and
+  when a request ran out of time.
 
 * A session request without ``clientIndexUrl`` was sent to every candidate
   training portal, each of which refused it, and then failed with HTTP 503

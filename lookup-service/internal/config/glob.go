@@ -7,10 +7,9 @@ import (
 )
 
 // globMatches reports whether name matches the glob pattern as Python's
-// fnmatch matches it, which the service always used: * matches any run of
-// characters, ? any one character, [seq] any character in seq and [!seq]
-// any character not in it, and the whole name must match. A [ without its
-// closing ] is an ordinary character.
+// fnmatch matches it: * matches any run of characters, ? any one character,
+// [seq] any character in seq and [!seq] any character not in it, and the
+// whole name must match. A [ without its closing ] is an ordinary character.
 func globMatches(pattern, name string) bool {
 	return compileGlob(pattern).MatchString(name)
 }

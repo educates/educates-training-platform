@@ -80,6 +80,7 @@ func runLookupService(adjust ...func(*service.Options)) *lookupService {
 		ProbeListener: probeListener,
 		Clusters:      clusterOptions(),
 		Portals:       portalOptions(),
+		Placement:     placementOptions(),
 		Logger:        logs.logger(logf.Log.WithName("lookup-service")),
 	}
 	for _, adjustment := range adjust {

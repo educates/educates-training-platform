@@ -1,6 +1,6 @@
 // Package api serves the Lookup Service's REST API. Its routes, status codes,
 // plain-text error bodies and field names are a contract with API clients,
-// and stay as the service has always served them.
+// which the REST suite holds to the golden responses under testdata/golden.
 package api
 
 import (
@@ -18,7 +18,8 @@ import (
 	"github.com/educates/educates-training-platform/lookup-service/internal/tokens"
 )
 
-// maxRequestBody is the largest request body read, as aiohttp allowed.
+// maxRequestBody is the largest request body read, 1 MiB. A larger one is
+// answered 413.
 const maxRequestBody = 1 << 20
 
 const (
@@ -63,7 +64,7 @@ func NewServer(model *config.Model, inv *inventory.Inventory, store *tokens.Stor
 
 // ServeHTTP checks the request's bearer token, if it has one, before
 // routing it, so that a malformed or invalid token is refused whatever the
-// route, as it always was.
+// route.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.log.V(1).Info("Request", "method", r.Method, "path", r.URL.Path)
 
@@ -84,7 +85,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // unrouted answers a request no route serves with the status the mux gives
-// it, 404 or 405, and the body aiohttp gave it.
+// it, and the body `404: Not Found` or `405: Method Not Allowed`.
 func unrouted(w http.ResponseWriter, r *http.Request, handler http.Handler) {
 	recorder := &statusRecorder{header: w.Header()}
 	handler.ServeHTTP(recorder, r)
@@ -136,10 +137,27 @@ func (s *Server) writeJSON(w http.ResponseWriter, r *http.Request, value any) {
 	_, _ = w.Write(body)
 }
 
-// internalError logs err and answers 500 with aiohttp's default body.
+// internalError logs err and answers 500, with a body that says nothing of
+// what went wrong.
 func (s *Server) internalError(w http.ResponseWriter, r *http.Request, err error) {
 	s.log.Error(err, "Request failed", "method", r.Method, "path", r.URL.Path)
 	writeText(w, http.StatusInternalServerError, "500 Internal Server Error\n\nServer got itself in trouble")
+}
+
+// tenant returns the tenant of that name. When there is no such tenant it
+// answers the request itself, with the notFound status and the body
+// `Tenant not available`, and returns false.
+func (s *Server) tenant(w http.ResponseWriter, r *http.Request, name string, notFound int) (config.Tenant, bool) {
+	tenant, found, err := s.config.Tenant(r.Context(), name)
+	if err != nil {
+		s.internalError(w, r, err)
+		return config.Tenant{}, false
+	}
+	if !found {
+		writeText(w, notFound, "Tenant not available")
+		return config.Tenant{}, false
+	}
+	return tenant, true
 }
 
 // errNotJSONObject is returned for a request body that is not a JSON object.

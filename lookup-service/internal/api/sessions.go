@@ -58,13 +58,8 @@ func (s *Server) requestSession(w http.ResponseWriter, r *http.Request, c caller
 		return
 	}
 
-	tenant, found, err := s.config.Tenant(r.Context(), tenantName)
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	if !found {
-		writeText(w, http.StatusServiceUnavailable, "Tenant not available")
+	tenant, ok := s.tenant(w, r, tenantName, http.StatusServiceUnavailable)
+	if !ok {
 		return
 	}
 

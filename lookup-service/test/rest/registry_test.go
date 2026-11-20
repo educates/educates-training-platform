@@ -278,7 +278,7 @@ users:
 			Should(ConsistOf("lab-alpha"))
 	})
 
-	It("say at error level that a cluster went down, repeat it at debug level with a reminder, and say when it is back", func() {
+	It("say at error level that a cluster went down, then at debug level with a reminder, and say when it is up", func() {
 		// An attempt to sync takes the sync timeout and the retry interval,
 		// so the second attempt that fails comes before the reminder is due
 		// and the third after it.
@@ -300,11 +300,12 @@ users:
 			WithTimeout(inventoryTimeout).Should(Equal([]string{"error"}))
 
 		By("leaving it down for three attempts to sync its cache")
-		unsynced := []string{"The cluster's cache has not synced in time", "cluster=cluster-b"}
-		Eventually(func() []string { return logs.Levels(unsynced...) }).WithTimeout(inventoryTimeout + 3*clusterSyncTimeout).
+		const unsynced = "The cluster's cache has not synced in time"
+		Eventually(logs.Levels).WithArguments(unsynced, "cluster=cluster-b").
+			WithTimeout(inventoryTimeout + 3*clusterSyncTimeout).
 			Should(HaveLen(3))
-		Expect(logs.Levels(unsynced...)).To(Equal([]string{"error", "debug", "error"}))
-		Expect(logs.Levels(append(unsynced, "downSince=")...)).To(Equal([]string{"error"}))
+		Expect(logs.Levels(unsynced, "cluster=cluster-b")).To(Equal([]string{"error", "debug", "error"}))
+		Expect(logs.Levels(unsynced, "cluster=cluster-b", "downSince=")).To(Equal([]string{"error"}))
 
 		By("letting it answer again")
 		synced := len(logs.Levels("The cluster's cache has synced", "cluster=cluster-b"))

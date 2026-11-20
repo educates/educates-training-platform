@@ -265,9 +265,13 @@ func lookupServiceHost(obj *platformv1alpha1.LookupService, cfg *configv1alpha1.
 
 // lookupServiceURL is the public URL of the lookup-service Ingress, with the
 // scheme the cluster config publishes for every public-facing URL: http on a
-// plain HTTP install, https otherwise.
+// plain HTTP install, https otherwise, and https when it publishes none.
 func lookupServiceURL(obj *platformv1alpha1.LookupService, cfg *configv1alpha1.EducatesClusterConfig) string {
-	return fmt.Sprintf("%s://%s", cfg.Status.Ingress.Protocol, lookupServiceHost(obj, cfg))
+	protocol := configv1alpha1.IngressProtocolHTTPS
+	if cfg.Status.Ingress.Protocol != "" {
+		protocol = cfg.Status.Ingress.Protocol
+	}
+	return fmt.Sprintf("%s://%s", protocol, lookupServiceHost(obj, cfg))
 }
 
 func (r *LookupServiceReconciler) installOrUpgradeLS(ctx context.Context, obj *platformv1alpha1.LookupService, cfg *configv1alpha1.EducatesClusterConfig) (helm.Result, error) {

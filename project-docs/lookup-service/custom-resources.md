@@ -151,7 +151,7 @@ spec:
 
 The full set of fields in the ``spec`` is:
 
-* ``spec.client.password`` - The password for the client. Must be at least 8 characters. This is used together with the resource name (``metadata.name``) as the username when authenticating via the REST API. Changing the password revokes every access token the client holds, as [Client Authentication](client-authentication) describes.
+* ``spec.client.password`` - The password for the client. Must be at least 8 characters. This is used together with the resource name (``metadata.name``) as the username when authenticating via the REST API. Changing the password revokes every access token the client holds, as [Client Authentication](./client-authentication) describes.
 
 * ``spec.roles`` - A list of roles assigned to the client. At least one role must be specified. Supported roles are ``admin`` and ``tenant``.
 
@@ -181,7 +181,7 @@ Managing resources
 
 All configuration resources are created in the ``educates-config`` namespace, along with the secrets holding the kubeconfig files of remote clusters. The Educates install creates this namespace when it deploys the lookup service, so you do not need to create it yourself. The namespace is kept when the lookup service or Educates is uninstalled, so your configuration resources and secrets are still there when you install Educates again. The lookup service puts no finalizer on the configuration resources, so you can delete them, or the namespace itself, as usual at any time. If you created the ``educates-config`` namespace by hand, as earlier versions of Educates required, the install takes it over and keeps what it holds. A configuration resource kept from an earlier version of Educates can still hold the finalizer that version's lookup service put on it. The lookup service treats such a resource as gone as soon as you delete it, and uninstalling the lookup service removes the finalizer, which lets the deletion finish.
 
-The lookup service reads secrets, and its configuration resources, only in the ``educates-config`` namespace. Resources in any other namespace are ignored.
+The lookup service reads the secrets holding kubeconfig files, and its configuration resources, only in the ``educates-config`` namespace. Resources in any other namespace are ignored.
 
 Resources can be created, updated, and deleted using standard ``kubectl`` commands:
 

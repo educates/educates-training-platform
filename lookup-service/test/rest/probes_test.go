@@ -1,6 +1,8 @@
 package rest
 
 import (
+	"context"
+	"encoding/base64"
 	"net/http"
 	"strings"
 	"time"
@@ -8,6 +10,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
+
+	lookupv1beta1 "github.com/educates/educates-training-platform/lookup-service/api/v1beta1"
 	"github.com/educates/educates-training-platform/lookup-service/internal/service"
 )
 
@@ -90,4 +95,40 @@ var _ = Describe("Readiness", func() {
 		Expect(sc.workshops("tenant-names")).To(BeEmpty())
 		sc.service = nil
 	})
+
+	DescribeTable("does not wait for a cluster whose configuration gives no connection",
+		func(disconnect func(), cluster string) {
+			sc.service.stop()
+			sc.service = nil
+			disconnect()
+
+			// Waiting for the cluster would take far longer than the spec allows.
+			svc := runLookupService(func(options *service.Options) { options.Clusters.ReadyTimeout = time.Minute })
+			DeferCleanup(svc.stop)
+			Eventually(svc.ready).WithTimeout(20 * time.Second).Should(BeTrue())
+			Expect(svc.logs.Lines()).To(ContainElement(And(
+				ContainSubstring("Ready"), ContainSubstring(cluster), ContainSubstring("have not synced"))))
+			Expect(svc.logs.Lines()).To(ContainElement(And(
+				ContainSubstring("The cluster is not connected"), ContainSubstring("cluster="+cluster))))
+		},
+		Entry("a remote cluster whose kubeconfig Secret is missing", func() {
+			Expect(k8sClient.Delete(context.Background(), &corev1.Secret{
+				ObjectMeta: objectMeta(configNamespace, kubeconfigSecret),
+			})).To(Succeed())
+		}, "cluster-b"),
+		Entry("a remote cluster whose kubeconfig Secret lacks the key", func() {
+			updateClusterConfig("cluster-b", func(config *lookupv1beta1.ClusterConfig) {
+				config.Spec.Credentials.Kubeconfig.SecretRef.Key = "absent"
+			})
+		}, "cluster-b"),
+		Entry("a remote cluster whose kubeconfig is refused", func() {
+			updateKubeconfigSecret("config", "not a kubeconfig")
+		}, "cluster-b"),
+		Entry("a remote cluster whose kubeconfig cannot be used", func() {
+			updateKubeconfigSecret("config", strings.Replace(clusterB.kubeconfig(clusterB.config.Host),
+				base64.StdEncoding.EncodeToString(clusterB.config.CAData),
+				base64.StdEncoding.EncodeToString([]byte("not a certificate")), 1))
+		}, "cluster-b"),
+		Entry("the local cluster without its remote-access token", removeLocalToken, "cluster-a"),
+	)
 })

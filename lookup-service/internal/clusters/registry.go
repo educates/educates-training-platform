@@ -13,7 +13,13 @@
 // time is given up on: its cache is stopped, so that it has no portals,
 // and started again until it syncs. No cluster ever waits for another, the
 // REST API waits for none, and readiness waits for the clusters only for a
-// bounded time.
+// bounded time, and not at all for one whose configuration gives no
+// connection.
+//
+// A cluster that is down says so at error level once for each thing that
+// fails, and repeats it at debug level on every further attempt, with a
+// reminder at error level now and then. Its cache syncing, which is logged
+// at info level, ends that.
 package clusters
 
 import (
@@ -59,6 +65,7 @@ const (
 	DefaultProbeInterval       = 10 * time.Second
 	DefaultProbeTimeout        = 5 * time.Second
 	DefaultUnreachableAfter    = 30 * time.Second
+	DefaultDownReminder        = 10 * time.Minute
 )
 
 // syncPollInterval is how often WaitForSync looks at the clusters.
@@ -82,7 +89,8 @@ type Options struct {
 	RetryInterval time.Duration
 	// ReadyTimeout bounds how long WaitForSync waits for clusters' caches
 	// to sync, so that a cluster that cannot be reached holds the service's
-	// readiness back no longer.
+	// readiness back no longer. A cluster whose configuration gives no
+	// connection is not waited for.
 	ReadyTimeout time.Duration
 	// ProbeInterval is how often the API server of a cluster whose cache
 	// has synced is probed, and ProbeTimeout bounds each probe.
@@ -92,6 +100,10 @@ type Options struct {
 	// probe before the cluster is given up on, and contributes no portals
 	// until its cache has synced again.
 	UnreachableAfter time.Duration
+	// DownReminder is how often a cluster that stays down says so again at
+	// error level. Between reminders, the attempts that fail the way an
+	// earlier one did are logged at debug level.
+	DownReminder time.Duration
 }
 
 func (o Options) withDefaults() Options {
@@ -121,6 +133,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.UnreachableAfter <= 0 {
 		o.UnreachableAfter = DefaultUnreachableAfter
+	}
+	if o.DownReminder <= 0 {
+		o.DownReminder = DefaultDownReminder
 	}
 	return o
 }
@@ -161,6 +176,11 @@ type member struct {
 	// reader reads the cluster's API server directly, nil while no cache of
 	// the cluster has synced.
 	reader client.Reader
+	// noConnection reports that the cluster's configuration gives no
+	// connection to try, for the reason info.Problem gives: the cluster's
+	// cache cannot sync until the configuration changes or, for the local
+	// cluster, until the remote-access token is mounted.
+	noConnection bool
 	// cancel stops the supervisor, nil until it is started.
 	cancel context.CancelFunc
 }
@@ -303,6 +323,7 @@ func (r *Registry) setConnection(m *member, connection *kubeconfig.Config, probl
 	r.current(m, func() {
 		m.info.Kubeconfig = connection
 		m.info.Problem = problem
+		m.noConnection = connection == nil
 		r.inventory.SetCluster(m.cluster.Name, m.info)
 		if connection == nil {
 			m.reader = nil
@@ -320,8 +341,9 @@ func (r *Registry) supervise(ctx context.Context, m *member) {
 	// unreachable why its API server was given up on, until a cache of the
 	// cluster syncs again.
 	problem, unreachable := "", ""
+	down := &outage{reminder: r.opts.DownReminder}
 	for ctx.Err() == nil {
-		conn, err := r.connect(m.cluster, log)
+		conn, err := r.connect(m.cluster, log, down)
 		if err != nil {
 			if err.Error() != problem {
 				problem = err.Error()
@@ -339,7 +361,7 @@ func (r *Registry) supervise(ctx context.Context, m *member) {
 		}
 		problem = ""
 		r.setConnection(m, conn.kubeconfig, unreachable)
-		result := r.run(ctx, m, conn)
+		result := r.run(ctx, m, conn, down)
 		switch {
 		case result.unreachable != "":
 			unreachable = result.unreachable
@@ -350,6 +372,59 @@ func (r *Registry) supervise(ctx context.Context, m *member) {
 			sleep(ctx, r.opts.RetryInterval)
 		}
 	}
+}
+
+// outage sets the level of what a cluster logs while it is down, which is
+// from the first failure reported until the cluster is back. Each message
+// is logged at error level the first time, and at debug level from then on,
+// except that once the reminder interval has passed since the message was
+// last logged at error level, it is logged at error level again, saying
+// since when the cluster has been down.
+type outage struct {
+	reminder time.Duration
+
+	mu sync.Mutex
+	// since is when the cluster went down, zero while it is not down.
+	since time.Time
+	// said is when each message logged since the cluster went down was last
+	// logged at error level.
+	said map[string]time.Time
+}
+
+// report logs a failure of the cluster, with the error that caused it, if
+// any.
+func (o *outage) report(log logr.Logger, err error, msg string, keysAndValues ...any) {
+	now := time.Now()
+	o.mu.Lock()
+	if o.since.IsZero() {
+		o.since, o.said = now, map[string]time.Time{}
+	}
+	last, repeated := o.said[msg]
+	remind := repeated && now.Sub(last) >= o.reminder
+	if !repeated || remind {
+		o.said[msg] = now
+	}
+	since := o.since
+	o.mu.Unlock()
+
+	switch {
+	case !repeated:
+		log.Error(err, msg, keysAndValues...)
+	case remind:
+		log.Error(err, msg, append(keysAndValues, "downSince", since.UTC().Format(time.RFC3339))...)
+	default:
+		if err != nil {
+			keysAndValues = append(keysAndValues, "reason", err.Error())
+		}
+		log.V(1).Info(msg, keysAndValues...)
+	}
+}
+
+// over records that the cluster is back.
+func (o *outage) over() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.since = time.Time{}
 }
 
 // connection is what a cluster is reached through: its kubeconfig, the
@@ -365,7 +440,7 @@ type connection struct {
 // calling its API server. It fails when the configuration gives no
 // kubeconfig, or one that is refused or cannot be used, such as one whose
 // CA data is no certificate.
-func (r *Registry) connect(c config.Cluster, log logr.Logger) (*connection, error) {
+func (r *Registry) connect(c config.Cluster, log logr.Logger, down *outage) (*connection, error) {
 	selected, err := r.kubeconfig(c)
 	if err != nil {
 		return nil, err
@@ -375,7 +450,7 @@ func (r *Registry) connect(c config.Cluster, log logr.Logger) (*connection, erro
 		if c.Local() {
 			conn.restConfig.Host = r.opts.LocalServer
 		}
-		conn.cluster, err = r.newCluster(conn.restConfig, log)
+		conn.cluster, err = r.newCluster(conn.restConfig, log, down)
 	}
 	switch {
 	case err == nil:
@@ -442,8 +517,9 @@ type outcome struct {
 // does not sync in time or stops, the cluster's API server has failed every
 // probe for too long, or, for the local cluster, the mounted token changes.
 // While the cache has not synced, and once it has ended, the cluster has no
-// portals.
-func (r *Registry) run(ctx context.Context, m *member, conn *connection) outcome {
+// portals. What fails is reported to down, which the cache syncing, and a
+// probe that is answered, end.
+func (r *Registry) run(ctx context.Context, m *member, conn *connection, down *outage) outcome {
 	log := logr.FromContextOrDiscard(ctx)
 	c := conn.cluster
 
@@ -455,7 +531,7 @@ func (r *Registry) run(ctx context.Context, m *member, conn *connection) outcome
 
 	synced, err := watchTraining(ctx, c.GetCache(), feed)
 	if err != nil {
-		log.Error(err, "Cannot watch the cluster's training resources")
+		down.report(log, err, "Cannot watch the cluster's training resources")
 		return outcome{}
 	}
 
@@ -473,8 +549,8 @@ func (r *Registry) run(ctx context.Context, m *member, conn *connection) outcome
 	cancelSync()
 	if !ok {
 		if ctx.Err() == nil {
-			log.Info("The cluster's cache has not synced in time: it contributes no portals until it does, and is started again",
-				"timeout", r.opts.SyncTimeout.String())
+			down.report(log, nil, "The cluster's cache has not synced in time: it contributes no portals until it "+
+				"does, and is started again", "timeout", r.opts.SyncTimeout.String())
 		}
 		return outcome{}
 	}
@@ -484,6 +560,7 @@ func (r *Registry) run(ctx context.Context, m *member, conn *connection) outcome
 		m.info.Problem = ""
 		r.inventory.SetCluster(m.cluster.Name, m.info)
 	})
+	down.over()
 	log.Info("The cluster's cache has synced", "server", conn.restConfig.Host)
 
 	recheck := make(<-chan time.Time)
@@ -503,7 +580,7 @@ func (r *Registry) run(ctx context.Context, m *member, conn *connection) outcome
 			return outcome{synced: true}
 		case err := <-stopped:
 			stopped <- err
-			log.Error(err, "The cluster's cache stopped")
+			down.report(log, err, "The cluster's cache stopped")
 			return outcome{synced: true}
 		case <-recheck:
 			latest, err := r.kubeconfig(m.cluster)
@@ -520,13 +597,14 @@ func (r *Registry) run(ctx context.Context, m *member, conn *connection) outcome
 					log.Info("The cluster's API server answers again")
 				}
 				failingSince = time.Time{}
+				down.over()
 			case ctx.Err() != nil:
 				return outcome{synced: true}
 			case failingSince.IsZero():
 				failingSince = sent
-				log.Info("The cluster's API server did not answer a probe", "reason", err.Error())
+				down.report(log, err, "The cluster's API server did not answer a probe")
 			case time.Since(failingSince) >= r.opts.UnreachableAfter:
-				log.Error(err, "The cluster's API server has not answered for a while: the cluster contributes "+
+				down.report(log, err, "The cluster's API server has not answered for a while: the cluster contributes "+
 					"no portals until its cache has synced again", "for", time.Since(failingSince).Round(time.Second).String())
 				return outcome{synced: true, unreachable: fmt.Sprintf(
 					"the cluster's API server has not answered since %s: %v",
@@ -547,47 +625,54 @@ func (r *Registry) probe(ctx context.Context, c cluster.Cluster) error {
 	return c.GetAPIReader().List(ctx, portals, client.Limit(1))
 }
 
-// WaitForSync waits until the caches of the clusters of those names have
-// synced, for the ready timeout at most, and returns the names of those
-// that have not: clusters that cannot be reached, or that the configuration
-// no longer names.
+// WaitForSync waits until each of the clusters of those names has settled,
+// for the ready timeout at most: its cache has synced, or its configuration
+// gives no connection, so that waiting would not let it sync. It returns
+// the names of the clusters whose caches have not synced: those without a
+// connection, those that cannot be reached, and those the configuration no
+// longer names.
 func (r *Registry) WaitForSync(ctx context.Context, names []string) []string {
 	ctx, cancel := context.WithTimeout(ctx, r.opts.ReadyTimeout)
 	defer cancel()
 	ticker := time.NewTicker(syncPollInterval)
 	defer ticker.Stop()
 	for {
-		pending := r.unsynced(names)
-		if len(pending) == 0 {
-			return nil
+		unsynced, awaited := r.unsynced(names)
+		if !awaited {
+			return unsynced
 		}
 		select {
 		case <-ctx.Done():
-			return pending
+			return unsynced
 		case <-ticker.C:
 		}
 	}
 }
 
 // unsynced returns those of the names that are not the name of a cluster
-// whose cache has synced.
-func (r *Registry) unsynced(names []string) []string {
+// whose cache has synced, and whether any of them is still worth waiting
+// for, which a cluster whose configuration gives no connection is not.
+func (r *Registry) unsynced(names []string) (unsynced []string, awaited bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var pending []string
 	for _, name := range names {
-		if m, ok := r.members[name]; !ok || m.reader == nil {
-			pending = append(pending, name)
+		m, ok := r.members[name]
+		if ok && m.reader != nil {
+			continue
+		}
+		unsynced = append(unsynced, name)
+		if !ok || !m.noConnection {
+			awaited = true
 		}
 	}
-	return pending
+	return unsynced, awaited
 }
 
 // newCluster creates a controller-runtime cluster that reaches the API
 // server with restConfig. Its cache watches only the training resources,
 // read as unstructured objects; a mapper that knows them, and Secrets, saves
 // the cluster from discovering the API server's resources.
-func (r *Registry) newCluster(restConfig *rest.Config, log logr.Logger) (cluster.Cluster, error) {
+func (r *Registry) newCluster(restConfig *rest.Config, log logr.Logger, down *outage) (cluster.Cluster, error) {
 	restConfig = rest.CopyConfig(restConfig)
 	restConfig.UserAgent = "educates-lookup-service"
 	return cluster.New(restConfig, func(o *cluster.Options) {
@@ -609,21 +694,21 @@ func (r *Registry) newCluster(restConfig *rest.Config, log logr.Logger) (cluster
 				},
 			},
 			DefaultTransform:         cache.TransformStripManagedFields(),
-			DefaultWatchErrorHandler: watchErrorHandler(log),
+			DefaultWatchErrorHandler: watchErrorHandler(log, down),
 		}
 	})
 }
 
-// watchErrorHandler logs why listing or watching a cluster's training
-// resources failed, which the reflector then retries.
-func watchErrorHandler(log logr.Logger) toolscache.WatchErrorHandlerWithContext {
+// watchErrorHandler reports to down why listing or watching a cluster's
+// training resources failed, which the reflector then retries.
+func watchErrorHandler(log logr.Logger, down *outage) toolscache.WatchErrorHandlerWithContext {
 	return func(_ context.Context, _ *toolscache.Reflector, err error) {
 		switch {
 		case errors.Is(err, io.EOF):
 		case apierrors.IsResourceExpired(err) || apierrors.IsGone(err) || errors.Is(err, io.ErrUnexpectedEOF):
 			log.V(1).Info("The watch of the cluster's training resources closed", "reason", err.Error())
 		default:
-			log.Error(err, "Cannot list or watch the cluster's training resources")
+			down.report(log, err, "Cannot list or watch the cluster's training resources")
 		}
 	}
 }

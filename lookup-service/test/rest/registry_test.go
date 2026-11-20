@@ -5,7 +5,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	lookupv1beta1 "github.com/educates/educates-training-platform/lookup-service/api/v1beta1"
+	"github.com/educates/educates-training-platform/lookup-service/internal/service"
 )
 
 // kopfFinalizer is the finalizer the Python service's framework left on the
@@ -273,6 +276,48 @@ users:
 		gate.open()
 		Eventually(sc.workshops).WithArguments("tenant-names").WithTimeout(inventoryTimeout + clusterSyncTimeout).
 			Should(ConsistOf("lab-alpha"))
+	})
+
+	It("say at error level that a cluster went down, repeat it at debug level with a reminder, and say when it is back", func() {
+		// An attempt to sync takes the sync timeout and the retry interval,
+		// so the second attempt that fails comes before the reminder is due
+		// and the third after it.
+		reminder := 2*clusterSyncTimeout - time.Second
+		gate := newGatedAPIServer(clusterB.config, "")
+		DeferCleanup(gate.close)
+		gate.open()
+		updateKubeconfigSecret("config", clusterB.kubeconfig(gate.config.Host))
+		sc.adjust = append(sc.adjust, func(options *service.Options) { options.Clusters.DownReminder = reminder })
+		sc.restart()
+		sc.awaitClusters()
+		logs := sc.service.logs
+
+		By("making cluster-b's API server stop answering")
+		gate.shut()
+		Eventually(logs.Levels).WithArguments("The cluster's API server did not answer a probe", "cluster=cluster-b").
+			WithTimeout(inventoryTimeout).Should(Equal([]string{"error"}))
+		Eventually(logs.Levels).WithArguments("The cluster's API server has not answered", "cluster=cluster-b").
+			WithTimeout(inventoryTimeout).Should(Equal([]string{"error"}))
+
+		By("leaving it down for three attempts to sync its cache")
+		unsynced := []string{"The cluster's cache has not synced in time", "cluster=cluster-b"}
+		Eventually(func() []string { return logs.Levels(unsynced...) }).WithTimeout(inventoryTimeout + 3*clusterSyncTimeout).
+			Should(HaveLen(3))
+		Expect(logs.Levels(unsynced...)).To(Equal([]string{"error", "debug", "error"}))
+		Expect(logs.Levels(append(unsynced, "downSince=")...)).To(Equal([]string{"error"}))
+
+		By("letting it answer again")
+		synced := len(logs.Levels("The cluster's cache has synced", "cluster=cluster-b"))
+		gate.open()
+		Eventually(sc.workshops).WithArguments("tenant-names").WithTimeout(inventoryTimeout + clusterSyncTimeout).
+			Should(ConsistOf("lab-alpha"))
+		Expect(logs.Levels("The cluster's cache has synced", "cluster=cluster-b")).
+			To(Equal(slices.Repeat([]string{"info"}, synced+1)))
+
+		By("stopping it again, which is said at error level again")
+		gate.shut()
+		Eventually(logs.Levels).WithArguments("The cluster's API server did not answer a probe", "cluster=cluster-b").
+			WithTimeout(inventoryTimeout).Should(Equal([]string{"error", "error"}))
 	})
 
 	It("do not connect the local cluster without the remote-access token, and connect it once kubelet mounts it", func() {

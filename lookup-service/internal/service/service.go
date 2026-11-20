@@ -101,7 +101,8 @@ type Options struct {
 	// ProbeListener is where the liveness probe, /healthz, and the readiness
 	// probe, /readyz, are served. The service is ready once its
 	// configuration caches have synced and the cache of every cluster the
-	// configuration then names has synced or been waited for long enough.
+	// configuration then names has synced or been waited for long enough,
+	// which a cluster whose configuration gives no connection is at once.
 	ProbeListener net.Listener
 
 	// Tokens configure the token store. Unset fields take their defaults:
@@ -113,8 +114,9 @@ type Options struct {
 	// ClusterConfigs name. Unset fields take their defaults: the local
 	// cluster is the in-cluster API server, reached with the remote-access
 	// token mounted under /opt/cluster-access-token, readiness waits 10
-	// seconds at most for the clusters' caches, and a cluster whose API
-	// server has failed its probes for 30 seconds contributes no portals.
+	// seconds at most for the clusters' caches, a cluster whose API server
+	// has failed its probes for 30 seconds contributes no portals, and a
+	// cluster that stays down says so at error level every 10 minutes.
 	Clusters clusters.Options
 
 	// Portals configure how the service reaches the training portals it
@@ -223,7 +225,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		// would answer that no workshop is available, so readiness waits
 		// for the clusters the configuration names now, but only for a
 		// bounded time: a cluster that cannot be reached must not keep the
-		// pod out of service.
+		// pod out of service. A cluster whose configuration gives no
+		// connection is not waited for.
 		names, err := model.ClusterNames(ctx)
 		if err != nil {
 			if ctx.Err() != nil {

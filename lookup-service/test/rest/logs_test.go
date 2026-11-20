@@ -14,6 +14,8 @@ import (
 type logRecorder struct {
 	mu    sync.Mutex
 	lines []string
+	// levels holds the level of each of lines: error, info or debug.
+	levels []string
 }
 
 // logger returns a logger that records every line it logs, at any
@@ -30,7 +32,30 @@ func (r *logRecorder) Lines() []string {
 	return slices.Clone(r.lines)
 }
 
-func (r *logRecorder) record(name, msg string, err error, values []any) {
+// Levels returns the level, error, info or debug, of each of the lines
+// logged so far that contain every one of the substrings, in the order
+// they were logged.
+func (r *logRecorder) Levels(substrings ...string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var levels []string
+	for i, line := range r.lines {
+		if !slices.ContainsFunc(substrings, func(s string) bool { return !strings.Contains(line, s) }) {
+			levels = append(levels, r.levels[i])
+		}
+	}
+	return levels
+}
+
+// infoOrDebug names the level of a line logged at a logr verbosity.
+func infoOrDebug(verbosity int) string {
+	if verbosity > 0 {
+		return "debug"
+	}
+	return "info"
+}
+
+func (r *logRecorder) record(level, name, msg string, err error, values []any) {
 	var line strings.Builder
 	if name != "" {
 		line.WriteString(name + ": ")
@@ -45,6 +70,7 @@ func (r *logRecorder) record(name, msg string, err error, values []any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.lines = append(r.lines, line.String())
+	r.levels = append(r.levels, level)
 }
 
 // recordingSink is a logr sink that records every line and passes it on.
@@ -62,14 +88,14 @@ func (s *recordingSink) Init(info logr.RuntimeInfo) { s.next.Init(info) }
 func (s *recordingSink) Enabled(int) bool { return true }
 
 func (s *recordingSink) Info(level int, msg string, keysAndValues ...any) {
-	s.recorder.record(s.name, msg, nil, append(slices.Clone(s.values), keysAndValues...))
+	s.recorder.record(infoOrDebug(level), s.name, msg, nil, append(slices.Clone(s.values), keysAndValues...))
 	if s.next.Enabled(level) {
 		s.next.Info(level, msg, keysAndValues...)
 	}
 }
 
 func (s *recordingSink) Error(err error, msg string, keysAndValues ...any) {
-	s.recorder.record(s.name, msg, err, append(slices.Clone(s.values), keysAndValues...))
+	s.recorder.record("error", s.name, msg, err, append(slices.Clone(s.values), keysAndValues...))
 	s.next.Error(err, msg, keysAndValues...)
 }
 

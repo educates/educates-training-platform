@@ -53,9 +53,32 @@ const (
 
 	serviceAccountNamespaceFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 
-	shutdownTimeout   = 10 * time.Second
-	readHeaderTimeout = 10 * time.Second
+	shutdownTimeout = 10 * time.Second
+
+	// readTimeout bounds how long a client takes to send a request, its
+	// body included.
+	readTimeout = 10 * time.Second
+	// answerMargin is the time a request has to be answered in beyond the
+	// time a session request may take to place, which is the longest any
+	// handler takes: it covers recording a login or logout in the token
+	// Secret and writing the response.
+	answerMargin = 8 * time.Second
+	// idleTimeout is how long a connection is kept open between requests.
+	idleTimeout = 2 * time.Minute
 )
+
+// newServer returns an HTTP server whose connections cannot be held open by
+// a client that stops sending or reading: a request is read within
+// readTimeout and answered within answerTimeout of its headers being read.
+func newServer(handler http.Handler, answerTimeout time.Duration) *http.Server {
+	return &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: readTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      answerTimeout,
+		IdleTimeout:       idleTimeout,
+	}
+}
 
 // Options configure the service.
 type Options struct {
@@ -198,14 +221,12 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 	placer := placement.NewPlacer(inv, portals, opts.Placement, log.WithName("placement"))
 
-	s.api = &http.Server{
-		Handler:           api.NewServer(model, inv, store, placer, log.WithName("api")),
-		ReadHeaderTimeout: readHeaderTimeout,
+	placementTimeout := opts.Placement.Timeout
+	if placementTimeout <= 0 {
+		placementTimeout = placement.DefaultTimeout
 	}
-	s.probes = &http.Server{
-		Handler:           s.probeHandler(),
-		ReadHeaderTimeout: readHeaderTimeout,
-	}
+	s.api = newServer(api.NewServer(model, inv, store, placer, log.WithName("api")), placementTimeout+answerMargin)
+	s.probes = newServer(s.probeHandler(), answerMargin)
 	return s, nil
 }
 

@@ -279,7 +279,8 @@ test builds its scenario as its `scenario` member describes.
 one build with `hack/harnesses/local-cluster.sh`, and rewrites `fixtures/`,
 `states/` and `capture.json`; it leaves `derived/` alone. It needs Python 3,
 kubectl and the educates CLI of that build, and needs the Python Lookup
-Service, so it can no longer be rerun once the Go service replaces it. The
+Service, which the repository no longer holds, so it can be rerun only on a
+build of a commit that holds it, such as the one `capture.json` names. The
 clusters must hold none of the scenario's resources and the Lookup Service
 must have started since they were removed:
 

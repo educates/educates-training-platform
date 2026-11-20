@@ -11,14 +11,3 @@ testdata
 .golangci.yml
 Makefile
 README.md
-
-# The Python implementation, which the image does not run.
-**/__pycache__
-**/.pytest_cache
-.venv
-venv
-.python-version
-pyproject.toml
-uv.lock
-service
-start-service.sh

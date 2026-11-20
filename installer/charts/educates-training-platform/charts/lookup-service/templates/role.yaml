@@ -1,9 +1,9 @@
 {{- /*
 lookup-service's own access, confined to its configuration namespace: it
-indexes the Secrets there, serves and patches its configuration resources,
-and posts events about them. It needs nothing cluster-wide. The operators it
-runs for each monitored cluster use that cluster's kubeconfig, and the local
-cluster's is the remote-access account's token.
+watches its configuration resources there and the Secrets holding the
+kubeconfigs of remote clusters, and writes nothing there. It needs nothing
+cluster-wide. It reaches each monitored cluster with that cluster's
+kubeconfig, and the local cluster with the remote-access account's token.
 */ -}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -18,10 +18,7 @@ rules:
     verbs: [list, watch]
   - apiGroups: [lookup.educates.dev]
     resources: [clusterconfigs, clientconfigs, tenantconfigs]
-    verbs: [list, watch, patch]
-  - apiGroups: [""]
-    resources: [events]
-    verbs: [create]
+    verbs: [list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

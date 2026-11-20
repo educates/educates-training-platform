@@ -395,7 +395,6 @@ prune-builds:
 	rm -rf workshop-images/base-environment/opt/renderer/build
 	rm -rf workshop-images/base-environment/opt/renderer/node_modules
 	rm -rf workshop-images/base-environment/client-programs
-	rm -rf lookup-service/venv
 	rm -rf lookup-service/bin
 	rm -rf secrets-manager/venv
 	rm -rf session-manager/venv

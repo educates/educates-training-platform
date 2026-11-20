@@ -142,7 +142,7 @@ educates admin platform delete
 Container image conventions
 ---------------------------
 
-The runtime component images (`secrets-manager`, `session-manager`, `lookup-service`, `tunnel-manager` and `training-portal`) share one layout, and a change to one of them should normally be mirrored in the others.
+The Python runtime component images (`secrets-manager`, `session-manager`, `tunnel-manager` and `training-portal`) share one layout, and a change to one of them should normally be mirrored in the others. The `lookup-service` image is built from Go instead, as the operator's is: a builder stage on `golang` cross-compiles a static binary, which the final stage packages on `gcr.io/distroless/static:nonroot`. That image has no shell, CA bundle or environment variables for one, and the service reads the cluster ingress CA from the `ca.crt` the chart mounts, through its `--ingress-ca-file` flag.
 
 * **Base image.** `debian:trixie-slim`, pinned by codename only. A rebuild picks up the current Debian point release and security rebuilds. The codename is bumped when Debian stable moves on, which happens roughly every two years; there is no six-monthly base image bump as there was with Fedora. The `image-cache` image is the exception and uses `gcr.io/distroless/base-debian13:nonroot`, since `zot` is a self-contained binary.
 

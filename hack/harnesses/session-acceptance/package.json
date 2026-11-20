@@ -5,7 +5,8 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "harness": "node src/main.mjs"
+    "harness": "node src/main.mjs",
+    "test": "node --test src/*.test.mjs ../lib/*.test.mjs"
   },
   "dependencies": {
     "puppeteer-core": "25.16.0"

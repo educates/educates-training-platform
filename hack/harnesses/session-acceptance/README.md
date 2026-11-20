@@ -286,3 +286,13 @@ what was observed, whether they match and the browser's own action.
 
 The summary table is also printed at the end of the run. Results are
 gitignored.
+
+## Tests
+
+Finding the cluster in the CLI's list of local clusters has unit tests,
+which need no cluster. `npm test` also runs the tests of the modules in
+[`lib/`](../lib/) that the harness shares with the other harnesses:
+
+```
+cd hack/harnesses/session-acceptance && npm test
+```

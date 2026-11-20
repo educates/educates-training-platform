@@ -5,6 +5,7 @@
 import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
+import { parseClusterList } from "../../lib/local-cluster-list.mjs";
 
 // run runs a command and resolves with its exit code and output. It never
 // rejects on a non-zero exit, so callers decide what a failure means.
@@ -101,22 +102,4 @@ export class LocalCluster {
   hostname(prefix) {
     return `${prefix}.${this.domain}`;
   }
-}
-
-// parseClusterList parses the table 'educates local cluster list' prints.
-// The state column may hold a space ("partly running"), so the columns are
-// taken from the right.
-export function parseClusterList(text) {
-  return text
-    .split("\n")
-    .slice(1)
-    .map((line) => line.trim().split(/\s+/))
-    .filter((cols) => cols.length >= 5)
-    .map((cols) => ({
-      name: cols[0],
-      state: cols.slice(1, cols.length - 3).join(" "),
-      listenAddress: cols[cols.length - 3],
-      domain: cols[cols.length - 2],
-      context: cols[cols.length - 1],
-    }));
 }

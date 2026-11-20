@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "harness": "node src/main.mjs",
-    "test": "node --test src/*.test.mjs"
+    "test": "node --test src/*.test.mjs ../lib/*.test.mjs"
   },
   "volta": {
     "node": "24.16.0"

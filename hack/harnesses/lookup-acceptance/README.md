@@ -33,9 +33,10 @@ A run:
    lookup kubeconfig`, whose server address it rewrites from the host's
    loopback port to `https://educates-<remote cluster>-control-plane:6443`,
    the remote control plane container that the lookup cluster's pods reach
-   on Docker's `kind` network; and adds a tenant whose empty selectors reach
-   both portals, an admin client and a tenant client, with passwords made up
-   for the run;
+   on Docker's `kind` network; and adds a tenant that reaches every portal
+   on those two clusters, selected by a label the run gives their
+   `ClusterConfig`s, an admin client and a tenant client, with passwords made
+   up for the run;
 4. waits until the Lookup Service lists both portals, each with one running
    environment at the run's capacity and no session;
 5. requests the run's new sessions one after the other, one user each, and
@@ -155,6 +156,15 @@ The results directory holds:
   portal and environment of every placement that failed, and why.
 
 Results are gitignored.
+
+When the Lookup Service never lists the remote cluster's portal, the run
+stops with what it last saw, and the Lookup Service's log says why it could
+not connect to the remote cluster. Its pods reach the remote control plane
+container by name through Docker's DNS, and the remote portal's host name
+through the host's resolver for `*.educates.test`, so both clusters must run
+on the same Docker host, with Docker Desktop's "Allow privileged port
+forwarding to external machines" setting on, as `educates local cluster
+create` requires.
 
 ## Tests
 

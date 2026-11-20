@@ -87,10 +87,12 @@ export function newCredentials() {
 // lookupManifests registers the lookup cluster, reached through the
 // Lookup Service's own remote-access token since its ClusterConfig names no
 // kubeconfig, and the remote cluster, reached through the kubeconfig in the
-// Secret, with a tenant whose empty selectors match both clusters' portals.
+// Secret, with a tenant that reaches every portal of those two clusters and
+// of no other cluster the service may know.
 export function lookupManifests({ lookup, remote, kubeconfig, credentials }) {
   const meta = (name) => ({ name, namespace: CONFIG_NAMESPACE, labels: HARNESS_LABEL });
   const secretName = `${remote.name}-kubeconfig`;
+  const clusterLabels = [{ name: "harness", value: "lookup-acceptance" }];
   return [
     {
       apiVersion: "v1",
@@ -103,14 +105,14 @@ export function lookupManifests({ lookup, remote, kubeconfig, credentials }) {
       apiVersion: "lookup.educates.dev/v1beta1",
       kind: "ClusterConfig",
       metadata: meta(lookup.name),
-      spec: { labels: [{ name: "harness", value: "lookup-acceptance" }] },
+      spec: { labels: clusterLabels },
     },
     {
       apiVersion: "lookup.educates.dev/v1beta1",
       kind: "ClusterConfig",
       metadata: meta(remote.name),
       spec: {
-        labels: [{ name: "harness", value: "lookup-acceptance" }],
+        labels: clusterLabels,
         credentials: { kubeconfig: { secretRef: { name: secretName } } },
       },
     },
@@ -118,7 +120,7 @@ export function lookupManifests({ lookup, remote, kubeconfig, credentials }) {
       apiVersion: "lookup.educates.dev/v1beta1",
       kind: "TenantConfig",
       metadata: meta(NAMES.tenant),
-      spec: {},
+      spec: { clusters: { labelSelector: { matchLabels: { harness: "lookup-acceptance" } } } },
     },
     {
       apiVersion: "lookup.educates.dev/v1beta1",

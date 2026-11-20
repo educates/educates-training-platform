@@ -284,15 +284,17 @@ func assertRoleGrantedToLookupService(t *testing.T, namespace, name string, want
 	}
 }
 
+// The service only reads its configuration namespace: it watches its
+// configuration resources and the kubeconfig Secrets they reference, and
+// writes nothing there.
 func TestLookupServiceChart_GrantsConfigNamespaceAccess(t *testing.T) {
 	assertRoleGrantedToLookupService(t, lookupServiceConfigNamespace, "educates-lookup-service", []rbacv1.PolicyRule{
 		{APIGroups: []string{""}, Resources: []string{"secrets"}, Verbs: []string{"list", "watch"}},
 		{
 			APIGroups: []string{"lookup.educates.dev"},
 			Resources: []string{"clusterconfigs", "clientconfigs", "tenantconfigs"},
-			Verbs:     []string{"list", "watch", "patch"},
+			Verbs:     []string{"list", "watch"},
 		},
-		{APIGroups: []string{""}, Resources: []string{"events"}, Verbs: []string{"create"}},
 	})
 }
 

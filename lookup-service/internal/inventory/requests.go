@@ -60,7 +60,7 @@ func (r *Request) Placed(session string) {
 	}
 	r.session = session
 	if feed := entry.feed; feed != nil {
-		if record, ok := feed.sessions[session]; ok && isAllocated(record.phase) {
+		if record, ok := feed.sessions[session]; ok && SessionTaken(record.phase) {
 			i.endRequest(r)
 			return
 		}
@@ -93,7 +93,7 @@ func (i *Inventory) settleRequests(cluster, session string, record *sessionRecor
 		return
 	}
 	for r := range entry.requests {
-		if r.session == session && (record == nil || isAllocated(record.phase)) {
+		if r.session == session && (record == nil || SessionTaken(record.phase)) {
 			i.endRequest(r)
 		}
 	}

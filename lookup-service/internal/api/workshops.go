@@ -87,7 +87,7 @@ func workshopsOf(portals []*inventory.Portal) []workshopDetails {
 	index := map[string]int{}
 	for _, portal := range portals {
 		for _, environment := range portal.Environments {
-			if environment.Phase != inventory.PhaseRunning {
+			if environment.Phase != inventory.EnvironmentRunning {
 				continue
 			}
 			details := workshopDetails{

@@ -22,7 +22,7 @@ func Candidates(portals []*inventory.Portal, workshop string) []*inventory.Envir
 	var candidates []*inventory.Environment
 	for _, portal := range portals {
 		for _, environment := range portal.Environments {
-			if environment.Phase != inventory.PhaseRunning || environment.Workshop != workshop {
+			if environment.Phase != inventory.EnvironmentRunning || environment.Workshop != workshop {
 				continue
 			}
 			if environment.Capacity != nil && *environment.Capacity == 0 {
@@ -50,7 +50,7 @@ func SessionsOf(portals []*inventory.Portal, workshop, user string) []*inventory
 				if session.User != user {
 					continue
 				}
-				if session.Phase == inventory.SessionAllocating || session.Phase == inventory.SessionAllocated {
+				if inventory.SessionLive(session.Phase) {
 					sessions = append(sessions, session)
 				}
 			}

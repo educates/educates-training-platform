@@ -254,7 +254,7 @@ func (f *Feed) assemble(c *Cluster, requests map[*Request]struct{}) {
 		if p, ok := c.portals[name]; ok {
 			return p
 		}
-		p := &Portal{Cluster: c, Name: name, UID: uid, Labels: config.Labels{}, Phase: PhaseUnknown,
+		p := &Portal{Cluster: c, Name: name, UID: uid, Labels: config.Labels{}, Phase: PlaceholderPhase,
 			environments: map[string]*Environment{}}
 		c.portals[name] = p
 		return p
@@ -266,7 +266,7 @@ func (f *Feed) assemble(c *Cluster, requests map[*Request]struct{}) {
 		p.Labels = r.labels
 		p.URL = r.url
 		p.Namespace = r.namespace
-		p.RobotCredentialsSecret = r.robot
+		p.RobotCredentialsSecret = r.robotCredentialsSecret
 		p.Phase = r.phase
 		p.Capacity = r.capacity
 	}
@@ -295,7 +295,7 @@ func (f *Feed) assemble(c *Cluster, requests map[*Request]struct{}) {
 		e, ok := p.environments[r.environment]
 		if !ok {
 			e = &Environment{Portal: p, Name: r.environment, UID: r.environmentUID, Workshop: r.workshop,
-				Labels: config.Labels{}, Phase: PhaseUnknown}
+				Labels: config.Labels{}, Phase: PlaceholderPhase}
 			p.environments[r.environment] = e
 		}
 		e.Sessions = append(e.Sessions, &Session{
@@ -306,7 +306,7 @@ func (f *Feed) assemble(c *Cluster, requests map[*Request]struct{}) {
 			User:        r.user,
 		})
 		switch {
-		case isAllocated(r.phase):
+		case SessionTaken(r.phase):
 			e.Allocated++
 		case r.phase == SessionAvailable:
 			e.Available++

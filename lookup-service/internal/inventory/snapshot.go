@@ -5,25 +5,6 @@ import (
 	"github.com/educates/educates-training-platform/lookup-service/internal/kubeconfig"
 )
 
-// The phases of training resources the inventory looks at.
-const (
-	// PhaseRunning is the phase of a workshop environment that can be given
-	// sessions.
-	PhaseRunning = "Running"
-	// PhaseUnknown is the phase of a portal or environment the inventory
-	// knows only from the resources that belong to it, such as a session
-	// seen before its environment.
-	PhaseUnknown = "Unknown"
-
-	// The phases of a workshop session: a reserved session waiting for a
-	// user, a session waiting for its user to activate it, a session in
-	// use, and a session being stopped.
-	SessionAvailable  = "Available"
-	SessionAllocating = "Allocating"
-	SessionAllocated  = "Allocated"
-	SessionStopping   = "Stopping"
-)
-
 // Snapshot is the inventory at one moment: every cluster, with the training
 // portals, workshop environments and sessions of those whose cache has
 // synced. A snapshot never changes, so a request that works from one sees
@@ -178,13 +159,4 @@ type Session struct {
 	// User is the name of the portal user the session belongs to, empty for
 	// a reserved session waiting for a user.
 	User string
-}
-
-// isAllocated reports whether a session in the phase is taken.
-func isAllocated(phase string) bool {
-	switch phase {
-	case SessionAllocating, SessionAllocated, SessionStopping:
-		return true
-	}
-	return false
 }

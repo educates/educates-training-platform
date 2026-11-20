@@ -18,28 +18,28 @@ const (
 
 // portalRecord is a TrainingPortal as the inventory keeps it.
 type portalRecord struct {
-	name, uid  string
-	generation int64
-	labels     config.Labels
-	url        string
-	namespace  string
-	robot      string
-	phase      string
-	capacity   int64
+	name, uid              string
+	generation             int64
+	labels                 config.Labels
+	url                    string
+	namespace              string
+	robotCredentialsSecret string
+	phase                  string
+	capacity               int64
 }
 
 func projectPortal(u *unstructured.Unstructured) portalRecord {
 	labels, _, _ := unstructured.NestedSlice(u.Object, "spec", "portal", "labels")
 	return portalRecord{
-		name:       u.GetName(),
-		uid:        string(u.GetUID()),
-		generation: u.GetGeneration(),
-		labels:     config.ProjectLabels(labels),
-		url:        nestedString(u, "status", "educates", "url"),
-		namespace:  nestedString(u, "status", "educates", "namespace"),
-		robot:      nestedString(u, "status", "educates", "credentialSecrets", "robot"),
-		phase:      nestedString(u, "status", "educates", "phase"),
-		capacity:   nestedInt(u, "spec", "portal", "sessions", "maximum"),
+		name:                   u.GetName(),
+		uid:                    string(u.GetUID()),
+		generation:             u.GetGeneration(),
+		labels:                 config.ProjectLabels(labels),
+		url:                    nestedString(u, "status", "educates", "url"),
+		namespace:              nestedString(u, "status", "educates", "namespace"),
+		robotCredentialsSecret: nestedString(u, "status", "educates", "credentialSecrets", "robot"),
+		phase:                  nestedString(u, "status", "educates", "phase"),
+		capacity:               nestedInt(u, "spec", "portal", "sessions", "maximum"),
 	}
 }
 

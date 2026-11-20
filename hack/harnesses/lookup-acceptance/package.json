@@ -1,0 +1,14 @@
+{
+  "name": "educates-lookup-acceptance-harness",
+  "private": true,
+  "description": "Checks on two local kind clusters that the Lookup Service spreads sessions across them and gives a returning user their session back.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "harness": "node src/main.mjs",
+    "test": "node --test src/*.test.mjs"
+  },
+  "volta": {
+    "node": "24.16.0"
+  }
+}

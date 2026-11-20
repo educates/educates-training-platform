@@ -84,6 +84,8 @@ Any other change to the ``ClientConfig`` resource, such as to its roles or tenan
 
 Tokens stay valid when the lookup service restarts. The lookup service keeps the key it signs tokens with, and the record of which tokens each client has revoked, in the secret ``lookup-service-tokens`` in the ``educates`` namespace, which it creates when it first starts. Uninstalling the lookup service, or Educates, leaves that secret in place, so tokens issued before are still valid when the lookup service is installed again. Delete the secret while the lookup service is not installed if you want a new installation to start with a new signing key, which invalidates every token issued before.
 
+While the lookup service is upgraded or its pod replaced, the old and the new pod run side by side for a moment and share that secret. Each reads the secret again every 10 seconds, so a logout or password change which one pod handles is honoured by the other within 10 seconds.
+
 A custom front-end portal using the lookup service should not assume that a previously obtained token will remain valid indefinitely. It should be designed to handle an HTTP 401 response at any time by re-authenticating and retrying the request.
 
 Capturing the token in a script

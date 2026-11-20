@@ -117,7 +117,7 @@ The possible error responses are:
 
 * HTTP 400 - The request has no access token, its body is not a JSON object, such as malformed JSON, or it lacks ``tenantName``, ``workshopName`` or ``clientIndexUrl``. The plain-text message names a missing property, as in ``Missing clientIndexUrl``.
 * HTTP 401 - The access token is invalid, has expired or has been revoked.
-* HTTP 403 - The client is not permitted to access the specified tenant.
+* HTTP 403 - The client is not permitted to access the specified tenant. This is checked before ``clientIndexUrl``, so a client which may not access the tenant gets HTTP 403 whether or not its request has one.
 * HTTP 503 - The specified tenant configuration does not exist, with the message ``Tenant not available``, or no training portal gave a session, with the message ``Workshop not available``.
 
 Session allocation
@@ -128,6 +128,8 @@ When a workshop session is requested for a user who has no live session of the w
 The candidates are the running workshop environments of the requested workshop on the training portals the tenant can access, on the clusters the lookup service is connected to. A workshop environment whose capacity is 0 is never a candidate.
 
 For each candidate, the lookup service counts as taken the sessions awaiting activation, in use or stopping, as well as the session requests it has sent to the workshop environment whose sessions it has not yet seen, and counts as available the reserved sessions waiting for a user. A training portal's taken sessions are those of all its workshop environments. Its capacity is the ``spec.portal.sessions.maximum`` of the ``TrainingPortal``, and a workshop environment's capacity is the one its training portal gives it.
+
+A session request which a training portal was sent and did not answer in time counts as taken as well, since the training portal may have created the session all the same. It counts until the lookup service sees a new session taken in that workshop environment, or for one minute. A request which the training portal refused, or which never reached it, stops counting at once.
 
 The candidates are ordered by the following, each one deciding only between candidates that the ones before it rank equally:
 
@@ -144,6 +146,8 @@ With the same workshop on two clusters at the same capacity, new sessions theref
 The lookup service then requests a session from the candidates in that order, and moves on to the next candidate when a training portal refuses the request, answers with an error, cannot be reached, or does not answer within 10 seconds. A full candidate is still tried, last, since its training portal may have room the lookup service has not yet seen. When no candidate gives a session, the request fails with HTTP 503 and the message ``Workshop not available``. The reason each candidate failed is in the lookup service logs, with the cluster, training portal and workshop environment it concerns.
 
 A session request is answered within 12 seconds, whatever is left to try, so that a training portal which does not answer cannot hold it for longer. A training portal which cannot be reached or does not answer is not contacted again for the same request, neither for another of its workshop environments nor for the session of a returning user. When the 12 seconds run out before a training portal gives a session, the request fails with HTTP 503 and the message ``Workshop not available``, and the lookup service logs that the request ran out of time.
+
+When a client closes its connection before it is answered, the lookup service contacts no further training portal for the request, but a request it has already sent to a training portal runs on, within the same 12 seconds, and a session the training portal gives is counted as taken. A custom front-end portal should therefore wait for the answer for at least 12 seconds: a session given after it stopped waiting stays reserved for its user until the activation token expires. The lookup service also closes a connection whose request, body included, takes more than 10 seconds to arrive, and a connection left idle for two minutes.
 
 (end-user-identification)=
 End user identification

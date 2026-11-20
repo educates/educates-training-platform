@@ -1621,8 +1621,10 @@ Features Changed
   still uses the ``remote-access`` service account. The lookup service's
   deployment also now has a liveness probe, so a lookup service which stops
   answering is restarted, and a readiness probe, so that it receives
-  requests only once it has loaded its configuration, which it does without
-  waiting for the clusters it monitors.
+  requests only once it has loaded its configuration and listed the
+  resources of the clusters it monitors. It waits at most 10 seconds for the
+  clusters, so a cluster which cannot be reached does not keep it from
+  receiving requests.
 
 * The lookup service is now written in Go, replacing its Python
   implementation in place. It keeps the ``lookup-service`` image name, its
@@ -2421,7 +2423,9 @@ Bugs Fixed
   configured. It now counts as taken the sessions awaiting activation, in
   use or stopping, as well as the session requests it has sent whose
   sessions it has not yet seen, and orders candidates which rank equally at
-  random for each request. New sessions therefore alternate between clusters
+  random for each request. A request which a training portal did not answer
+  in time counts for up to a minute too, since the training portal may have
+  created its session all the same. New sessions therefore alternate between clusters
   of equal capacity, and with unequal capacity the cluster with more room
   takes new sessions until both have the same room left. The ``allocated``
   counts the admin endpoints of the REST API give for training portals and
@@ -2435,6 +2439,21 @@ Bugs Fixed
   placing sessions on a cluster as soon as its ``ClusterConfig`` is deleted,
   and connects to a cluster again whenever its ``ClusterConfig`` or
   kubeconfig secret changes.
+
+* A cluster which stopped answering after the lookup service had connected
+  to it, as when the cluster was decommissioned or the token of its
+  kubeconfig was revoked, kept its training portals in the lookup service,
+  which went on placing sessions on them by the counts it had last seen. The
+  lookup service now checks every 10 seconds that each cluster still answers
+  and still lets it list training portals. A cluster which has failed every
+  check for about 30 seconds contributes no training portals, and gets no
+  session, until the lookup service has listed its resources again, and the
+  lookup service logs why.
+
+* A workshop environment with a capacity of 0 no longer receives sessions.
+  The lookup service treated a capacity of 0 as no limit, so it sent session
+  requests to such a workshop environment, and preferred it to one which was
+  full.
 
 * A session request for a user who already had a session of the workshop,
   named by ``clientUserId`` or by ``spec.user`` of the client's
@@ -2459,7 +2478,10 @@ Bugs Fixed
   the message ``Workshop not available``, once no candidate gave a session
   or its 12 seconds ran out, and the lookup service logs why each candidate
   failed, naming the cluster, training portal and workshop environment, and
-  when a request ran out of time.
+  when a request ran out of time. The lookup service also closes a
+  connection whose request takes more than 10 seconds to arrive, and one
+  left idle for two minutes, so a client which stops sending cannot hold a
+  connection open.
 
 * A session request without ``clientIndexUrl`` was sent to every candidate
   training portal, each of which refused it, and then failed with HTTP 503
@@ -2477,7 +2499,9 @@ Bugs Fixed
   client certificate, even when the selected context used a token, so a
   kubeconfig holding other contexts could not be used. Only the selected
   context is now checked: its user must authenticate with a token, and its
-  cluster must give its CA certificate data. A label without a value on a
+  cluster must give its CA certificate data. A kubeconfig which passes those
+  checks and still cannot be used, such as one whose CA certificate data is
+  not a certificate, is refused the same way. A label without a value on a
   ``ClusterConfig`` or a ``TrainingPortal`` broke matching tenants against
   that cluster or training portal, so a request which needed it failed with
   HTTP 500. Such a label now matches as a label whose value is the empty

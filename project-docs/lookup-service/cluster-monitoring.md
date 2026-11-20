@@ -183,7 +183,13 @@ Changes take effect without restarting the lookup service. When a ``ClusterConfi
 Clusters which cannot be reached
 --------------------------------
 
-A cluster the lookup service cannot reach, or whose resources it cannot list, contributes no training portals, and requests for the training portals of the other clusters are not delayed by it. When the first listing of a cluster's resources does not complete within 30 seconds, the lookup service gives up on that attempt and tries again 10 seconds later, and keeps trying until it succeeds. The lookup service reports itself ready once it has loaded its own configuration, without waiting for any cluster.
+A cluster the lookup service cannot reach, or whose resources it cannot list, contributes no training portals, and requests for the training portals of the other clusters are not delayed by it. When the first listing of a cluster's resources does not complete within 30 seconds, the lookup service gives up on that attempt and tries again 10 seconds later, and keeps trying until it succeeds.
+
+A cluster the lookup service is connected to can stop answering later, as when the cluster is decommissioned, the network to it fails, or the token of its kubeconfig is revoked. The lookup service therefore checks every 10 seconds that the API server of each connected cluster still answers and still lets it list training portals, giving each check 5 seconds. When every check has failed for about 30 seconds, the lookup service stops counting on the cluster: the cluster's training portals are no longer listed and no session is placed on them, rather than being placed by the counts the cluster last gave. The lookup service logs why, and keeps trying to connect to the cluster, which contributes its training portals again once a listing of its resources completes.
+
+A kubeconfig which the lookup service cannot use, such as one whose ``certificate-authority-data`` is not a certificate, is treated as a kubeconfig it refuses: the cluster is not connected, the reason is logged once, and the REST API does not list the cluster, until the ``ClusterConfig`` or its kubeconfig secret changes.
+
+When it starts, the lookup service reports itself ready, and so receives requests, once it has loaded its own configuration and completed the first listing of every cluster that configuration names. It waits at most 10 seconds for the clusters, so a cluster which cannot be reached does not keep the lookup service out of service: after that time it reports itself ready with the clusters it has, and the others contribute their training portals when their listing completes.
 
 Verifying cluster registration
 ------------------------------

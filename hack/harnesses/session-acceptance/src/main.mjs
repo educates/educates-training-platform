@@ -175,6 +175,8 @@ async function main() {
     const h = {
       cluster,
       browser,
+      // A fixture that needs a browser of its own launches it alike.
+      launchBrowser: (profileDir) => launchBrowser({ chrome, cluster, profileDir, headful: values.headful }),
       outDir,
       portal: values.portal,
       portalUrl: trainingPortal.status.educates.url.replace(/\/$/, ""),

@@ -1,6 +1,8 @@
 // The run's report: a table to read at a glance and, per fixture, what was
 // observed, current behaviour included.
 
+import { CASES, SHORTCUTS, copyPasteCaseCell, describeExpected, describeObserved } from "./copypaste.mjs";
+
 function kubectlCell(check) {
   return check ? check.outcome : "-";
 }
@@ -23,6 +25,36 @@ function tunnelCell(r) {
   return r.tunnel.connected ? "connected" : "failed";
 }
 
+function copyPasteCell(r) {
+  if (!r.features.terminalCopyPaste) return "-";
+  const copyPaste = r.terminalCopyPaste;
+  if (!copyPaste) return "not checked";
+  const cases = copyPaste.platforms.flatMap((p) => p.cases);
+  const matched = cases.filter((c) => c.matches).length;
+  const notRun = copyPaste.platforms.filter((p) => p.error).length;
+  return `${matched} of ${CASES.length * copyPaste.platforms.length} match${notRun ? `, ${notRun} platform(s) not run` : ""}`;
+}
+
+function markdownTable(rows) {
+  return [
+    `| ${rows[0].join(" | ")} |`,
+    `|${rows[0].map(() => "---").join("|")}|`,
+    ...rows.slice(1).map((row) => `| ${row.join(" | ")} |`),
+  ].join("\n");
+}
+
+// copyPasteTable shows, per fixture and platform, each copy and paste case.
+function copyPasteTable(results) {
+  const rows = [["Fixture", "Platform", ...CASES.map((c) => c.label)]];
+  for (const r of results) {
+    for (const p of r.terminalCopyPaste?.platforms ?? []) {
+      const byCase = Object.fromEntries(p.cases.map((c) => [c.case, c]));
+      rows.push([r.fixture, p.error ? `${p.label}: not run` : p.label, ...CASES.map((c) => copyPasteCaseCell(byCase[c.id]))]);
+    }
+  }
+  return rows.length > 1 ? markdownTable(rows) : null;
+}
+
 function walkCell(r) {
   if (!r.walk) return "not walked";
   return `${r.walk.pages} pages, ${r.walk.clicked} actions, ${r.walk.terminalErrors.length} terminal errors`;
@@ -30,7 +62,7 @@ function walkCell(r) {
 
 export function summaryTable(results) {
   const rows = [
-    ["Fixture", "Result", "Walk", "get ns <own>", "get ns", "get pods", "Context namespace", "Console", "Tunnel"],
+    ["Fixture", "Result", "Walk", "get ns <own>", "get ns", "get pods", "Context namespace", "Console", "Tunnel", "Copy and paste"],
     ...results.map((r) => [
       r.fixture,
       r.passed ? "PASS" : "FAIL",
@@ -41,13 +73,11 @@ export function summaryTable(results) {
       r.kubectl?.contextNamespace ?? "-",
       consoleCell(r),
       tunnelCell(r),
+      copyPasteCell(r),
     ]),
   ];
-  return [
-    `| ${rows[0].join(" | ")} |`,
-    `|${rows[0].map(() => "---").join("|")}|`,
-    ...rows.slice(1).map((row) => `| ${row.join(" | ")} |`),
-  ].join("\n");
+  const copyPaste = copyPasteTable(results);
+  return copyPaste ? `${markdownTable(rows)}\n\n${copyPaste}` : markdownTable(rows);
 }
 
 function fence(text) {
@@ -102,12 +132,39 @@ function fixtureSection(r) {
   if (r.tunnel) {
     out.push(`- Tunnel from this host with \`educates tunnel connect\`: ${r.tunnel.connected ? "connected" : "failed"}`, "", fence(r.tunnel.output || "(no output)"), "");
   }
+  if (r.terminalCopyPaste) out.push(...copyPasteSection(r.terminalCopyPaste));
   for (const n of r.notes) out.push(`- Note: ${n}`);
   if (r.problems.length) {
     out.push("", "Problems:", "");
     for (const p of r.problems) out.push(`- ${p}`);
   }
   return out.join("\n");
+}
+
+// copyPasteSection reports each platform's cases against the table, with
+// the browser's own action and whether it ran natively or was simulated.
+function copyPasteSection(copyPaste) {
+  const out = ["", "Terminal copy and paste, in terminal 1 of the dashboard inside the portal's page:", ""];
+  for (const p of copyPaste.platforms) {
+    const host = p.hostBindings
+      ? Object.entries(p.hostBindings)
+          .map(([id, hostBindsShortcut]) => `${SHORTCUTS[id].label} ${hostBindsShortcut ? "fires a" : "fires no"} ${SHORTCUTS[id].event} event`)
+          .join(", ")
+      : "not checked";
+    out.push(`- ${p.label}: navigator.platform ${p.reported ?? "not read"} in the dashboard's frame; in this host's Chrome, unaided, ${host}`);
+    if (p.error) out.push(`  - Not run: ${p.error}`);
+  }
+  for (const p of copyPaste.platforms) {
+    if (!p.cases.length) continue;
+    out.push("", `${p.label}:`, "");
+    const rows = [["Case", "The table says", "Observed", "Matches", "Browser's own action"]];
+    for (const c of p.cases) {
+      rows.push([c.label, describeExpected(c.expected), describeObserved(c.observed), c.matches ? "yes" : "no", c.action.text]);
+    }
+    out.push(markdownTable(rows));
+  }
+  out.push("");
+  return out;
 }
 
 export function markdownReport(run, results) {

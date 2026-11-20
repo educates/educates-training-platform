@@ -169,7 +169,16 @@ const (
 	portalHangsOnToken
 	// portalUnreachable cannot be connected to.
 	portalUnreachable
+	// portalAnswersLate gives a session and answers lateAnswer after it
+	// received the request.
+	portalAnswersLate
+	// portalGivesWithoutAnswering gives a session and never answers the
+	// request for it.
+	portalGivesWithoutAnswering
 )
+
+// lateAnswer is how long a portal that answers late takes to answer.
+const lateAnswer = time.Second
 
 // robotCredentials are a training portal's robot credentials.
 type robotCredentials struct {
@@ -471,7 +480,17 @@ func (p *fakePortal) requestSession(w http.ResponseWriter, r *http.Request) {
 		user = string(uuid.NewUUID())
 	}
 
-	session, status, err := p.giveSession(r.Context(), received.environment, user, received.query.Get("session"))
+	// A portal goes on giving the session it was asked for when its caller
+	// stops waiting for the answer.
+	ctx := context.WithoutCancel(r.Context())
+	if behavior == portalAnswersLate {
+		time.Sleep(lateAnswer)
+	}
+	session, status, err := p.giveSession(ctx, received.environment, user, received.query.Get("session"))
+	if behavior == portalGivesWithoutAnswering {
+		p.hold(r)
+		return
+	}
 	switch {
 	case err != nil:
 		http.Error(w, err.Error(), http.StatusInternalServerError)

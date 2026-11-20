@@ -156,7 +156,9 @@ func removeLocalToken() {
 // clusterOptions are the options the suite runs the cluster registry with:
 // the local cluster is cluster-a's API server, reached through the token
 // mount, with a kubeconfig that names the in-cluster address as in a pod,
-// and a cache that does not sync is retried within seconds.
+// and a cache that does not sync is retried, readiness waits for the
+// clusters, and an API server that stops answering is given up on, all
+// within seconds.
 func clusterOptions() clusters.Options {
 	return clusters.Options{
 		LocalTokenDirectory:   localTokenDirectory,
@@ -164,5 +166,9 @@ func clusterOptions() clusters.Options {
 		LocalKubeconfigServer: clusters.DefaultLocalServer,
 		SyncTimeout:           clusterSyncTimeout,
 		RetryInterval:         clusterRetryInterval,
+		ReadyTimeout:          clusterReadyTimeout,
+		ProbeInterval:         clusterProbeInterval,
+		ProbeTimeout:          clusterProbeTimeout,
+		UnreachableAfter:      clusterUnreachableAfter,
 	}
 }

@@ -101,13 +101,20 @@ export class LocalCluster {
     if (result.code !== 0) throw new Error(`deleting local cluster ${this.name} failed (exit ${result.code})`);
   }
 
+  // listed returns the local clusters the CLI lists.
+  async listed() {
+    const list = await mustRun(this.cli, ["local", "cluster", "list"]);
+    return parseClusterList(list.stdout);
+  }
+
   // resolve reads the cluster's listen address and state from the CLI's
   // list of local clusters, its ingress domain and protocol from its
-  // EducatesClusterConfig status, and its ingress CA certificate from the
-  // CA trust Secret the operator publishes.
+  // EducatesClusterConfig status, and, for a cluster served over HTTPS, its
+  // ingress CA certificate from the CA trust Secret the operator publishes.
+  // A cluster served over plain HTTP has no such Secret, and no CA
+  // certificate.
   async resolve() {
-    const list = await mustRun(this.cli, ["local", "cluster", "list"]);
-    const row = parseClusterList(list.stdout).find((r) => r.context === this.context);
+    const row = (await this.listed()).find((r) => r.context === this.context);
     if (!row) throw new Error(`local cluster ${this.name} (kube context ${this.context}) is not in 'educates local cluster list'`);
     if (row.state !== "running") throw new Error(`local cluster ${this.name} is ${row.state}, not running`);
     this.listenAddress = row.listenAddress;
@@ -118,6 +125,8 @@ export class LocalCluster {
     }
     this.domain = ingress.domain;
     this.protocol = ingress.protocol;
+    this.caCertificate = null;
+    if (this.protocol !== "https") return this;
     const secret = await this.kubectlJson(["-n", "educates-installer", "get", "secret", "educates-ingress-ca"]);
     this.caCertificate = Buffer.from(secret.data?.["ca.crt"] ?? "", "base64").toString("utf8");
     if (!this.caCertificate.includes("BEGIN CERTIFICATE")) {
@@ -153,19 +162,25 @@ export class LocalCluster {
 }
 
 // parseClusterList parses the table 'educates local cluster list' prints.
-// The state column may hold a space ("partly running"), so the columns are
-// taken from the right.
+// Its columns are set apart by two spaces or more, and a heading or a value
+// may hold a single space ("LISTEN IP", "partly running"), so each value is
+// taken from the column under its heading, whatever other columns the CLI
+// prints.
 export function parseClusterList(text) {
-  return text
-    .split("\n")
-    .slice(1)
-    .map((line) => line.trim().split(/\s+/))
-    .filter((cols) => cols.length >= 5)
-    .map((cols) => ({
-      name: cols[0],
-      state: cols.slice(1, cols.length - 3).join(" "),
-      listenAddress: cols[cols.length - 3],
-      domain: cols[cols.length - 2],
-      context: cols[cols.length - 1],
-    }));
+  const cells = (line) => line.trim().split(/\s{2,}/);
+  const [heading, ...lines] = text.split("\n");
+  const headings = cells(heading ?? "");
+  return lines
+    .map(cells)
+    .filter((cols) => cols.length === headings.length && cols.length >= 5)
+    .map((cols) => {
+      const value = (name) => cols[headings.indexOf(name)];
+      return {
+        name: value("NAME"),
+        state: value("STATE"),
+        listenAddress: value("LISTEN IP"),
+        domain: value("DOMAIN"),
+        context: value("CONTEXT"),
+      };
+    });
 }

@@ -34,6 +34,8 @@ type Inventory struct {
 	// snapshot is the snapshot of the current state, nil once a change
 	// makes it stale.
 	snapshot *Snapshot
+	// requests counts the session requests started so far.
+	requests uint64
 }
 
 type clusterEntry struct {
@@ -206,8 +208,12 @@ func (f *Feed) DeleteEnvironment(name string) {
 func (f *Feed) SetSession(u *unstructured.Unstructured) {
 	record := projectSession(u)
 	f.update(func() {
+		// What a cache delivers before it has synced is what the cluster
+		// held when the cache started, which is not new.
+		previous, known := f.sessions[record.name]
+		newlyTaken := f.synced && SessionTaken(record.phase) && (!known || !SessionTaken(previous.phase))
 		f.sessions[record.name] = record
-		f.inventory.settleRequests(f.cluster, record.name, &record)
+		f.inventory.settleRequests(f.cluster, record.name, &record, newlyTaken)
 	})
 }
 
@@ -216,7 +222,7 @@ func (f *Feed) SetSession(u *unstructured.Unstructured) {
 func (f *Feed) DeleteSession(name string) {
 	f.update(func() {
 		delete(f.sessions, name)
-		f.inventory.settleRequests(f.cluster, name, nil)
+		f.inventory.settleRequests(f.cluster, name, nil, false)
 	})
 }
 

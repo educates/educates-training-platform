@@ -211,6 +211,70 @@ users:
 			Should(ConsistOf("lab-alpha"))
 	})
 
+	It("do not connect a remote cluster whose kubeconfig passes validation and cannot be used, saying why once", func() {
+		sc.awaitClusters()
+		status, _ := apiRequest(sc.service.url, http.MethodGet, "/api/v1/clusters/cluster-b", sc.adminToken(), "")
+		Expect(status).To(Equal(http.StatusOK))
+
+		By("giving cluster-b a CA that is base64 and no certificate")
+		updateKubeconfigSecret("config", strings.Replace(clusterB.kubeconfig(clusterB.config.Host),
+			base64.StdEncoding.EncodeToString(clusterB.config.CAData),
+			base64.StdEncoding.EncodeToString([]byte("not a certificate")), 1))
+		refusals := func() []string {
+			var lines []string
+			for _, line := range sc.service.logs.Lines() {
+				if strings.Contains(line, "cluster=cluster-b") && strings.Contains(line, "cannot be used") {
+					lines = append(lines, line)
+				}
+			}
+			return lines
+		}
+		Eventually(refusals).WithTimeout(inventoryTimeout).Should(ConsistOf(And(
+			ContainSubstring("The cluster is not connected"),
+			ContainSubstring("the kubeconfig in Secret cluster-b-kubeconfig under key config cannot be used"))))
+		Expect(sc.workshops("tenant-names")).To(BeEmpty())
+
+		By("showing the cluster as not connected, and not trying the same kubeconfig again")
+		status, body := apiRequest(sc.service.url, http.MethodGet, "/api/v1/clusters/cluster-b", sc.adminToken(), "")
+		Expect(status).To(Equal(http.StatusNotFound), body)
+		Consistently(refusals).WithTimeout(4 * clusterRetryInterval).Should(HaveLen(1))
+		Expect(sc.service.logs.Lines()).NotTo(ContainElement(ContainSubstring("Cannot create the cluster's cache")))
+
+		By("giving it a kubeconfig it can use")
+		updateKubeconfigSecret("config", clusterB.kubeconfig(clusterB.config.Host))
+		Eventually(sc.workshops).WithArguments("tenant-names").WithTimeout(inventoryTimeout).
+			Should(ConsistOf("lab-alpha"))
+	})
+
+	It("leave out a cluster whose API server stops answering, and bring it back once it answers again", func() {
+		gate := newGatedAPIServer(clusterB.config, "")
+		DeferCleanup(gate.close)
+		gate.open()
+		updateKubeconfigSecret("config", clusterB.kubeconfig(gate.config.Host))
+		sc.awaitClusters()
+		Eventually(sc.service.logs.Lines).WithTimeout(inventoryTimeout).Should(ContainElement(And(
+			ContainSubstring("The cluster's cache has synced"), ContainSubstring("cluster=cluster-b"),
+			ContainSubstring(gate.config.Host))))
+
+		By("making cluster-b's API server stop answering")
+		gate.shut()
+		Eventually(sc.workshops).WithArguments("tenant-names").
+			WithTimeout(inventoryTimeout + clusterUnreachableAfter).Should(BeEmpty())
+		Expect(sc.service.logs.Lines()).To(ContainElement(And(
+			ContainSubstring("The cluster's API server has not answered"),
+			ContainSubstring("cluster=cluster-b"))))
+		Expect(sc.workshops("tenant-labels")).To(ConsistOf("lab-alpha", "lab-beta"))
+		status, body := apiRequest(sc.service.url, http.MethodGet, "/api/v1/clusters/cluster-b/portals",
+			sc.adminToken(), "")
+		Expect(status).To(Equal(http.StatusOK), body)
+		Expect(body).To(MatchJSON(`{"portals": []}`))
+
+		By("letting it answer again")
+		gate.open()
+		Eventually(sc.workshops).WithArguments("tenant-names").WithTimeout(inventoryTimeout + clusterSyncTimeout).
+			Should(ConsistOf("lab-alpha"))
+	})
+
 	It("do not connect the local cluster without the remote-access token, and connect it once kubelet mounts it", func() {
 		sc.replay("auth-login")
 		sc.awaitClusters()

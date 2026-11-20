@@ -39,6 +39,38 @@ var _ = Describe("Tokens across restarts", func() {
 		sc.replay("auth-verify-revoked")
 	})
 
+	It("honours a logout the pod it replaces handled after it started, as in a rolling update", func() {
+		sc.replay("auth-login-revoke-client")
+		token := sc.token("revoke-client")
+
+		By("starting a second instance of the service against the same Secret")
+		newer := startLookupService(sc.adjust...)
+		DeferCleanup(newer.stop)
+		status, _ := apiRequest(newer.url, http.MethodGet, "/auth/verify", token, "")
+		Expect(status).To(Equal(http.StatusOK))
+
+		By("logging out through the first instance")
+		sc.replay("auth-logout")
+		Eventually(func() int {
+			status, _ := apiRequest(newer.url, http.MethodGet, "/auth/verify", token, "")
+			return status
+		}).WithTimeout(10 * tokenRefreshInterval).Should(Equal(http.StatusUnauthorized))
+
+		By("changing a client's password, which the second instance records in the Secret")
+		updateClientConfig("rotate-client", func(config *lookupv1beta1.ClientConfig) {
+			config.Spec.Client.Password = rotatedPassword
+		})
+		Eventually(func() int {
+			status, _ := apiRequest(newer.url, http.MethodPost, "/auth/login", "",
+				`{"username": "rotate-client", "password": "`+rotatedPassword+`"}`)
+			return status
+		}).WithTimeout(inventoryTimeout).Should(Equal(http.StatusOK))
+
+		By("starting the service again, which reads the revocation from the Secret")
+		sc.restart()
+		sc.replay("auth-verify-revoked")
+	})
+
 	It("revokes a client's tokens when its password changed while the service was stopped", func() {
 		sc.replay("auth-login-rotate-client")
 		sc.service.stop()

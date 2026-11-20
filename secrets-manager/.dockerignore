@@ -5,3 +5,5 @@
 .gitignore
 .venv
 venv
+bin
+cover.out

@@ -184,15 +184,6 @@ func rootCAs(file string, log logr.Logger) (*x509.CertPool, error) {
 // environment when there is one.
 func (c *Client) RequestSession(ctx context.Context, environment *inventory.Environment, request SessionRequest,
 ) (Session, error) {
-	portal := environment.Portal
-	if portal.URL == "" {
-		return Session{}, errors.New("the portal's status gives no URL yet")
-	}
-	base, err := baseURL(portal)
-	if err != nil {
-		return Session{}, err
-	}
-
 	query := url.Values{
 		"user":          {request.User},
 		"email":         {request.Email},
@@ -211,16 +202,12 @@ func (c *Client) RequestSession(ctx context.Context, environment *inventory.Envi
 	if err != nil {
 		return Session{}, fmt.Errorf("encoding the workshop parameters: %w", err)
 	}
-	endpoint := base + "/workshops/environment/" + url.PathEscape(environment.Name) + "/request/?" + query.Encode()
 
-	var answer sessionAnswer
-	if err := c.call(ctx, portal, endpoint, body, &answer); err != nil {
+	session, err := c.session(ctx, environment, query, body)
+	if err != nil {
 		return Session{}, fmt.Errorf("requesting a session: %w", err)
 	}
-	if answer.Name == "" || answer.URL == "" {
-		return Session{}, errors.New("requesting a session: the portal's answer names no session")
-	}
-	return Session{Name: answer.Name, ActivationURL: portal.URL + answer.URL}, nil
+	return session, nil
 }
 
 // ReacquireSession asks the session's portal to give the session back to its
@@ -229,7 +216,26 @@ func (c *Client) RequestSession(ctx context.Context, environment *inventory.Envi
 // when the user has not activated it yet.
 func (c *Client) ReacquireSession(ctx context.Context, session *inventory.Session, indexURL string,
 ) (Session, error) {
-	environment := session.Environment
+	query := url.Values{
+		"user":      {session.User},
+		"index_url": {indexURL},
+		"session":   {session.Name},
+	}
+	reacquired, err := c.session(ctx, session.Environment, query, nil)
+	if err != nil {
+		return Session{}, fmt.Errorf("reacquiring the session: %w", err)
+	}
+	if reacquired.Name != session.Name {
+		return Session{}, fmt.Errorf("reacquiring the session: the portal's answer names session %q", reacquired.Name)
+	}
+	return reacquired, nil
+}
+
+// session POSTs a session request, with the query and body, or no body when
+// body is nil, to the environment's request endpoint, and returns the
+// session the portal's answer names.
+func (c *Client) session(ctx context.Context, environment *inventory.Environment, query url.Values, body []byte,
+) (Session, error) {
 	portal := environment.Portal
 	if portal.URL == "" {
 		return Session{}, errors.New("the portal's status gives no URL yet")
@@ -238,29 +244,21 @@ func (c *Client) ReacquireSession(ctx context.Context, session *inventory.Sessio
 	if err != nil {
 		return Session{}, err
 	}
-
-	query := url.Values{
-		"user":      {session.User},
-		"index_url": {indexURL},
-		"session":   {session.Name},
-	}
 	endpoint := base + "/workshops/environment/" + url.PathEscape(environment.Name) + "/request/?" + query.Encode()
 
-	var answer sessionAnswer
-	if err := c.call(ctx, portal, endpoint, nil, &answer); err != nil {
-		return Session{}, fmt.Errorf("reacquiring the session: %w", err)
+	// The portal answers with the session's name and the path its user
+	// activates it at.
+	var answer struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
 	}
-	if answer.Name != session.Name || answer.URL == "" {
-		return Session{}, fmt.Errorf("reacquiring the session: the portal's answer names session %q", answer.Name)
+	if err := c.call(ctx, portal, endpoint, body, &answer); err != nil {
+		return Session{}, err
+	}
+	if answer.Name == "" || answer.URL == "" {
+		return Session{}, errors.New("the portal's answer names no session")
 	}
 	return Session{Name: answer.Name, ActivationURL: portal.URL + answer.URL}, nil
-}
-
-// sessionAnswer is the part of a portal's answer to a session request the
-// client reads: the session's name, and the path its user activates it at.
-type sessionAnswer struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
 }
 
 // baseURL is the URL of the portal's REST API: its in-cluster service on the

@@ -48,13 +48,13 @@ func (s *Server) requestSession(w http.ResponseWriter, r *http.Request, c caller
 	case workshopName == "":
 		writeText(w, http.StatusBadRequest, "Missing workshopName")
 		return
-	case indexURL == "":
-		writeText(w, http.StatusBadRequest, "Missing clientIndexUrl")
-		return
 	case !c.client.MayActFor(tenantName):
 		s.log.Info("A client requested a session for a tenant it may not act for", "client", c.client.Name,
 			"tenant", tenantName)
 		writeText(w, http.StatusForbidden, "Client not allowed access to tenant")
+		return
+	case indexURL == "":
+		writeText(w, http.StatusBadRequest, "Missing clientIndexUrl")
 		return
 	}
 
@@ -71,7 +71,8 @@ func (s *Server) requestSession(w http.ResponseWriter, r *http.Request, c caller
 		IndexURL:     indexURL,
 		AnalyticsURL: analyticsURL,
 	}
-	if parameters, ok := body["workshopParams"]; ok && parameters != nil {
+	// A null member is passed on as null; only an absent one means none.
+	if parameters, ok := body["workshopParams"]; ok {
 		if request.Parameters, err = json.Marshal(parameters); err != nil {
 			s.internalError(w, r, err)
 			return

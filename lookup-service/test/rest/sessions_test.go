@@ -122,6 +122,27 @@ var _ = Describe("Session requests", func() {
 		Expect(portalB.receivedRequests()).To(BeEmpty())
 	})
 
+	It("refuse a client that may not act for the tenant before saying that the request lacks clientIndexUrl", func() {
+		sc.replay("auth-login")
+		sc.awaitClusters()
+		status, body := apiRequest(sc.service.url, http.MethodPost, "/api/v1/workshops", sc.token("tenant-client"),
+			`{"tenantName": "other-tenant", "workshopName": "lab-alpha"}`)
+		Expect(status).To(Equal(http.StatusForbidden))
+		Expect(body).To(Equal("Client not allowed access to tenant"))
+	})
+
+	It("pass null workshop parameters to the portal as null", func() {
+		sc.replay("auth-login")
+		sc.awaitClusters()
+		status, body := apiRequest(sc.service.url, http.MethodPost, "/api/v1/workshops", sc.token("tenant-client"),
+			`{"tenantName": "tenant-all", "workshopName": "lab-beta", "clientIndexUrl": "https://sites.example.test/index",`+
+				` "clientUserId": "user-10", "workshopParams": null}`)
+		Expect(status).To(Equal(http.StatusOK), body)
+		requests := portalA.receivedRequests()
+		Expect(requests).To(HaveLen(1))
+		Expect(requests[0].body).To(MatchJSON(`{"parameters": null}`))
+	})
+
 	Describe("spreading sessions across two clusters offering the same workshop (#975)", func() {
 		// The portals create each session's WorkshopSession some time after
 		// answering, so that only the requests in flight tell the service

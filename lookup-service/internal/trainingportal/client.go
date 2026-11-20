@@ -91,8 +91,8 @@ type SessionRequest struct {
 	LastName     string
 	IndexURL     string
 	AnalyticsURL string
-	// Parameters are the workshop parameters, passed to the portal as given.
-	// None is an empty list.
+	// Parameters are the workshop parameters as JSON, passed to the portal
+	// as given, a JSON null included. Without any, an empty list is sent.
 	Parameters json.RawMessage
 }
 

@@ -1624,7 +1624,9 @@ Features Changed
   requests only once it has loaded its configuration and listed the
   resources of the clusters it monitors. It waits at most 10 seconds for the
   clusters, so a cluster which cannot be reached does not keep it from
-  receiving requests.
+  receiving requests, and does not wait for a cluster it cannot connect to
+  until its configuration changes, such as one whose kubeconfig secret is
+  missing or whose kubeconfig it refuses.
 
 * The lookup service is now written in Go, replacing its Python
   implementation in place. It keeps the ``lookup-service`` image name, its
@@ -2448,7 +2450,10 @@ Bugs Fixed
   and still lets it list training portals. A cluster which has failed every
   check for about 30 seconds contributes no training portals, and gets no
   session, until the lookup service has listed its resources again, and the
-  lookup service logs why.
+  lookup service logs why. A cluster which stays down is logged at ``error``
+  level when it goes down and once every 10 minutes after that, and at
+  ``info`` level when it is back. The attempts in between are logged at
+  ``debug`` level.
 
 * A workshop environment with a capacity of 0 no longer receives sessions.
   The lookup service treated a capacity of 0 as no limit, so it sent session

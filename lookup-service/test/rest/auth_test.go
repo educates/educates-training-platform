@@ -68,7 +68,7 @@ var _ = Describe("Client authentication", func() {
 		sc.replay("auth-verify-not-a-jwt", "auth-verify-expired", "auth-verify-foreign-key")
 	})
 
-	It("answers a path no route serves and a route asked with another method as before", func() {
+	It("answers a path no route serves with 404, and a route asked with another method with 405", func() {
 		sc.replay("login-alias", "unknown-route", "auth-login-wrong-method")
 	})
 })

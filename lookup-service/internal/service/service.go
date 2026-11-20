@@ -102,6 +102,11 @@ type Options struct {
 	// probe, /readyz, are served.
 	ProbeListener net.Listener
 
+	// Tokens configure the token store. Unset fields take their defaults:
+	// the token Secret is read again every 10 seconds, and a write of it is
+	// given up after 5 seconds.
+	Tokens tokens.Options
+
 	// Clusters configure how the service reaches the clusters its
 	// ClusterConfigs name. Unset fields take their defaults: the local
 	// cluster is the in-cluster API server, reached with the remote-access
@@ -180,8 +185,12 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating a client: %w", err)
 	}
-	store, err := tokens.Open(logr.NewContext(ctx, log.WithName("tokens")), direct, direct, opts.ServiceNamespace)
+	store, err := tokens.Open(logr.NewContext(ctx, log.WithName("tokens")), direct, direct, opts.ServiceNamespace,
+		opts.Tokens)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.manager.Add(store); err != nil {
 		return nil, err
 	}
 

@@ -34,6 +34,10 @@ const (
 	clusterSyncTimeout   = 3 * time.Second
 	clusterRetryInterval = 500 * time.Millisecond
 
+	// tokenRefreshInterval is how often the suite's service reads its token
+	// Secret again.
+	tokenRefreshInterval = 500 * time.Millisecond
+
 	// inventoryTimeout bounds the wait for the service to show a change to
 	// the clusters' configuration or training resources.
 	inventoryTimeout = 20 * time.Second
@@ -78,6 +82,7 @@ func runLookupService(adjust ...func(*service.Options)) *lookupService {
 		RESTConfig:    restConfig,
 		APIListener:   apiListener,
 		ProbeListener: probeListener,
+		Tokens:        tokens.Options{RefreshInterval: tokenRefreshInterval},
 		Clusters:      clusterOptions(),
 		Portals:       portalOptions(),
 		Placement:     placementOptions(),

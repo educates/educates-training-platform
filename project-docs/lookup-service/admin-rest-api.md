@@ -27,7 +27,7 @@ Cluster endpoints
 * ``GET /api/v1/clusters/<cluster>/portals/<portal>/environments/<environment>/users`` - List the user identifiers of the sessions of a specific environment, each once, with ``null`` standing for the reserved sessions which have no user yet.
 * ``GET /api/v1/clusters/<cluster>/portals/<portal>/environments/<environment>/users/<user>/sessions`` - List sessions for a specific user in a specific environment.
 
-In the details of a portal or a workshop environment, ``allocated`` is the number of its sessions which are awaiting activation, in use or stopping. In the details of a workshop environment, ``available`` is the number of its reserved sessions waiting for a user. A ``capacity`` of ``0`` for a portal means it has no maximum number of sessions.
+In the details of a portal or a workshop environment, ``allocated`` is the number of its sessions which are awaiting activation, in use or stopping. In the details of a workshop environment, ``available`` is the number of its reserved sessions waiting for a user. A ``capacity`` of ``0`` for a portal means it has no maximum number of sessions. For a workshop environment, a ``capacity`` of ``0`` stands both for a workshop environment whose status gives no capacity, which the lookup service treats as having no limit, and for one whose capacity is ``0``, which is never a candidate for a session request. The ``status.educates.capacity`` of the ``WorkshopEnvironment`` tells the two apart.
 
 Portal endpoints
 ----------------

@@ -8,7 +8,13 @@
 // The target is a live cluster named by the kubeconfig in
 // SECRETS_MANAGER_LIVE_KUBECONFIG, using the context in
 // SECRETS_MANAGER_LIVE_CONTEXT or else the kubeconfig's current one. With
-// no target, the suite skips.
+// no live cluster named, the target is an envtest API server with the four
+// kinds loaded from the secrets-manager subchart's CRDs, and the
+// secrets-manager's real composition running in this process against it;
+// KUBEBUILDER_ASSETS names the envtest binaries, as make test sets it.
+//
+// A target may name scenarios its secrets-manager does not pass yet; they
+// skip on it.
 //
 // Labels select scenarios in a run:
 //
@@ -50,10 +56,13 @@ var _ = BeforeSuite(func() {
 	var err error
 	target, err = selectTarget()
 	Expect(err).NotTo(HaveOccurred())
-	if target == nil {
-		Skip("no target: set " + liveKubeconfigEnv + " to run the scenarios against a live cluster")
-	}
 	By("running the scenarios against the " + target.Name)
+})
+
+var _ = BeforeEach(func() {
+	if behavior := target.awaited(CurrentSpecReport()); behavior != "" {
+		Skip("awaiting " + behavior + " on the " + target.Name)
+	}
 })
 
 var _ = AfterSuite(func() {

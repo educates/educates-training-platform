@@ -4,7 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -19,7 +23,7 @@ import (
 
 const (
 	// liveKubeconfigEnv names the kubeconfig of a live cluster to run the
-	// scenarios against. Without it the suite has no target and skips.
+	// scenarios against. Without it the suite runs against envtest.
 	liveKubeconfigEnv = "SECRETS_MANAGER_LIVE_KUBECONFIG"
 
 	// liveContextEnv names the context of that kubeconfig to use, its
@@ -50,6 +54,12 @@ type Target struct {
 
 	// Timing bounds how long scenarios wait on the target.
 	Timing Timing
+
+	// Awaiting names, under the behavior they wait for, the scenarios the
+	// target's secrets-manager does not pass yet, by their full text or by
+	// the full text of a container that holds them. They skip on the
+	// target.
+	Awaiting map[string][]string
 
 	// stop releases what the target started, when anything.
 	stop func() error
@@ -85,12 +95,12 @@ var liveTiming = Timing{
 }
 
 // selectTarget picks the target of this run: the live cluster the
-// environment names, or none.
+// environment names, or else envtest with the secrets-manager in process.
 func selectTarget() (*Target, error) {
 	if kubeconfig := os.Getenv(liveKubeconfigEnv); kubeconfig != "" {
 		return newLiveTarget(kubeconfig, os.Getenv(liveContextEnv))
 	}
-	return nil, nil
+	return newEnvtestTarget()
 }
 
 // newLiveTarget reaches a running cluster through the context kubeContext
@@ -133,6 +143,24 @@ func newLiveTarget(kubeconfig, kubeContext string) (*Target, error) {
 		NamespaceController: true,
 		Timing:              liveTiming,
 	}, nil
+}
+
+// awaited returns the behavior the scenario report describes waits for on
+// the target, or "" when the target's secrets-manager passes it.
+func (t *Target) awaited(report SpecReport) string {
+	texts := make([]string, 0, 1+len(report.ContainerHierarchyTexts))
+	texts = append(texts, report.FullText())
+	for i := range report.ContainerHierarchyTexts {
+		texts = append(texts, strings.Join(report.ContainerHierarchyTexts[:i+1], " "))
+	}
+	for behavior, scenarios := range t.Awaiting {
+		for _, text := range texts {
+			if slices.Contains(scenarios, text) {
+				return behavior
+			}
+		}
+	}
+	return ""
 }
 
 // Stop releases what the target started.

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -162,6 +163,56 @@ var _ = Describe("Session requests", func() {
 				Expect(placed[i]).NotTo(Equal(placed[i+1]), "placed %v: sessions %d and %d", placed, i+1, i+2)
 			}
 			Expect(placed).To(HaveEach(BeElementOf("cluster-a", "cluster-b")))
+		})
+
+		// With two sessions left under portal-a's maximum, and no maximum on
+		// portal-b, a request goes to portal-a. Once portal-a has one left,
+		// as few as a portal without a maximum counts for, the next goes to
+		// portal-b, whose environment has more room.
+		prepareUnequalPortals := func() {
+			GinkgoHelper()
+			sc.prepareSpreading(2, 0)
+			updateTraining(clusterA, workshopEnvironmentKind, "portal-a-w01", func(environment map[string]any) {
+				Expect(unstructured.SetNestedField(environment, int64(5), "status", "educates", "capacity")).
+					To(Succeed())
+			})
+			sc.restart()
+			sc.awaitClusters()
+		}
+
+		It("counts the session of a request whose client stopped waiting for the answer", func() {
+			prepareUnequalPortals()
+			portalA.delayCreations()
+			portalA.behave(portalAnswersLate)
+
+			request, err := http.NewRequest(http.MethodPost, sc.service.url+"/api/v1/workshops", strings.NewReader(
+				`{"tenantName": "tenant-all", "workshopName": "lab-alpha", "clientUserId": "user-20", `+
+					`"clientIndexUrl": "https://sites.example.test/index"}`))
+			Expect(err).NotTo(HaveOccurred())
+			request.Header.Set("Authorization", "Bearer "+sc.token("tenant-client"))
+			impatient := &http.Client{Timeout: lateAnswer / 4}
+			_, err = impatient.Do(request)
+			Expect(err).To(HaveOccurred(), "the portal answered before the client stopped waiting")
+			impatient.CloseIdleConnections()
+
+			By("letting the portal answer the request the service went on waiting for")
+			Expect(portalA.receivedRequests()).To(HaveLen(1))
+			time.Sleep(lateAnswer + lateAnswer/2)
+			portalA.behave(portalAnswers)
+			Expect(sc.requestSessions("lab-alpha", 1)).To(Equal([]string{"cluster-b"}))
+			Expect(portalA.receivedRequests()).To(HaveLen(1))
+		})
+
+		It("counts a request its portal did not answer, which the portal may have given a session", func() {
+			prepareUnequalPortals()
+			portalA.delayCreations()
+			portalA.behave(portalGivesWithoutAnswering)
+			Expect(sc.requestSessions("lab-alpha", 1)).To(Equal([]string{"cluster-b"}))
+			Expect(portalA.receivedRequests()).To(HaveLen(1))
+
+			portalA.behave(portalAnswers)
+			Expect(sc.requestSessions("lab-alpha", 1)).To(Equal([]string{"cluster-b"}))
+			Expect(portalA.receivedRequests()).To(HaveLen(1))
 		})
 
 		It("fills the larger cluster until both have as many sessions left, and then alternates", func() {

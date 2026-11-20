@@ -111,25 +111,39 @@ var errOutOfTime = errors.New("the session request ran out of time")
 // reached or did not answer is not contacted again for the request, and the
 // request ends once its time runs out, whatever is left to try. Every attempt
 // that fails is logged, and Place reports false when none succeeds.
+//
+// When ctx is cancelled, as when the request's client stops waiting, no
+// further portal is contacted, but a call a portal was already sent runs
+// on within the request's time: the portal may give a session all the same,
+// which then counts as one.
 func (p *Placer) Place(ctx context.Context, portals []*inventory.Portal, workshop string,
 	request trainingportal.SessionRequest) (Placement, bool) {
-	ctx, cancel := context.WithTimeoutCause(ctx, p.timeout, errOutOfTime)
+	client := ctx
+	ctx, cancel := context.WithTimeoutCause(context.WithoutCancel(client), p.timeout, errOutOfTime)
 	defer cancel()
+	// over reports whether the request is to contact no further portal.
+	over := func() bool { return ctx.Err() != nil || client.Err() != nil }
 	unanswered := unansweredPortals{}
-	placement, ok := p.place(ctx, portals, workshop, request, unanswered)
-	if !ok && errors.Is(context.Cause(ctx), errOutOfTime) {
+	placement, ok := p.place(ctx, over, portals, workshop, request, unanswered)
+	switch {
+	case ok:
+	case errors.Is(context.Cause(ctx), errOutOfTime):
 		p.log.Info("The session request ran out of time before a portal gave a session",
 			"workshop", workshop, "timeout", p.timeout.String())
+	case client.Err() != nil:
+		p.log.Info("The session request's client stopped waiting before a portal gave a session",
+			"workshop", workshop)
 	}
 	return placement, ok
 }
 
-// place is Place within the request's time, recording in unanswered each
+// place is Place within the request's time, which ctx ends, contacting no
+// further portal once over reports true, and recording in unanswered each
 // portal that got no answer.
-func (p *Placer) place(ctx context.Context, portals []*inventory.Portal, workshop string,
+func (p *Placer) place(ctx context.Context, over func() bool, portals []*inventory.Portal, workshop string,
 	request trainingportal.SessionRequest, unanswered unansweredPortals) (Placement, bool) {
 	if request.User != "" {
-		if placement, ok := p.reacquire(ctx, portals, workshop, request, unanswered); ok {
+		if placement, ok := p.reacquire(ctx, over, portals, workshop, request, unanswered); ok {
 			return placement, true
 		}
 	}
@@ -140,7 +154,7 @@ func (p *Placer) place(ctx context.Context, portals []*inventory.Portal, worksho
 		return Placement{}, false
 	}
 	for _, environment := range p.ordering.Order(candidates) {
-		if ctx.Err() != nil {
+		if over() {
 			return Placement{}, false
 		}
 		if unanswered.skip(p.log, environment) {
@@ -149,7 +163,13 @@ func (p *Placer) place(ctx context.Context, portals []*inventory.Portal, worksho
 		inFlight := p.inventory.StartRequest(environment)
 		session, err := p.portals.RequestSession(ctx, environment, request)
 		if err != nil {
-			inFlight.Failed()
+			// A portal that was sent the request and did not answer may
+			// have given a session, which goes on counting.
+			if trainingportal.OutcomeUnknown(err) {
+				inFlight.Unanswered()
+			} else {
+				inFlight.Failed()
+			}
 			unanswered.record(environment.Portal, err)
 			p.log.Error(err, "The portal did not give a session",
 				append(environmentKeys(environment), "workshop", workshop)...)
@@ -164,10 +184,10 @@ func (p *Placer) place(ctx context.Context, portals []*inventory.Portal, worksho
 // reacquire reacquires the request's user's live sessions of the workshop on
 // the portals in turn, and reports the first one its portal gives back. A
 // reacquired session is counted already, so it starts no request in flight.
-func (p *Placer) reacquire(ctx context.Context, portals []*inventory.Portal, workshop string,
+func (p *Placer) reacquire(ctx context.Context, over func() bool, portals []*inventory.Portal, workshop string,
 	request trainingportal.SessionRequest, unanswered unansweredPortals) (Placement, bool) {
 	for _, session := range SessionsOf(portals, workshop, request.User) {
-		if ctx.Err() != nil {
+		if over() {
 			return Placement{}, false
 		}
 		environment := session.Environment

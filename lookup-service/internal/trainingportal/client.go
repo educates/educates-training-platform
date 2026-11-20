@@ -21,10 +21,12 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -286,7 +288,10 @@ func (c *Client) call(ctx context.Context, portal *inventory.Portal, endpoint st
 		if body != nil {
 			content = bytes.NewReader(body)
 		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, content)
+		var sent atomic.Bool
+		trace := &httptrace.ClientTrace{WroteHeaders: func() { sent.Store(true) }}
+		request, err := http.NewRequestWithContext(httptrace.WithClientTrace(ctx, trace), http.MethodPost, endpoint,
+			content)
 		if err != nil {
 			return err
 		}
@@ -295,6 +300,10 @@ func (c *Client) call(ctx context.Context, portal *inventory.Portal, endpoint st
 			request.Header.Set("Content-Type", "application/json")
 		}
 		err = c.do(request, out)
+		var unanswered *unansweredError
+		if errors.As(err, &unanswered) {
+			unanswered.sent = sent.Load()
+		}
 		var refused *statusError
 		if attempt == 0 && errors.As(err, &refused) && refused.status == http.StatusUnauthorized {
 			c.forgetToken(portal, token)
@@ -473,11 +482,25 @@ func (c *Client) do(request *http.Request, out any) error {
 // unansweredError is the error of a call that got no answer: the portal, or
 // the cluster a portal's robot credentials are read from, could not be
 // reached or did not answer in time.
-type unansweredError struct{ err error }
+type unansweredError struct {
+	err error
+	// sent records that the call was a session request the portal was
+	// sent, so that the portal may have acted on it.
+	sent bool
+}
 
 func (e *unansweredError) Error() string { return e.err.Error() }
 
 func (e *unansweredError) Unwrap() error { return e.err }
+
+// OutcomeUnknown reports whether err is that of a session request that was
+// sent to its portal and got no answer, so that the portal may have given
+// a session all the same. A request that never reached the portal, as when
+// the portal could not be connected to or gave no OAuth token, is not one.
+func OutcomeUnknown(err error) bool {
+	var unanswered *unansweredError
+	return errors.As(err, &unanswered) && unanswered.sent
+}
 
 // Unanswered reports whether err is that of a call that got no answer,
 // because the portal, or the cluster its robot credentials are read from,

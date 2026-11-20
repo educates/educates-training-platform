@@ -1,0 +1,31 @@
+{
+  "id": "187-label-tenant-portals-tenant-names",
+  "step": "label-without-value",
+  "description": "The admin lists tenant-names' portals, which needs portal-b's labels.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tenants/tenant-names/portals",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 500,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "500 Internal Server Error\n\nServer got itself in trouble"
+  },
+  "change": {
+    "summary": "A label without a value matches the empty string, so tenant matching works and the request answers as it would without the label.",
+    "spec": "Tenant matching: a label without a value has the empty string as its value; user story 39",
+    "expected": {
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "bodyFormat": "json",
+      "sameBodyAs": "label-cluster-b-portals"
+    }
+  }
+}

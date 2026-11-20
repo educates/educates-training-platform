@@ -1,0 +1,22 @@
+{
+  "id": "145-session-environment-full",
+  "step": "portal-a-busy",
+  "description": "A request for lab-beta, whose only environment is at its capacity: portal-a refuses it.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenantName\": \"tenant-all\", \"workshopName\": \"lab-beta\", \"clientUserId\": \"user-3\", \"clientIndexUrl\": \"https://sites.example.test/index\"}"
+  },
+  "response": {
+    "status": 503,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Workshop not available"
+  }
+}

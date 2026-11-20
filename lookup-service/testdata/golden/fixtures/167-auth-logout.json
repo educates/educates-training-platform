@@ -1,0 +1,21 @@
+{
+  "id": "167-auth-logout",
+  "step": "sessions-settled",
+  "description": "revoke-client logs out.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/logout",
+    "headers": {
+      "Authorization": "Bearer <token:revoke-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {}
+  }
+}

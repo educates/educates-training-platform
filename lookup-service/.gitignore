@@ -1,0 +1,6 @@
+# Tools, envtest binaries and the service binary that make downloads and
+# builds.
+bin/
+
+# Coverage profile written by make test.
+cover.out

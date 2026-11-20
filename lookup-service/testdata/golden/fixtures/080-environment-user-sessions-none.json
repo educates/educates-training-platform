@@ -1,0 +1,23 @@
+{
+  "id": "080-environment-user-sessions-none",
+  "step": "initial",
+  "description": "The sessions of a user who has none.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a/environments/portal-a-w01/users/user-1/sessions",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "sessions": []
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "035-clients-get-unknown",
+  "step": "initial",
+  "description": "The admin reads a client that does not exist.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clients/nobody",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Client not available"
+  }
+}

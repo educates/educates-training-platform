@@ -1,0 +1,53 @@
+{
+  "id": "036-tenants-list",
+  "step": "initial",
+  "description": "The admin lists the tenants.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tenants",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "tenants": [
+        {
+          "name": "tenant-names",
+          "clients": [
+            "tenant-client"
+          ]
+        },
+        {
+          "name": "tenant-all",
+          "clients": [
+            "tenant-client",
+            "both-client",
+            "user-client",
+            "revoke-client",
+            "rotate-client",
+            "doomed-client"
+          ]
+        },
+        {
+          "name": "tenant-labels",
+          "clients": [
+            "tenant-client"
+          ]
+        },
+        {
+          "name": "tenant-none",
+          "clients": [
+            "tenant-client"
+          ]
+        }
+      ]
+    }
+  }
+}

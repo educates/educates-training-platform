@@ -1,0 +1,22 @@
+{
+  "id": "106-session-tenant-without-portals",
+  "step": "initial",
+  "description": "A session request for a tenant that reaches no portal.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"clientIndexUrl\": \"https://sites.example.test/index\", \"tenantName\": \"tenant-none\", \"workshopName\": \"lab-alpha\"}"
+  },
+  "response": {
+    "status": 503,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Workshop not available"
+  }
+}

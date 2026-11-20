@@ -1,0 +1,21 @@
+{
+  "id": "073-portal-unknown",
+  "step": "initial",
+  "description": "A portal that does not exist.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-z",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Portal not available"
+  }
+}

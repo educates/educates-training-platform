@@ -1,0 +1,41 @@
+{
+  "id": "183-label-portal-b",
+  "step": "label-without-value",
+  "description": "The admin reads portal-b, which has a label without a value.",
+  "source": "captured",
+  "actions": [
+    "update TrainingPortal portal-b on cluster-b: add the label featured, without a value, to spec.portal.labels"
+  ],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-b/portals/portal-b",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "portal-b",
+      "uid": "<uid:cluster-b/TrainingPortal/portal-b>",
+      "generation": "<generation>",
+      "labels": [
+        {
+          "name": "region",
+          "value": "west"
+        },
+        {
+          "name": "featured"
+        }
+      ],
+      "cluster": "cluster-b",
+      "url": "https://portal-b-ui.lsg-golden-b.educates.test",
+      "capacity": 0,
+      "allocated": 1,
+      "phase": "Running"
+    }
+  }
+}

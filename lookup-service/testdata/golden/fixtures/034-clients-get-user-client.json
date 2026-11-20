@@ -1,0 +1,29 @@
+{
+  "id": "034-clients-get-user-client",
+  "step": "initial",
+  "description": "The admin reads a client that sets spec.user.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clients/user-client",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "user-client",
+      "roles": [
+        "tenant"
+      ],
+      "tenants": [
+        "tenant-all"
+      ]
+    }
+  }
+}

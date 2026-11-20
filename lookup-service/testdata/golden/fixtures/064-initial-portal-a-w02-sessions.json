@@ -1,0 +1,23 @@
+{
+  "id": "064-initial-portal-a-w02-sessions",
+  "step": "initial",
+  "description": "The admin lists portal-a-w02's sessions.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a/environments/portal-a-w02/sessions",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "sessions": []
+    }
+  }
+}

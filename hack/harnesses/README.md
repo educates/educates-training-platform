@@ -1,15 +1,16 @@
 # Harnesses
 
-The harnesses in this directory check Educates by hand on a local kind
-cluster, driving it the way a user would. They cover what unit tests and
-render checks don't: session-manager's handlers, the training portal,
-lookup-service and tunnel-manager have almost no tests, and checks that only
-rendered resources or ran fixtures have missed real defects. They are not
-run in CI.
+The harnesses in this directory check Educates by hand on local kind
+clusters, driving them the way a user would. They cover what unit tests and
+render checks don't: session-manager's handlers, the training portal and
+tunnel-manager have almost no tests, lookup-service's tests run it against a
+fake training portal, and checks that only rendered resources or ran
+fixtures have missed real defects. They are not run in CI.
 
 | Harness | What it checks |
 |---|---|
 | [session-acceptance](session-acceptance/README.md) | Real workshop sessions, requested from a test portal and walked in Chrome: instruction actions, kubectl inside the workshop container, the console, the SSH tunnel, and the terminals' copy and paste shortcuts under each platform. |
+| [lookup-acceptance](lookup-acceptance/README.md) | The Lookup Service across two named local clusters it creates and deletes itself: new sessions alternating between two portals of equal capacity, and a returning user getting their session back. |
 
 ## Running a harness on a cluster of its own
 
@@ -29,6 +30,16 @@ hack/harnesses/local-cluster.sh delete mycheck
 
 Every command runs to completion without prompting, so an agent or a
 script can drive the whole sequence.
+
+A harness that needs more than one cluster, as `lookup-acceptance` does,
+creates its clusters itself with `local-cluster.sh` and deletes them at the
+end, so it takes the build tag and the listen addresses instead of a
+cluster:
+
+```
+make local-build PACKAGE_VERSION=mytag
+hack/harnesses/lookup-acceptance/run.sh --tag mytag --lookup-address 10.10.10.2 --remote-address 10.10.10.3
+```
 
 ### The cluster helper
 
@@ -106,8 +117,8 @@ Give the harness a subdirectory of its own here, holding everything it
 needs: its code, dependencies, fixtures and a README saying what it checks,
 what it needs on the host, and how to run it without prompts. Add a row to
 the table above. A harness drives a local cluster selected the way the CLI
-selects one, so it works with `local-cluster.sh` and needs no change to
-another harness.
+selects one, or creates the clusters it needs with `local-cluster.sh`, so
+it works with `local-cluster.sh` and needs no change to another harness.
 
 A Node harness pins its Node version for Volta in its `package.json`, with
 `volta pin node@<version>`, and pins its dependencies exactly with a

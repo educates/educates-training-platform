@@ -1,0 +1,21 @@
+{
+  "id": "077-environment-sessions-unknown",
+  "step": "initial",
+  "description": "The sessions of an environment that does not exist.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a/environments/portal-a-w99/sessions",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Environment not available"
+  }
+}

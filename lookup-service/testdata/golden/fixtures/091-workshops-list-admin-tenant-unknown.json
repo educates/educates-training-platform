@@ -1,0 +1,21 @@
+{
+  "id": "091-workshops-list-admin-tenant-unknown",
+  "step": "initial",
+  "description": "The admin lists the workshops of a tenant that does not exist.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workshops?tenant=tenant-unknown",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 503,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Tenant not available"
+  }
+}

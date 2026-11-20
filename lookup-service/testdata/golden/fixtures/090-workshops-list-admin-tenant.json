@@ -1,0 +1,35 @@
+{
+  "id": "090-workshops-list-admin-tenant",
+  "step": "initial",
+  "description": "The admin lists a tenant's workshops.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workshops?tenant=tenant-names",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "workshops": [
+        {
+          "name": "lab-alpha",
+          "title": "Lab Alpha",
+          "description": "A workshop both clusters offer.",
+          "labels": [
+            {
+              "name": "track",
+              "value": "golden"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

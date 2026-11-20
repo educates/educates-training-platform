@@ -1,0 +1,22 @@
+{
+  "id": "102-session-missing-tenant",
+  "step": "initial",
+  "description": "A session request without tenantName.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"clientIndexUrl\": \"https://sites.example.test/index\", \"workshopName\": \"lab-alpha\"}"
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Missing tenantName"
+  }
+}

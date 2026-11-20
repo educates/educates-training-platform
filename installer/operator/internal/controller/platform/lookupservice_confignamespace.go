@@ -46,9 +46,11 @@ const (
 	helmReleaseNameAnnotation      = "meta.helm.sh/release-name"
 	helmReleaseNamespaceAnnotation = "meta.helm.sh/release-namespace"
 
-	// kopfFinalizer is the finalizer kopf puts on every lookup-service
-	// configuration, and removes once lookup-service has handled its
-	// deletion.
+	// kopfFinalizer is the finalizer the kopf-based Lookup Service of
+	// earlier releases put on every configuration. The Lookup Service adds
+	// no finalizer, but a configuration created under a kopf-based one can
+	// still carry it, since the configuration namespace outlives the
+	// release.
 	kopfFinalizer = "kopf.zalando.org/KopfFinalizerMarker"
 )
 
@@ -63,10 +65,10 @@ var lookupServiceConfigurationKinds = []schema.GroupVersionKind{
 // releaseLookupServiceConfigurations removes kopf's finalizer from every
 // lookup-service configuration in the configuration namespace, leaving any
 // other finalizer. The namespace and its configurations outlive the
-// lookup-service release, and with lookup-service gone nothing else removes
-// kopf's finalizer, so deleting a configuration, or the namespace, would wait
-// for lookup-service to run again. Call it only once the release is
-// uninstalled, so lookup-service can no longer put the finalizer back.
+// lookup-service release, and nothing else removes kopf's finalizer from a
+// configuration that still carries it, so deleting that configuration, or
+// the namespace, would wait forever. Call it once the release is
+// uninstalled.
 func releaseLookupServiceConfigurations(ctx context.Context, c client.Client) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		for _, gvk := range lookupServiceConfigurationKinds {

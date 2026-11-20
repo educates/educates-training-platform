@@ -78,7 +78,7 @@
         },
 
         "clusterIngress": {
-          "description": "Cluster-wide ingress identity. Consumed by session-manager (operator config + auto-derived SecretCopier + ca-trust init container), lookup-service (Ingress TLS + ca-trust init container + SecretCopier), and node-ca-injector (CA Secret mount + SecretCopier).",
+          "description": "Cluster-wide ingress identity. Consumed by session-manager (operator config + auto-derived SecretCopier + CA Secret mount, appended to the image's CA bundle), lookup-service (Ingress TLS + CA Secret mount, read by the service itself + SecretCopier), and node-ca-injector (CA Secret mount + SecretCopier).",
           "type": "object",
           "additionalProperties": false,
           "properties": {

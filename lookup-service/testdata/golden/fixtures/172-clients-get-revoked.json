@@ -1,0 +1,21 @@
+{
+  "id": "172-clients-get-revoked",
+  "step": "sessions-settled",
+  "description": "revoke-client reads its own details with the revoked token.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clients/revoke-client",
+    "headers": {
+      "Authorization": "Bearer <token:revoke-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Client identity does not match"
+  }
+}

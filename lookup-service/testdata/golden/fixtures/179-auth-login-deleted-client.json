@@ -1,0 +1,21 @@
+{
+  "id": "179-auth-login-deleted-client",
+  "step": "sessions-settled",
+  "description": "doomed-client logs in once its ClientConfig is deleted.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"username\": \"doomed-client\", \"password\": \"golden-doomed-password\"}"
+  },
+  "response": {
+    "status": 401,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Invalid username/password"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "id": "181-auth-login-recreated-client",
+  "step": "sessions-settled",
+  "description": "The new doomed-client logs in.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"username\": \"doomed-client\", \"password\": \"golden-doomed-password\"}"
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "access_token": "<token:doomed-client#2>",
+      "token_type": "Bearer",
+      "expires_at": "<expires-at>"
+    }
+  },
+  "issuedToken": {
+    "name": "<token:doomed-client#2>",
+    "header": {
+      "alg": "HS256",
+      "typ": "JWT"
+    },
+    "claims": {
+      "sub": "doomed-client",
+      "jti": "client@educates:<uid:cluster-a/ClientConfig/doomed-client#2>#1",
+      "exp": "<expires-at>"
+    },
+    "lifetimeSeconds": 259200
+  }
+}

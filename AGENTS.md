@@ -33,11 +33,13 @@ CLI builds and pushes workshop and extension package images itself, with
 go-containerregistry. Sessions still download content with the vendir
 and imgpkg binaries in the base image (`workshop-images/`).
 
-**The Educates runtime is Python/kopf/Django.** Components in
-`session-manager/`, `secrets-manager/`, `lookup-service/`,
-`training-portal/`, `tunnel-manager/`, `workshop-images/`, and supporting
-services keep those implementations. The installer is the operator + chart;
-it installs the runtime but does not reimplement it.
+**The Educates runtime is Python/kopf/Django, moving to Go one component
+at a time** (ADR 0011 in `developer-docs/adr/`). `lookup-service/` is the
+first ported: a Go service on controller-runtime, client-go and `net/http`.
+Components in `session-manager/`, `secrets-manager/`, `training-portal/`,
+`tunnel-manager/`, `workshop-images/`, and supporting services keep their
+Python implementations. The installer is the operator + chart; it installs
+the runtime but does not reimplement it.
 
 ---
 
@@ -191,15 +193,17 @@ make prune-all                                # Clean caches and build artifacts
 ### CI parity (run the gating workflows locally)
 
 ```bash
-make ci                                       # All CI checks (CLI + operator)
+make ci                                       # All CI checks (CLI, operator, Lookup Service)
 make ci-cli                                   # client-programs-ci.yaml: vet/build/test + chart/schema drift
 make ci-operator                              # installer-operator-ci.yaml: vet/build + manifest/deepcopy drift + envtest + lint
+make ci-lookup-service                        # lookup-service-ci.yaml: vet/build + deepcopy drift + envtest REST suite + lint
 make stage-renderer-files                     # Stage the gitignored CLI theme embed dir (also done by build-cli/ci-cli)
 ```
 
-`ci-operator` needs the Go version pinned in `installer/operator/go.mod`
-on `PATH` (or `GOTOOLCHAIN=go1.x.y`) to avoid mixed-toolchain compile
-errors. See `developer-docs/build-instructions.md`.
+`ci-operator` and `ci-lookup-service` need the Go version pinned in
+`installer/operator/go.mod` and `lookup-service/go.mod` on `PATH` (or
+`GOTOOLCHAIN=go1.x.y`) to avoid mixed-toolchain compile errors. See
+`developer-docs/build-instructions.md`.
 
 ---
 
@@ -213,7 +217,14 @@ errors. See `developer-docs/build-instructions.md`.
 - **secrets-manager/** — Python/kopf operator handling secret copying,
   exporting, importing, injection across namespaces.
 - **training-portal/** — Django web app, user-facing portal. Exposes REST API.
-- **lookup-service/** — Python service for service discovery.
+- **lookup-service/**: Go service giving a tenant's API client a workshop
+  session on whichever training portal, on whichever cluster, offers the
+  workshop. Watches its `lookup.educates.dev` configuration and each
+  cluster's training resources with controller-runtime, and serves its REST
+  API with `net/http`. Its REST suite runs it in process against envtest
+  and asserts the responses captured from the Python service it replaced,
+  in `lookup-service/testdata/golden/`. The image is a static binary on
+  `gcr.io/distroless/static:nonroot`.
 - **tunnel-manager/** — Hybrid Python/Go operator for network tunneling.
 - **node-ca-injector/** — Go program injecting CA certificates into
   Kubernetes nodes.
@@ -245,11 +256,11 @@ The installer has three layers:
 
 ### Go workspace
 
-`go.work` covers `client-programs/` and `node-ca-injector/`. Other Go
-services (`assets-server/`, `image-puller/`, `tunnel-manager/`) have their
-own `go.mod` and are built only via Docker. CI runs no tests outside the
-workspace, so `image-puller/`'s Dockerfile runs its tests in the build
-stage.
+`go.work` covers `client-programs/`, `installer/operator/`,
+`lookup-service/` and `node-ca-injector/`. Other Go services
+(`assets-server/`, `image-puller/`) have their own `go.mod` and are built
+only via Docker. CI runs no tests outside the workspace, so
+`image-puller/`'s Dockerfile runs its tests in the build stage.
 
 ### The four CRDs
 

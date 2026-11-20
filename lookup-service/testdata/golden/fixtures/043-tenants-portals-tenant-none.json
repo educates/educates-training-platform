@@ -1,0 +1,23 @@
+{
+  "id": "043-tenants-portals-tenant-none",
+  "step": "initial",
+  "description": "The admin lists tenant-none's portals.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tenants/tenant-none/portals",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "portals": []
+    }
+  }
+}

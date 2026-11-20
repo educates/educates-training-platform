@@ -1,0 +1,34 @@
+# The clusters the Lookup Service monitors. cluster-a is the cluster the
+# service runs on, reached through the mounted remote-access token because
+# it names no kubeconfig Secret. cluster-b is a second cluster, reached
+# through the kubeconfig in the Secret cluster-b-kubeconfig, under the
+# default key "config". The capture script creates that Secret from the
+# output of "educates admin lookup kubeconfig" for the second cluster, with
+# its server address rewritten to one the first cluster's pods can reach.
+apiVersion: lookup.educates.dev/v1beta1
+kind: ClusterConfig
+metadata:
+  name: cluster-a
+  namespace: educates-config
+spec:
+  labels:
+  - name: location
+    value: a
+  - name: environment
+    value: golden
+---
+apiVersion: lookup.educates.dev/v1beta1
+kind: ClusterConfig
+metadata:
+  name: cluster-b
+  namespace: educates-config
+spec:
+  labels:
+  - name: location
+    value: b
+  - name: environment
+    value: golden
+  credentials:
+    kubeconfig:
+      secretRef:
+        name: cluster-b-kubeconfig

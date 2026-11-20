@@ -76,8 +76,9 @@ session-manager:
 # every node. Off by default; opt in only when a private/self-signed CA is
 # in use AND containerd-level trust is required (e.g., image pulls from a
 # private registry behind that CA). Per-pod CA trust is handled separately:
-# the session-manager and lookup-service Deployments mount the CA Secret
-# and their images append it to the CA bundle their TLS environment
-# variables point at.
+# the session-manager and lookup-service Deployments mount the CA Secret's
+# `ca.crt`. The session-manager image appends it to the CA bundle its TLS
+# environment variables point at, and the lookup-service binary reads it
+# itself, trusting it besides the system roots.
 node-ca-injector:
   enabled: false

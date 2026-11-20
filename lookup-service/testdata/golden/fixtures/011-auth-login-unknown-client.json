@@ -1,0 +1,21 @@
+{
+  "id": "011-auth-login-unknown-client",
+  "step": "initial",
+  "description": "A login as a client that does not exist.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/auth/login",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"username\": \"nobody\", \"password\": \"not-the-password\"}"
+  },
+  "response": {
+    "status": 401,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Invalid username/password"
+  }
+}

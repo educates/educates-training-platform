@@ -69,8 +69,8 @@ const (
 
 // LookupServiceReconciler drives the LookupService CR. Mirrors
 // SecretsManagerReconciler with the addition of a status.url field
-// derived from spec.ingress.prefix +
-// EducatesClusterConfig.status.ingress.domain.
+// derived from EducatesClusterConfig.status.ingress.protocol,
+// spec.ingress.prefix and EducatesClusterConfig.status.ingress.domain.
 type LookupServiceReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -227,8 +227,7 @@ func (r *LookupServiceReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, r.updateLSStatusWithTransitionLog(ctx, obj)
 	}
 
-	host := lookupServiceHost(obj, cfg)
-	obj.Status.URL = "https://" + host
+	obj.Status.URL = lookupServiceURL(obj, cfg)
 	obj.Status.InstalledVersion = vendoredcharts.LookupServiceChartVersion
 	obj.Status.DeploymentRef = &platformv1alpha1.NamespacedRef{
 		Namespace: platformNamespace,
@@ -264,6 +263,17 @@ func lookupServiceHost(obj *platformv1alpha1.LookupService, cfg *configv1alpha1.
 	return fmt.Sprintf("%s.%s", obj.Spec.Ingress.Prefix, cfg.Status.Ingress.Domain)
 }
 
+// lookupServiceURL is the public URL of the lookup-service Ingress, with the
+// scheme the cluster config publishes for every public-facing URL: http on a
+// plain HTTP install, https otherwise, and https when it publishes none.
+func lookupServiceURL(obj *platformv1alpha1.LookupService, cfg *configv1alpha1.EducatesClusterConfig) string {
+	protocol := configv1alpha1.IngressProtocolHTTPS
+	if cfg.Status.Ingress.Protocol != "" {
+		protocol = cfg.Status.Ingress.Protocol
+	}
+	return fmt.Sprintf("%s://%s", protocol, lookupServiceHost(obj, cfg))
+}
+
 func (r *LookupServiceReconciler) installOrUpgradeLS(ctx context.Context, obj *platformv1alpha1.LookupService, cfg *configv1alpha1.EducatesClusterConfig) (helm.Result, error) {
 	if err := platformnamespace.Ensure(ctx, r.Client); err != nil {
 		return helm.Result{}, err
@@ -289,7 +299,9 @@ func (r *LookupServiceReconciler) installOrUpgradeLS(ctx context.Context, obj *p
 // imageRegistryNamespace is the chart's own image registry namespace, kept
 // under the cluster config's image registry prefix.
 func renderLookupServiceValues(obj *platformv1alpha1.LookupService, cfg *configv1alpha1.EducatesClusterConfig, imageRegistryNamespace string) map[string]any {
-	values := map[string]any{}
+	values := map[string]any{
+		"logLevel": defaultLogLevel(obj.Spec.LogLevel),
+	}
 
 	if dev := developmentImageRegistryValues(cfg, imageRegistryNamespace); dev != nil {
 		values["development"] = dev

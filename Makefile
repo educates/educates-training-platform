@@ -245,7 +245,7 @@ stage-base-environment-fetcher: ## Stage the fetcher source the base image build
 # leave generated files modified in the working tree (same as CI flags).
 # =============================================================================
 
-ci: ci-cli ci-operator ## Run all CI checks locally (CLI + operator)
+ci: ci-cli ci-operator ci-lookup-service ## Run all CI checks locally (CLI, operator, Lookup Service)
 
 ci-cli: stage-renderer-files ## CI parity for the CLI (client-programs-ci.yaml)
 	cd client-programs && go vet ./...
@@ -267,6 +267,15 @@ ci-operator: package-local-charts ## CI parity for the operator (installer-opera
 		|| { echo "ERROR: generated DeepCopy drifted. Run 'make -C installer/operator generate' and commit."; exit 1; }
 	$(MAKE) -C installer/operator test
 	$(MAKE) -C installer/operator lint
+
+ci-lookup-service: ## CI parity for the Lookup Service (lookup-service-ci.yaml)
+	cd lookup-service && go vet ./...
+	cd lookup-service && go build ./...
+	$(MAKE) -C lookup-service generate
+	@git diff --exit-code -- lookup-service/api \
+		|| { echo "ERROR: generated DeepCopy drifted. Run 'make -C lookup-service generate' and commit."; exit 1; }
+	$(MAKE) -C lookup-service test
+	$(MAKE) -C lookup-service lint
 
 # The always-on localhost:5001 registry must exist before images can be
 # pushed to it. The freshly built CLI deploys it (idempotent, no cluster
@@ -386,7 +395,7 @@ prune-builds:
 	rm -rf workshop-images/base-environment/opt/renderer/build
 	rm -rf workshop-images/base-environment/opt/renderer/node_modules
 	rm -rf workshop-images/base-environment/client-programs
-	rm -rf lookup-service/venv
+	rm -rf lookup-service/bin
 	rm -rf secrets-manager/venv
 	rm -rf session-manager/venv
 	rm -rf training-portal/venv
@@ -424,7 +433,7 @@ help: ## Show available targets
   refresh-operator-embeds refresh-cli-embeds package-local-charts \
   generate-cli-schemas verify-cli-schemas embed-installer-chart verify-installer-chart \
   build-cli build-client-programs client-programs-educates ensure-local-registry \
-  stage-renderer-files ci ci-cli ci-operator release-prep \
+  stage-renderer-files ci ci-cli ci-operator ci-lookup-service release-prep \
   build-docker-extension install-docker-extension update-docker-extension \
   restart-training-platform deploy-workshop delete-workshop open-workshop \
   build-project-docs open-project-docs clean-project-docs \

@@ -116,7 +116,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Free Disk Space
-        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') || (matrix.image == 'lookup-service') }}
+        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') }}
         uses: endersonmenezes/free-disk-space@v3
         with:
           remove_android: true
@@ -125,7 +125,7 @@ jobs:
           remove_tool_cache: true
 
       - name: Restore Docker cache
-        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') || (matrix.image == 'lookup-service') }}
+        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') }}
         uses: actions/cache/restore@v5
         with:
           path: /tmp/.buildx-cache-amd64-new
@@ -187,12 +187,12 @@ jobs:
           rm -rf /tmp/.buildx-cache-old || true
 
       - name: Dump cache directory sizes
-        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') || (matrix.image == 'lookup-service') }}
+        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') }}
         run: |
           du -ks /tmp/.buildx-cache-* || true
 
       - name: Save Docker cache
-        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') || (matrix.image == 'lookup-service') }}
+        if: ${{ (matrix.image == 'secrets-manager') || (matrix.image == 'session-manager') || (matrix.image == 'training-portal') || (matrix.image == 'tunnel-manager') }}
         uses: actions/cache/save@v5
         with:
           path: /tmp/.buildx-cache-new

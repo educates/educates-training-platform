@@ -1,0 +1,31 @@
+{
+  "id": "111-session-malformed-json",
+  "step": "initial",
+  "description": "A session request whose body is not valid JSON.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenantName\": \"tenant-all\", "
+  },
+  "response": {
+    "status": 500,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "500 Internal Server Error\n\nServer got itself in trouble"
+  },
+  "change": {
+    "summary": "A body on /api/v1/workshops that is not a JSON object answers 400 instead of crashing the handler with a 500.",
+    "spec": "REST API contract: the changes; user story 19",
+    "expected": {
+      "status": 400,
+      "contentType": "text/plain; charset=utf-8",
+      "bodyFormat": "text"
+    }
+  }
+}

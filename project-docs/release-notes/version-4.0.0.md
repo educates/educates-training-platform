@@ -863,10 +863,10 @@ Features Changed
   directly, for example a ``session.objects`` entry binding
   ``educates-admin-session-role``, need to be updated to the new names.
 
-* The ``session-manager``, ``lookup-service`` and ``training-portal``
-  containers no longer rely on an init container running as ``root`` to
-  install the cluster ingress CA into the operating system trust store when a
-  private certificate authority is in use. The CA secret is instead mounted
+* The ``session-manager`` and ``training-portal`` containers no longer rely
+  on an init container running as ``root`` to install the cluster ingress CA
+  into the operating system trust store when a private certificate authority
+  is in use. The CA secret is instead mounted
   into the container and, on start-up, appended to a copy of the system CA
   bundle at ``/opt/app-root/ca-bundle.crt``. The ``SSL_CERT_FILE``,
   ``REQUESTS_CA_BUNDLE``, ``CURL_CA_BUNDLE``, ``GIT_SSL_CAINFO`` and
@@ -892,9 +892,9 @@ Features Changed
   next restarts.
 
 * The container images for the ``secrets-manager``, ``session-manager``,
-  ``lookup-service``, ``tunnel-manager`` and ``training-portal`` components
-  are now based on Debian (``debian:trixie-slim``) instead of Fedora, and the
-  ``image-cache`` image is now based on a distroless base image. The Python
+  ``tunnel-manager`` and ``training-portal`` components are now based on
+  Debian (``debian:trixie-slim``) instead of Fedora, and the ``image-cache``
+  image is now based on a distroless base image. The Python
   components run on a Python interpreter installed by ``uv`` rather than the
   distribution's Python, and are built in two stages so that the published
   images contain no compiler, package build tooling or ``uv`` binary. The
@@ -1619,23 +1619,63 @@ Features Changed
   the lookup service reads its configuration, and keeps it when the lookup
   service or Educates is uninstalled, so the ``ClusterConfig``,
   ``ClientConfig`` and ``TenantConfig`` resources and the kubeconfig secrets
-  in it survive a reinstall. Uninstalling the lookup service removes the
-  finalizer the lookup service puts on those resources, so once it is
-  uninstalled they, and the namespace, can be deleted as usual rather than
-  waiting for the lookup service to run again. Previously the namespace had
-  to be created by hand before configuring the lookup service. An
-  ``educates-config`` namespace created by hand is taken over by the
-  install, and the configurations in it are kept. The lookup service now
-  reads secrets only in that namespace. Previously its service account was
-  bound to the ``educates-lookup-service`` cluster role, which granted read
-  access to the secrets of every namespace. That cluster role and its
-  binding no longer exist, and the lookup service holds nothing cluster
-  wide: the role ``educates-lookup-service`` in ``educates-config`` lets it
-  list and watch secrets and its configuration resources there, patch those
-  resources, and create events. Monitoring the cluster the lookup service
-  runs on still uses the ``remote-access`` service account. The lookup
-  service's deployment also now has a liveness probe, so a lookup service
-  which can no longer reach the Kubernetes API is restarted.
+  in it survive a reinstall. The lookup service no longer puts a finalizer on
+  those resources, and uninstalling the lookup service removes the one an
+  earlier version put on them, so they, and the namespace, can be deleted as
+  usual rather than waiting for the lookup service to run again. Previously
+  the namespace had to be created by hand before configuring the lookup
+  service. An ``educates-config`` namespace created by hand is taken over by
+  the install, and the configurations in it are kept. The lookup service now
+  reads the secrets holding kubeconfig files only in that namespace.
+  Previously its service account was bound to the ``educates-lookup-service``
+  cluster role, which granted read access to the secrets of every namespace.
+  That cluster role and its binding no longer exist, and the lookup service
+  holds nothing cluster wide: the role ``educates-lookup-service`` in
+  ``educates-config`` lets it list and watch secrets and its configuration
+  resources there, and nothing more, and the role
+  ``educates-lookup-service-tokens`` in ``educates`` lets it keep its token
+  secret, described below. Monitoring the cluster the lookup service runs on
+  still uses the ``remote-access`` service account. The lookup service's
+  deployment also now has a liveness probe, so a lookup service which stops
+  answering is restarted, and a readiness probe, so that it receives
+  requests only once it has loaded its configuration and listed the
+  resources of the clusters it monitors. It waits at most 10 seconds for the
+  clusters, so a cluster which cannot be reached does not keep it from
+  receiving requests, and does not wait for a cluster it cannot connect to
+  until its configuration changes, such as one whose kubeconfig secret is
+  missing or whose kubeconfig it refuses.
+
+* The lookup service is now written in Go, replacing its Python
+  implementation in place. It keeps the ``lookup-service`` image name, its
+  subchart and values, the ``LookupService`` custom resource, the
+  ``ClusterConfig``, ``TenantConfig`` and ``ClientConfig`` resources and its
+  REST API, down to its status codes and plain-text error messages, so API
+  clients, lookup service configurations and installations need no change,
+  except where the bugs fixed below say otherwise. Its image holds a single
+  static binary on ``gcr.io/distroless/static:nonroot``, which runs as a
+  non-root user on a read-only root file system. It trusts the cluster
+  ingress CA by reading the ``ca.crt`` of the mounted CA trust Secret itself,
+  so it no longer relies on an init container running as ``root`` to install
+  the CA into the operating system trust store. It logs one JSON object per
+  line. It keeps the access token it obtains from each training portal until
+  shortly before the token expires, rather than logging in to the training
+  portal and out again for every session request. The lookup service
+  documentation has been corrected throughout to describe what the lookup
+  service does.
+
+* Access tokens of lookup service clients now stay valid when the lookup
+  service restarts, which used to invalidate every token, so a restart no
+  longer makes every API client log in again. The lookup service keeps the
+  key it signs tokens with, and the record of which tokens each client has
+  revoked, in the secret ``lookup-service-tokens`` in the ``educates``
+  namespace, which it creates when it first starts. The secret is kept when
+  the lookup service or Educates is uninstalled, so tokens issued before stay
+  valid after a reinstall. Delete it while the lookup service is not
+  installed to start with a new signing key, which invalidates every token
+  issued before. Changing the ``spec.client.password`` of a ``ClientConfig``
+  now revokes every token issued to that client, so rotating a leaked
+  password locks out whoever holds its tokens. Previously a password change
+  left them valid.
 
 Removed Features
 ----------------
@@ -2138,11 +2178,11 @@ Bugs Fixed
   workshop dashboard is unchanged.
 
 * The Python packages bundled with the session manager, secrets manager,
-  lookup service, training portal and tunnel manager have been updated to
-  releases which fix vulnerabilities reported against the previously bundled
-  versions, being ``urllib3`` 2.8.0 and ``oauthlib`` 4.0.0 in all five
-  components, ``Django`` 5.2.17 in the training portal, and ``PyJWT`` 2.15.1
-  in the lookup service. The behavior of these components is unchanged.
+  training portal and tunnel manager have been updated to releases which fix
+  vulnerabilities reported against the previously bundled versions, being
+  ``urllib3`` 2.8.0 and ``oauthlib`` 4.0.0 in all four components, and
+  ``Django`` 5.2.17 in the training portal. The behavior of these components
+  is unchanged.
 
 * Deploying a workshop with ``educates docker workshop deploy`` crashed with a
   Go panic when an extension package listed under ``spec.workshop.packages``
@@ -2358,14 +2398,13 @@ Bugs Fixed
   executable as well.
 
 * For about a minute after starting, the training portal, secrets manager,
-  session manager, lookup service and tunnel manager each logged nine
-  ``ERROR`` messages for failed requests to list
-  ``customresourcedefinitions.apiextensions.k8s.io``, followed by the warning
-  ``Not enough permissions to watch for resources``. The lookup service did
-  the same for each cluster it manages. The kopf operator framework they run
-  on watches custom resource definitions to notice ones created or changed
-  while it runs, and their service accounts are not permitted to read them,
-  so kopf fell back to serving the custom resources it found at startup.
+  session manager and tunnel manager each logged nine ``ERROR`` messages for
+  failed requests to list ``customresourcedefinitions.apiextensions.k8s.io``,
+  followed by the warning ``Not enough permissions to watch for resources``.
+  The kopf operator framework they run on watches custom resource
+  definitions to notice ones created or changed while it runs, and their
+  service accounts are not permitted to read them, so kopf fell back to
+  serving the custom resources it found at startup.
   They now tell kopf to work that way from the start, so it no longer makes
   the requests or logs the errors and the warning, and what they serve is
   unchanged. An upgrade of Educates restarts them, which picks up any changed
@@ -2373,6 +2412,132 @@ Bugs Fixed
   cluster role no longer has a rule for ``customresourcedefinitions`` in the
   core API group, which granted nothing, since custom resource definitions
   belong to the ``apiextensions.k8s.io`` API group.
+
+* ``LookupService.status.url`` always gave the lookup service's URL with
+  ``https``, also on an installation whose ingress is served over plain HTTP,
+  where that URL could not be reached. It now takes the scheme of the
+  installation's ingress, as ``EducatesClusterConfig.status.ingress.protocol``
+  publishes it, so it is ``http`` on a plain HTTP installation.
+
+* With ``spec.remoteAccess.mode`` set to ``Disabled`` on the
+  ``SessionManager`` resource, the lookup service pod could not start. It
+  mounted the secret ``remote-access-token``, the token of the
+  ``remote-access`` service account, which exists only while remote access is
+  installed, and Kubernetes does not start a pod while a secret it mounts is
+  missing. The secret is now mounted as optional, so the pod starts without
+  it. The lookup service uses that token only to monitor the cluster it runs
+  on, so without remote access a ``ClusterConfig`` for the local cluster, one
+  without ``spec.credentials``, is not connected and the local cluster's
+  training portals are not offered, while remote clusters are monitored as
+  before.
+
+* With the same workshop offered by training portals on several clusters,
+  the lookup service placed every new session on one of them: with equal
+  capacity on the cluster configured first, and with unequal capacity on the
+  larger one, even once the other had more room left. It counted as taken
+  only the sessions in use, while a session requested through its REST API
+  awaits activation by its user until it is in use, so the counts it ordered
+  candidates by did not move as sessions were requested, and candidates
+  which ranked equally were always tried in the order the clusters were
+  configured. It now counts as taken the sessions awaiting activation, in
+  use or stopping, as well as the session requests it has sent whose
+  sessions it has not yet seen, and orders candidates which rank equally at
+  random for each request. A request which a training portal did not answer
+  in time counts for up to a minute too, since the training portal may have
+  created its session all the same. New sessions therefore alternate between clusters
+  of equal capacity, and with unequal capacity the cluster with more room
+  takes new sessions until both have the same room left. The ``allocated``
+  counts the admin endpoints of the REST API give for training portals and
+  workshop environments include sessions awaiting activation and stopping
+  too.
+
+* Deleting a ``ClusterConfig`` could leave the lookup service placing
+  sessions on that cluster until the lookup service restarted, and a change
+  to the secret holding a cluster's kubeconfig, as when the credentials of
+  the cluster are rotated, was never picked up. The lookup service now stops
+  placing sessions on a cluster as soon as its ``ClusterConfig`` is deleted,
+  and connects to a cluster again whenever its ``ClusterConfig`` or
+  kubeconfig secret changes.
+
+* A cluster which stopped answering after the lookup service had connected
+  to it, as when the cluster was decommissioned or the token of its
+  kubeconfig was revoked, kept its training portals in the lookup service,
+  which went on placing sessions on them by the counts it had last seen. The
+  lookup service now checks every 10 seconds that each cluster still answers
+  and still lets it list training portals. A cluster which has failed every
+  check for about 30 seconds contributes no training portals, and gets no
+  session, until the lookup service has listed its resources again, and the
+  lookup service logs why. A cluster which stays down is logged at ``error``
+  level when it goes down and once every 10 minutes after that, and at
+  ``info`` level when it is back. The attempts in between are logged at
+  ``debug`` level.
+
+* A workshop environment with a capacity of 0 no longer receives sessions.
+  The lookup service treated a capacity of 0 as no limit, so it sent session
+  requests to such a workshop environment, and preferred it to one which was
+  full.
+
+* A session request for a user who already had a session of the workshop,
+  named by ``clientUserId`` or by ``spec.user`` of the client's
+  ``ClientConfig``, got that session back from whichever training portal
+  held it, on any cluster and in any state. Two tenants whose clients used
+  the same user identifier could therefore reach each other's sessions, also
+  on training portals outside their reach, and a user could be handed a
+  session which was already stopping. The lookup service now looks for the
+  user's session only on the training portals the requesting tenant can
+  reach, and only among sessions awaiting activation or in use.
+
+* A session request could take up to five minutes and then fail with HTTP
+  500 when a training portal did not answer, since a timeout, or any error
+  other than a refused connection, while logging in to a training portal
+  ended the request instead of moving on to the next candidate. Every call
+  to a training portal now times out after 10 seconds, and a training portal
+  which refuses the request, answers with an error, cannot be reached or
+  times out is passed over for the next candidate. A training portal which
+  cannot be reached or times out is not contacted again for the same
+  request, and a session request is answered within 12 seconds, however
+  many training portals it contacts. The request fails, with HTTP 503 and
+  the message ``Workshop not available``, once no candidate gave a session
+  or its 12 seconds ran out, and the lookup service logs why each candidate
+  failed, naming the cluster, training portal and workshop environment, and
+  when a request ran out of time. The lookup service also closes a
+  connection whose request takes more than 10 seconds to arrive, and one
+  left idle for two minutes, so a client which stops sending cannot hold a
+  connection open.
+
+* A session request without ``clientIndexUrl`` was sent to every candidate
+  training portal, each of which refused it, and then failed with HTTP 503
+  and the message ``Workshop not available``. It now fails at once with HTTP
+  400 and the message ``Missing clientIndexUrl``, before any training portal
+  is contacted. A request to log in, or to request a session, whose body was
+  malformed JSON, or JSON other than an object, failed with HTTP 500. It now
+  fails with HTTP 400, as the documentation said.
+
+* A ``ClusterConfig`` whose ``spec.credentials.kubeconfig.context`` named a
+  context the kubeconfig did not hold silently connected to the cluster of
+  another context. Such a ``ClusterConfig`` is now refused: the cluster is
+  not connected, and the lookup service logs the reason. A kubeconfig was
+  also refused when any of its users authenticated with an exec plugin or a
+  client certificate, even when the selected context used a token, so a
+  kubeconfig holding other contexts could not be used. Only the selected
+  context is now checked: its user must authenticate with a token, and its
+  cluster must give its CA certificate data. A kubeconfig which passes those
+  checks and still cannot be used, such as one whose CA certificate data is
+  not a certificate, is refused the same way. A label without a value on a
+  ``ClusterConfig`` or a ``TrainingPortal`` broke matching tenants against
+  that cluster or training portal, so a request which needed it failed with
+  HTTP 500. Such a label now matches as a label whose value is the empty
+  string.
+
+* Updating a ``ClientConfig``, for example to change its roles or tenants,
+  made the tokens which its client had revoked by logging out valid again.
+  An update which keeps the password now leaves revoked tokens revoked, and
+  one which changes the password revokes every token of the client.
+
+* The ``spec.logLevel`` of the ``LookupService`` resource never reached the
+  lookup service, which always logged at its default level. The operator now
+  passes it to the lookup service, so setting it to ``debug`` makes the
+  lookup service log more detail, such as a line for every REST API request.
 
 * The Kubernetes console of a workshop session failed to start, and could
   not be opened, when the session's role did not allow reading, creating and

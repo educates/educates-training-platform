@@ -64,6 +64,12 @@
 
     "resources": { "type": "object" },
 
+    "logLevel": {
+      "description": "The service's log level.",
+      "type": "string",
+      "enum": ["debug", "info", "warn", "error"]
+    },
+
     "clusterIngress": {
       "type": "object",
       "additionalProperties": false,

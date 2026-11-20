@@ -1,0 +1,30 @@
+{
+  "id": "126-session-request-remote",
+  "step": "beta-allocated",
+  "description": "A tenant client requests lab-alpha for user-2 through tenant-names, which reaches only portal-b on the remote cluster.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenantName\": \"tenant-names\", \"workshopName\": \"lab-alpha\", \"clientUserId\": \"user-2\", \"clientIndexUrl\": \"https://sites.example.test/index\"}"
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "clusterName": "cluster-b",
+      "portalName": "portal-b",
+      "environmentName": "portal-b-w01",
+      "sessionName": "<session:alpha-user-2>",
+      "clientUserId": "user-2",
+      "sessionActivationUrl": "https://portal-b-ui.lsg-golden-b.educates.test/workshops/session/<session:alpha-user-2>/activate/?token=<activation-token>&index_url=https%3A%2F%2Fsites.example.test%2Findex",
+      "tenantName": "tenant-names"
+    }
+  }
+}

@@ -1,0 +1,69 @@
+# The tenants. Each exercises one kind of selector:
+#
+# - tenant-all has empty selectors, which match every cluster and portal.
+# - tenant-names selects by glob name patterns only: cluster-b, portal-b.
+# - tenant-labels selects by Educates labels only, with matchLabels, In and
+#   DoesNotExist: cluster-a, portal-a.
+# - tenant-none selects every cluster with Exists, and no portal, with
+#   NotIn.
+apiVersion: lookup.educates.dev/v1beta1
+kind: TenantConfig
+metadata:
+  name: tenant-all
+  namespace: educates-config
+spec: {}
+---
+apiVersion: lookup.educates.dev/v1beta1
+kind: TenantConfig
+metadata:
+  name: tenant-names
+  namespace: educates-config
+spec:
+  clusters:
+    nameSelector:
+      matchNames:
+      - "*-b"
+  portals:
+    nameSelector:
+      matchNames:
+      - "portal-*"
+---
+apiVersion: lookup.educates.dev/v1beta1
+kind: TenantConfig
+metadata:
+  name: tenant-labels
+  namespace: educates-config
+spec:
+  clusters:
+    labelSelector:
+      matchLabels:
+        location: a
+  portals:
+    labelSelector:
+      matchExpressions:
+      - key: region
+        operator: In
+        values:
+        - east
+      - key: retired
+        operator: DoesNotExist
+---
+apiVersion: lookup.educates.dev/v1beta1
+kind: TenantConfig
+metadata:
+  name: tenant-none
+  namespace: educates-config
+spec:
+  clusters:
+    labelSelector:
+      matchExpressions:
+      - key: location
+        operator: Exists
+  portals:
+    labelSelector:
+      matchExpressions:
+      - key: region
+        operator: NotIn
+        values:
+        - east
+        - west

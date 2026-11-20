@@ -1,0 +1,21 @@
+{
+  "id": "020-auth-verify-basic-scheme",
+  "step": "initial",
+  "description": "An Authorization header with the Basic scheme.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/auth/verify",
+    "headers": {
+      "Authorization": "Basic dGVuYW50LWNsaWVudDpwYXNzd29yZA=="
+    },
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Invalid Authorization header"
+  }
+}

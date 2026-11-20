@@ -1,0 +1,21 @@
+{
+  "id": "045-tenants-portals-tenant-role",
+  "step": "initial",
+  "description": "A tenant client lists a tenant's portals.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tenants/tenant-all/portals",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Client access not permitted"
+  }
+}

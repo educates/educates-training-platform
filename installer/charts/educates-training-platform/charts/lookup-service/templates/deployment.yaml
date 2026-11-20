@@ -1,6 +1,7 @@
 {{- $ci := include "lookup-service.resolvedClusterIngress" . | fromYaml -}}
 {{- $caRef := default dict $ci.caCertificateRef -}}
 {{- $caEnabled := and $caRef.name true -}}
+{{- $caMountPath := "/opt/app-root/certs/ingress-ca" -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,22 +25,47 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
+        # The image's entrypoint is the service's binary, so the chart gives
+        # only its flags.
         - name: lookup-service
           image: "{{ include "lookup-service.image.repository" . }}:{{ include "lookup-service.image.tag" . }}"
           imagePullPolicy: {{ include "lookup-service.image.pullPolicy" . }}
+          args:
+            - --log-level={{ .Values.logLevel }}
+            {{- if $caEnabled }}
+            - --ingress-ca-file={{ $caMountPath }}/ca.crt
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8080
             - containerPort: 8081
-          # kopf's liveness endpoint. It fails when the Kubernetes API
-          # refuses lookup-service's token or cannot be reached, a check
-          # that needs no RBAC rule.
+          # The service answers /healthz while its process serves requests.
           livenessProbe:
             httpGet:
               path: /healthz
               port: 8081
             initialDelaySeconds: 15
             periodSeconds: 10
+          # /readyz answers once the service has loaded its configuration
+          # from the config namespace and listed the resources of every
+          # cluster the configuration names. It waits 10 seconds at most for
+          # the clusters, so an unreachable cluster cannot keep the service
+          # out of rotation.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 2
+            periodSeconds: 5
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -51,26 +77,28 @@ spec:
               mountPath: /opt/cluster-access-token
             {{- end }}
             {{- if $caEnabled }}
-            # The image's start script appends ca.crt from this mount to the
-            # system CA bundle at /opt/app-root/ca-bundle.crt, which the
-            # SSL_CERT_FILE, REQUESTS_CA_BUNDLE and related variables baked
-            # into the image already point at. Required when lookup-service
-            # verifies TLS against a private or self-signed CA when calling
-            # other clusters' training portals. Only ca.crt is projected
-            # from the Secret. Mounted as a directory, not via subPath, so
-            # a rotated Secret propagates into the pod for the next
-            # restart.
+            # The service trusts ca.crt from this mount, besides the system
+            # roots, when it calls training portals, which lets it verify
+            # portals whose certificates chain to the cluster's private or
+            # self-signed CA. Only ca.crt is projected from the Secret.
+            # Mounted as a directory, not via subPath, so a rotated Secret
+            # propagates into the pod; the service reads it when it starts.
             - name: cluster-ca
-              mountPath: /opt/app-root/certs/ingress-ca
+              mountPath: {{ $caMountPath }}
               readOnly: true
             {{- end }}
           {{- end }}
       {{- if or .Values.remoteAccessTokenMount.enabled $caEnabled }}
       volumes:
         {{- if .Values.remoteAccessTokenMount.enabled }}
+        # The Secret exists only while remote access is installed on this
+        # cluster. Without it the pod still starts, with the mount empty,
+        # and a ClusterConfig for the local cluster is not connected until
+        # the Secret appears and kubelet fills the mount.
         - name: cluster-access-token
           secret:
             secretName: remote-access-token
+            optional: true
         {{- end }}
         {{- if $caEnabled }}
         - name: cluster-ca

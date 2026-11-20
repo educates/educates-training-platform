@@ -1,0 +1,21 @@
+{
+  "id": "022-auth-verify-not-a-jwt",
+  "step": "initial",
+  "description": "A bearer token that is not a JWT.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/auth/verify",
+    "headers": {
+      "Authorization": "Bearer not-a-jwt"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "JWT token is invalid"
+  }
+}

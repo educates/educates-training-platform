@@ -8,6 +8,8 @@ Local cluster monitoring
 
 To monitor the cluster where the lookup service is deployed, create a ``ClusterConfig`` resource without a ``spec.credentials`` section. The lookup service will then access the Kubernetes API as the ``remote-access`` service account in the ``educates`` namespace, using the token of that service account which is mounted into the lookup service pod. This is the same account a kubeconfig generated for a remote cluster uses, as described below, so the lookup service has the same access to the local cluster as it has to a remote one.
 
+The token of the ``remote-access`` service account exists only while remote access is installed on the cluster. With ``spec.remoteAccess.mode`` at its default of ``Auto`` on the ``SessionManager`` resource, remote access is installed whenever a ``LookupService`` resource exists, so a cluster running the lookup service has it. With ``spec.remoteAccess.mode`` set to ``Disabled``, the lookup service still starts and monitors remote clusters, but a ``ClusterConfig`` without ``spec.credentials`` is not connected, and the training portals of the local cluster are not offered. The lookup service keeps checking for the token, and connects to the local cluster without a restart once remote access is installed again.
+
 In the simplest case the ``spec`` section can be omitted entirely:
 
 ```yaml
@@ -45,6 +47,8 @@ Remote cluster access
 
 To monitor a remote cluster, the lookup service needs a kubeconfig file that provides access to the Educates resources on that cluster. The kubeconfig must be stored in a Kubernetes secret in the ``educates-config`` namespace of the cluster where the lookup service is running.
 
+The context of the kubeconfig the lookup service uses, as ``spec.credentials.kubeconfig.context`` of the ``ClusterConfig`` selects it, must authenticate with a bearer token, and its cluster must give the address of the API server and the CA certificate to verify it with, as ``certificate-authority-data``. A context whose user authenticates with an exec plugin, an authentication provider or a client certificate is not supported: the kubeconfig is refused, and the cluster is not connected. Only that context is checked, so the kubeconfig may hold other contexts, whatever they use. The kubeconfig generated as described below meets these requirements.
+
 The service account used in the kubeconfig should have limited permissions. Specifically, it needs ``list`` and ``watch`` access to the following Educates resource types:
 
 * ``TrainingPortal``
@@ -58,6 +62,8 @@ The ``remote-access`` service account in the ``educates`` namespace, which is wh
 If the kubeconfig you give the lookup service uses an identity other than the ``remote-access`` service account, that identity needs to be granted ``get`` on the ``training-portal-robot-credentials`` secret in the namespace of each training portal, in addition to the access to the Educates resources listed above. Without it, the lookup service cannot obtain an access token for the training portals of that cluster and session requests for their workshops fail, with an error in the lookup service logs naming the secret it could not read. Grant ``get`` on that secret alone, by name, rather than on all secrets in the namespace, so that the identity cannot read the admin credentials secret.
 
 It is strongly advised against using a kubeconfig with ``cluster-admin`` privileges for monitoring a remote cluster. The lookup service only needs read access to the Educates resources listed above and to the robot credentials secret of each training portal.
+
+The lookup service calls the REST API of a training portal on a remote cluster at the public URL of the training portal, and that of a training portal on the local cluster through its service inside the cluster. It trusts certificates issued by a public certificate authority, and certificates which chain to the CA of the ingress of the Educates installation it runs in, when that installation has one, as [Secure HTTP connections](../installation-guides/secure-http-connections) describes. A remote training portal whose certificate is issued by another private CA cannot be reached. Every call to a training portal times out after 10 seconds, and a session request is answered within 12 seconds, however many training portals it contacts.
 
 Generating a kubeconfig
 -----------------------
@@ -167,6 +173,26 @@ Common labeling strategies include:
 
 Labels can be updated on an existing ``ClusterConfig`` without needing to recreate the resource. This provides flexibility to reclassify clusters without disrupting monitoring.
 
+A label without a value is matched by tenant selectors as a label whose value is the empty string.
+
+Changing and removing clusters
+------------------------------
+
+Changes take effect without restarting the lookup service. When a ``ClusterConfig`` is created or changed, or the secret holding its kubeconfig is changed, as when the credentials of a cluster are rotated, the lookup service connects to the cluster again with the new configuration. When a ``ClusterConfig`` is deleted, the lookup service stops placing sessions on that cluster at once.
+
+Clusters which cannot be reached
+--------------------------------
+
+A cluster the lookup service cannot reach, or whose resources it cannot list, contributes no training portals, and requests for the training portals of the other clusters are not delayed by it. When the first listing of a cluster's resources does not complete within 30 seconds, the lookup service gives up on that attempt and tries again 10 seconds later, and keeps trying until it succeeds.
+
+A cluster the lookup service is connected to can stop answering later, as when the cluster is decommissioned, the network to it fails, or the token of its kubeconfig is revoked. The lookup service therefore checks every 10 seconds that the API server of each connected cluster still answers and still lets it list training portals, giving each check 5 seconds. When every check has failed for about 30 seconds, the lookup service stops counting on the cluster: the cluster's training portals are no longer listed and no session is placed on them, rather than being placed by the counts the cluster last gave. The lookup service logs why, and keeps trying to connect to the cluster, which contributes its training portals again once a listing of its resources completes.
+
+A cluster which stays down does not fill the lookup service logs. The lookup service logs at ``error`` level the first time a check of a cluster fails, when it stops counting on the cluster, and the first time a listing of the cluster's resources fails or does not complete in time. Further attempts which fail the same way are logged at ``debug`` level, so they show only when ``spec.logLevel`` of the ``LookupService`` resource is ``debug``, except that every 10 minutes each of those messages is logged at ``error`` level once more, with the time the cluster went down in its ``downSince`` field. When the cluster is back, the lookup service logs ``The cluster's cache has synced`` at ``info`` level, and a later failure is logged at ``error`` level again.
+
+A kubeconfig which the lookup service cannot use, such as one whose ``certificate-authority-data`` is not a certificate, is treated as a kubeconfig it refuses: the cluster is not connected, the reason is logged once, and the REST API does not list the cluster, until the ``ClusterConfig`` or its kubeconfig secret changes.
+
+When it starts, the lookup service reports itself ready, and so receives requests, once it has loaded its own configuration and completed the first listing of every cluster that configuration names. It waits at most 10 seconds for the clusters, so a cluster which cannot be reached does not keep the lookup service out of service: after that time it reports itself ready with the clusters it has, and the others contribute their training portals when their listing completes. It does not wait for a cluster it has no connection to try for, since waiting would not help: a remote cluster whose kubeconfig secret is missing or lacks the key the ``ClusterConfig`` names, or whose kubeconfig it refuses or cannot use, and the local cluster while its remote access token is missing. The lookup service log names the clusters it became ready without.
+
 Verifying cluster registration
 ------------------------------
 
@@ -177,8 +203,10 @@ curl --silent -X GET -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   https://lookup.<ingress-domain>/api/v1/clusters | jq
 ```
 
-This will return a list of all registered clusters with their names and labels. You can also check the lookup service logs to confirm that the cluster operator threads have started for each configured cluster:
+This will return a list of all registered clusters with their names and labels. A cluster whose kubeconfig the lookup service refused is not listed. You can also check the lookup service logs, in which each cluster is named by the ``cluster`` field of a log line:
 
 ```
 kubectl logs -n educates --follow deployment/lookup-service
 ```
+
+The message ``The cluster's cache has synced`` shows the lookup service has connected to a cluster and listed its resources. The message ``The cluster is not connected`` gives the reason it could not connect to a cluster, such as a refused kubeconfig, a context the kubeconfig does not hold, or a missing remote access token for the local cluster.

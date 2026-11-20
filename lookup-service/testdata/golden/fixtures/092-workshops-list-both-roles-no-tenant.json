@@ -1,0 +1,21 @@
+{
+  "id": "092-workshops-list-both-roles-no-tenant",
+  "step": "initial",
+  "description": "A client with both roles lists workshops without a tenant.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:both-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Missing tenant name"
+  }
+}

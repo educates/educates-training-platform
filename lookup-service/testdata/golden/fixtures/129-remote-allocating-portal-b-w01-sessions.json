@@ -1,0 +1,34 @@
+{
+  "id": "129-remote-allocating-portal-b-w01-sessions",
+  "step": "remote-allocating",
+  "description": "The admin lists portal-b-w01's sessions.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-b/portals/portal-b/environments/portal-b-w01/sessions",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "sessions": [
+        {
+          "name": "<session:alpha-user-2>",
+          "generation": "<generation>",
+          "cluster": "cluster-b",
+          "portal": "portal-b",
+          "environment": "portal-b-w01",
+          "workshop": "lab-alpha",
+          "phase": "Allocating",
+          "user": "user-2"
+        }
+      ]
+    }
+  }
+}

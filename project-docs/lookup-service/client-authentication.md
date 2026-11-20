@@ -31,7 +31,7 @@ The ``access_token`` is a JWT token that should be used in subsequent API reques
 
 The access token currently expires after 72 hours, however this default may change in future versions. Clients should not assume a fixed expiration period and should always be prepared to handle token expiry regardless of the expected lifetime.
 
-If the request body is malformed or missing required fields, the response will be HTTP 400. If the credentials are incorrect, the response will be HTTP 401.
+If the request body is not a JSON object, such as malformed JSON, or lacks the ``username`` or the ``password``, the response will be HTTP 400. If the credentials are incorrect, the response will be HTTP 401. Error responses carry a short plain-text message, such as ``Invalid username/password``.
 
 Note that the ``/login`` endpoint also exists but is deprecated. Clients should use ``/auth/login`` instead.
 
@@ -47,6 +47,8 @@ curl -X GET -H "Authorization: Bearer ${ACCESS_TOKEN}" \
 
 If the token has expired or been revoked, the API will return HTTP 401. When this occurs, the client should re-authenticate by calling the ``/auth/login`` endpoint again to obtain a new token.
 
+A request without an ``Authorization`` header gets HTTP 400 with the message ``JWT token not supplied``, and a request whose ``Authorization`` header is not of the form ``Bearer <token>`` gets HTTP 400 too.
+
 Verifying a token
 -----------------
 
@@ -57,24 +59,32 @@ curl -X GET -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   https://lookup.<ingress-domain>/auth/verify
 ```
 
-If the token is valid, the response will be HTTP 200. If the token has expired or been revoked, the response will be HTTP 401.
+If the token is valid, the response will be HTTP 200. If the token has expired or been revoked, the response will be HTTP 401. A request without a token gets HTTP 400.
 
 Token revocation
 ----------------
 
-An access token can be explicitly revoked by calling the ``/auth/logout`` endpoint:
+Access tokens can be explicitly revoked by calling the ``/auth/logout`` endpoint:
 
 ```
 curl -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   https://lookup.<ingress-domain>/auth/logout
 ```
 
+Logging out revokes every token issued to the client up to that moment, not only the token the request carries, so any other process using the same client credentials also needs to authenticate again.
+
 In addition to explicit revocation, access tokens are also invalidated in the following circumstances:
 
 * The token reaches its expiration time.
 * The ``ClientConfig`` resource for the client is deleted.
-* The ``ClientConfig`` resource is deleted and immediately recreated (even with the same name and password).
-* The lookup service is restarted.
+* The ``ClientConfig`` resource is deleted and recreated, even with the same name and password.
+* The ``spec.client.password`` of the ``ClientConfig`` resource is changed. This lets you lock out whoever holds tokens obtained with a leaked password.
+
+Any other change to the ``ClientConfig`` resource, such as to its roles or tenants, leaves its tokens as they were: a valid token stays valid, with the client's new roles and tenants applying to it at once, and a revoked token stays revoked.
+
+Tokens stay valid when the lookup service restarts. The lookup service keeps the key it signs tokens with, and the record of which tokens each client has revoked, in the secret ``lookup-service-tokens`` in the ``educates`` namespace, which it creates when it first starts. Uninstalling the lookup service, or Educates, leaves that secret in place, so tokens issued before are still valid when the lookup service is installed again. Delete the secret while the lookup service is not installed if you want a new installation to start with a new signing key, which invalidates every token issued before.
+
+While the lookup service is upgraded or its pod replaced, the old and the new pod run side by side for a moment and share that secret. Each reads the secret again every 10 seconds, so a logout or password change which one pod handles is honoured by the other within 10 seconds.
 
 A custom front-end portal using the lookup service should not assume that a previously obtained token will remain valid indefinitely. It should be designed to handle an HTTP 401 response at any time by re-authenticating and retrying the request.
 

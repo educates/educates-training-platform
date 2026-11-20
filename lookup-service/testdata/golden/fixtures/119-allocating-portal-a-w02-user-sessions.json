@@ -1,0 +1,34 @@
+{
+  "id": "119-allocating-portal-a-w02-user-sessions",
+  "step": "beta-allocating",
+  "description": "The admin lists user-1's sessions in portal-a-w02.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a/environments/portal-a-w02/users/user-1/sessions",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "sessions": [
+        {
+          "name": "<session:beta-user-1>",
+          "generation": "<generation>",
+          "cluster": "cluster-a",
+          "portal": "portal-a",
+          "environment": "portal-a-w02",
+          "workshop": "lab-beta",
+          "phase": "Allocating",
+          "user": "user-1"
+        }
+      ]
+    }
+  }
+}

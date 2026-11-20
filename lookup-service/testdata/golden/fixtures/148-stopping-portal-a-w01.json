@@ -1,0 +1,51 @@
+{
+  "id": "148-stopping-portal-a-w01",
+  "step": "reserved-stopping",
+  "description": "The admin reads portal-a-w01 while its reserved session is Stopping.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-a/portals/portal-a/environments/portal-a-w01",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "portal-a-w01",
+      "uid": "<uid:cluster-a/WorkshopEnvironment/portal-a-w01>",
+      "generation": "<generation>",
+      "workshop": "lab-alpha",
+      "title": "Lab Alpha",
+      "description": "A workshop both clusters offer.",
+      "labels": [
+        {
+          "name": "track",
+          "value": "golden"
+        }
+      ],
+      "cluster": "cluster-a",
+      "portal": "portal-a",
+      "capacity": 2,
+      "reserved": 1,
+      "allocated": 1,
+      "available": 0,
+      "phase": "Running"
+    }
+  },
+  "change": {
+    "summary": "The allocated count includes the session the Python service does not count.",
+    "spec": "Counting and ordering: an environment's and a portal's allocated count include sessions in the Stopping phase",
+    "expected": {
+      "status": 200,
+      "fields": {
+        "allocated": 2
+      }
+    }
+  }
+}

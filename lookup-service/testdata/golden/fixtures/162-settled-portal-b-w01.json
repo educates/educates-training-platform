@@ -1,0 +1,41 @@
+{
+  "id": "162-settled-portal-b-w01",
+  "step": "sessions-settled",
+  "description": "The admin reads environment portal-b-w01.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clusters/cluster-b/portals/portal-b/environments/portal-b-w01",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "portal-b-w01",
+      "uid": "<uid:cluster-b/WorkshopEnvironment/portal-b-w01>",
+      "generation": "<generation>",
+      "workshop": "lab-alpha",
+      "title": "Lab Alpha",
+      "description": "A workshop both clusters offer.",
+      "labels": [
+        {
+          "name": "track",
+          "value": "golden"
+        }
+      ],
+      "cluster": "cluster-b",
+      "portal": "portal-b",
+      "capacity": 2,
+      "reserved": 0,
+      "allocated": 1,
+      "available": 0,
+      "phase": "Running"
+    }
+  }
+}

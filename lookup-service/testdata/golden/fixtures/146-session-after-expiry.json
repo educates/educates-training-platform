@@ -1,0 +1,32 @@
+{
+  "id": "146-session-after-expiry",
+  "step": "remote-expired",
+  "description": "user-2 requests lab-alpha through tenant-names again once the earlier session expired: a new session is created.",
+  "source": "captured",
+  "actions": [
+    "wait for user-2's unactivated session on portal-b to expire, 60 seconds after it was last requested, and for its WorkshopSession to be deleted"
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"tenantName\": \"tenant-names\", \"workshopName\": \"lab-alpha\", \"clientUserId\": \"user-2\", \"clientIndexUrl\": \"https://sites.example.test/index\"}"
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "clusterName": "cluster-b",
+      "portalName": "portal-b",
+      "environmentName": "portal-b-w01",
+      "sessionName": "<session:alpha-user-2-again>",
+      "clientUserId": "user-2",
+      "sessionActivationUrl": "https://portal-b-ui.lsg-golden-b.educates.test/workshops/session/<session:alpha-user-2-again>/activate/?token=<activation-token>&index_url=https%3A%2F%2Fsites.example.test%2Findex",
+      "tenantName": "tenant-names"
+    }
+  }
+}

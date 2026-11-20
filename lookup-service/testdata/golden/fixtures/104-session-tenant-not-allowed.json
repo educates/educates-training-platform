@@ -1,0 +1,22 @@
+{
+  "id": "104-session-tenant-not-allowed",
+  "step": "initial",
+  "description": "A session request for a tenant the client's patterns do not match.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/workshops",
+    "headers": {
+      "Authorization": "Bearer <token:tenant-client>",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"clientIndexUrl\": \"https://sites.example.test/index\", \"tenantName\": \"other-tenant\", \"workshopName\": \"lab-alpha\"}"
+  },
+  "response": {
+    "status": 403,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "Client not allowed access to tenant"
+  }
+}

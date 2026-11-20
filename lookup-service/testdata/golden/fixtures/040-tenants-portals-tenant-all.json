@@ -1,0 +1,56 @@
+{
+  "id": "040-tenants-portals-tenant-all",
+  "step": "initial",
+  "description": "The admin lists tenant-all's portals.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tenants/tenant-all/portals",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "portals": [
+        {
+          "name": "portal-a",
+          "uid": "<uid:cluster-a/TrainingPortal/portal-a>",
+          "generation": "<generation>",
+          "labels": [
+            {
+              "name": "region",
+              "value": "east"
+            }
+          ],
+          "cluster": "cluster-a",
+          "url": "https://portal-a-ui.lsg-golden-a.educates.test",
+          "capacity": 4,
+          "allocated": 0,
+          "phase": "Running"
+        },
+        {
+          "name": "portal-b",
+          "uid": "<uid:cluster-b/TrainingPortal/portal-b>",
+          "generation": "<generation>",
+          "labels": [
+            {
+              "name": "region",
+              "value": "west"
+            }
+          ],
+          "cluster": "cluster-b",
+          "url": "https://portal-b-ui.lsg-golden-b.educates.test",
+          "capacity": 0,
+          "allocated": 0,
+          "phase": "Running"
+        }
+      ]
+    }
+  }
+}

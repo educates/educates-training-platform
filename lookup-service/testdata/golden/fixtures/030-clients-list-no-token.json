@@ -1,0 +1,19 @@
+{
+  "id": "030-clients-list-no-token",
+  "step": "initial",
+  "description": "The client list without a token.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/clients",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "contentType": "text/plain; charset=utf-8",
+    "bodyFormat": "text",
+    "body": "JWT token not supplied"
+  }
+}

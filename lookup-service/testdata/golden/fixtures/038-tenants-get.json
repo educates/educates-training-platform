@@ -1,0 +1,31 @@
+{
+  "id": "038-tenants-get",
+  "step": "initial",
+  "description": "The admin reads a tenant.",
+  "source": "captured",
+  "actions": [],
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/tenants/tenant-all",
+    "headers": {
+      "Authorization": "Bearer <token:admin-client>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyFormat": "json",
+    "body": {
+      "name": "tenant-all",
+      "clients": [
+        "tenant-client",
+        "both-client",
+        "user-client",
+        "revoke-client",
+        "rotate-client",
+        "doomed-client"
+      ]
+    }
+  }
+}

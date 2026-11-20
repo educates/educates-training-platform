@@ -1,0 +1,40 @@
+{{- /*
+lookup-service's access to its token Secret, lookup-service-tokens, in the
+release namespace. The Secret holds the key that signs client tokens and
+each client's revocation state, so tokens survive a restart. The service
+creates the Secret on its first start; Kubernetes cannot restrict create by
+name, so create covers the namespace's Secrets, while get and update cover
+only that one. Helm does not own the Secret, so uninstalling the chart
+leaves it, and a reinstall keeps the tokens issued before.
+*/ -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: educates-lookup-service-tokens
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lookup-service.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [lookup-service-tokens]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: educates-lookup-service-tokens
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lookup-service.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: educates-lookup-service-tokens
+subjects:
+  - kind: ServiceAccount
+    name: lookup-service
+    namespace: {{ .Release.Namespace }}

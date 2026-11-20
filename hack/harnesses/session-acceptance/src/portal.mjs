@@ -26,6 +26,9 @@ export function loadFixtures(fixturesDir) {
         // Terminal lines the workshop prints as expected output, which the
         // walk would otherwise report as errors.
         ignoreTerminalLines: (meta.ignoreTerminalLines ?? []).map((r) => new RegExp(r)),
+        // Whether the session's terminal copy and paste shortcuts are
+        // pressed under each platform.
+        terminalCopyPaste: meta.terminalCopyPaste === true,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));

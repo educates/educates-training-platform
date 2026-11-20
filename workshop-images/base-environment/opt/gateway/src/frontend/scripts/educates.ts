@@ -34,6 +34,37 @@ function is_ios() {
     return /iPad|iPhone|iPod/.test(navigator.userAgent)
 }
 
+// The platform whose conventions the copy and paste shortcuts of terminals
+// follow. It is sorted once, from navigator.platform, with the values xterm.js
+// itself takes for Apple and Windows platforms.
+
+enum KeyboardPlatform {
+    APPLE,
+    WINDOWS,
+    OTHER
+}
+
+function keyboard_platform(): KeyboardPlatform {
+    let platform = navigator.platform
+
+    if (["Macintosh", "MacIntel", "MacPPC", "Mac68K", "iPad", "iPhone"].includes(platform))
+        return KeyboardPlatform.APPLE
+
+    if (["Windows", "Win16", "Win32", "WinCE"].includes(platform))
+        return KeyboardPlatform.WINDOWS
+
+    return KeyboardPlatform.OTHER
+}
+
+const KEYBOARD_PLATFORM = keyboard_platform()
+
+// The key codes of the C and V keys. Shortcuts are matched on key codes
+// because xterm.js reads them to turn Ctrl and a letter into a control
+// character, so a shortcut and xterm.js agree on which key was pressed.
+
+const KEY_CODE_C = 67
+const KEY_CODE_V = 86
+
 function string_to_slug(str: string) {
     str = str.trim()
     str = str.toLowerCase()
@@ -574,6 +605,11 @@ class TerminalSession {
 
         this.terminal.loadAddon(new WebLinksAddon(handleLinkClick))
 
+        // Add the copy and paste shortcuts of the platform the browser runs
+        // on to those the browser and xterm.js already provide.
+
+        this.terminal.attachCustomKeyEventHandler((event) => this.handle_key_event(event))
+
         // Ensure that the element the terminal is contained in is visible.
         // This is just to ensure that dimensions can be correctly calculated.
 
@@ -587,6 +623,61 @@ class TerminalSession {
         }
 
         wait_until_visible()
+    }
+
+    // Handles a key event before xterm.js does, and returns whether xterm.js
+    // should go on to handle it. Only keydown events are acted on; keypress
+    // and keyup events pass through.
+    //
+    // On Apple platforms every key is left as it was: Cmd+C and Cmd+V copy
+    // and paste through the browser's copy and paste events, which xterm.js
+    // handles. On other platforms Ctrl+Shift+C copies the terminal's
+    // selection and keeps it, as their own terminals do, and does nothing
+    // when nothing is selected. Either way the key is cancelled, so that the
+    // browser's inspector doesn't open. The copy runs the browser's copy
+    // command, whose copy event xterm.js handles by putting the selection on
+    // the clipboard, which needs neither a secure context nor a clipboard
+    // permission. Ctrl+Shift+V is left to the browser, whose paste as plain
+    // text fires the paste event xterm.js handles.
+    //
+    // On Windows, Ctrl+C copies the terminal's selection and then clears it,
+    // as Windows Terminal does, so that the next Ctrl+C interrupts; with
+    // nothing selected, xterm.js sends it to the shell as ^C. Ctrl+V pastes.
+    // For both, the key is left to the browser, neither cancelled nor sent
+    // to the shell, so that the browser runs its own copy or paste, whose
+    // copy or paste event xterm.js handles. xterm.js copies nothing once the
+    // selection is gone, so the selection is cleared from a task queued
+    // here, which runs only after the keydown event's default action, the
+    // browser's copy, has fired its copy event and xterm.js has handled it.
+
+    private handle_key_event(event: KeyboardEvent): boolean {
+        if (event.type != "keydown" || KEYBOARD_PLATFORM == KeyboardPlatform.APPLE)
+            return true
+
+        let ctrl_only = event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey
+        let ctrl_shift = event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey
+
+        if (ctrl_only && KEYBOARD_PLATFORM == KeyboardPlatform.WINDOWS) {
+            if (event.keyCode == KEY_CODE_C && this.terminal.hasSelection()) {
+                setTimeout(() => this.terminal.clearSelection(), 0)
+
+                return false
+            }
+
+            if (event.keyCode == KEY_CODE_V)
+                return false
+        }
+
+        if (ctrl_shift && event.keyCode == KEY_CODE_C) {
+            event.preventDefault()
+
+            if (this.terminal.hasSelection())
+                document.execCommand("copy")
+
+            return false
+        }
+
+        return true
     }
 
     private configure_session() {

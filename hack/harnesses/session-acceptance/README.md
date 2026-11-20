@@ -21,17 +21,23 @@ attendee would, and reports what it saw. For each fixture workshop it:
 5. when the workshop has SSH access over the tunnel, connects to the session
    from this host with `ssh`, using `educates tunnel connect` from the CLI
    under test as the proxy command;
-6. terminates the session.
+6. when the fixture asks for it, presses the terminal copy and paste
+   shortcuts under Windows, Linux and macOS, as
+   [the terminal copy and paste step](#the-terminal-copy-and-paste-step)
+   describes;
+7. terminates the session.
 
 At the end it deletes its test portal, which deletes the portal's
 environments, and its fixture workshops, and waits for their namespaces to
 go.
 
 A fixture passes when its walk reached the last instruction page with every
-action clicked and no terminal errors, and, for the SSH fixture, the tunnel
-connected. The kubectl checks and the console are reported as observed, not
-judged: they describe the build's current behaviour, which a change may set
-out to alter, so read them against what the change intends.
+action clicked and no terminal errors, for the SSH fixture, the tunnel
+connected, and, for a fixture with the copy and paste step, every shortcut
+behaved as the key behaviour table says under every platform. The kubectl
+checks and the console are reported as observed, not judged: they describe
+the build's current behaviour, which a change may set out to alter, so read
+them against what the change intends.
 
 ## Requirements
 
@@ -69,6 +75,13 @@ address from `educates local cluster list`, and its ingress domain and
 protocol from the cluster's `EducatesClusterConfig` status, so it works the
 same over HTTPS and plain HTTP.
 
+To reach a cluster served over plain HTTP, the harness's Chrome runs with
+its `HttpsFirstBalancedModeAutoEnable` feature turned off. Chrome turns its
+HTTPS-First balanced mode on by itself, and with it on, headless Chrome
+refuses a page served over plain HTTP with `net::ERR_BLOCKED_BY_CLIENT`.
+This makes the harness's Chrome looser than a user's, so a run over plain
+HTTP doesn't show what a user's Chrome does with that cluster.
+
 It never prompts. It prints its progress, writes the report, prints the
 summary table and exits 0 when every fixture passed, 1 when one failed, and
 2 when it could not start, as for an unknown option or a cluster that is not
@@ -82,7 +95,7 @@ running.
 | `full` | 15 minutes | every minute | An acceptance run, where a console that hangs after a few minutes shows |
 
 Both profiles walk every fixture in full. With the default of three
-sessions at once, the quick profile takes about 15 minutes on a laptop, and
+sessions at once, the quick profile takes about 18 minutes on a laptop, and
 the full one about 45. To repeat only what a fix touches, name the fixtures
 with `--fixtures`, and shorten or lengthen the hold with `--hold`.
 
@@ -142,10 +155,13 @@ locked".
 Each fixture is a directory under `fixtures/` holding the Workshop
 definition, `workshop.yaml`, and `fixture.json`, whose `summary` describes
 it, whose `sample` names the directory of `workshop-samples/` its
-instructions come from, and whose optional `ignoreTerminalLines` lists
+instructions come from, whose optional `ignoreTerminalLines` lists
 regular expressions for lines the workshop prints as expected output that
 the walk would otherwise report as errors, such as the `Error Log File`
-line of the server `lab-k8s-fundamentals` deploys. The harness copies the sample, puts the fixture's
+line of the server `lab-k8s-fundamentals` deploys, and whose optional
+`terminalCopyPaste`, when `true`, runs
+[the terminal copy and paste step](#the-terminal-copy-and-paste-step) in
+its session. The harness copies the sample, puts the fixture's
 definition in place of the sample's, publishes the workshop files to the
 local registry with `educates workshop publish`, tagged with the cluster's
 name, and deploys it. A fixture without a `sample` uses files already
@@ -160,6 +176,7 @@ published, as `lab-k8s-fundamentals` does.
 | `dashboard-console` | The dashboard actions sample, with the console. |
 | `terminal-vcluster` | The terminal actions sample with a virtual cluster, where kubectl and the console use the virtual cluster. |
 | `ssh-tunnel` | The SSH remote access sample, which connects back over the tunnel from inside the session, and from this host with the CLI under test. |
+| `terminal-copy-paste` | The terminal actions sample under the default `admin` role, with the terminal copy and paste step. |
 
 Every sample turns the session token off, and each fixture built from one
 turns it back on, so its session has a service account token, as most
@@ -173,6 +190,78 @@ that publishes files names its image after itself under
 `$(image_repository)` and tags it `$(workshop_version)`, as the existing
 ones do.
 
+## The terminal copy and paste step
+
+A fixture whose `fixture.json` sets `"terminalCopyPaste": true` has the
+copy and paste shortcuts of its session's terminals pressed after the walk,
+the console hold and the tunnel. The fixture runs in a Chrome of its own,
+since the clipboard belongs to the browser and other fixtures' walks click
+copy actions.
+
+The step loads the training portal's page for the session, which shows the
+dashboard in its iframe, once for each of Windows, Linux and macOS. Before
+the page loads it sets the platform the browser reports through the
+DevTools protocol, which reaches every frame of the page:
+`navigator.platform` reads `Win32`, `Linux x86_64` or `MacIntel`, and the
+user agent names the same operating system. It reads `navigator.platform`
+back in the dashboard's frame, and runs nothing under a platform the frame
+doesn't report.
+
+In terminal 1 it then runs six cases. For each it types a command that
+runs a small probe the step writes into the workshop container, as
+`/tmp/session-acceptance-keys`, and presses the shortcut while the probe
+runs:
+
+| Case | What the probe does |
+|---|---|
+| Ctrl+C, text selected, then again | Shows a word, which the step double-clicks to select, and prints every byte the terminal delivers until three seconds pass without one, with the terminal raw so that ^C and ^V arrive as bytes. It then does so once more, for Ctrl+C pressed a second time with nothing else between. |
+| Ctrl+C, nothing selected, sleep running | Sleeps ten seconds and prints whether an interrupt ended the sleep. |
+| Ctrl+V | Prints the bytes delivered, with known text put on the clipboard first from the portal's own page. |
+| Ctrl+Shift+C, text selected | Shows a word, which the step double-clicks to select, and prints the bytes delivered. |
+| Ctrl+Shift+C, nothing selected | Prints the bytes delivered, with nothing selected. |
+| Ctrl+Shift+V | As for Ctrl+V. |
+
+It observes what a workshop user would: what the page's `copy` event put
+on the clipboard, read from the event since the clipboard can't be read
+over plain HTTP; whether the page's `paste` event carried the clipboard's
+text; what reached the shell, whether the pasted text, ^C, ^V or nothing,
+and for a second press of Ctrl+C, what reached the shell then; whether the
+selection was kept or cleared; whether the sleep was interrupted; and
+whether the page cancelled the key's default action. It judges each case
+against the key behaviour table:
+
+| Platform | Ctrl+C | Ctrl+V | Ctrl+Shift+C | Ctrl+Shift+V |
+|---|---|---|---|---|
+| Windows | Copies a selection and clears it, with nothing reaching the shell, so that a second press sends ^C; interrupts with none. | Pastes. | Cancelled; copies a selection and keeps it; does nothing with none. | Pastes. |
+| Linux | ^C, on a second press too, which interrupts with no selection. | ^V. | As on Windows. | Pastes. |
+| macOS | ^C, on a second press too, which interrupts with no selection. | ^V. | Left to the browser; copies nothing and sends nothing. | Sends nothing. |
+
+The fixture passes only when all eighteen cases match.
+
+Chrome's own copy and paste key bindings follow the operating system Chrome
+runs on, not the platform it reports. Chrome on Windows and Linux runs its
+copy, paste and paste-as-plain-text commands for Ctrl+C, Ctrl+V and
+Ctrl+Shift+V when the page leaves the key alone; Chrome on macOS runs none
+of them. Before each platform the step presses those keys in a textarea of
+a page of its own, reporting that platform, and watches for the `copy` or
+`paste` event. Where this host's Chrome runs the command itself, the step
+presses the key as it is, and the report says the browser's own action ran
+natively. Where it doesn't, as on a macOS host, the step sends the key with
+the command attached through the DevTools protocol, which Chrome runs only
+when the page leaves the key's default action alone, as it does its own
+binding, and the report says the action was simulated. On Windows and Linux
+Ctrl+Shift+C opens Chrome's inspector, a browser action no page can observe
+and the step doesn't run, so the step judges it by whether the page
+cancelled the key, and the report says the inspector was not run.
+
+The step's full pass is established on a macOS host, whose Chrome binds
+none of these keys. On another host, such as Linux, the host Chrome's own
+bindings act under every platform the step fakes. Under macOS, Ctrl+Shift+V
+then pastes as plain text, which fails its case, and the report names the
+host's command as the browser's own action. With `--headful`, macOS's
+Ctrl+Shift+C, which the page leaves to the browser, opens the host Chrome's
+real inspector.
+
 ## The report
 
 The results directory holds:
@@ -180,11 +269,20 @@ The results directory holds:
 - `report.md`: the run's cluster, CLI, profile and robot credentials
   source, a summary table, and for each fixture its walk, each kubectl
   check with the first lines of its output, the console's probes, process
-  and settings, the tunnel, and any problems;
+  and settings, the tunnel, the copy and paste cases, and any problems;
 - `report.json`: the same, as data;
 - one directory per fixture with `result.json`, `log.jsonl`, the event log
   of the session, and screenshots of each instruction page and console
-  probe.
+  probe, and of the terminal after each platform's copy and paste cases.
+
+For a fixture with the copy and paste step, the summary table counts the
+cases that matched the key behaviour table, and a second table shows each
+case per fixture and platform: whether it matched, what was observed of
+what the table judges, and, in brackets, the browser's own action and
+whether it ran natively or was simulated. The fixture's section shows, per
+platform, the platform its dashboard's frame reported, what this host's
+Chrome does for each key unaided, and each case with what the table says,
+what was observed, whether they match and the browser's own action.
 
 The summary table is also printed at the end of the run. Results are
 gitignored.

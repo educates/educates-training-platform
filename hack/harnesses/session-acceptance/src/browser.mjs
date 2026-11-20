@@ -172,7 +172,7 @@ function terminalLines(page) {
     .catch(() => []);
 }
 
-async function screenshot(page, dir, name, log) {
+export async function screenshot(page, dir, name, log) {
   try {
     await page.screenshot({ path: path.join(dir, `${name}.png`) });
   } catch (e) {

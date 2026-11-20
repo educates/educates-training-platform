@@ -32,6 +32,7 @@ import (
 	configv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/config/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
 	"github.com/educates/educates-training-platform/installer/operator/internal/pki"
+	"github.com/educates/educates-training-platform/installer/operator/internal/rollout"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -989,4 +990,20 @@ func (r *EducatesClusterConfigReconciler) handleManagedReleaseResult(
 	default:
 		return true, ctrl.Result{}, nil
 	}
+}
+
+// deploymentsRolledOut reports whether every named Deployment in
+// namespace has rolled out its current spec, read uncached (see package
+// rollout). The cluster-service readiness gates share it.
+func (r *EducatesClusterConfigReconciler) deploymentsRolledOut(ctx context.Context, namespace string, names ...string) (bool, error) {
+	for _, name := range names {
+		done, err := rollout.DeploymentComplete(ctx, r.APIReader, namespace, name)
+		if err != nil {
+			return false, fmt.Errorf("get Deployment %s/%s: %w", namespace, name, err)
+		}
+		if !done {
+			return false, nil
+		}
+	}
+	return true, nil
 }

@@ -23,7 +23,6 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,6 +42,7 @@ import (
 	platformv1alpha1 "github.com/educates/educates-training-platform/installer/operator/api/platform/v1alpha1"
 	"github.com/educates/educates-training-platform/installer/operator/internal/helm"
 	"github.com/educates/educates-training-platform/installer/operator/internal/platformnamespace"
+	"github.com/educates/educates-training-platform/installer/operator/internal/rollout"
 	vendoredcharts "github.com/educates/educates-training-platform/installer/operator/vendored-charts"
 )
 
@@ -65,7 +65,7 @@ const (
 
 	// secretsManagerDeploymentName matches the chart template's
 	// fixed-name Deployment. The reconciler uses this to gate Ready
-	// on the upstream component's availability without parsing chart
+	// on the upstream component's rollout without parsing chart
 	// output.
 	secretsManagerDeploymentName = "secrets-manager"
 
@@ -89,6 +89,14 @@ func DeploymentWatchNamespaces() []string {
 	return []string{platformNamespace}
 }
 
+// DaemonSetWatchNamespaces returns the namespaces the platform reconcilers
+// read DaemonSets in: SessionManager reads the node-ca-injector DaemonSet
+// in the shared platform namespace. Exposed so the manager's DaemonSet
+// informer can be scoped to it.
+func DaemonSetWatchNamespaces() []string {
+	return []string{platformNamespace}
+}
+
 const (
 	// finalizerSecretsManager guarantees the reconciler gets a chance
 	// to uninstall the helm release + delete the platform namespace
@@ -108,11 +116,16 @@ const (
 // SecretsManagerReconciler drives the SecretsManager CR. Per-phase
 // flow mirrors the EducatesClusterConfig Managed-mode reconciler:
 // validate prerequisites (here: EducatesClusterConfig.Ready), install
-// the helm chart, gate Ready on Deployment availability, finalizer
+// the helm chart, gate Ready on the Deployment's rollout, finalizer
 // drain on delete.
 type SecretsManagerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// APIReader is an uncached reader for the secrets-manager
+	// Deployment, read straight after the Helm upgrade that wrote it.
+	// Production wiring uses mgr.GetAPIReader().
+	APIReader client.Reader
 
 	// HelmClientFor returns a Helm client scoped to the given
 	// namespace. Production wiring builds a REST-config-backed
@@ -251,13 +264,13 @@ func (r *SecretsManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// RequeueAfter pattern as the cluster-services reconcilers — the
 	// Deployment watch should fire, but cache-vs-watch races have
 	// bitten us before.
-	avail, err := r.deploymentAvailable(ctx)
+	rolledOut, err := rollout.DeploymentComplete(ctx, r.APIReader, platformNamespace, secretsManagerDeploymentName)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("read secrets-manager Deployment: %w", err)
 	}
-	if !avail {
+	if !rolledOut {
 		r.markReady(obj, metav1.ConditionFalse, "WaitingForDeployment",
-			"secrets-manager Deployment not yet Available")
+			"secrets-manager Deployment has not rolled out yet")
 		r.markPhase(obj, platformv1alpha1.ComponentPhaseInstalling)
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, r.updateStatusWithTransitionLog(ctx, obj)
 	}
@@ -269,7 +282,7 @@ func (r *SecretsManagerReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		Name:      secretsManagerDeploymentName,
 	}
 	r.markReady(obj, metav1.ConditionTrue, "SecretsManagerReady",
-		"secrets-manager is installed and Available")
+		"secrets-manager is installed and rolled out")
 	r.markPhase(obj, platformv1alpha1.ComponentPhaseReady)
 	obj.Status.ObservedGeneration = obj.Generation
 	return ctrl.Result{}, r.updateStatusWithTransitionLog(ctx, obj)
@@ -419,27 +432,6 @@ func defaultLogLevel(l platformv1alpha1.LogLevel) string {
 		return string(platformv1alpha1.LogLevelInfo)
 	}
 	return string(l)
-}
-
-// deploymentAvailable reports whether the secrets-manager Deployment
-// has Available=True. Missing Deployment is treated as "not ready,
-// not yet rolled out" rather than an error — helm install may not
-// have created it yet, or a deletion-replay is in progress.
-func (r *SecretsManagerReconciler) deploymentAvailable(ctx context.Context) (bool, error) {
-	dep := &appsv1.Deployment{}
-	key := types.NamespacedName{Namespace: platformNamespace, Name: secretsManagerDeploymentName}
-	if err := r.Get(ctx, key, dep); err != nil {
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	for _, c := range dep.Status.Conditions {
-		if c.Type == appsv1.DeploymentAvailable {
-			return c.Status == corev1.ConditionTrue, nil
-		}
-	}
-	return false, nil
 }
 
 // cleanup uninstalls the helm release. The Namespace is left in

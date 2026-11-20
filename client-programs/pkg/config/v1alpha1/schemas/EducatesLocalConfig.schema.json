@@ -51,7 +51,7 @@
         },
         "nodes": {
           "type": "array",
-          "description": "Nodes of the Kind cluster. Leave empty for the default single control-plane cluster; when set, the list fully declares the cluster's nodes and must include a control-plane node.",
+          "description": "Nodes of the Kind cluster. Leave empty for the default single control-plane cluster; when set, the list fully declares the cluster's nodes and must include exactly one control-plane node, which publishes ports 80 and 443 on the listen address; the others are workers.",
           "items": {
             "type": "object",
             "additionalProperties": false,

@@ -73,7 +73,34 @@ func (c *Client) UpgradeOrInstall(ctx context.Context, releaseName string, chrt 
 	return c.upgrade(ctx, releaseName, chrt, vals)
 }
 
+// Preview returns the release releaseName has in the cluster, nil when it
+// has none, and the release UpgradeOrInstall would leave with chrt and
+// vals, from a dry run that changes nothing: a server dry run of the
+// upgrade of a release that exists, and a client-side render of the
+// install of one that does not, whose namespace may not exist yet.
+func (c *Client) Preview(ctx context.Context, releaseName string, chrt *chart.Chart, vals map[string]any) (current, next *release.Release, err error) {
+	current, err = c.status(releaseName)
+	if err != nil && !errors.Is(err, ErrReleaseNotFound) {
+		return nil, nil, err
+	}
+	if current == nil {
+		act := c.newInstall(releaseName)
+		act.DryRunStrategy = action.DryRunClient
+		next, err = runInstall(ctx, act, releaseName, chrt, vals)
+		return nil, next, err
+	}
+	act := c.newUpgrade()
+	act.DryRunStrategy = action.DryRunServer
+	next, err = runUpgrade(ctx, act, releaseName, chrt, vals)
+	return current, next, err
+}
+
 func (c *Client) install(ctx context.Context, name string, chrt *chart.Chart, vals map[string]any) (*release.Release, error) {
+	return runInstall(ctx, c.newInstall(name), name, chrt, vals)
+}
+
+// newInstall returns the install action of the release name.
+func (c *Client) newInstall(name string) *action.Install {
 	act := action.NewInstall(c.cfg)
 	act.ReleaseName = name
 	act.Namespace = c.namespace
@@ -84,7 +111,10 @@ func (c *Client) install(ctx context.Context, name string, chrt *chart.Chart, va
 	// on every subsequent re-deploy — helm's default would only install
 	// CRDs on first install).
 	act.SkipCRDs = true
+	return act
+}
 
+func runInstall(ctx context.Context, act *action.Install, name string, chrt *chart.Chart, vals map[string]any) (*release.Release, error) {
 	rel, err := act.RunWithContext(ctx, chrt, vals)
 	if err != nil {
 		return nil, fmt.Errorf("helm install %q: %w", name, err)
@@ -97,6 +127,11 @@ func (c *Client) install(ctx context.Context, name string, chrt *chart.Chart, va
 }
 
 func (c *Client) upgrade(ctx context.Context, name string, chrt *chart.Chart, vals map[string]any) (*release.Release, error) {
+	return runUpgrade(ctx, c.newUpgrade(), name, chrt, vals)
+}
+
+// newUpgrade returns the upgrade action of a release.
+func (c *Client) newUpgrade() *action.Upgrade {
 	act := action.NewUpgrade(c.cfg)
 	act.Namespace = c.namespace
 	act.WaitStrategy = kube.HookOnlyStrategy
@@ -107,7 +142,10 @@ func (c *Client) upgrade(ctx context.Context, name string, chrt *chart.Chart, va
 	// an SSA conflict on the edited field. The CLI's deploy is the
 	// source of truth for chart-managed fields.
 	act.ForceConflicts = true
+	return act
+}
 
+func runUpgrade(ctx context.Context, act *action.Upgrade, name string, chrt *chart.Chart, vals map[string]any) (*release.Release, error) {
 	rel, err := act.RunWithContext(ctx, name, chrt, vals)
 	if err != nil {
 		return nil, fmt.Errorf("helm upgrade %q: %w", name, err)
@@ -128,6 +166,11 @@ func (c *Client) Uninstall(name string) error {
 		return fmt.Errorf("helm uninstall %q: %w", name, err)
 	}
 	return nil
+}
+
+// Release returns the deployed release name, or ErrReleaseNotFound.
+func (c *Client) Release(name string) (*release.Release, error) {
+	return c.status(name)
 }
 
 func (c *Client) status(name string) (*release.Release, error) {

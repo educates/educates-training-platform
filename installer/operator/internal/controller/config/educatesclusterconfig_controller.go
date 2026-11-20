@@ -172,7 +172,9 @@ type EducatesClusterConfigReconciler struct {
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=cert-manager.io,resources=clusterissuers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingressclasses,verbs=get;list;watch
-// Nodes are read to work out whether the cluster can mount package images.
+// Nodes are read to work out whether the cluster can mount package images,
+// and, with the pods of the envoy DaemonSet, to leave out of its rollout the
+// pods on nodes that are not Ready.
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 // Managed-mode operations:
@@ -190,6 +192,8 @@ type EducatesClusterConfigReconciler struct {
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list
 // +kubebuilder:rbac:groups=cert-manager.io,resources=clusterissuers,verbs=create;update;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 
@@ -713,13 +717,15 @@ func (r *EducatesClusterConfigReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToSingleton)).
 		Watches(&networkingv1.IngressClass{}, handler.EnqueueRequestsFromMapFunc(r.mapIngressClassToSingleton)).
 		Watches(&appsv1.Deployment{}, handler.EnqueueRequestsFromMapFunc(r.mapDeploymentToSingleton)).
+		Watches(&appsv1.DaemonSet{}, handler.EnqueueRequestsFromMapFunc(r.mapDaemonSetToSingleton)).
 		// A node joining, leaving or being upgraded can change whether the
-		// cluster can mount package images. The predicate keeps node
-		// heartbeats from reconciling the singleton.
+		// cluster can mount package images, and a node turning Ready or not
+		// changes which envoy pods count towards IngressReady. The predicate
+		// keeps node heartbeats from reconciling the singleton.
 		Watches(
 			&corev1.Node{},
 			handler.EnqueueRequestsFromMapFunc(r.mapNodeToSingleton),
-			builder.WithPredicates(nodeVersionsChanged()),
+			builder.WithPredicates(nodeVersionsOrReadinessChanged()),
 		).
 		// Platform component CRs gate the Managed-mode finalizer drain;
 		// their deletion events are what unblock a pending teardown.

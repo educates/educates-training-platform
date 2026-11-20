@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 )
 
@@ -146,5 +148,84 @@ func TestKubeContextIgnoresTheLocalClusterSelectionWithAContext(t *testing.T) {
 	}
 	if got != flags {
 		t.Errorf("resolveKubeContext = %+v, want %+v", got, flags)
+	}
+}
+
+func TestKubeContextUsage(t *testing.T) {
+	cases := []struct {
+		name       string
+		kubeconfig string
+		context    string
+		namesFile  bool
+		want       string
+	}{
+		{
+			name:       "the file kubectl reads by default is left out",
+			kubeconfig: "/home/user/.kube/config",
+			context:    "kind-educates",
+			want:       "kubectl cluster-info --context kind-educates",
+		},
+		{
+			name:       "another file is named",
+			kubeconfig: "/given/config",
+			context:    "kind-educates-test2",
+			namesFile:  true,
+			want:       "kubectl cluster-info --context kind-educates-test2 --kubeconfig /given/config",
+		},
+		{
+			name:       "a file with a space in its path is quoted",
+			kubeconfig: "/given/my config",
+			context:    "kind-educates",
+			namesFile:  true,
+			want:       "kubectl cluster-info --context kind-educates --kubeconfig '/given/my config'",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := kubeContextUsage(tc.kubeconfig, tc.context, tc.namesFile); got != tc.want {
+				t.Errorf("kubeContextUsage = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNoteKubeContext(t *testing.T) {
+	test2, err := localclusters.Named("test2", t.TempDir())
+	if err != nil {
+		t.Fatalf("Named: %v", err)
+	}
+	cases := []struct {
+		name           string
+		kubeconfigFlag string
+		kubeconfigEnv  string
+		wantCommand    string
+	}{
+		{
+			name:        "the default kubeconfig",
+			wantCommand: "kubectl cluster-info --context kind-educates-test2",
+		},
+		{
+			name:           "--kubeconfig names the file",
+			kubeconfigFlag: "/home/user/.kube/config",
+			wantCommand:    "kubectl cluster-info --context kind-educates-test2 --kubeconfig /home/user/.kube/config",
+		},
+		{
+			name:          "$KUBECONFIG names the file",
+			kubeconfigEnv: "/other/config",
+			wantCommand:   "kubectl cluster-info --context kind-educates-test2 --kubeconfig /home/user/.kube/config",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("KUBECONFIG", tc.kubeconfigEnv)
+			var out bytes.Buffer
+
+			noteKubeContext(progress.New(&out, 0, false), &out, tc.kubeconfigFlag, "/home/user/.kube/config", test2)
+
+			want := "· The current context of /home/user/.kube/config is now kind-educates-test2. Use the cluster with:\n\n    " + tc.wantCommand + "\n"
+			if out.String() != want {
+				t.Errorf("noteKubeContext wrote %q, want %q", out.String(), want)
+			}
+		})
 	}
 }

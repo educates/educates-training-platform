@@ -592,6 +592,17 @@ func (p *Plan) Commit(r Reporter) error {
 	return nil
 }
 
+// PendingCAKeyPairs returns the CA key pairs the plan minted that Commit
+// has not yet written to the cache, by name, so that a preview of a
+// deploy can tell what it would push without committing the plan.
+func (p *Plan) PendingCAKeyPairs() map[string]*apiv1.Secret {
+	pending := make(map[string]*apiv1.Secret, len(p.mints))
+	for _, m := range p.mints {
+		pending[m.secret.Name] = m.secret
+	}
+	return pending
+}
+
 // TranslatorOptions returns the translator input the plan decided.
 func (p *Plan) TranslatorOptions() translator.Options {
 	return translator.Options{LocalCertificates: p.Certificates}

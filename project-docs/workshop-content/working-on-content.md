@@ -284,6 +284,12 @@ could not read.
 
 The `--patch-workshop` command in this case will cause the workshop definition for the workshop to be patched so that workshop instructions will be sourced from a HTTP server run by the `educates serve-workshop` command.
 
+When you stop the command, it removes the patch by applying the workshop
+definition from your local files again. If that fails, it says so, and
+`educates cluster workshop update`, run with the same options, applies the
+definition again. Without `--patch-workshop`, the command leaves the
+workshop definition in the cluster as it is.
+
 Under the covers what the `--patch-workshop` command is doing is injecting the following configuration into the workshop definition.
 
 ```yaml

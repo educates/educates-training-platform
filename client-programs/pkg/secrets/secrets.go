@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path"
@@ -103,6 +104,98 @@ func SyncLocalCachedSecretsToCluster(client *kubernetes.Clientset, names []strin
 	}
 
 	return nil
+}
+
+// SecretSyncChange is what SyncLocalCachedSecretsToCluster would do to one
+// Secret of the LocalSecretsSyncNamespace namespace.
+type SecretSyncChange struct {
+	// Name is the name of the Secret.
+	Name string
+
+	// Change is SecretCreated, SecretUpdated or SecretUnchanged.
+	Change string
+}
+
+// The changes a SecretSyncChange reports.
+const (
+	SecretCreated   = "created"
+	SecretUpdated   = "updated"
+	SecretUnchanged = "unchanged"
+)
+
+// PreviewSyncLocalCachedSecretsToCluster returns what
+// SyncLocalCachedSecretsToCluster would do with names: whether it would
+// create the LocalSecretsSyncNamespace namespace, and whether it would
+// create, update or leave unchanged the Secret of each name. It reads the
+// cluster and changes nothing, and it reports no value of any Secret.
+//
+// pending holds Secrets that are not in the local cache yet, by name, such
+// as a CA key pair a certificate plan has minted and not committed, and
+// the preview takes them in place of the cache. A Secret in the cluster is
+// unchanged when it has the type of the cached one and the same value for
+// every key the cached one holds, the fields the sync sets.
+func PreviewSyncLocalCachedSecretsToCluster(client kubernetes.Interface, names []string, pending map[string]*apiv1.Secret) (bool, []SecretSyncChange, error) {
+	_, err := client.CoreV1().Namespaces().Get(context.TODO(), LocalSecretsSyncNamespace, metav1.GetOptions{})
+	namespaceCreated := k8serrors.IsNotFound(err)
+	if err != nil && !namespaceCreated {
+		return false, nil, errors.Wrapf(err, "unable to check namespace %q for local secrets sync", LocalSecretsSyncNamespace)
+	}
+
+	changes := make([]SecretSyncChange, 0, len(names))
+
+	for _, name := range names {
+		desired, ok := pending[name]
+		if !ok {
+			if desired, err = decodeCachedSecret(name); err != nil {
+				return false, nil, err
+			}
+		}
+
+		change := SecretCreated
+
+		if !namespaceCreated {
+			live, err := client.CoreV1().Secrets(LocalSecretsSyncNamespace).Get(context.TODO(), name, metav1.GetOptions{})
+			switch {
+			case k8serrors.IsNotFound(err):
+			case err != nil:
+				return false, nil, errors.Wrap(err, "unable to read secrets from cluster")
+			case syncedSecretMatches(desired, live):
+				change = SecretUnchanged
+			default:
+				change = SecretUpdated
+			}
+		}
+
+		changes = append(changes, SecretSyncChange{Name: name, Change: change})
+	}
+
+	return namespaceCreated, changes, nil
+}
+
+// syncedSecretMatches reports whether live, a Secret in the cluster, holds
+// what the sync of desired would set: its type, taking an empty one as
+// Opaque, and the value of each key of desired, from data or stringData.
+func syncedSecretMatches(desired, live *apiv1.Secret) bool {
+	typeOf := func(s *apiv1.Secret) apiv1.SecretType {
+		if s.Type == "" {
+			return apiv1.SecretTypeOpaque
+		}
+		return s.Type
+	}
+	if typeOf(desired) != typeOf(live) {
+		return false
+	}
+	for key, value := range desired.Data {
+		if !bytes.Equal(live.Data[key], value) {
+			return false
+		}
+	}
+	for key, value := range desired.StringData {
+		if !bytes.Equal(live.Data[key], []byte(value)) {
+			return false
+		}
+	}
+	return true
 }
 
 // decodeCachedSecret reads and decodes the cached Secret name.

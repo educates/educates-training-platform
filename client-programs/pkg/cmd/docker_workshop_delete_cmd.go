@@ -9,6 +9,7 @@ import (
 	"path"
 
 	yttcmd "carvel.dev/ytt/pkg/cmd/template"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/moby/moby/client"
@@ -38,15 +39,20 @@ func (m *DockerWorkshopsManager) DeleteWorkshop(name string, stdout io.Writer, s
 
 	defer m.ClearWorkshopStatus(name)
 
+	// Take the workshop down as a Compose project: this removes its
+	// containers, the project network and the named volumes of the
+	// workshop and of its Compose services. Compose finds them by their
+	// project labels, so the compose file deploy wrote is not needed, and
+	// a project with nothing left to remove only warns.
+
 	dockerCommand := exec.Command(
 		"docker",
 		"compose",
 		"--project-name",
 		name,
-		"rm",
-		"--stop",
-		"--force",
+		"down",
 		"--volumes",
+		"--remove-orphans",
 	)
 
 	dockerCommand.Stdout = stdout
@@ -58,6 +64,10 @@ func (m *DockerWorkshopsManager) DeleteWorkshop(name string, stdout io.Writer, s
 		return errors.Wrap(err, "unable to stop workshop")
 	}
 
+	// Compose removes the workshop volume with the project. Remove it here
+	// as well, for a volume Compose no longer counts as the project's, and
+	// count a volume which is already gone as removed.
+
 	ctx := context.Background()
 
 	cli, err := docker.NewDockerClient()
@@ -68,7 +78,7 @@ func (m *DockerWorkshopsManager) DeleteWorkshop(name string, stdout io.Writer, s
 
 	_, err = cli.VolumeRemove(ctx, fmt.Sprintf("%s_workshop", name), client.VolumeRemoveOptions{})
 
-	if err != nil {
+	if err != nil && !cerrdefs.IsNotFound(err) {
 		return errors.Wrap(err, "unable to delete workshop volume")
 	}
 
@@ -76,8 +86,11 @@ func (m *DockerWorkshopsManager) DeleteWorkshop(name string, stdout io.Writer, s
 	workshopConfigDir := path.Join(configFileDir, "workshops", name)
 	composeConfigDir := path.Join(configFileDir, "compose", name)
 
-	os.RemoveAll(workshopConfigDir)
-	os.RemoveAll(composeConfigDir)
+	for _, dir := range []string{workshopConfigDir, composeConfigDir} {
+		if err := os.RemoveAll(dir); err != nil {
+			fmt.Fprintf(stderr, "Unable to remove workshop configuration %s: %v\n", dir, err)
+		}
+	}
 
 	return nil
 }

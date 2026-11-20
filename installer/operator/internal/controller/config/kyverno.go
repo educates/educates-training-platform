@@ -22,11 +22,8 @@ import (
 	"fmt"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -49,7 +46,7 @@ const (
 // kyvernoDeployments are the four Deployments the chart installs at
 // default values (admission, background, cleanup, reports
 // controllers — reports-server is opt-in and not enabled). Readiness
-// is gated on all four reporting Available=True.
+// is gated on all four having rolled out.
 var kyvernoDeployments = []string{
 	"kyverno-admission-controller",
 	"kyverno-background-controller",
@@ -59,12 +56,12 @@ var kyvernoDeployments = []string{
 
 // errKyvernoNotReady is the in-flight sentinel ensureKyvernoReady
 // returns. Same shape as the other service-readiness sentinels.
-var errKyvernoNotReady = errors.New("kyverno Deployments not yet Available")
+var errKyvernoNotReady = errors.New("kyverno Deployments have not rolled out yet")
 
 // reconcileKyvernoPhase runs the Kyverno install pipeline:
 //
 //  1. helm install/upgrade from the vendored chart.
-//  2. Wait for the four kyverno Deployments to report Available.
+//  2. Wait for the four kyverno Deployments to roll out.
 //
 // Kyverno installs validating + mutating admission webhooks via the
 // chart, with the cainjector-equivalent built into the
@@ -127,8 +124,8 @@ func (r *EducatesClusterConfigReconciler) reconcileKyvernoPhase(ctx context.Cont
 }
 
 // installBundledKyverno installs or upgrades the bundled Kyverno release
-// and waits for its four controllers. It returns done=true once they are
-// Available.
+// and waits for its four controllers. It returns done=true once they have
+// rolled out.
 func (r *EducatesClusterConfigReconciler) installBundledKyverno(ctx context.Context, obj *configv1alpha1.EducatesClusterConfig) (bool, ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 	phaseStop := func(res ctrl.Result, err error) (bool, ctrl.Result, error) {
@@ -149,10 +146,10 @@ func (r *EducatesClusterConfigReconciler) installBundledKyverno(ctx context.Cont
 
 	if err := r.ensureKyvernoReady(ctx); err != nil {
 		if errors.Is(err, errKyvernoNotReady) {
-			r.markPolicyEnforcementProgressing(obj, "WaitingForKyverno", "kyverno Deployments not yet Available")
+			r.markPolicyEnforcementProgressing(obj, "WaitingForKyverno", "kyverno Deployments have not rolled out yet")
 			r.markManagedPhase(obj, configv1alpha1.ClusterConfigPhaseInstalling)
-			// Same cache-vs-watch race mitigation as the other
-			// service-readiness gates.
+			// Same self-poll fallback as the other service-readiness
+			// gates.
 			return false, ctrl.Result{RequeueAfter: 15 * time.Second}, r.updateStatusWithTransitionLog(ctx, obj)
 		}
 		return phaseStop(ctrl.Result{}, err)
@@ -261,22 +258,16 @@ func renderKyvernoValues(obj *configv1alpha1.EducatesClusterConfig) map[string]a
 }
 
 // ensureKyvernoReady gates the rest of the pipeline on the four
-// kyverno Deployments reporting Available=True. Same shape as
-// ensureCertManagerReady: a missing Deployment (404) maps to
-// "not ready" rather than a hard error.
+// kyverno Deployments having rolled out their current spec. Same shape
+// as ensureCertManagerReady: a missing Deployment (404) maps to "not
+// ready" rather than a hard error.
 func (r *EducatesClusterConfigReconciler) ensureKyvernoReady(ctx context.Context) error {
-	for _, name := range kyvernoDeployments {
-		dep := &appsv1.Deployment{}
-		key := types.NamespacedName{Namespace: kyvernoNamespace, Name: name}
-		if err := r.Get(ctx, key, dep); err != nil {
-			if apierrors.IsNotFound(err) {
-				return errKyvernoNotReady
-			}
-			return fmt.Errorf("get Deployment %s: %w", key, err)
-		}
-		if !deploymentAvailable(dep) {
-			return errKyvernoNotReady
-		}
+	rolledOut, err := r.deploymentsRolledOut(ctx, kyvernoNamespace, kyvernoDeployments...)
+	if err != nil {
+		return err
+	}
+	if !rolledOut {
+		return errKyvernoNotReady
 	}
 	return nil
 }

@@ -40,6 +40,26 @@ When the IP address of your host can't be detected, the configuration is written
 
 On Docker Desktop 4.97 or later, turn on "Allow privileged port forwarding to external machines", under **Settings > Advanced**. Docker Desktop otherwise serves published ports below 1024 on loopback addresses only, and the cluster's ports 80 and 443 are on a non-loopback address. `educates local cluster create` and `educates local cluster start` refuse to run while the setting is off, and warn when they can't read it.
 
+Checking the cluster
+--------------------
+
+To see whether the local cluster runs, and whether Educates on it is ready, run:
+
+```
+educates local cluster status
+```
+
+It first says whether the cluster's nodes are running: all of them, none, or only some, naming those which are not. Unless the cluster is stopped, it then lists the cluster's Kubernetes nodes as the cluster reports them, each with its role, `control-plane` or `worker`, its status, its Kubernetes version, its labels and its taints:
+
+```
+NODE                     ROLE            STATUS   VERSION   LABELS                            TAINTS
+educates-control-plane   control-plane   Ready    v1.36.4   ingress-ready=true,tier=control   node-role.kubernetes.io/control-plane:NoSchedule
+educates-worker          worker          Ready    v1.36.4   disktype=ssd,tier=frontend        -
+educates-worker2         worker          Ready    v1.36.4   tier=backend                      -
+```
+
+The labels Kubernetes puts on every node, such as `kubernetes.io/hostname`, are left out, so a node shows the labels the `cluster.nodes` list of the configuration declares for it, and the control-plane node also shows the `ingress-ready` label. To see every label of each node, those Kubernetes sets included, add `--all-labels`. When the cluster can't be reached, as while its control-plane node starts, the command says so in place of the list. Last, it lists the Educates platform components and whether each is ready, or says that Educates is not installed, as on a cluster created with `--cluster-only`.
+
 Deleting the cluster
 --------------------
 
@@ -145,7 +165,7 @@ ingress:
   domain: educates-local-dev.test
 ```
 
-When you set a custom ingress domain, the install serves workshop sessions over HTTPS: it installs cert-manager, which issues the wildcard TLS certificate for the ingress domain inside the cluster from a certificate authority (CA) minted for that domain from a root CA kept on your machine. Setting a custom domain turns off the insecure default, so before creating the cluster you provide the root CA, or instead a wildcard certificate as described further below. To generate a root CA:
+When you set a custom ingress domain, the install serves workshop sessions over HTTPS: it installs cert-manager, which issues the wildcard TLS certificate for the ingress domain inside the cluster from a certificate authority (CA) minted for that domain from a root CA kept on your machine. Setting a custom domain turns off the insecure default, so before creating the cluster you provide the root CA, or instead a wildcard certificate as described further below. `educates local cluster create --cluster-only` deploys no platform and so needs neither: you can provide one after creating the cluster, before `educates admin platform deploy --local-config` deploys Educates. To generate a root CA:
 
 ```
 educates local secrets add ca educates-local-ca
@@ -671,7 +691,7 @@ To see every local cluster, run:
 educates local cluster list
 ```
 
-It lists the default cluster, shown as `(default)`, and every named cluster, whatever `--local-cluster` or `EDUCATES_LOCAL_CLUSTER` select. Each row has the cluster's state, the host IP address it publishes ports 80 and 443 on, its ingress domain and its kube context. The state is `running`, `stopped`, or `partly running` when only some nodes of a multi-node cluster run. The domain is the one the DNS resolver serves for the cluster: the domain its configuration declares, or else the `nip.io` name of its listen address. It shows as `-` when the cluster has none, as for an `EducatesConfig` whose custom resources declare no domain. A configuration that does not load, such as one without a specific listen address, leaves the domain as `-` and is reported in a warning after the list.
+It lists the default cluster, shown as `(default)`, and every named cluster, whatever `--local-cluster` or `EDUCATES_LOCAL_CLUSTER` select. Each row has the cluster's state, its number of nodes, its Kubernetes version, the host IP address it publishes ports 80 and 443 on, its ingress domain and its kube context. The state is `running`, `stopped`, or `partly running` when only some nodes of a multi-node cluster run. The number of nodes counts the cluster's control-plane and worker nodes, running or not, the nodes `kubectl get nodes` lists, and `educates local cluster status --local-cluster <name>` shows each one with its labels and taints. The Kubernetes version, such as `v1.36.4`, is the one the cluster's node image holds, chosen with `--kubernetes-version` or `--kind-cluster-image` when the cluster was created. Like the other columns, it is shown for a stopped cluster too, and it shows as `-` when it can't be read from the cluster's control-plane node. The domain is the one the DNS resolver serves for the cluster: the domain its configuration declares, or else the `nip.io` name of its listen address. It shows as `-` when the cluster has none, as for an `EducatesConfig` whose custom resources declare no domain. A configuration that does not load, such as one without a specific listen address, leaves the domain as `-` and is reported in a warning after the list.
 
 Only the Kind clusters the command line tool manages are local clusters: the Kind cluster `educates`, and a Kind cluster `educates-<name>` whose folder `clusters/<name>/` exists in the data home. A Kind cluster you created yourself is left out of the list and ignored by every check, even when its name starts with `educates-`. The `educates local cluster delete`, `start`, `stop` and `status` commands also leave it alone: given the name of a cluster whose folder the data home does not hold, such as `--local-cluster foo` beside a Kind cluster `educates-foo` you created, they refuse with an error saying so.
 

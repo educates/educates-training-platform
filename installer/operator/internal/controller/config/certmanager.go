@@ -26,7 +26,6 @@ import (
 	cmacme "github.com/cert-manager/cert-manager/pkg/apis/acme/v1"
 	cmv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -67,11 +66,11 @@ const (
 )
 
 // errCertManagerNotReady is returned by ensureCertManagerReady when one
-// or more cert-manager Deployments has not yet reported Available=True.
+// or more cert-manager Deployments has not rolled out yet.
 // It is a typed sentinel so the reconciler can map it to a
 // CertificatesReady=False/WaitingForWebhook condition without retrying
 // the underlying API call.
-var errCertManagerNotReady = errors.New("cert-manager Deployments not yet Available")
+var errCertManagerNotReady = errors.New("cert-manager Deployments have not rolled out yet")
 
 // isWebhookNotReadyErr reports whether err is the apiserver's "couldn't
 // reach the cert-manager webhook" error. The webhook is fronted by a
@@ -223,7 +222,7 @@ func (r *EducatesClusterConfigReconciler) cleanupCertManager(ctx context.Context
 // BundledCertManager steps:
 //
 //  1. helm install/upgrade cert-manager from the vendored chart.
-//  2. Wait for cert-manager Deployments to report Available.
+//  2. Wait for cert-manager Deployments to roll out.
 //  3. Copy the CustomCA Secret into cert-manager's namespace.
 //  4. SSA the ClusterIssuer.
 //  5. SSA the wildcard Certificate.
@@ -275,18 +274,17 @@ func (r *EducatesClusterConfigReconciler) reconcileCertificatesPhase(ctx context
 
 	// Gate the rest of the pipeline on cert-manager being live. A
 	// not-ready signal is published as a progressing condition; the
-	// Deployment watch re-triggers reconcile when Availability flips.
+	// Deployment watch re-triggers reconcile as the rollout progresses.
 	if err := r.ensureCertManagerReady(ctx); err != nil {
 		if errors.Is(err, errCertManagerNotReady) {
-			r.markCertificatesProgressing(obj, "WaitingForCertManager", "cert-manager Deployments not yet Available")
+			r.markCertificatesProgressing(obj, "WaitingForCertManager", "cert-manager Deployments have not rolled out yet")
 			r.markManagedPhase(obj, configv1alpha1.ClusterConfigPhaseInstalling)
 			// RequeueAfter as belt-and-suspenders: in practice the
 			// 3 cert-manager Deployments roll out in stagger, so the
-			// final Available transition usually has at least one
+			// final rollout transition usually has at least one
 			// other status event behind it that re-triggers the
-			// reconciler. But a tight cache-vs-apiserver race could
-			// still leave us stuck with no further watch events;
-			// 15s of self-poll matches Contour's gate.
+			// reconciler. But a missed final event would leave the
+			// gate waiting; 15s of self-poll matches Contour's gate.
 			return false, ctrl.Result{RequeueAfter: 15 * time.Second}, r.updateStatusWithTransitionLog(ctx, obj)
 		}
 		return phaseStop(ctrl.Result{}, err)
@@ -371,38 +369,19 @@ func shouldInstallCertManager(obj *configv1alpha1.EducatesClusterConfig) bool {
 }
 
 // ensureCertManagerReady gates the rest of the cert-manager pipeline
-// on the three upstream Deployments reporting Available=True. This is
-// the readiness contract (Deployment-availability only; synthetic
-// admission probe deferred to a follow-up). A Deployment that's missing
-// (404) maps to "not ready" rather than a hard error — Helm has
-// not yet finished applying the manifests in that case.
+// on the three upstream Deployments having rolled out their current
+// spec. A Deployment that's missing (404) maps to "not ready" rather
+// than a hard error — Helm has not yet finished applying the manifests
+// in that case.
 func (r *EducatesClusterConfigReconciler) ensureCertManagerReady(ctx context.Context) error {
-	for _, name := range certManagerDeployments {
-		dep := &appsv1.Deployment{}
-		key := types.NamespacedName{Namespace: certManagerNamespace, Name: name}
-		if err := r.Get(ctx, key, dep); err != nil {
-			if apierrors.IsNotFound(err) {
-				return errCertManagerNotReady
-			}
-			return fmt.Errorf("get Deployment %s: %w", key, err)
-		}
-		if !deploymentAvailable(dep) {
-			return errCertManagerNotReady
-		}
+	rolledOut, err := r.deploymentsRolledOut(ctx, certManagerNamespace, certManagerDeployments...)
+	if err != nil {
+		return err
+	}
+	if !rolledOut {
+		return errCertManagerNotReady
 	}
 	return nil
-}
-
-// deploymentAvailable reports whether a Deployment has Available=True.
-// Returns false when the condition is missing entirely (a fresh
-// Deployment whose ReplicaSet is still rolling out).
-func deploymentAvailable(d *appsv1.Deployment) bool {
-	for _, c := range d.Status.Conditions {
-		if c.Type == appsv1.DeploymentAvailable {
-			return c.Status == corev1.ConditionTrue
-		}
-	}
-	return false
 }
 
 // ensureCustomCASecretCopy mirrors the user-supplied CustomCA Secret

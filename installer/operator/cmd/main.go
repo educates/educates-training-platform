@@ -256,10 +256,23 @@ func main() {
 		deploymentNamespaceConfigs[ns] = cache.Config{}
 	}
 
+	// The DaemonSet informer is scoped the same way, to the namespaces of
+	// the DaemonSets the reconcilers report on: Contour's envoy, the
+	// node-ca-injector and the image pre-puller.
+	daemonSetCacheNamespaces := append(
+		configcontroller.DaemonSetWatchNamespaces(),
+		platformcontroller.DaemonSetWatchNamespaces()...,
+	)
+	daemonSetNamespaceConfigs := make(map[string]cache.Config, len(daemonSetCacheNamespaces))
+	for _, ns := range daemonSetCacheNamespaces {
+		daemonSetNamespaceConfigs[ns] = cache.Config{}
+	}
+
 	cacheOpts := cache.Options{
 		ByObject: map[client.Object]cache.ByObject{
 			&corev1.Secret{}:     {Namespaces: namespaceConfigs},
 			&appsv1.Deployment{}: {Namespaces: deploymentNamespaceConfigs},
+			&appsv1.DaemonSet{}:  {Namespaces: daemonSetNamespaceConfigs},
 			// Nodes are read only to work out whether the cluster can mount
 			// package images. A platform with many nodes would otherwise hold
 			// every node object in memory, so the cache keeps just the Linux
@@ -314,8 +327,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&platformcontroller.SecretsManagerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		APIReader: mgr.GetAPIReader(),
+		Scheme:    mgr.GetScheme(),
 		HelmClientFor: func(ns string) (*helm.Client, error) {
 			return helm.NewClient(restCfg, ns)
 		},
@@ -324,8 +338,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&platformcontroller.LookupServiceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		APIReader: mgr.GetAPIReader(),
+		Scheme:    mgr.GetScheme(),
 		HelmClientFor: func(ns string) (*helm.Client, error) {
 			return helm.NewClient(restCfg, ns)
 		},
@@ -363,8 +378,12 @@ func main() {
 	}
 }
 
-// trimNodeForCache keeps only what the image volume check reads from a node,
-// so a platform with many nodes does not hold their full objects in memory.
+// trimNodeForCache keeps only what the operator reads from a cached node, so
+// a platform with many nodes does not hold their full objects in memory: the
+// versions the image volume check reads, and the status of the Ready
+// condition, whose flips re-check the DaemonSet gates that leave out the pods
+// on nodes that are not Ready. The Ready condition is kept without its
+// timestamps, so a node's heartbeat leaves the trimmed object unchanged.
 // Everything dropped here is unused by this operator.
 func trimNodeForCache(object any) (any, error) {
 	node, ok := object.(*corev1.Node)
@@ -380,6 +399,11 @@ func trimNodeForCache(object any) (any, error) {
 	trimmed.UID = node.UID
 	trimmed.Status.NodeInfo.KubeletVersion = node.Status.NodeInfo.KubeletVersion
 	trimmed.Status.NodeInfo.ContainerRuntimeVersion = node.Status.NodeInfo.ContainerRuntimeVersion
+	for _, c := range node.Status.Conditions {
+		if c.Type == corev1.NodeReady {
+			trimmed.Status.Conditions = []corev1.NodeCondition{{Type: c.Type, Status: c.Status}}
+		}
+	}
 
 	return trimmed, nil
 }

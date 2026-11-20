@@ -257,6 +257,14 @@ New Features
   declares whose container is missing, and says in a ``DECLARED`` column
   whether the file declares each mirror.
 
+* The ``educates local cluster`` command group is also available as
+  ``educates local clusters``, ``educates local mirror`` as ``educates local
+  mirrors``, and ``educates local secrets`` as ``educates local secret``, so
+  each answers to its singular and its plural, as other command groups such
+  as ``educates cluster portal`` do. The ``educates local registry`` and
+  ``educates local resolver`` groups manage the one local registry and the
+  one DNS resolver, and keep their singular name only.
+
 * The ``educates cluster portal export`` command exports a training portal
   and the workshops it references as Kubernetes resource YAML, either to
   standard output as a single document stream or, with ``--as-files``, as
@@ -265,7 +273,8 @@ New Features
   status and metadata are stripped and the portal password is removed. The
   ``--image-repository`` and ``--workshop-version`` options substitute the
   ``$(image_repository)`` and ``$(workshop_version)`` variables in the
-  exported workshops.
+  exported workshops. The command is also available as the top-level alias
+  ``educates export-portal``, alongside the other training portal aliases.
 
 * ``educates local cluster create`` accepts a ``--kubernetes-version`` flag
   to choose the Kubernetes version of the local Kind cluster. The supported
@@ -279,15 +288,25 @@ New Features
   ``cluster.nodes`` list declares the cluster's nodes, each with a ``role``
   (``control-plane`` or ``worker``), optional Kubernetes node ``labels``, and
   optional ``taints``, so a laptop cluster can model node pools for workshops
-  that schedule across several nodes. Leaving ``cluster.nodes`` unset keeps
-  the default single control-plane cluster. Every node pulls from the local
+  that schedule across several nodes. Exactly one node has the
+  ``control-plane`` role, since that node publishes ports 80 and 443 on the
+  listen address. ``educates local cluster create``, ``educates local
+  config edit`` and ``educates local config set`` refuse a list with none or
+  with more than one, and ``educates local config view`` says why the
+  cluster can't use such a config. Leaving ``cluster.nodes`` unset keeps the
+  default single control-plane cluster. Every node pulls from the local
   image registry and the local registry mirrors: ``educates local cluster
   create``, ``educates local registry deploy`` and ``educates local mirror
   deploy`` configure each node, and ``educates local mirror delete`` removes
   the mirror's configuration from each node. ``educates local cluster stop``
   and ``educates local cluster start`` stop and start every node, and
   ``educates local cluster status`` reports a cluster with only some of its
-  nodes running as partly running, naming the nodes which are not.
+  nodes running as partly running, naming the nodes which are not. Unless
+  the cluster is stopped, ``educates local cluster status`` also lists the
+  cluster's Kubernetes nodes, each with its role, status, Kubernetes
+  version, labels and taints, leaving out the labels Kubernetes puts on
+  every node, so the labels ``cluster.nodes`` declares show on their nodes.
+  The ``--all-labels`` option shows every label of each node instead.
 
 * ``educates local cluster status`` now also reports whether Educates is
   installed on the local cluster and whether its platform components are
@@ -327,8 +346,9 @@ New Features
   ``KUBECONFIG`` or the current kube context say.
 
   ``educates local cluster list`` shows every local cluster, the default
-  one marked, with its state, listen address, ingress domain, declared or
-  derived as the DNS resolver serves it, and kube context. A Kind cluster
+  one marked, with its state, number of nodes, Kubernetes version, listen
+  address, ingress domain, declared or derived as the DNS resolver serves
+  it, and kube context. A Kind cluster
   named ``educates-<name>`` counts as a local cluster only when its folder
   ``clusters/<name>/`` exists in the data home, so Kind clusters made by
   hand are left out of the list and of every check, and ``delete``,
@@ -588,8 +608,13 @@ New Features
   it was, and the ``SessionManager`` reports ``Ready`` as ``False`` with
   reason ``InstallFailed`` and a message naming the entry. ``enabled`` remains
   the only switch: while it is ``false`` nothing is pulled, and the list can
-  stay in place. See [pre-pulling workshop
-  images](pre-pulling-workshop-images).
+  stay in place. The ``SessionManager`` reports the pre-puller's progress on
+  its ``ImagesPrePulled`` condition, ``True`` with reason ``Pulled`` once
+  every image is pulled on every node the ``image-puller`` daemon set runs on.
+  The condition is informational: neither the ``Ready`` condition of the
+  ``SessionManager`` nor ``educates admin platform deploy`` waits for it,
+  since a workshop session starts without pre-pulled images, only more
+  slowly. See [pre-pulling workshop images](pre-pulling-workshop-images).
 
 * The workshop dashboard has a button at the start of its tabs for collapsing
   the panel holding the workshop instructions out of the way. When the panel
@@ -599,8 +624,74 @@ New Features
   panel as before. The button is shown only when the workshop instructions
   are displayed in the left hand side panel.
 
+* The backend of the Docker Desktop extension logs what the extension asks
+  of it, so the log of the extension's backend container, which ``docker
+  logs`` shows, says why a workshop failed to deploy from the extension. It
+  logs its version, socket and image repository when it starts, each request
+  to deploy or delete a workshop when it arrives and when it finishes, with
+  the status and the response, and any other request only when it fails.
+  Before, the error of a failed deploy reached only the extension.
+
+* ``educates admin platform deploy --diff`` shows what a deploy would change
+  in the cluster, and changes nothing, in the cluster or in the local
+  secrets cache. It lists the cached Secrets a local configuration would
+  sync into the ``educates-secrets`` namespace, by name and never with their
+  values, the CRDs, and the operator release with its chart version and a
+  diff of its values, and shows a diff of each platform custom resource
+  against the resource as the API server would leave it, from a server-side
+  dry run of the deploy's apply. A change the API server would refuse, such
+  as one to how a cluster service is provided, shows as refused with the
+  reason. ``--verbose`` adds the full diffs of the CRDs and of the other
+  objects of the operator release. The command exits with status 0 whether
+  or not anything would change. It replaces the ``--show-changes`` option
+  of the 3.x installer, which printed the changes and applied them at once.
+
+* ``educates admin platform export`` writes the configuration of Educates
+  deployed to a cluster as an ``EducatesConfig``: the spec of each platform
+  custom resource as the cluster holds it, and the values of the operator
+  release as the ``operator`` block. Deployed with ``educates admin
+  platform deploy --config``, the file reproduces that configuration, on
+  the same cluster or on another one. It holds no Secret, and a comment
+  names each Secret the custom resources reference. It replaces reading
+  the deployed configuration back with ``educates admin platform config
+  --from-cluster`` and ``educates admin platform values --from-cluster`` in
+  the 3.x installer.
+
+* Each deploy of Educates by the command line tool, with ``educates admin
+  platform deploy`` or ``educates local cluster create``, is recorded as a
+  revision in the deploy history of the cluster, the ConfigMap
+  ``educates-deploy-history`` in the ``educates-installer`` namespace. A
+  revision holds when the deploy ran, whether it installed Educates or
+  updated it, the CLI version, the config file as given and the
+  ``EducatesConfig`` the deploy applied. ``educates admin platform history``
+  lists the revisions, and ``educates admin platform export --revision``
+  shows what one applied, or with ``--source`` the config it was given, so
+  the configuration a cluster was created with stays available. The history
+  keeps revision 1, the original, and the latest 10.
+
+* ``educates admin platform drift`` shows how a cluster has drifted from a
+  revision of its deploy history, the latest by default or, with
+  ``--revision original``, the deploy that installed Educates, and changes
+  nothing. It compares the operator chart version and values the revision
+  recorded with the release's, and shows a diff for each platform custom
+  resource of what a redeploy of the revision would leave against the
+  resource in the cluster, from a server-side dry run, so the defaults the
+  API server adds do not show as drift. It also lists the spec fields a
+  field manager other than the command line tool owns, such as one
+  ``kubectl edit`` changed, with when it wrote them.
+
 Features Changed
 ----------------
+
+* ``educates admin diagnostics collect`` also collects the Educates platform
+  resources the operator reconciles, ``EducatesClusterConfig``,
+  ``SecretsManager``, ``LookupService`` and ``SessionManager``, whose status
+  conditions say which part of an install is not ready and why, in
+  ``educates-cluster-configs.yaml``, ``secrets-managers.yaml``,
+  ``lookup-services.yaml`` and ``session-managers.yaml``. It also collects
+  the logs of the Educates operator, in ``educates-installer.log``, finding
+  its pods by their labels in whichever namespace it runs in, and the logs
+  of the lookup service, in ``lookup-service.log``.
 
 * When deploying a workshop with ``educates docker workshop deploy``, a
   workshop image using the ``:main``, ``:master``, ``:develop`` or ``:latest``
@@ -1698,6 +1789,22 @@ Removed Features
   3 configuration settings onto their version 4 equivalents is included in
   the documentation.
 
+* The commands and options of the CLI which served the version 3 installer
+  have been removed: ``educates admin platform config``, ``educates admin
+  platform values`` and ``educates local config reset``, the ``--dry-run``,
+  ``--show-changes``, ``--domain``, ``--version``, ``--package-repository``
+  and ``--skip-image-resolution`` options of ``educates admin platform
+  deploy``, the ``--version``, ``--package-repository`` and
+  ``--skip-image-resolution`` options of ``educates local cluster create``,
+  the ``--config`` and ``--domain`` options of ``educates local config
+  view``, and the ``--domain`` option of ``educates local secrets add ca``
+  and ``educates local secrets add tls``. A removed option fails as an
+  unknown flag, and a removed command as an unknown command. The migration
+  guide names what replaces each, such as ``educates admin platform render``
+  and ``educates admin platform deploy --diff`` for ``--dry-run``, and
+  ``educates admin platform export`` for reading the deployed configuration
+  back.
+
 * The CLI binaries are no longer published as the ``educates-client-programs``
   imgpkg bundle. Download the binaries from the GitHub release for the
   version, or use the ``educates-cli`` container image when embedding the CLI
@@ -1773,6 +1880,101 @@ Deprecations
 
 Bugs Fixed
 ----------
+
+* An unknown command of an ``educates`` command group, such as the mistyped
+  ``educates admin platform deplyo`` or a command removed in this release,
+  printed the help of the group and exited with status 0, so a script
+  running it reported success. It now fails with status 1, saying the
+  command is unknown to the group and suggesting the commands of the group
+  it is close to, as an unknown top-level command already did.
+
+* The help of every ``educates`` command with options showed ``[options]``
+  after ``[flags]`` in its usage line, and the help of every command below a
+  command group ended by pointing at a command such as ``educates cluster
+  portal options`` for a list of global command-line options. No such
+  command exists, and the CLI has no global options. Both came from the
+  kubectl help templates the CLI renders its help with, and both are gone
+  from the help of every command. The help of a command group also ended
+  by naming the group alone, as ``Use "portal <command> --help"`` for
+  ``educates cluster portal``, and now names it in full, as ``Use
+  "educates cluster portal <command> --help"``.
+
+* ``educates docker workshop delete``, which the Docker Desktop extension
+  also uses, removed the workshop's containers and its ``workshop`` volume
+  but left behind the Compose project network and the named volumes of the
+  workshop's Compose services, so every workshop deployed and deleted left
+  a network, and eventually Docker ran out of address pools for new ones.
+  When the ``workshop`` volume was already gone, the command failed before
+  it removed the workshop's configuration from the CLI data home. The
+  command now takes the workshop down as a Compose project, which removes
+  its containers, network and named volumes, and counts a volume which is
+  already gone as removed, so deleting a workshop again succeeds.
+
+* ``educates cluster workshop serve`` applied the workshop definition from
+  the local workshop files when it stopped even when ``--patch-workshop``
+  was not given, and printed ``Restored workshop``, although it had patched
+  nothing. Edits to the local workshop files so reached the cluster when the
+  command stopped, without ``educates cluster workshop update``. The command
+  now applies the definition again only to undo the patch of
+  ``--patch-workshop``.
+
+* When ``educates cluster workshop serve`` stops, it applies the workshop
+  definition again, undoing the change ``--patch-workshop`` makes so that
+  sessions proxy to the local server. When applying it failed, the command
+  still printed ``Restored workshop``, and when it could not reach the
+  cluster it printed nothing, so a patched workshop could go on proxying to
+  a server which no longer ran. The command now reports the failure, and
+  says to run ``educates cluster workshop update`` with the same options to
+  apply the definition again.
+
+* ``educates cluster workshop deploy --open-browser`` waited up to 60
+  seconds for the training portal to report its URL, and when it did not, it
+  went on with an empty URL, waited another five minutes for it to answer,
+  and then asked the operating system to open an empty URL. The command now
+  fails as soon as the 60 seconds pass, saying that the workshop is deployed
+  and that ``educates cluster portal open`` opens the portal once it is
+  ready.
+
+* ``educates local registry prune`` looked the registry container up with a
+  Docker name filter, which matches part of a name, and ran the garbage
+  collection in the first running container it found. The names of the
+  registry mirror containers start with that of the registry, as
+  ``educates-registry-mirror-docker.io`` does, so with registry mirrors
+  running the command could garbage collect a mirror and leave the local
+  registry's storage as it was. When no registry was running, it failed with
+  ``unable to create exec command``. The command now looks the registry up by
+  its exact name, and when no local registry exists, or its container is not
+  running, it says so and names the command which creates or starts it.
+
+* Run against a cluster which already ran Educates, ``educates admin platform
+  deploy`` could report every component ready before the build it deployed
+  had rolled out, so a workshop session requested as soon as the command
+  returned could reach the previous build's session manager, or one which
+  was restarting. The command took the ``Ready`` condition a resource had
+  before the command changed it for the outcome of the change, and applied
+  the resources without waiting for the new Educates operator to replace the
+  old one, while the operator reported a component ready as soon as its
+  deployment was available, even when the available pod was the previous
+  build's. The command now waits for the operator deployment to roll out
+  before it applies the resources, and accepts a resource as ready only once
+  the operator has reconciled the configuration the command applied. The
+  operator reports ``SecretsManager``, ``LookupService`` and
+  ``SessionManager`` ready only once the deployment of the component has
+  rolled out, and ``SessionManager`` only once the ``node-ca-injector``
+  deployment and daemon set have too, when it installs them. Likewise it
+  reports each cluster service it installs, cert-manager, Contour,
+  external-dns and Kyverno, ready only once its deployments, and the Envoy
+  daemon set of Contour, have rolled out. So ``kubectl wait
+  --for=condition=Ready`` after a change to the resource also waits for the
+  new pods. For the ``node-ca-injector`` and Envoy daemon sets, a pod which
+  is not available because its node is not ready, or no longer exists, does
+  not count, so such a node does not keep the ``IngressReady`` condition of
+  ``EducatesClusterConfig`` false, nor ``SessionManager`` from reporting
+  ready. During an upgrade it does keep the daemon set from rolling out,
+  since Kubernetes cannot replace that node's pod. A redeploy
+  which leaves a resource unchanged, such as one with a newer release of the
+  command and the same configuration, or an upgrade of the operator chart
+  alone, still accepts the resource's existing ``Ready`` condition.
 
 * ``educates cluster workshop deploy`` could fail with ``the object has been
   modified; please apply your changes to the latest version and try again``

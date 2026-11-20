@@ -50,6 +50,15 @@ func envoyUseHostPort(values map[string]any) (map[string]any, bool) {
 	return uhp, ok
 }
 
+func envoyTolerations(values map[string]any) ([]any, bool) {
+	envoy, ok := values["envoy"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	tolerations, ok := envoy["tolerations"].([]any)
+	return tolerations, ok
+}
+
 func envoyService(values map[string]any) (map[string]any, bool) {
 	envoy, ok := values["envoy"].(map[string]any)
 	if !ok {
@@ -83,6 +92,57 @@ func TestRenderContourValues_NonClusterIPNoHostPort(t *testing.T) {
 		values := renderContourValues(contourConfig(st))
 		if _, ok := envoyUseHostPort(values); ok {
 			t.Errorf("serviceType %q unexpectedly enabled envoy.useHostPort", st)
+		}
+	}
+}
+
+// kind publishes 80/443 from the control-plane node only and keeps its
+// NoSchedule taint when the cluster has workers, so a ClusterIP Envoy must
+// tolerate it or no Envoy binds the published ports.
+func TestRenderContourValues_ClusterIPToleratesControlPlane(t *testing.T) {
+	values := renderContourValues(contourConfig(configv1alpha1.EnvoyServiceTypeClusterIP))
+
+	tolerations, ok := envoyTolerations(values)
+	if !ok {
+		t.Fatal("ClusterIP service did not set envoy.tolerations")
+	}
+	if len(tolerations) != 1 {
+		t.Fatalf("envoy.tolerations = %v, want exactly the control-plane toleration", tolerations)
+	}
+	toleration, ok := tolerations[0].(map[string]any)
+	if !ok {
+		t.Fatalf("envoy.tolerations[0] = %T, want map[string]any", tolerations[0])
+	}
+	want := map[string]any{
+		"key":      "node-role.kubernetes.io/control-plane",
+		"operator": "Equal",
+		"effect":   "NoSchedule",
+	}
+	if len(toleration) != len(want) {
+		t.Errorf("envoy.tolerations[0] = %v, want %v", toleration, want)
+	}
+	for k, v := range want {
+		if toleration[k] != v {
+			t.Errorf("envoy.tolerations[0][%q] = %v, want %v", k, toleration[k], v)
+		}
+	}
+}
+
+// LoadBalancer (cloud) and NodePort reach Envoy through a Service, so it
+// keeps the chart's default placement and no control-plane toleration.
+func TestRenderContourValues_NonClusterIPNoTolerations(t *testing.T) {
+	for _, st := range []configv1alpha1.EnvoyServiceType{
+		configv1alpha1.EnvoyServiceTypeLoadBalancer,
+		configv1alpha1.EnvoyServiceTypeNodePort,
+		"", // default → LoadBalancer
+	} {
+		values := renderContourValues(contourConfig(st))
+		envoy, ok := values["envoy"].(map[string]any)
+		if !ok {
+			t.Fatalf("serviceType %q: envoy values missing", st)
+		}
+		if _, present := envoy["tolerations"]; present {
+			t.Errorf("serviceType %q unexpectedly set envoy.tolerations", st)
 		}
 	}
 }

@@ -49,6 +49,7 @@ func (p *ProjectInfo) NewEducatesCmdGroup() *cobra.Command {
 				overrideCommandName(p.NewClusterPortalPasswordCmd(), "view-credentials"),
 
 				overrideCommandName(p.NewClusterPortalCreateCmd(), "create-portal"),
+				overrideCommandName(p.NewClusterPortalExportCmd(), "export-portal"),
 				overrideCommandName(p.NewClusterPortalListCmd(), "list-portals"),
 				overrideCommandName(p.NewClusterPortalDeleteCmd(), "delete-portal"),
 
@@ -88,6 +89,8 @@ func (p *ProjectInfo) NewEducatesCmdGroup() *cobra.Command {
 	templates.ActsAsRootCommand(c, []string{"--help"}, commandGroups...)
 
 	c.AddCommand(p.NewProjectVersionCmd())
+
+	correctKubectlHelp(c)
 
 	return c
 }

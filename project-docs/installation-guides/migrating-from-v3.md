@@ -245,6 +245,45 @@ The local-environment commands moved under grouped names:
 | educates delete-platform    | educates admin platform delete   |
 ```
 
+Some v3 commands and options were removed, as the v4 install path has no
+use for them or offers another way to do the same:
+
+* `educates admin platform config` and `educates admin platform values`:
+  `educates admin platform render` writes the operator chart values and the
+  custom resources a deploy of a configuration would apply, without a
+  cluster. In place of `--from-cluster`, `educates admin platform export`
+  writes the configuration deployed to a cluster, and with `--revision` the
+  configuration a recorded deploy applied. `educates local config view`
+  shows the local configuration.
+* `educates local config reset`: `educates local config init --force`
+  writes a new minimal configuration in place of the existing one.
+* `--dry-run` of `educates admin platform deploy`: `educates admin platform
+  render` writes what a deploy would apply, and `educates admin platform
+  deploy --diff` compares it with the cluster, changing nothing.
+* `--show-changes` of `educates admin platform deploy`, which printed the
+  changes and applied them: `--diff` prints them without applying them, and
+  a deploy without it applies them.
+* `--domain` of `educates admin platform deploy` and `educates local config
+  view`: the ingress domain is set in the configuration, for the local
+  configuration with `educates local config set ingress.domain <domain>`.
+* `--version` and `--package-repository` of `educates admin platform deploy`
+  and `educates local cluster create`: the command line tool installs the
+  operator chart it embeds, and so the version of Educates it belongs to. To
+  install another version, use the command line tool of that version. The
+  `operator.image` and `imageVersions` settings of the local configuration
+  point the operator and the platform components at other images, such as
+  ones built locally.
+* `--skip-image-resolution` of the same commands: v4 does not resolve image
+  references at install time, so there is nothing to skip.
+* `--config` of `educates local config view`: the command shows the
+  configuration of the default local cluster, or with `--local-cluster` of a
+  named one. `educates admin platform render --config <file>` shows what a
+  file would deploy.
+* `--domain` of `educates local secrets add ca` and `educates local secrets
+  add tls`: a wildcard certificate serves the domains of its `*.<domain>`
+  DNS names, and a root CA serves every ingress domain, as a deploy mints a
+  CA for the domain from it.
+
 The workshop tooling (`educates publish-workshop`, `deploy-workshop`,
 `browse-workshops`, ...) keeps its commands and options, but publishing a
 workshop changed in ways which can need action:

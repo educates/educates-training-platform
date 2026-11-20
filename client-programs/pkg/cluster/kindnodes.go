@@ -1,10 +1,13 @@
 package cluster
 
 import (
+	"archive/tar"
 	"context"
+	"io"
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
@@ -23,15 +26,27 @@ const (
 	kindRoleLabelKey    = "io.x-k8s.kind.role"
 )
 
+// kindVersionPath is the file in which a kind node image records the
+// Kubernetes version it holds, such as v1.36.4. kind reads it to configure
+// the cluster.
+const kindVersionPath = "/kind/version"
+
+// maxKindVersionSize bounds what is read of a node container's
+// kindVersionPath, which holds a version string alone.
+const maxKindVersionSize = 256
+
 // ObserveLocalClusters returns the state of the host the inventory of
 // local clusters answers from: every kind node container on the Docker
 // host, as ObserveNodeContainers returns them, with the host ports each
-// control-plane node is configured to publish, the addresses of the
-// host's network interfaces, and the registry mirror containers, as
-// registry.ObserveMirrorContainers returns them.
+// control-plane node is configured to publish and the Kubernetes version
+// of its node image, the addresses of the host's network interfaces, and
+// the registry mirror containers, as registry.ObserveMirrorContainers
+// returns them.
 //
 // The port bindings come from each container's configured host config,
-// not from the ports it publishes now, so a stopped cluster's count too.
+// not from the ports it publishes now, and the Kubernetes version from
+// the container's file system, so a stopped cluster's count too. A
+// version that can't be read is left empty and fails no observation.
 func ObserveLocalClusters(ctx context.Context) (localclusters.Observed, error) {
 	nodes, err := ObserveNodeContainers(ctx)
 	if err != nil {
@@ -51,6 +66,7 @@ func ObserveLocalClusters(ctx context.Context) (localclusters.Observed, error) {
 		if err != nil {
 			return localclusters.Observed{}, errors.Wrapf(err, "unable to inspect kind node container %s", n.Name)
 		}
+		nodes[i].KubernetesVersion = nodeKubernetesVersion(ctx, cli, n.Name)
 		if info.Container.HostConfig == nil {
 			continue
 		}
@@ -90,6 +106,46 @@ func ObserveLocalClusters(ctx context.Context) (localclusters.Observed, error) {
 	}
 
 	return localclusters.Observed{Nodes: nodes, InterfaceAddresses: interfaces, Mirrors: mirrors}, nil
+}
+
+// nodeKubernetesVersion returns the Kubernetes version of the node image
+// of the kind node container name, from its kindVersionPath, or an empty
+// string when it can't be read. Docker copies a file out of a container
+// whether it runs or not.
+func nodeKubernetesVersion(ctx context.Context, cli *client.Client, name string) string {
+	res, err := cli.CopyFromContainer(ctx, name, client.CopyFromContainerOptions{SourcePath: kindVersionPath})
+	if err != nil {
+		return ""
+	}
+	defer res.Content.Close()
+	version, err := kindVersionFromArchive(res.Content)
+	if err != nil {
+		return ""
+	}
+	return version
+}
+
+// kindVersionFromArchive returns the Kubernetes version a kind node
+// image's kindVersionPath holds, from the tar archive of that one file
+// that Docker copies out of a node container.
+func kindVersionFromArchive(archive io.Reader) (string, error) {
+	tr := tar.NewReader(archive)
+	header, err := tr.Next()
+	if err != nil {
+		return "", errors.Wrapf(err, "unable to read the archive of %s", kindVersionPath)
+	}
+	if header.Typeflag != tar.TypeReg {
+		return "", errors.Errorf("%s is not a regular file", kindVersionPath)
+	}
+	data, err := io.ReadAll(io.LimitReader(tr, maxKindVersionSize))
+	if err != nil {
+		return "", errors.Wrapf(err, "unable to read %s", kindVersionPath)
+	}
+	version := strings.TrimSpace(string(data))
+	if version == "" {
+		return "", errors.Errorf("%s is empty", kindVersionPath)
+	}
+	return version, nil
 }
 
 // ObserveNodeContainers returns every kind node container on the Docker

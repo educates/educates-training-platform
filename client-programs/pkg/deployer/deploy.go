@@ -24,6 +24,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -38,6 +39,10 @@ const (
 
 	// OperatorReleaseName is the helm release name.
 	OperatorReleaseName = "educates-installer"
+
+	// OperatorDeploymentName is the operator Deployment the chart
+	// installs in OperatorNamespace (templates/deployment.yaml).
+	OperatorDeploymentName = "educates-installer"
 
 	// DefaultTimeout caps the wait on each CR's Ready=True condition.
 	DefaultTimeout = 5 * time.Minute
@@ -56,7 +61,8 @@ type Options struct {
 	// HelmLog receives helm SDK debug output. io.Discard by default.
 	HelmLog io.Writer
 
-	// Timeout overrides DefaultTimeout per CR wait.
+	// Timeout overrides DefaultTimeout per CR wait, and bounds the
+	// wait for the operator Deployment to roll out.
 	Timeout time.Duration
 
 	// SkipCRDApply bypasses the operator CRD apply step. The default
@@ -79,6 +85,10 @@ type Options struct {
 	// the local certificate resolution plan's SyncSecretNames.
 	LocalSecretNames []string
 
+	// Record, when set, has the deploy recorded as a revision of the
+	// deploy history once it has applied the platform resources.
+	Record *RevisionInput
+
 	// Progress is the structured progress reporter. When nil, plain
 	// io.Discard-backed reporter is used (no progress output, but the
 	// helpers still call into it so the call-site code is uniform).
@@ -90,7 +100,9 @@ type Options struct {
 // Deploy executes the install pipeline against the cluster reachable
 // via opts.Getter:
 //
-//  1. Helm install/upgrade the operator chart in the operator namespace.
+//  1. Helm install/upgrade the operator chart in the operator namespace,
+//     and wait for the operator Deployment to roll out, so the operator
+//     the chart names is the one that reconciles what follows.
 //  2. Apply EducatesClusterConfig → wait Ready.
 //  3. Apply SecretsManager → wait Ready.
 //  4. Apply LookupService (if present) → wait Ready.
@@ -98,8 +110,12 @@ type Options struct {
 //  6. Point the loopback service of a local cluster, when it has one, at
 //     the ingress domain.
 //
-// Returns the last LookupService/SessionManager objects observed so the
-// caller can print URLs from .status.
+// Each wait on Ready accepts only a Ready condition the operator
+// concluded for the generation the apply produced: on a redeploy that
+// changes a resource, the condition from its previous spec is still
+// there until the operator reconciles the new one. A redeploy that
+// leaves a resource's spec unchanged keeps its generation, so its wait
+// accepts the Ready condition already there.
 func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 	if opts.Out == nil {
 		opts.Out = io.Discard
@@ -160,7 +176,23 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 		step.Fail(err)
 		return err
 	}
+	// Helm doesn't wait for the operator to roll out, and the Deployment
+	// replaces its pod (Recreate): until the rollout is done, the
+	// operator of the previous install, or none, would reconcile the
+	// resources applied next.
+	if err := waiter.WaitRolledOut(ctx, OperatorNamespace, OperatorDeploymentName, opts.Timeout, step.Update); err != nil {
+		step.Fail(err)
+		return err
+	}
 	step.Done("")
+
+	// Whether this deploy installs the platform, which the deploy
+	// history records.
+	installs := false
+	if opts.Record != nil {
+		_, err := applier.Get(ctx, educatesClusterConfigGVK, "", "cluster")
+		installs = apierrors.IsNotFound(err) || meta.IsNoMatchError(err)
+	}
 
 	// 3. Apply EducatesClusterConfig + wait.
 	ecc, err := installStep(ctx, opts, applier, waiter, out.EducatesClusterConfig, "EducatesClusterConfig")
@@ -204,10 +236,18 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", t.label, err)
 		}
-		if _, err := applier.Apply(ctx, u); err != nil {
+		applied, err := applier.Apply(ctx, u)
+		if err != nil {
 			return fmt.Errorf("apply %s: %w", t.label, err)
 		}
-		objs[i] = u
+		objs[i] = applied
+	}
+
+	// Every platform resource is applied: record the deploy, before the
+	// waits, so that one that times out is recorded too.
+	revision := 0
+	if opts.Record != nil {
+		revision = recordDeploy(ctx, opts, out, chrt.Metadata.Version, installs)
 	}
 
 	// Wait on all concurrently, each reporting to its own line in the group.
@@ -223,8 +263,8 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			u, step := objs[i], steps[i]
-			if _, err := waiter.WaitReadyWithPhase(ctx, u.GroupVersionKind(), u.GetNamespace(), u.GetName(), opts.Timeout, step.Update); err != nil {
+			step := steps[i]
+			if _, err := waiter.WaitReady(ctx, objs[i], opts.Timeout, step.Update); err != nil {
 				step.Fail(err)
 				errs[i] = err
 				return
@@ -243,8 +283,54 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 	//    domain the EducatesClusterConfig publishes.
 	refreshLoopbackService(ctx, opts, ecc)
 
-	opts.Progress.Note("Educates successfully deployed")
+	if revision > 0 {
+		opts.Progress.Note(fmt.Sprintf("Educates successfully deployed, revision %d of the deploy history", revision))
+	} else {
+		opts.Progress.Note("Educates successfully deployed")
+	}
 	return nil
+}
+
+// recordDeploy records the deploy of out as a revision of the deploy
+// history and returns its number, or 0 when it can't, saying why: a
+// deploy that cannot record its revision still deploys. chartVersion is
+// the version of the operator chart it installed, and installs says
+// whether it created the platform.
+func recordDeploy(ctx context.Context, opts Options, out *translator.Output, chartVersion string, installs bool) int {
+	n, err := func() (int, error) {
+		applied, err := ExportOf(out).YAML(nil)
+		if err != nil {
+			return 0, err
+		}
+		cfg, err := opts.Getter.ToRESTConfig()
+		if err != nil {
+			return 0, fmt.Errorf("REST config: %w", err)
+		}
+		cs, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			return 0, fmt.Errorf("kubernetes client: %w", err)
+		}
+		action := ActionUpdated
+		if installs {
+			action = ActionInstalled
+		}
+		return RecordRevision(ctx, cs, Revision{
+			Deployed:     time.Now().UTC().Truncate(time.Second),
+			Action:       action,
+			CLIVersion:   opts.Record.CLIVersion,
+			ChartVersion: chartVersion,
+			KubeContext:  opts.Record.KubeContext,
+			Source:       opts.Record.Source,
+			Kind:         opts.Record.Kind,
+			Config:       string(opts.Record.Config),
+			Applied:      string(applied),
+		})
+	}()
+	if err != nil {
+		opts.Progress.Note(fmt.Sprintf("warning: the deploy is not recorded in the deploy history: %v", err))
+		return 0
+	}
+	return n
 }
 
 // installStep applies obj and waits for it to become Ready under a
@@ -260,12 +346,13 @@ func installStep(ctx context.Context, opts Options, applier *apply.Client, waite
 	}
 	step := opts.Progress.Start("Installing " + label)
 	step.Update("applying")
-	if _, err := applier.Apply(ctx, u); err != nil {
+	applied, err := applier.Apply(ctx, u)
+	if err != nil {
 		err = explainApplyRejection(err)
 		step.Fail(err)
 		return nil, err
 	}
-	ready, err := waiter.WaitReadyWithPhase(ctx, u.GroupVersionKind(), u.GetNamespace(), u.GetName(), opts.Timeout, step.Update)
+	ready, err := waiter.WaitReady(ctx, applied, opts.Timeout, step.Update)
 	if err != nil {
 		step.Fail(err)
 		return nil, err

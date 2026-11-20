@@ -31,6 +31,13 @@ func controlPlane(kindName, hostIP string, running bool) NodeContainer {
 	}
 }
 
+// withKubernetesVersion returns the node container n with the Kubernetes
+// version of its node image set to version.
+func withKubernetesVersion(n NodeContainer, version string) NodeContainer {
+	n.KubernetesVersion = version
+	return n
+}
+
 // ingressBindings are the bindings of ports 80 and 443 on hostIP, beside
 // the API server's on loopback, as kind configures a control-plane node.
 func ingressBindings(hostIP string) []PortBinding {
@@ -102,8 +109,8 @@ func TestListRows(t *testing.T) {
 	writeClusterConfig(t, dataHome, "test3", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.3\ningress:\n  domain: test3.educates.test\n")
 	observed := Observed{Nodes: []NodeContainer{
-		controlPlane("educates", "10.10.10.1", true),
-		controlPlane("educates-test2", "10.10.10.2", false),
+		withKubernetesVersion(controlPlane("educates", "10.10.10.1", true), "v1.36.4"),
+		withKubernetesVersion(controlPlane("educates-test2", "10.10.10.2", false), "v1.35.8"),
 		{Name: "educates-test2-worker", KindCluster: "educates-test2", Role: "worker"},
 		controlPlane("educates-test3", "10.10.10.3", true),
 		{Name: "educates-test3-worker", KindCluster: "educates-test3", Role: "worker", Running: false},
@@ -113,12 +120,15 @@ func TestListRows(t *testing.T) {
 	rows := NewInventory(observed, dataHome).List()
 
 	want := []struct {
-		name, state, listen, domain, context string
-		isDefault                            bool
+		name, state             string
+		nodes                   int
+		version                 string
+		listen, domain, context string
+		isDefault               bool
 	}{
-		{"", "running", "10.10.10.1", "educates.test", "kind-educates", true},
-		{"test2", "stopped", "10.10.10.2", "10-10-10-2.nip.io", "kind-educates-test2", false},
-		{"test3", "partly running", "10.10.10.3", "test3.educates.test", "kind-educates-test3", false},
+		{"", "running", 1, "v1.36.4", "10.10.10.1", "educates.test", "kind-educates", true},
+		{"test2", "stopped", 2, "v1.35.8", "10.10.10.2", "10-10-10-2.nip.io", "kind-educates-test2", false},
+		{"test3", "partly running", 2, "", "10.10.10.3", "test3.educates.test", "kind-educates-test3", false},
 	}
 	if len(rows) != len(want) {
 		t.Fatalf("List() returned %d rows, want %d: %+v", len(rows), len(want), rows)
@@ -126,9 +136,11 @@ func TestListRows(t *testing.T) {
 	for i, w := range want {
 		r := rows[i]
 		if r.Identity.Name != w.name || r.Identity.IsDefault() != w.isDefault || string(r.State) != w.state ||
-			r.ListenAddress != w.listen || r.Domain != w.domain || r.Identity.Context != w.context {
-			t.Errorf("row %d = {name %q, default %t, state %q, listen %q, domain %q, context %q}, want %+v",
-				i, r.Identity.Name, r.Identity.IsDefault(), r.State, r.ListenAddress, r.Domain, r.Identity.Context, w)
+			r.Nodes != w.nodes || r.KubernetesVersion != w.version || r.ListenAddress != w.listen ||
+			r.Domain != w.domain || r.Identity.Context != w.context {
+			t.Errorf("row %d = {name %q, default %t, state %q, nodes %d, version %q, listen %q, domain %q, context %q}, want %+v",
+				i, r.Identity.Name, r.Identity.IsDefault(), r.State, r.Nodes, r.KubernetesVersion, r.ListenAddress,
+				r.Domain, r.Identity.Context, w)
 		}
 		if r.ConfigError != nil {
 			t.Errorf("row %d: ConfigError = %v, want none", i, r.ConfigError)
@@ -214,6 +226,42 @@ func TestListRowsReportAConfigThatDoesNotLoad(t *testing.T) {
 		t.Errorf("domain = %q, want none", rows[0].Domain)
 	}
 	wantErrorMentioning(t, rows[0].ConfigError, "loopback")
+}
+
+func TestListRowsCountTheKubernetesNodesAlone(t *testing.T) {
+	dataHome := t.TempDir()
+	observed := Observed{Nodes: []NodeContainer{
+		{Name: "educates-external-load-balancer", KindCluster: "educates", Role: "external-load-balancer", Running: true},
+		{Name: "educates-control-plane", KindCluster: "educates", Role: "control-plane", Running: true},
+		{Name: "educates-control-plane2", KindCluster: "educates", Role: "control-plane", Running: true},
+		{Name: "educates-control-plane3", KindCluster: "educates", Role: "control-plane", Running: true},
+		{Name: "educates-worker", KindCluster: "educates", Role: "worker", Running: true},
+		{Name: "educates-worker2", KindCluster: "educates", Role: "worker"},
+		{Name: "educates-x-worker", KindCluster: "educates-x", Role: "worker", Running: true},
+	}}
+
+	rows := NewInventory(observed, dataHome).List()
+
+	if len(rows) != 1 || rows[0].Nodes != 5 {
+		t.Errorf("List() = %+v, want one row counting 5 nodes: the control planes and the workers, "+
+			"running or not, without the external load balancer", rows)
+	}
+}
+
+func TestListRowsTakeTheKubernetesVersionOfTheFirstControlPlane(t *testing.T) {
+	dataHome := t.TempDir()
+	observed := Observed{Nodes: []NodeContainer{
+		{Name: "educates-worker", KindCluster: "educates", Role: "worker", KubernetesVersion: "v1.34.11"},
+		{Name: "educates-control-plane2", KindCluster: "educates", Role: "control-plane", KubernetesVersion: "v1.35.8"},
+		{Name: "educates-control-plane", KindCluster: "educates", Role: "control-plane", KubernetesVersion: "v1.36.4"},
+		{Name: "educates-x-control-plane", KindCluster: "educates-x", Role: "control-plane", KubernetesVersion: "v1.37.0"},
+	}}
+
+	rows := NewInventory(observed, dataHome).List()
+
+	if len(rows) != 1 || rows[0].KubernetesVersion != "v1.36.4" {
+		t.Errorf("List() = %+v, want one row with the version of educates-control-plane, v1.36.4", rows)
+	}
 }
 
 func TestListRowsLeaveTheListenAddressEmptyWithNoIngressBinding(t *testing.T) {

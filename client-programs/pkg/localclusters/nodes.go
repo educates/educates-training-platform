@@ -31,6 +31,12 @@ type NodeContainer struct {
 	// publish, whether it runs or not. Only a control-plane node's are
 	// read, and an observation may leave other nodes' out.
 	PortBindings []PortBinding
+
+	// KubernetesVersion is the Kubernetes version of the container's node
+	// image, such as v1.36.4, as kind records it in the image's
+	// /kind/version file, whether the container runs or not. Only a
+	// control-plane node's is read, and it is empty when it can't be read.
+	KubernetesVersion string
 }
 
 // PortBinding is a host address and port a node container is configured
@@ -88,12 +94,24 @@ func (id Identity) State(observed []NodeContainer) State {
 // external load balancer of a cluster with several control planes.
 func (id Identity) RegistryNodes(observed []NodeContainer) []string {
 	var names []string
-	for _, n := range id.nodes(observed) {
-		if n.Role != externalLoadBalancerRole {
-			names = append(names, n.Name)
-		}
+	for _, n := range id.kubernetesNodes(observed) {
+		names = append(names, n.Name)
 	}
 	return names
+}
+
+// kubernetesNodes returns the cluster's node containers, among the
+// observed ones, that are Kubernetes nodes, in kind's order, whether they
+// run or not: every node container but the external load balancer of a
+// cluster with several control planes, which runs no kubelet.
+func (id Identity) kubernetesNodes(observed []NodeContainer) []NodeContainer {
+	var nodes []NodeContainer
+	for _, n := range id.nodes(observed) {
+		if n.Role != externalLoadBalancerRole {
+			nodes = append(nodes, n)
+		}
+	}
+	return nodes
 }
 
 // NodesToStart returns the names of the cluster's node containers, among

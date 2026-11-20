@@ -1001,7 +1001,19 @@ func PruneRegistry(p Progress) error {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	containerID, _ := getContainerInfo(EducatesRegistryContainer)
+	// Look the registry up by its exact name: a Docker name filter matches
+	// substrings, so it also matches the registry mirror containers, whose
+	// names start with the registry's.
+	state, exists, err := containerState(ctx, cli, EducatesRegistryContainer)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errors.New(`no local registry exists; create it with "educates local registry deploy"`)
+	}
+	if state != container.StateRunning {
+		return errors.Errorf("local registry container %s is not running; start it with \"docker start %s\"", EducatesRegistryContainer, EducatesRegistryContainer)
+	}
 
 	cmdStatement := []string{"registry", "garbage-collect", RegistryConfigTargetPath, "--delete-untagged=true"}
 
@@ -1011,7 +1023,7 @@ func PruneRegistry(p Progress) error {
 		Cmd:          cmdStatement,
 	}
 
-	response, err := cli.ExecCreate(ctx, containerID, optionsCreateExecuteScript)
+	response, err := cli.ExecCreate(ctx, EducatesRegistryContainer, optionsCreateExecuteScript)
 	if err != nil {
 		return errors.Wrap(err, "unable to create exec command")
 	}
@@ -1044,34 +1056,6 @@ func runningContainerID(ctx context.Context, cli *client.Client, name string) st
 		return ""
 	}
 	return info.Container.ID
-}
-
-/**
- * This function is used to get the container id and status of a container.
- * If the container does not exist, it will return an empty string for the container id and status.
- */
-func getContainerInfo(containerName string) (containerID string, status string) {
-	ctx := context.Background()
-
-	cli, err := docker.NewDockerClient()
-	if err != nil {
-		panic(err)
-	}
-
-	nameFilters := client.Filters{}.Add("name", containerName)
-
-	resp, err := cli.ContainerList(ctx, client.ContainerListOptions{Filters: nameFilters})
-	if err != nil {
-		panic(err)
-	}
-
-	if len(resp.Items) > 0 {
-		containerID = resp.Items[0].ID
-		containerStatus := strings.Split(resp.Items[0].Status, " ")
-		status = containerStatus[0]
-	}
-
-	return
 }
 
 /**

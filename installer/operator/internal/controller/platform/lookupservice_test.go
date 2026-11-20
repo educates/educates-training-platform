@@ -119,7 +119,7 @@ func servePlainHTTPOnClusterConfig() {
 }
 
 // lookupServiceReadyWithURL creates the LookupService singleton with the
-// prefix lookup, marks its Deployment Available once its release exists,
+// prefix lookup, marks its Deployment rolled out once its release exists,
 // and returns the status.url it publishes on reaching Ready.
 func lookupServiceReadyWithURL(helmFac *memoryHelmFactory) string {
 	GinkgoHelper()
@@ -137,7 +137,7 @@ func lookupServiceReadyWithURL(helmFac *memoryHelmFactory) string {
 		_, err = hc.Status(lookupServiceReleaseName)
 		return err
 	}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-	markDeploymentAvailable(lookupServiceDeploymentName)
+	markDeploymentRolledOut(lookupServiceDeploymentName)
 	Eventually(func() metav1.ConditionStatus {
 		return lsReadyStatus()
 	}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
@@ -234,6 +234,7 @@ var _ = Describe("LookupService reconciler", func() {
 
 		Expect((&LookupServiceReconciler{
 			Client:        mgr.GetClient(),
+			APIReader:     mgr.GetAPIReader(),
 			Scheme:        mgr.GetScheme(),
 			HelmClientFor: helmFac.For,
 		}).SetupWithManager(mgr)).To(Succeed())
@@ -319,7 +320,7 @@ var _ = Describe("LookupService reconciler", func() {
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
 
-		markDeploymentAvailable(lookupServiceDeploymentName)
+		markDeploymentRolledOut(lookupServiceDeploymentName)
 
 		Eventually(func() metav1.ConditionStatus {
 			return lsReadyStatus()
@@ -333,6 +334,39 @@ var _ = Describe("LookupService reconciler", func() {
 		Expect(got.Status.DeploymentRef).NotTo(BeNil())
 		Expect(got.Status.DeploymentRef.Namespace).To(Equal(platformNamespace))
 		Expect(got.Status.DeploymentRef.Name).To(Equal(lookupServiceDeploymentName))
+	})
+
+	It("keeps Ready=False until the Deployment has rolled out its spec", func() {
+		makeReadyClusterConfig()
+		makeReadySecretsManager()
+
+		ls := &platformv1alpha1.LookupService{
+			ObjectMeta: metav1.ObjectMeta{Name: singletonName},
+			Spec: platformv1alpha1.LookupServiceSpec{
+				Ingress: platformv1alpha1.LookupServiceIngress{Prefix: "lookup"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, ls)).To(Succeed())
+		Eventually(func() error {
+			hc, err := helmFac.For(platformNamespace)
+			if err != nil {
+				return err
+			}
+			_, err = hc.Status(lookupServiceReleaseName)
+			return err
+		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
+
+		// Available=True here describes the replica of the previous
+		// spec, which the rollout is about to replace.
+		markDeploymentRollingOut(lookupServiceDeploymentName)
+		Consistently(func() metav1.ConditionStatus {
+			return lsReadyStatus()
+		}, 3*time.Second, 200*time.Millisecond).ShouldNot(Equal(metav1.ConditionTrue))
+
+		markDeploymentRolledOut(lookupServiceDeploymentName)
+		Eventually(func() metav1.ConditionStatus {
+			return lsReadyStatus()
+		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))
 	})
 
 	It("waits for SecretsManager to run the embedded secrets-manager chart before installing", func() {
@@ -533,7 +567,7 @@ var _ = Describe("LookupService reconciler", func() {
 			_, err = hc.Status(lookupServiceReleaseName)
 			return err
 		}, 30*time.Second, 200*time.Millisecond).Should(Succeed())
-		markDeploymentAvailable(lookupServiceDeploymentName)
+		markDeploymentRolledOut(lookupServiceDeploymentName)
 		Eventually(func() metav1.ConditionStatus {
 			return lsReadyStatus()
 		}, 30*time.Second, 200*time.Millisecond).Should(Equal(metav1.ConditionTrue))

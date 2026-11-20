@@ -169,7 +169,8 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	//    mirrors file does not load or a mirror it declares has a
 	//    container with other values, Docker
 	//    Desktop's privileged port setting is off, host 80/443 are bound,
-	//    or a secure install has no certificate source. The clash check
+	//    or a secure install, unless --cluster-only skips it, has no
+	//    certificate source. The clash check
 	//    reads every Educates cluster's configured bindings, so a stopped
 	//    cluster counts too. The host-port case comes last, for holders
 	//    that are not Educates clusters: a probe container tries to
@@ -178,7 +179,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	//    can't publish them. The certificate case is the one the deploy
 	//    resolves later: without this check it would only fail after the
 	//    kind cluster and registry already exist.
-	in, err := p.prepareLocalCreate(cfg)
+	in, err := p.prepareLocalCreate(cfg, !o.ClusterOnly)
 	if err != nil {
 		return err
 	}
@@ -314,13 +315,20 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 
 	if o.ClusterOnly {
 		rep.Note("cluster + registry ready (--cluster-only; skipped platform deploy)")
+		noteKubeContext(rep, w, o.Kubeconfig, clusterConfig.Config.Kubeconfig, id)
 		return nil
 	}
 
 	// 5. tail-call the v4 deploy. We have the loaded config, so rather
 	//    than re-loading it inside runDeploy, translate here and call
 	//    deployer.Deploy directly.
-	return tailCallDeploy(ctx, w, in.Deploy, in.Plan, createDeployFlags(o, clusterConfig.Config.Kubeconfig, id))
+	flags := createDeployFlags(o, clusterConfig.Config.Kubeconfig, id)
+	flags.Record = deployRevisionInput(p.Version, in.Deploy.GetKind(), "local cluster create, "+absPath(configPath), configPath)
+	if err := tailCallDeploy(ctx, w, in.Deploy, in.Plan, flags); err != nil {
+		return err
+	}
+	noteKubeContext(rep, w, o.Kubeconfig, clusterConfig.Config.Kubeconfig, id)
+	return nil
 }
 
 // loadLocalConfig returns the loaded v4 config of the local cluster id +
@@ -397,8 +405,9 @@ type localCreateInputs struct {
 	// Empty when the config declares none.
 	Domain string
 
-	// Plan is the local certificate plan of an EducatesLocalConfig, and
-	// nil for an EducatesConfig.
+	// Plan is the local certificate plan of an EducatesLocalConfig the
+	// platform is deployed with, and nil for an EducatesConfig or when
+	// no deploy follows.
 	Plan *localcerts.Plan
 }
 
@@ -406,16 +415,23 @@ type localCreateInputs struct {
 // the create flow needs, checking it before anything is created.
 //
 // An EducatesLocalConfig, whose ingress.domain the local cluster rules
-// have already defaulted, gets the CLI defaults and the local certificate
-// plan. An EducatesConfig gets neither: its custom resources are deployed
-// as declared and translated by TranslateEscape, so the CLI neither
-// decides its certificates nor syncs cached Secrets for it.
-func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInputs, error) {
+// have already defaulted, gets the CLI defaults, and the local certificate
+// plan when deploy says the platform is deployed after the cluster is
+// created. Only that deploy uses the plan, so a create with --cluster-only
+// creates the cluster of a secure domain the local secrets cache has no
+// certificate for yet. An EducatesConfig gets neither: its custom resources
+// are deployed as declared and translated by TranslateEscape, so the CLI
+// neither decides its certificates nor syncs cached Secrets for it.
+func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config, deploy bool) (*localCreateInputs, error) {
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
 		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
-		if err := validateClusterNodes(c.Cluster.Nodes); err != nil {
-			return nil, err
+		if !deploy {
+			return &localCreateInputs{
+				Deploy:  c,
+				Cluster: c.Cluster,
+				Domain:  c.Ingress.Domain,
+			}, nil
 		}
 		// A secure install (the default; ingress.insecure not set)
 		// serves HTTPS from a cached wildcard TLS certificate or a cached
@@ -439,9 +455,6 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInput
 		}, nil
 	case *v1alpha1.EducatesConfig:
 		clusterCfg := c.Target.Cluster
-		if err := validateClusterNodes(clusterCfg.Nodes); err != nil {
-			return nil, err
-		}
 		return &localCreateInputs{
 			Deploy:  c,
 			Cluster: clusterCfg,
@@ -450,33 +463,6 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config) (*localCreateInput
 	default:
 		return nil, fmt.Errorf("unsupported kind %q for local cluster create", cfg.GetKind())
 	}
-}
-
-// validateClusterNodes checks a user-declared cluster.nodes list: when set,
-// it must contain at least one control-plane node (kind cannot bootstrap
-// without one) and use only the roles kind understands. An empty list keeps
-// the default single control-plane cluster and needs no validation.
-func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
-	if len(nodes) == 0 {
-		return nil
-	}
-
-	controlPlanes := 0
-	for _, n := range nodes {
-		switch n.Role {
-		case "control-plane":
-			controlPlanes++
-		case "worker":
-		default:
-			return fmt.Errorf("cluster.nodes: invalid node role %q (must be \"control-plane\" or \"worker\")", n.Role)
-		}
-	}
-
-	if controlPlanes == 0 {
-		return fmt.Errorf("cluster.nodes: at least one node must have role \"control-plane\"")
-	}
-
-	return nil
 }
 
 // kindBootstrapFromConfig pulls the kind-template inputs from the cluster

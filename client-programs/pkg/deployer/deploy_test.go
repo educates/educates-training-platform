@@ -2,12 +2,14 @@ package deployer
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -56,9 +58,14 @@ func specRejection(messages ...string) string {
 // resource, which the CLI must pass through unexplained.
 const protocolRejection = `{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"EducatesClusterConfig.config.educates.dev \"cluster\" is invalid: spec.ingress: Invalid value: ingress.protocol http is only valid when ingress.certificates.provider is None","reason":"Invalid","details":{"name":"cluster","group":"config.educates.dev","kind":"EducatesClusterConfig","causes":[{"reason":"FieldValueInvalid","message":"Invalid value: ingress.protocol http is only valid when ingress.certificates.provider is None","field":"spec.ingress"}]},"code":422}`
 
-// rejectingAPIServer serves just enough discovery for the CLI to map
-// EducatesClusterConfig, and answers every apply of it with rejection.
-func rejectingAPIServer(t *testing.T, rejection string) *httptest.Server {
+// clusterConfigPath is where the API server serves the
+// EducatesClusterConfig singleton.
+const clusterConfigPath = "/apis/config.educates.dev/v1alpha1/educatesclusterconfigs/cluster"
+
+// clusterConfigAPIServer serves just enough discovery for the CLI to map
+// EducatesClusterConfig, and answers every apply of it with onApply and
+// every read of it with onGet.
+func clusterConfigAPIServer(t *testing.T, onApply, onGet http.HandlerFunc) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -71,9 +78,10 @@ func rejectingAPIServer(t *testing.T, rejection string) *httptest.Server {
 			_, _ = io.WriteString(w, `{"kind":"APIGroupList","apiVersion":"v1","groups":[{"name":"config.educates.dev","versions":[{"groupVersion":"config.educates.dev/v1alpha1","version":"v1alpha1"}],"preferredVersion":{"groupVersion":"config.educates.dev/v1alpha1","version":"v1alpha1"}}]}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/apis/config.educates.dev/v1alpha1":
 			_, _ = io.WriteString(w, `{"kind":"APIResourceList","apiVersion":"v1","groupVersion":"config.educates.dev/v1alpha1","resources":[{"name":"educatesclusterconfigs","singularName":"educatesclusterconfig","namespaced":false,"kind":"EducatesClusterConfig","verbs":["get","list","watch","create","update","patch","delete"]}]}`)
-		case r.Method == http.MethodPatch && r.URL.Path == "/apis/config.educates.dev/v1alpha1/educatesclusterconfigs/cluster":
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			_, _ = io.WriteString(w, rejection)
+		case r.Method == http.MethodPatch && r.URL.Path == clusterConfigPath && onApply != nil:
+			onApply(w, r)
+		case r.Method == http.MethodGet && r.URL.Path == clusterConfigPath && onGet != nil:
+			onGet(w, r)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = io.WriteString(w, `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"NotFound","code":404}`)
@@ -81,6 +89,62 @@ func rejectingAPIServer(t *testing.T, rejection string) *httptest.Server {
 	}))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// rejectingAPIServer serves EducatesClusterConfig and answers every
+// apply of it with rejection.
+func rejectingAPIServer(t *testing.T, rejection string) *httptest.Server {
+	t.Helper()
+	return clusterConfigAPIServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = io.WriteString(w, rejection)
+	}, nil)
+}
+
+// clusterConfig is the EducatesClusterConfig singleton at generation,
+// with a Ready=True condition the operator concluded for
+// readyGeneration, or no status when readyGeneration is zero.
+func clusterConfig(generation, readyGeneration int64) map[string]interface{} {
+	obj := map[string]interface{}{
+		"apiVersion": "config.educates.dev/v1alpha1",
+		"kind":       "EducatesClusterConfig",
+		"metadata":   map[string]interface{}{"name": "cluster", "generation": generation},
+	}
+	if readyGeneration > 0 {
+		obj["status"] = map[string]interface{}{
+			"phase": "Ready",
+			"conditions": []interface{}{
+				map[string]interface{}{"type": "Ready", "status": "True", "observedGeneration": readyGeneration},
+			},
+		}
+	}
+	return obj
+}
+
+// reconcilingAPIServer serves EducatesClusterConfig, answers its apply
+// with the singleton at generation, and the n-th read of it with
+// states[n], repeating the last state once the script runs out. gets
+// reports how many reads it has served.
+func reconcilingAPIServer(t *testing.T, generation int64, states ...map[string]interface{}) (srv *httptest.Server, gets func() int) {
+	t.Helper()
+	var mu sync.Mutex
+	served := 0
+	srv = clusterConfigAPIServer(t,
+		func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(clusterConfig(generation, 0))
+		},
+		func(w http.ResponseWriter, _ *http.Request) {
+			mu.Lock()
+			state := states[min(served, len(states)-1)]
+			served++
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(state)
+		})
+	return srv, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return served
+	}
 }
 
 // restConfigGetter hands the deployer a fixed REST config; apply and
@@ -95,8 +159,9 @@ func (g restConfigGetter) ToRESTMapper() (meta.RESTMapper, error)        { retur
 func (g restConfigGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig { return nil }
 
 // applyClusterConfig runs the deploy step that applies the
-// EducatesClusterConfig against srv and returns its error.
-func applyClusterConfig(t *testing.T, srv *httptest.Server) error {
+// EducatesClusterConfig against srv, and returns the object it saw Ready
+// and its error.
+func applyClusterConfig(t *testing.T, srv *httptest.Server) (*unstructured.Unstructured, error) {
 	t.Helper()
 	opts := Options{
 		Getter:   restConfigGetter{cfg: &rest.Config{Host: srv.URL}},
@@ -125,14 +190,28 @@ func applyClusterConfig(t *testing.T, srv *httptest.Server) error {
 			},
 		},
 	}
-	_, err = installStep(context.Background(), opts, applier, waiter, ecc, "EducatesClusterConfig")
-	return err
+	return installStep(context.Background(), opts, applier, waiter, ecc, "EducatesClusterConfig")
+}
+
+func TestInstallStep_WaitsForTheGenerationItApplied(t *testing.T) {
+	srv, gets := reconcilingAPIServer(t, 4,
+		// The apply moved the resource to generation 4; the Ready
+		// condition is still the one the operator concluded for 3.
+		clusterConfig(4, 3),
+		clusterConfig(4, 4),
+	)
+	if _, err := applyClusterConfig(t, srv); err != nil {
+		t.Fatalf("installStep: %v", err)
+	}
+	if n := gets(); n != 2 {
+		t.Errorf("installStep returned after %d reads, want 2: it took generation 3's Ready for the generation it applied", n)
+	}
 }
 
 func TestDeploy_ProviderChangeIsExplained(t *testing.T) {
 	for _, rejection := range providerImmutableRejections {
 		t.Run(rejection.setting, func(t *testing.T) {
-			err := applyClusterConfig(t, rejectingAPIServer(t, specRejection(rejection.message)))
+			_, err := applyClusterConfig(t, rejectingAPIServer(t, specRejection(rejection.message)))
 			if err == nil {
 				t.Fatal("apply succeeded, want the provider change rejected")
 			}
@@ -156,7 +235,7 @@ func TestDeploy_ProviderChangeIsExplained(t *testing.T) {
 }
 
 func TestDeploy_SeveralProviderChangesAreExplainedTogether(t *testing.T) {
-	err := applyClusterConfig(t, rejectingAPIServer(t, specRejection(
+	_, err := applyClusterConfig(t, rejectingAPIServer(t, specRejection(
 		providerImmutableRejections[0].message,
 		providerImmutableRejections[2].message,
 	)))
@@ -170,7 +249,7 @@ func TestDeploy_SeveralProviderChangesAreExplainedTogether(t *testing.T) {
 }
 
 func TestDeploy_OtherApplyRejectionsAreNotExplained(t *testing.T) {
-	err := applyClusterConfig(t, rejectingAPIServer(t, protocolRejection))
+	_, err := applyClusterConfig(t, rejectingAPIServer(t, protocolRejection))
 	if err == nil {
 		t.Fatal("apply succeeded, want the protocol rejection")
 	}

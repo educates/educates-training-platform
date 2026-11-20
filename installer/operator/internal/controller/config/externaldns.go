@@ -22,11 +22,8 @@ import (
 	"fmt"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -58,7 +55,7 @@ const externalDNSImagePath = "external-dns/external-dns"
 // errExternalDNSNotReady is the sentinel ensureExternalDNSReady
 // returns while the install is in flight. Same pattern as
 // errCertManagerNotReady / errContourNotReady.
-var errExternalDNSNotReady = errors.New("external-dns Deployment not yet Available")
+var errExternalDNSNotReady = errors.New("external-dns Deployment has not rolled out yet")
 
 // reconcileExternalDNSPhase runs the external-dns install pipeline.
 // Order of operations:
@@ -66,7 +63,7 @@ var errExternalDNSNotReady = errors.New("external-dns Deployment not yet Availab
 //  1. Validate provider + credentials (per-provider mutex enforced
 //     here with friendlier messages than the CEL on the CRD).
 //  2. helm install/upgrade from the vendored chart.
-//  3. Wait for the external-dns Deployment to report Available.
+//  3. Wait for the external-dns Deployment to roll out.
 //
 // external-dns has no admission webhook, so there's no cainjector-
 // style bootstrap race. The chart doesn't manage CRDs (no
@@ -104,11 +101,11 @@ func (r *EducatesClusterConfigReconciler) reconcileExternalDNSPhase(ctx context.
 
 	if err := r.ensureExternalDNSReady(ctx); err != nil {
 		if errors.Is(err, errExternalDNSNotReady) {
-			r.markDNSProgressing(obj, "WaitingForExternalDNS", "external-dns Deployment not yet Available")
+			r.markDNSProgressing(obj, "WaitingForExternalDNS", "external-dns Deployment has not rolled out yet")
 			r.markManagedPhase(obj, configv1alpha1.ClusterConfigPhaseInstalling)
-			// Same cache-vs-watch race mitigation as Contour: single
-			// Deployment means few status transitions, so we self-poll
-			// every 15s instead of trusting watch events alone.
+			// Same fallback as Contour: a single Deployment means few
+			// status transitions, so the gate self-polls every 15s
+			// instead of trusting watch events alone.
 			return false, ctrl.Result{RequeueAfter: 15 * time.Second}, r.updateStatusWithTransitionLog(ctx, obj)
 		}
 		return phaseStop(ctrl.Result{}, err)
@@ -391,19 +388,15 @@ func (r *EducatesClusterConfigReconciler) validateBundledExternalDNS(_ context.C
 }
 
 // ensureExternalDNSReady gates the rest of the pipeline on the
-// external-dns Deployment reporting Available=True. Single
+// external-dns Deployment having rolled out its current spec. Single
 // Deployment so the readiness check is simple — no DaemonSet, no
 // webhook, no per-CRD readiness.
 func (r *EducatesClusterConfigReconciler) ensureExternalDNSReady(ctx context.Context) error {
-	dep := &appsv1.Deployment{}
-	key := types.NamespacedName{Namespace: externalDNSNamespace, Name: externalDNSControllerDeploy}
-	if err := r.Get(ctx, key, dep); err != nil {
-		if apierrors.IsNotFound(err) {
-			return errExternalDNSNotReady
-		}
-		return fmt.Errorf("get Deployment %s: %w", key, err)
+	rolledOut, err := r.deploymentsRolledOut(ctx, externalDNSNamespace, externalDNSControllerDeploy)
+	if err != nil {
+		return err
 	}
-	if !deploymentAvailable(dep) {
+	if !rolledOut {
 		return errExternalDNSNotReady
 	}
 	return nil

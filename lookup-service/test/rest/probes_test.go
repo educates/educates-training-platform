@@ -52,7 +52,7 @@ var _ = Describe("Readiness", func() {
 		}
 	}
 
-	It("waits for the caches of the clusters the configuration names, so that a ready service lists their workshops", func() {
+	It("waits for the caches of the clusters the configuration names, so a ready service lists them all", func() {
 		sc.service.stop()
 		sc.service = nil
 		for range 3 {

@@ -87,9 +87,7 @@ func TestARevocationAnotherInstanceRecordedIsSeenWithoutAWrite(t *testing.T) {
 	claims := issue(t, older, alice)
 
 	newer := open(t, api, tokens.Options{RefreshInterval: 20 * time.Millisecond})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = newer.Start(ctx) }()
+	go func() { _ = newer.Start(t.Context()) }()
 
 	if err := older.Revoke(context.Background(), alice); err != nil {
 		t.Fatalf("revoking: %v", err)

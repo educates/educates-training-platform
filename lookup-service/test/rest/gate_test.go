@@ -27,7 +27,7 @@ type gatedAPIServer struct {
 	mu sync.Mutex
 	// released is closed while the gate is open.
 	released chan struct{}
-	opened    bool
+	opened   bool
 }
 
 // newGatedAPIServer returns a proxy to target that is shut for the requests

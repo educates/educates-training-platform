@@ -18,6 +18,13 @@ since the Lookup Service orders equally ranked candidates at random, so
 "alternating" means one session of each pair on each cluster, not a fixed
 order.
 
+A portal names a session after its environment and a suffix it derives
+from the environment's creation time and the session's number. The run
+deploys both portals at once, so their environments are usually created in
+the same second and the two clusters hold sessions of the same names, such
+as `lookup-acceptance-w01-fv7t` on each. The checks tell sessions apart by
+cluster and name, and so must the Lookup Service.
+
 A run:
 
 1. creates the clusters with [local-cluster.sh](../local-cluster.sh), one

@@ -55,6 +55,16 @@ test("a new user given a session another request got fails the series", () => {
   assert.match(verdict.detail, /request 3 got session env-w01-abcd on lookup-a, which request 1 got/);
 });
 
+// Two portals whose environments were created in the same second name their
+// sessions alike, as the run's portals usually do.
+test("sessions of the same name on the two clusters are two sessions", () => {
+  const verdict = judgeAlternation(
+    [placed(1, "lookup-a", "env-w01-fv7t"), placed(2, "lookup-b", "env-w01-fv7t")],
+    CLUSTERS,
+  );
+  assert.equal(verdict.passed, true, verdict.detail);
+});
+
 test("a later pair that lands on one cluster fails, even with equal totals", () => {
   const verdict = judgeAlternation(
     [placed(1, "lookup-a"), placed(2, "lookup-b"), placed(3, "lookup-b"), placed(4, "lookup-b"), placed(5, "lookup-a"), placed(6, "lookup-a")],
@@ -110,6 +120,21 @@ test("a placed session held by another user fails", () => {
   });
   assert.equal(verdict.passed, false);
   assert.equal(verdict.detail, "session a-2 on lookup-a belongs to user-9, not user-2");
+});
+
+test("a session of the same name on the other cluster does not stand in for a placed one", () => {
+  const series = [placed(1, "lookup-a", "env-w01-fv7t"), placed(2, "lookup-b", "env-w01-fv7t")];
+  const both = judgeClusterSessions(series, {
+    "lookup-a": [held("env-w01-fv7t", "user-1")],
+    "lookup-b": [held("env-w01-fv7t", "user-2")],
+  });
+  assert.equal(both.passed, true, both.detail);
+  const onlyB = judgeClusterSessions(series, {
+    "lookup-a": [],
+    "lookup-b": [held("env-w01-fv7t", "user-2")],
+  });
+  assert.equal(onlyB.passed, false);
+  assert.equal(onlyB.detail, "lookup-a holds no session env-w01-fv7t, which request 1 got");
 });
 
 test("a session no request got fails", () => {

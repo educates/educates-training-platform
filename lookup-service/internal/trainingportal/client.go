@@ -7,7 +7,7 @@
 // in-cluster service, and a portal on another cluster through its public
 // URL. TLS is verified against the system roots and the ingress CA the
 // service's pod mounts, and every call is bounded by a timeout measured in
-// seconds.
+// seconds, or by the caller's deadline when that comes first.
 package trainingportal
 
 import (
@@ -57,7 +57,7 @@ const (
 // Options configure the client.
 type Options struct {
 	// Timeout bounds every call to a training portal, and every read of a
-	// portal's robot credentials.
+	// portal's robot credentials, unless the caller's deadline comes first.
 	Timeout time.Duration
 	// CAFile is a PEM file of CA certificates trusted besides the system
 	// roots. Without the file only the system roots are trusted.
@@ -373,11 +373,15 @@ func (c *Client) readCredentials(ctx context.Context, portal *inventory.Portal) 
 	if !ok {
 		return nil, errors.New("the cluster is not connected")
 	}
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	parent := ctx
+	ctx, cancel := context.WithTimeout(parent, c.timeout)
 	defer cancel()
 	var secret corev1.Secret
 	err := reader.Get(ctx, client.ObjectKey{Namespace: portal.Namespace, Name: portal.RobotCredentialsSecret}, &secret)
 	switch {
+	case err != nil && ctx.Err() != nil:
+		return nil, fmt.Errorf("reading the robot credentials Secret %s in namespace %s: %w",
+			portal.RobotCredentialsSecret, portal.Namespace, c.unanswered(parent, ctx, "the cluster", err))
 	case apierrors.IsNotFound(err):
 		return nil, fmt.Errorf("the robot credentials Secret %s in namespace %s does not exist",
 			portal.RobotCredentialsSecret, portal.Namespace)
@@ -442,8 +446,9 @@ func (e *statusError) Error() string {
 	return fmt.Sprintf("the portal answered %d %s: %s", e.status, http.StatusText(e.status), e.body)
 }
 
-// do sends the request, bounded by the client's timeout, and decodes a 200
-// answer's JSON body into out.
+// do sends the request, bounded by the client's timeout or by the request's
+// own deadline, whichever comes first, and decodes a 200 answer's JSON body
+// into out.
 func (c *Client) do(request *http.Request, out any) error {
 	parent := request.Context()
 	ctx, cancel := context.WithTimeout(parent, c.timeout)
@@ -451,12 +456,12 @@ func (c *Client) do(request *http.Request, out any) error {
 
 	response, err := c.http.Do(request.WithContext(ctx))
 	if err != nil {
-		return c.callError(parent, ctx, err)
+		return c.unanswered(parent, ctx, "the portal", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBody))
 	if err != nil {
-		return c.callError(parent, ctx, err)
+		return c.unanswered(parent, ctx, "the portal", err)
 	}
 	if response.StatusCode != http.StatusOK {
 		return &statusError{status: response.StatusCode, body: excerpt(data)}
@@ -467,13 +472,35 @@ func (c *Client) do(request *http.Request, out any) error {
 	return nil
 }
 
-// callError describes why a call failed, saying so when the portal did not
-// answer in time.
-func (c *Client) callError(parent, ctx context.Context, err error) error {
-	if parent.Err() == nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("the portal did not answer within %s", c.timeout)
+// unansweredError is the error of a call that got no answer: the portal, or
+// the cluster a portal's robot credentials are read from, could not be
+// reached or did not answer in time.
+type unansweredError struct{ err error }
+
+func (e *unansweredError) Error() string { return e.err.Error() }
+
+func (e *unansweredError) Unwrap() error { return e.err }
+
+// Unanswered reports whether err is that of a call that got no answer,
+// because the portal, or the cluster its robot credentials are read from,
+// could not be reached or did not answer in time. Calling it again soon
+// after is likely to fare the same.
+func Unanswered(err error) bool {
+	var unanswered *unansweredError
+	return errors.As(err, &unanswered)
+}
+
+// unanswered returns the error of a call to who that got no answer, saying
+// so when who did not answer in time: within the client's timeout, the
+// call's ctx, or before the caller's deadline, parent's.
+func (c *Client) unanswered(parent, ctx context.Context, who string, err error) error {
+	switch {
+	case parent.Err() == nil && errors.Is(ctx.Err(), context.DeadlineExceeded):
+		err = fmt.Errorf("%s did not answer within %s", who, c.timeout)
+	case errors.Is(parent.Err(), context.DeadlineExceeded):
+		err = fmt.Errorf("%s did not answer in the time the session request had left", who)
 	}
-	return err
+	return &unansweredError{err: err}
 }
 
 func excerpt(data []byte) string {

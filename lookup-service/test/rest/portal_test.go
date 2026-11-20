@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/educates/educates-training-platform/lookup-service/internal/placement"
 	"github.com/educates/educates-training-platform/lookup-service/internal/trainingportal"
 )
 
@@ -41,6 +42,11 @@ const (
 	// portalTimeout bounds every call the suite's service makes to a
 	// training portal.
 	portalTimeout = 2 * time.Second
+
+	// sessionRequestTimeout bounds every session request the suite's
+	// service places: more than one portal call, less than two, as the
+	// service's defaults are.
+	sessionRequestTimeout = 3 * time.Second
 
 	// robotCredentialsSecret is the Secret, in a portal's namespace, that
 	// the portal's status names as holding its robot credentials.
@@ -90,6 +96,11 @@ func portalOptions() trainingportal.Options {
 		CAFile:      portalCAFile,
 		DialContext: dialFakePortal,
 	}
+}
+
+// placementOptions are the options the suite places session requests with.
+func placementOptions() placement.Options {
+	return placement.Options{Timeout: sessionRequestTimeout}
 }
 
 // startFakePortals starts the fake training portals of portal-a, on the

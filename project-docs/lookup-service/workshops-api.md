@@ -143,6 +143,8 @@ With the same workshop on two clusters at the same capacity, new sessions theref
 
 The lookup service then requests a session from the candidates in that order, and moves on to the next candidate when a training portal refuses the request, answers with an error, cannot be reached, or does not answer within 10 seconds. A full candidate is still tried, last, since its training portal may have room the lookup service has not yet seen. When no candidate gives a session, the request fails with HTTP 503 and the message ``Workshop not available``. The reason each candidate failed is in the lookup service logs, with the cluster, training portal and workshop environment it concerns.
 
+A session request is answered within 12 seconds, whatever is left to try, so that a training portal which does not answer cannot hold it for longer. A training portal which cannot be reached or does not answer is not contacted again for the same request, neither for another of its workshop environments nor for the session of a returning user. When the 12 seconds run out before a training portal gives a session, the request fails with HTTP 503 and the message ``Workshop not available``, and the lookup service logs that the request ran out of time.
+
 (end-user-identification)=
 End user identification
 -----------------------

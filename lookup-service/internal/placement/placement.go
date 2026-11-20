@@ -6,6 +6,8 @@ package placement
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/go-logr/logr"
 
@@ -57,19 +59,38 @@ func SessionsOf(portals []*inventory.Portal, workshop, user string) []*inventory
 	return sessions
 }
 
+// DefaultTimeout is the default of Options.Timeout.
+const DefaultTimeout = 12 * time.Second
+
+// Options configure the placer.
+type Options struct {
+	// Timeout bounds the placement of one session request, every portal it
+	// contacts included.
+	Timeout time.Duration
+}
+
+func (o Options) withDefaults() Options {
+	if o.Timeout <= 0 {
+		o.Timeout = DefaultTimeout
+	}
+	return o
+}
+
 // Placer requests sessions from training portals, recording each request in
 // the inventory while it is in flight.
 type Placer struct {
 	inventory *inventory.Inventory
 	portals   *trainingportal.Client
 	ordering  Ordering
+	timeout   time.Duration
 	log       logr.Logger
 }
 
 // NewPlacer returns a placer that requests sessions through the portal
 // client and records them in inv.
-func NewPlacer(inv *inventory.Inventory, portals *trainingportal.Client, log logr.Logger) *Placer {
-	return &Placer{inventory: inv, portals: portals, ordering: NewOrdering(), log: log}
+func NewPlacer(inv *inventory.Inventory, portals *trainingportal.Client, opts Options, log logr.Logger) *Placer {
+	opts = opts.withDefaults()
+	return &Placer{inventory: inv, portals: portals, ordering: NewOrdering(), timeout: opts.Timeout, log: log}
 }
 
 // Placement is a session a portal gave, and the environment it is of.
@@ -78,16 +99,35 @@ type Placement struct {
 	Session     trainingportal.Session
 }
 
+// errOutOfTime is the cause of a session request's context ending once the
+// request has run out of time.
+var errOutOfTime = errors.New("the session request ran out of time")
+
 // Place gives the request's user, when it names one, their live session of
 // the workshop on the portals back, reacquiring each such session in turn
 // until its portal gives it. Otherwise it requests a new session of the
 // workshop from the environments of the portals that offer it, in the order
-// the ordering gives, until a portal gives one. Every attempt that fails is
-// logged, and Place reports false when none succeeds.
+// the ordering gives, until a portal gives one. A portal that could not be
+// reached or did not answer is not contacted again for the request, and the
+// request ends once its time runs out, whatever is left to try. Every attempt
+// that fails is logged, and Place reports false when none succeeds.
 func (p *Placer) Place(ctx context.Context, portals []*inventory.Portal, workshop string,
 	request trainingportal.SessionRequest) (Placement, bool) {
+	ctx, cancel := context.WithTimeoutCause(ctx, p.timeout, errOutOfTime)
+	defer cancel()
+	unanswered := unansweredPortals{}
+	placement, ok := p.place(ctx, portals, workshop, request, unanswered)
+	if !ok && errors.Is(context.Cause(ctx), errOutOfTime) {
+		p.log.Info("The session request ran out of time before a portal gave a session",
+			"workshop", workshop, "timeout", p.timeout.String())
+	}
+	return placement, ok
+}
+
+func (p *Placer) place(ctx context.Context, portals []*inventory.Portal, workshop string,
+	request trainingportal.SessionRequest, unanswered unansweredPortals) (Placement, bool) {
 	if request.User != "" {
-		if placement, ok := p.reacquire(ctx, portals, workshop, request); ok {
+		if placement, ok := p.reacquire(ctx, portals, workshop, request, unanswered); ok {
 			return placement, true
 		}
 	}
@@ -102,10 +142,14 @@ func (p *Placer) Place(ctx context.Context, portals []*inventory.Portal, worksho
 			return Placement{}, false
 		}
 		portal := environment.Portal
+		if unanswered.skip(p.log, environment) {
+			continue
+		}
 		inFlight := p.inventory.StartRequest(portal.Cluster.Name, portal.Name, environment.Name)
 		session, err := p.portals.RequestSession(ctx, environment, request)
 		if err != nil {
 			inFlight.Failed()
+			unanswered.record(portal, err)
 			p.log.Error(err, "The portal did not give a session",
 				"cluster", portal.Cluster.Name, "portal", portal.Name, "environment", environment.Name,
 				"workshop", workshop)
@@ -121,15 +165,19 @@ func (p *Placer) Place(ctx context.Context, portals []*inventory.Portal, worksho
 // the portals in turn, and reports the first one its portal gives back. A
 // reacquired session is counted already, so it starts no request in flight.
 func (p *Placer) reacquire(ctx context.Context, portals []*inventory.Portal, workshop string,
-	request trainingportal.SessionRequest) (Placement, bool) {
+	request trainingportal.SessionRequest, unanswered unansweredPortals) (Placement, bool) {
 	for _, session := range SessionsOf(portals, workshop, request.User) {
 		if ctx.Err() != nil {
 			return Placement{}, false
 		}
 		environment := session.Environment
 		portal := environment.Portal
+		if unanswered.skip(p.log, environment) {
+			continue
+		}
 		reacquired, err := p.portals.ReacquireSession(ctx, session, request.IndexURL)
 		if err != nil {
+			unanswered.record(portal, err)
 			p.log.Error(err, "The portal did not give the user's session back",
 				"cluster", portal.Cluster.Name, "portal", portal.Name, "environment", environment.Name,
 				"session", session.Name, "workshop", workshop)
@@ -138,4 +186,28 @@ func (p *Placer) reacquire(ctx context.Context, portals []*inventory.Portal, wor
 		return Placement{Environment: environment, Session: reacquired}, true
 	}
 	return Placement{}, false
+}
+
+// unansweredPortals are the portals that a session request could not reach,
+// or that did not answer it in time. The request contacts none of them
+// again, since each would most likely hold it as long again.
+type unansweredPortals map[*inventory.Portal]bool
+
+// record records the portal when the attempt's error says it got no answer.
+func (u unansweredPortals) record(portal *inventory.Portal, err error) {
+	if trainingportal.Unanswered(err) {
+		u[portal] = true
+	}
+}
+
+// skip reports whether the environment's portal got no answer before, and
+// logs that it is passed over when it did.
+func (u unansweredPortals) skip(log logr.Logger, environment *inventory.Environment) bool {
+	portal := environment.Portal
+	if !u[portal] {
+		return false
+	}
+	log.V(1).Info("Passing over the environment, whose portal did not answer earlier in the session request",
+		"cluster", portal.Cluster.Name, "portal", portal.Name, "environment", environment.Name)
+	return true
 }

@@ -73,12 +73,12 @@ type Claims struct {
 
 // clientState is the revocation state of one client. Counter is part of
 // every token's identity, so raising it revokes every token issued before.
-// Password is an HMAC of the password the state was last recorded with, so
-// that a password change is noticed even across a restart.
+// PasswordHMAC is an HMAC of the password the state was last recorded with,
+// so that a password change is noticed even across a restart.
 type clientState struct {
-	UID      string `json:"uid"`
-	Counter  int    `json:"counter"`
-	Password string `json:"password"`
+	UID          string `json:"uid"`
+	Counter      int    `json:"counter"`
+	PasswordHMAC string `json:"passwordHMAC"`
 }
 
 // Store issues and verifies tokens. It is safe for concurrent use.
@@ -265,13 +265,13 @@ func (s *Store) ObserveClient(ctx context.Context, c config.Client) error {
 // recorded when the client was created again or its password changed since.
 // The caller holds s.mu.
 func (s *Store) current(c config.Client) clientState {
-	password := s.fingerprint(c.Password)
+	mac := s.passwordHMAC(c.Password)
 	recorded, ok := s.clients[c.Name]
 	switch {
 	case !ok || recorded.UID != c.UID:
-		return clientState{UID: c.UID, Counter: 1, Password: password}
-	case !hmac.Equal([]byte(recorded.Password), []byte(password)):
-		return clientState{UID: c.UID, Counter: recorded.Counter + 1, Password: password}
+		return clientState{UID: c.UID, Counter: 1, PasswordHMAC: mac}
+	case !hmac.Equal([]byte(recorded.PasswordHMAC), []byte(mac)):
+		return clientState{UID: c.UID, Counter: recorded.Counter + 1, PasswordHMAC: mac}
 	default:
 		return recorded
 	}
@@ -345,9 +345,9 @@ func (s *Store) secret(clients map[string]clientState) (*corev1.Secret, error) {
 	}, nil
 }
 
-// fingerprint is an HMAC of a password under the signing key. It tells
+// passwordHMAC is an HMAC of a password under the signing key. It tells
 // whether a password changed without storing the password.
-func (s *Store) fingerprint(password string) string {
+func (s *Store) passwordHMAC(password string) string {
 	mac := hmac.New(sha256.New, s.signingKey)
 	mac.Write([]byte(password))
 	return hex.EncodeToString(mac.Sum(nil))

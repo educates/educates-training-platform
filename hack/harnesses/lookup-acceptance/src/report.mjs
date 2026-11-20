@@ -4,8 +4,17 @@
 export function summary(run) {
   const lines = run.checks.map((c) => `${c.passed ? "PASS" : "FAIL"}  ${c.name}: ${c.detail}`);
   if (run.error) lines.push(`FAIL  The run stopped: ${run.error}`);
+  if (run.suspensions?.length) lines.push(`FAIL  The host slept: ${slept(run.suspensions)}`);
   if (run.teardownError) lines.push(`FAIL  Teardown: ${run.teardownError}`);
   return lines.join("\n");
+}
+
+// slept says when the harness was suspended and why that voids the run.
+function slept(suspensions) {
+  const when = suspensions.map((s) => `${s.seconds} seconds from ${s.from} to ${s.to}`).join(", ");
+  return `the harness did not run for ${when}. A sleep stops the clusters' clocks, which jump forward when the host wakes, `
+    + "so the portals can expire the run's sessions and the checks prove nothing either way. "
+    + "Run it again on a host that stays awake.";
 }
 
 const cell = (v) => String(v ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
@@ -50,6 +59,7 @@ export function markdownReport(run) {
   out.push("");
   out.push(table(["Result", "Check", "Detail"], run.checks.map((c) => [c.passed ? "PASS" : "FAIL", c.name, c.detail])));
   if (run.error) out.push("", `The run stopped: ${run.error}`);
+  if (run.suspensions?.length) out.push("", `The host slept: ${slept(run.suspensions)}`);
   if (run.teardownError) out.push("", `Teardown failed: ${run.teardownError}`);
   out.push("");
   out.push("## New session requests");

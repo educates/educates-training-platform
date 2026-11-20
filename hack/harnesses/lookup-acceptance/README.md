@@ -64,6 +64,15 @@ lookup-acceptance-a`. An error that stops the run, such as a cluster that
 can't be created or a Lookup Service that never lists the remote cluster's
 portal, fails the run with the error and what it last saw.
 
+A run during which the host sleeps fails too, whatever its checks say. The
+clusters' clocks stop while the host sleeps and jump forward when it
+wakes, so the portals expire sessions the run placed, which then go
+missing from a later check, and a check may pass or fail on what the jump
+did rather than on what the Lookup Service did. The harness notes the
+moments it runs every few seconds, and a gap of more than a minute between
+two of them, from the first cluster to the last check, fails the run with
+`The host slept`, saying when and for how long.
+
 ## Requirements
 
 - A local build, made with `make local-build PACKAGE_VERSION=<tag>`, which
@@ -82,6 +91,9 @@ portal, fails the run with the error and what it last saw.
   Service trusts the remote cluster's portal; the harness checks that the
   two clusters' CA certificates are the same before it goes on.
 - `kubectl` on the `PATH`.
+- A host that stays awake for the whole run. On macOS, `run.sh` runs the
+  harness under `caffeinate -i`, which keeps the host from sleeping while
+  idle, but a laptop on battery still sleeps when its lid closes.
 - Node 22.12 or later. `package.json` pins the version for Volta. The
   harness has no dependencies beyond Node itself.
 
@@ -168,8 +180,8 @@ create` requires.
 
 ## Tests
 
-The checks a run is judged by, and the kubeconfig rewrite, have unit tests,
-which need no cluster:
+The checks a run is judged by, the kubeconfig rewrite and the detection of
+a sleep have unit tests, which need no cluster:
 
 ```
 cd hack/harnesses/lookup-acceptance && npm test

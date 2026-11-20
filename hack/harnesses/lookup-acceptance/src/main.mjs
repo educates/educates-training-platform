@@ -23,6 +23,7 @@ import {
   waitFor,
   withServer,
 } from "./scenario.mjs";
+import { SuspensionWatch } from "./suspension.mjs";
 import { judgeAlternation, judgeClusterSessions, judgeReturning } from "./verdict.mjs";
 
 const HARNESS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -194,12 +195,20 @@ async function main() {
   };
   say(`CLI ${cli} (${cliVersion}); results in ${outDir}`);
 
+  // A sleep of the host from the first cluster to the last check voids the
+  // run; one during the teardown does not.
+  const watch = new SuspensionWatch({
+    onSuspension: (s) => say(`The harness did not run for ${s.seconds} seconds, from ${s.from} to ${s.to}, as when the host sleeps; this run proves nothing`),
+  });
+  watch.start();
   try {
     await check(run, { lookup, remote, markers, say });
   } catch (e) {
     run.error = e.message;
     say(`The run stopped: ${e.message}`);
   } finally {
+    watch.stop();
+    run.suspensions = watch.suspensions;
     await collectDiagnostics(run, { lookup, remote, outDir, say });
     run.clusters = clusters.map((c) => ({
       name: c.name,
@@ -216,7 +225,8 @@ async function main() {
   }
 
   const expectedChecks = 3 + clusters.length + 1;
-  run.passed = !run.error && !run.teardownError && run.checks.length === expectedChecks && run.checks.every((c) => c.passed);
+  run.passed = !run.error && !run.teardownError && run.suspensions.length === 0
+    && run.checks.length === expectedChecks && run.checks.every((c) => c.passed);
   run.finished = new Date().toISOString();
   fs.writeFileSync(path.join(outDir, "report.json"), JSON.stringify(run, null, 2));
   fs.writeFileSync(path.join(outDir, "report.md"), markdownReport(run));

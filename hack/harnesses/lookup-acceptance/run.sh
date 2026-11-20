@@ -20,4 +20,9 @@ if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number
     exit 2
 fi
 
+# A sleep of the host voids a run, so on macOS the run keeps the host from
+# sleeping while idle. Closing the lid on battery sleeps it all the same.
+if command -v caffeinate >/dev/null 2>&1; then
+    exec caffeinate -i node src/main.mjs "$@"
+fi
 exec node src/main.mjs "$@"

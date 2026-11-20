@@ -217,7 +217,7 @@ make stage-renderer-files                     # Stage the gitignored CLI theme e
 - **secrets-manager/** — Python/kopf operator handling secret copying,
   exporting, importing, injection across namespaces.
 - **training-portal/** — Django web app, user-facing portal. Exposes REST API.
-- **lookup-service/** — Go service giving a tenant's API client a workshop
+- **lookup-service/**: Go service giving a tenant's API client a workshop
   session on whichever training portal, on whichever cluster, offers the
   workshop. Watches its `lookup.educates.dev` configuration and each
   cluster's training resources with controller-runtime, and serves its REST

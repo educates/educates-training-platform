@@ -56,9 +56,10 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
           # /readyz answers once the service has loaded its configuration
-          # from the config namespace. It never waits for the clusters the
-          # configuration names, so an unreachable cluster cannot keep the
-          # service out of rotation.
+          # from the config namespace and listed the resources of every
+          # cluster the configuration names. It waits 10 seconds at most for
+          # the clusters, so an unreachable cluster cannot keep the service
+          # out of rotation.
           readinessProbe:
             httpGet:
               path: /readyz

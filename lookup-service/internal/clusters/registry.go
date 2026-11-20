@@ -8,8 +8,12 @@
 // changes, and stopped when the ClusterConfig is deleted, which removes the
 // cluster's portals from the inventory at once. A cache that has not synced
 // within a bounded time is stopped and started again, and until it syncs
-// its cluster has no portals; no cluster ever waits for another, and
-// neither the REST API nor readiness waits for any.
+// its cluster has no portals. A cluster whose cache has synced is probed
+// from then on, and one whose API server fails every probe for a bounded
+// time is given up on: its cache is stopped, so that it has no portals,
+// and started again until it syncs. No cluster ever waits for another, the
+// REST API waits for none, and readiness waits for the clusters only for a
+// bounded time.
 package clusters
 
 import (
@@ -51,7 +55,14 @@ const (
 	DefaultLocalServer         = "https://kubernetes.default.svc"
 	DefaultSyncTimeout         = 30 * time.Second
 	DefaultRetryInterval       = 10 * time.Second
+	DefaultReadyTimeout        = 10 * time.Second
+	DefaultProbeInterval       = 10 * time.Second
+	DefaultProbeTimeout        = 5 * time.Second
+	DefaultUnreachableAfter    = 30 * time.Second
 )
+
+// syncPollInterval is how often WaitForSync looks at the clusters.
+const syncPollInterval = 50 * time.Millisecond
 
 // Options configure the cluster registry.
 type Options struct {
@@ -69,6 +80,18 @@ type Options struct {
 	// RetryInterval is the wait before a cache is started again, and how
 	// often the local cluster's mounted token is read again.
 	RetryInterval time.Duration
+	// ReadyTimeout bounds how long WaitForSync waits for clusters' caches
+	// to sync, so that a cluster that cannot be reached holds the service's
+	// readiness back no longer.
+	ReadyTimeout time.Duration
+	// ProbeInterval is how often the API server of a cluster whose cache
+	// has synced is probed, and ProbeTimeout bounds each probe.
+	ProbeInterval time.Duration
+	ProbeTimeout  time.Duration
+	// UnreachableAfter is how long a cluster's API server may fail every
+	// probe before the cluster is given up on, and contributes no portals
+	// until its cache has synced again.
+	UnreachableAfter time.Duration
 }
 
 func (o Options) withDefaults() Options {
@@ -86,6 +109,18 @@ func (o Options) withDefaults() Options {
 	}
 	if o.RetryInterval <= 0 {
 		o.RetryInterval = DefaultRetryInterval
+	}
+	if o.ReadyTimeout <= 0 {
+		o.ReadyTimeout = DefaultReadyTimeout
+	}
+	if o.ProbeInterval <= 0 {
+		o.ProbeInterval = DefaultProbeInterval
+	}
+	if o.ProbeTimeout <= 0 {
+		o.ProbeTimeout = DefaultProbeTimeout
+	}
+	if o.UnreachableAfter <= 0 {
+		o.UnreachableAfter = DefaultUnreachableAfter
 	}
 	return o
 }
@@ -281,9 +316,12 @@ func (r *Registry) setConnection(m *member, connection *kubeconfig.Config, probl
 func (r *Registry) supervise(ctx context.Context, m *member) {
 	log := r.log.WithValues("cluster", m.cluster.Name)
 	ctx = logr.NewContext(ctx, log)
-	problem := ""
+	// problem is why the cluster has no connection, as last logged, and
+	// unreachable why its API server was given up on, until a cache of the
+	// cluster syncs again.
+	problem, unreachable := "", ""
 	for ctx.Err() == nil {
-		connection, err := r.kubeconfig(m.cluster)
+		conn, err := r.connect(m.cluster, log)
 		if err != nil {
 			if err.Error() != problem {
 				problem = err.Error()
@@ -300,10 +338,54 @@ func (r *Registry) supervise(ctx context.Context, m *member) {
 			continue
 		}
 		problem = ""
-		r.setConnection(m, connection, "")
-		if !r.run(ctx, m, connection) {
+		r.setConnection(m, conn.kubeconfig, unreachable)
+		result := r.run(ctx, m, conn)
+		switch {
+		case result.unreachable != "":
+			unreachable = result.unreachable
+		case result.synced:
+			unreachable = ""
+		}
+		if !result.reconnectNow {
 			sleep(ctx, r.opts.RetryInterval)
 		}
+	}
+}
+
+// connection is what a cluster is reached through: its kubeconfig, the
+// client configuration made from it, and the controller-runtime cluster
+// whose cache watches it.
+type connection struct {
+	kubeconfig *kubeconfig.Config
+	restConfig *rest.Config
+	cluster    cluster.Cluster
+}
+
+// connect makes the connection the cluster's configuration gives, without
+// calling its API server. It fails when the configuration gives no
+// kubeconfig, or one that is refused or cannot be used, such as one whose
+// CA data is no certificate.
+func (r *Registry) connect(c config.Cluster, log logr.Logger) (*connection, error) {
+	selected, err := r.kubeconfig(c)
+	if err != nil {
+		return nil, err
+	}
+	conn := &connection{kubeconfig: selected}
+	if conn.restConfig, err = selected.RESTConfig(); err == nil {
+		if c.Local() {
+			conn.restConfig.Host = r.opts.LocalServer
+		}
+		conn.cluster, err = r.newCluster(conn.restConfig, log)
+	}
+	switch {
+	case err == nil:
+		return conn, nil
+	case c.Local():
+		return nil, fmt.Errorf("the remote-access token mounted at %s cannot be used: %w",
+			r.opts.LocalTokenDirectory, err)
+	default:
+		return nil, fmt.Errorf("the kubeconfig in Secret %s under key %s cannot be used: %w",
+			c.Kubeconfig.SecretName, c.Kubeconfig.Key, err)
 	}
 }
 
@@ -344,36 +426,37 @@ func readMounted(directory, name string) ([]byte, error) {
 	return data, err
 }
 
+// outcome is how one cache of a cluster ended.
+type outcome struct {
+	// reconnectNow asks to connect again at once, as for a new token,
+	// rather than after the retry interval.
+	reconnectNow bool
+	// synced reports that the cache synced before it ended.
+	synced bool
+	// unreachable says why the cluster's API server was given up on, empty
+	// when the cache ended for another reason.
+	unreachable string
+}
+
 // run runs one cache of the member's cluster until ctx is done, the cache
-// does not sync in time or stops, or, for the local cluster, the mounted
-// token changes. It reports whether to connect again at once, as for a new
-// token, rather than after the retry interval.
-func (r *Registry) run(ctx context.Context, m *member, connection *kubeconfig.Config) bool {
+// does not sync in time or stops, the cluster's API server has failed every
+// probe for too long, or, for the local cluster, the mounted token changes.
+// While the cache has not synced, and once it has ended, the cluster has no
+// portals.
+func (r *Registry) run(ctx context.Context, m *member, conn *connection) outcome {
 	log := logr.FromContextOrDiscard(ctx)
-	restConfig, err := connection.RESTConfig()
-	if err != nil {
-		log.Error(err, "The cluster is not connected")
-		return false
-	}
-	if m.cluster.Local() {
-		restConfig.Host = r.opts.LocalServer
-	}
-	c, err := r.newCluster(restConfig, log)
-	if err != nil {
-		log.Error(err, "Cannot create the cluster's cache")
-		return false
-	}
+	c := conn.cluster
 
 	var feed *inventory.Feed
 	if !r.current(m, func() { feed = r.inventory.Attach(m.cluster.Name) }) {
-		return false
+		return outcome{}
 	}
 	defer feed.Detach()
 
 	synced, err := watchTraining(ctx, c.GetCache(), feed)
 	if err != nil {
 		log.Error(err, "Cannot watch the cluster's training resources")
-		return false
+		return outcome{}
 	}
 
 	cacheCtx, stopCache := context.WithCancel(ctx)
@@ -393,11 +476,15 @@ func (r *Registry) run(ctx context.Context, m *member, connection *kubeconfig.Co
 			log.Info("The cluster's cache has not synced in time: it contributes no portals until it does, and is started again",
 				"timeout", r.opts.SyncTimeout.String())
 		}
-		return false
+		return outcome{}
 	}
 	feed.MarkSynced()
-	r.current(m, func() { m.reader = c.GetAPIReader() })
-	log.Info("The cluster's cache has synced", "server", restConfig.Host)
+	r.current(m, func() {
+		m.reader = c.GetAPIReader()
+		m.info.Problem = ""
+		r.inventory.SetCluster(m.cluster.Name, m.info)
+	})
+	log.Info("The cluster's cache has synced", "server", conn.restConfig.Host)
 
 	recheck := make(<-chan time.Time)
 	if m.cluster.Local() {
@@ -405,22 +492,95 @@ func (r *Registry) run(ctx context.Context, m *member, connection *kubeconfig.Co
 		defer ticker.Stop()
 		recheck = ticker.C
 	}
+	probes := time.NewTicker(r.opts.ProbeInterval)
+	defer probes.Stop()
+	// failingSince is when the first of the probes that have failed in a
+	// row was sent, zero while the last probe succeeded.
+	var failingSince time.Time
 	for {
 		select {
 		case <-ctx.Done():
-			return false
+			return outcome{synced: true}
 		case err := <-stopped:
 			stopped <- err
 			log.Error(err, "The cluster's cache stopped")
-			return false
+			return outcome{synced: true}
 		case <-recheck:
 			latest, err := r.kubeconfig(m.cluster)
-			if err != nil || !latest.Equal(connection) {
+			if err != nil || !latest.Equal(conn.kubeconfig) {
 				log.Info("The mounted remote-access token changed: connecting again")
-				return true
+				return outcome{synced: true, reconnectNow: true}
+			}
+		case <-probes.C:
+			sent := time.Now()
+			err := r.probe(ctx, c)
+			switch {
+			case err == nil:
+				if !failingSince.IsZero() {
+					log.Info("The cluster's API server answers again")
+				}
+				failingSince = time.Time{}
+			case ctx.Err() != nil:
+				return outcome{synced: true}
+			case failingSince.IsZero():
+				failingSince = sent
+				log.Info("The cluster's API server did not answer a probe", "reason", err.Error())
+			case time.Since(failingSince) >= r.opts.UnreachableAfter:
+				log.Error(err, "The cluster's API server has not answered for a while: the cluster contributes "+
+					"no portals until its cache has synced again", "for", time.Since(failingSince).Round(time.Second).String())
+				return outcome{synced: true, unreachable: fmt.Sprintf(
+					"the cluster's API server has not answered since %s: %v",
+					failingSince.UTC().Format(time.RFC3339), err)}
 			}
 		}
 	}
+}
+
+// probe checks that the cluster's API server answers, and still lets the
+// identity the cluster is reached as list training portals, within the
+// probe timeout.
+func (r *Registry) probe(ctx context.Context, c cluster.Cluster) error {
+	ctx, cancel := context.WithTimeout(ctx, r.opts.ProbeTimeout)
+	defer cancel()
+	portals := &unstructured.UnstructuredList{}
+	portals.SetGroupVersionKind(trainingPortalKind.GroupVersion().WithKind(trainingPortalKind.Kind + "List"))
+	return c.GetAPIReader().List(ctx, portals, client.Limit(1))
+}
+
+// WaitForSync waits until the caches of the clusters of those names have
+// synced, for the ready timeout at most, and returns the names of those
+// that have not: clusters that cannot be reached, or that the configuration
+// no longer names.
+func (r *Registry) WaitForSync(ctx context.Context, names []string) []string {
+	ctx, cancel := context.WithTimeout(ctx, r.opts.ReadyTimeout)
+	defer cancel()
+	ticker := time.NewTicker(syncPollInterval)
+	defer ticker.Stop()
+	for {
+		pending := r.unsynced(names)
+		if len(pending) == 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return pending
+		case <-ticker.C:
+		}
+	}
+}
+
+// unsynced returns those of the names that are not the name of a cluster
+// whose cache has synced.
+func (r *Registry) unsynced(names []string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var pending []string
+	for _, name := range names {
+		if m, ok := r.members[name]; !ok || m.reader == nil {
+			pending = append(pending, name)
+		}
+	}
+	return pending
 }
 
 // newCluster creates a controller-runtime cluster that reaches the API

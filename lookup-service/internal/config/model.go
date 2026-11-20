@@ -171,6 +171,22 @@ func (m *Model) Cluster(ctx context.Context, name string) (Cluster, bool, error)
 	return cluster, true, nil
 }
 
+// ClusterNames returns the name of every cluster, in order.
+func (m *Model) ClusterNames(ctx context.Context) ([]string, error) {
+	var configs lookupv1beta1.ClusterConfigList
+	if err := m.reader.List(ctx, &configs, client.InNamespace(m.namespace)); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(configs.Items))
+	for i := range configs.Items {
+		if configs.Items[i].DeletionTimestamp == nil {
+			names = append(names, configs.Items[i].Name)
+		}
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
 // ClustersUsingSecret returns the names of the clusters whose kubeconfig
 // the Secret of that name holds.
 func (m *Model) ClustersUsingSecret(ctx context.Context, secret string) ([]string, error) {

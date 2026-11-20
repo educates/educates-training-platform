@@ -99,7 +99,9 @@ type Options struct {
 	APIListener net.Listener
 
 	// ProbeListener is where the liveness probe, /healthz, and the readiness
-	// probe, /readyz, are served.
+	// probe, /readyz, are served. The service is ready once its
+	// configuration caches have synced and the cache of every cluster the
+	// configuration then names has synced or been waited for long enough.
 	ProbeListener net.Listener
 
 	// Tokens configure the token store. Unset fields take their defaults:
@@ -110,7 +112,9 @@ type Options struct {
 	// Clusters configure how the service reaches the clusters its
 	// ClusterConfigs name. Unset fields take their defaults: the local
 	// cluster is the in-cluster API server, reached with the remote-access
-	// token mounted under /opt/cluster-access-token.
+	// token mounted under /opt/cluster-access-token, readiness waits 10
+	// seconds at most for the clusters' caches, and a cluster whose API
+	// server has failed its probes for 30 seconds contributes no portals.
 	Clusters clusters.Options
 
 	// Portals configure how the service reaches the training portals it
@@ -215,8 +219,31 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 			}
 			return err
 		}
+		// A pod that reported ready before its clusters' caches had synced
+		// would answer that no workshop is available, so readiness waits
+		// for the clusters the configuration names now, but only for a
+		// bounded time: a cluster that cannot be reached must not keep the
+		// pod out of service.
+		names, err := model.ClusterNames(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		log.Info("The configuration caches have synced: waiting for the clusters' caches",
+			"configNamespace", opts.ConfigNamespace, "clusters", names)
+		pending := registry.WaitForSync(ctx, names)
+		if ctx.Err() != nil {
+			return nil
+		}
 		s.ready.Store(true)
-		log.Info("Ready: the configuration caches have synced", "configNamespace", opts.ConfigNamespace)
+		if len(pending) > 0 {
+			log.Info("Ready, although the caches of some clusters have not synced: they contribute no portals "+
+				"until they do", "clusters", pending)
+		} else {
+			log.Info("Ready: the configuration caches and the clusters' caches have synced")
+		}
 		<-ctx.Done()
 		return nil
 	}))
@@ -278,7 +305,8 @@ func (s *Service) probeHandler() http.Handler {
 	})
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
 		if !s.ready.Load() {
-			http.Error(w, "the configuration caches have not synced", http.StatusServiceUnavailable)
+			http.Error(w, "the configuration caches have not synced, or the clusters' caches are still awaited",
+				http.StatusServiceUnavailable)
 			return
 		}
 		_, _ = w.Write([]byte("ok"))

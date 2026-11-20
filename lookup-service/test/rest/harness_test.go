@@ -34,6 +34,17 @@ const (
 	clusterSyncTimeout   = 3 * time.Second
 	clusterRetryInterval = 500 * time.Millisecond
 
+	// clusterReadyTimeout is how long the suite's service holds its
+	// readiness back for clusters whose caches have not synced.
+	clusterReadyTimeout = 3 * time.Second
+
+	// The suite's service probes each cluster's API server every
+	// clusterProbeInterval, for clusterProbeTimeout at most, and gives up
+	// on a cluster whose probes failed for clusterUnreachableAfter.
+	clusterProbeInterval    = 300 * time.Millisecond
+	clusterProbeTimeout     = time.Second
+	clusterUnreachableAfter = 2 * time.Second
+
 	// tokenRefreshInterval is how often the suite's service reads its token
 	// Secret again.
 	tokenRefreshInterval = 500 * time.Millisecond

@@ -41,13 +41,8 @@ func (s *Server) listWorkshops(w http.ResponseWriter, r *http.Request, c caller)
 	snapshot := s.inventory.Snapshot()
 	portals := snapshot.Portals()
 	if tenantName != "" {
-		tenant, found, err := s.config.Tenant(r.Context(), tenantName)
-		if err != nil {
-			s.internalError(w, r, err)
-			return
-		}
-		if !found {
-			writeText(w, http.StatusServiceUnavailable, "Tenant not available")
+		tenant, ok := s.tenant(w, r, tenantName, http.StatusServiceUnavailable)
+		if !ok {
 			return
 		}
 		portals = snapshot.PortalsOf(tenant)
@@ -66,13 +61,8 @@ func (s *Server) listTenantWorkshops(w http.ResponseWriter, r *http.Request, c c
 		return
 	}
 
-	tenant, found, err := s.config.Tenant(r.Context(), tenantName)
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	if !found {
-		writeText(w, http.StatusNotFound, "Tenant not available")
+	tenant, ok := s.tenant(w, r, tenantName, http.StatusNotFound)
+	if !ok {
 		return
 	}
 	s.writeJSON(w, r, workshopList{Workshops: workshopsOf(s.inventory.Snapshot().PortalsOf(tenant))})

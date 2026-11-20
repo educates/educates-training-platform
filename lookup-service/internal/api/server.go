@@ -144,6 +144,22 @@ func (s *Server) internalError(w http.ResponseWriter, r *http.Request, err error
 	writeText(w, http.StatusInternalServerError, "500 Internal Server Error\n\nServer got itself in trouble")
 }
 
+// tenant returns the tenant of that name. When there is no such tenant it
+// answers the request itself, with the notFound status and the body
+// `Tenant not available`, and returns false.
+func (s *Server) tenant(w http.ResponseWriter, r *http.Request, name string, notFound int) (config.Tenant, bool) {
+	tenant, found, err := s.config.Tenant(r.Context(), name)
+	if err != nil {
+		s.internalError(w, r, err)
+		return config.Tenant{}, false
+	}
+	if !found {
+		writeText(w, notFound, "Tenant not available")
+		return config.Tenant{}, false
+	}
+	return tenant, true
+}
+
 // errNotJSONObject is returned for a request body that is not a JSON object.
 var errNotJSONObject = errors.New("request body is not a JSON object")
 

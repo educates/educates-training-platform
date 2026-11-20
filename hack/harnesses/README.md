@@ -120,6 +120,13 @@ the table above. A harness drives a local cluster selected the way the CLI
 selects one, or creates the clusters it needs with `local-cluster.sh`, so
 it works with `local-cluster.sh` and needs no change to another harness.
 
+Code that more than one harness needs, such as reading the table `educates
+local cluster list` prints, goes in `lib/` instead, as a module each
+harness imports by its relative path. A module there uses only Node's
+built-in modules, so it needs no `package.json` or dependencies of its own.
+Its tests sit beside it, and the `npm test` of every harness that imports
+it runs them.
+
 A Node harness pins its Node version for Volta in its `package.json`, with
 `volta pin node@<version>`, and pins its dependencies exactly with a
 committed `package-lock.json`. Its results go in a gitignored directory of

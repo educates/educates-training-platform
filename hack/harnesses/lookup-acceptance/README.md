@@ -191,7 +191,9 @@ create` requires.
 ## Tests
 
 The checks a run is judged by, the kubeconfig rewrite and the detection of
-a sleep have unit tests, which need no cluster:
+a sleep have unit tests, which need no cluster. `npm test` also runs the
+tests of the modules in [`lib/`](../lib/) that the harness shares with the
+other harnesses:
 
 ```
 cd hack/harnesses/lookup-acceptance && npm test

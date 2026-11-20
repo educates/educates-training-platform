@@ -124,6 +124,8 @@ func (p *Placer) Place(ctx context.Context, portals []*inventory.Portal, worksho
 	return placement, ok
 }
 
+// place is Place within the request's time, recording in unanswered each
+// portal that got no answer.
 func (p *Placer) place(ctx context.Context, portals []*inventory.Portal, workshop string,
 	request trainingportal.SessionRequest, unanswered unansweredPortals) (Placement, bool) {
 	if request.User != "" {

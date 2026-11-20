@@ -101,13 +101,20 @@ export class LocalCluster {
     if (result.code !== 0) throw new Error(`deleting local cluster ${this.name} failed (exit ${result.code})`);
   }
 
+  // listed returns the local clusters the CLI lists.
+  async listed() {
+    const list = await mustRun(this.cli, ["local", "cluster", "list"]);
+    return parseClusterList(list.stdout);
+  }
+
   // resolve reads the cluster's listen address and state from the CLI's
   // list of local clusters, its ingress domain and protocol from its
-  // EducatesClusterConfig status, and its ingress CA certificate from the
-  // CA trust Secret the operator publishes.
+  // EducatesClusterConfig status, and, for a cluster served over HTTPS, its
+  // ingress CA certificate from the CA trust Secret the operator publishes.
+  // A cluster served over plain HTTP has no such Secret, and no CA
+  // certificate.
   async resolve() {
-    const list = await mustRun(this.cli, ["local", "cluster", "list"]);
-    const row = parseClusterList(list.stdout).find((r) => r.context === this.context);
+    const row = (await this.listed()).find((r) => r.context === this.context);
     if (!row) throw new Error(`local cluster ${this.name} (kube context ${this.context}) is not in 'educates local cluster list'`);
     if (row.state !== "running") throw new Error(`local cluster ${this.name} is ${row.state}, not running`);
     this.listenAddress = row.listenAddress;
@@ -118,6 +125,8 @@ export class LocalCluster {
     }
     this.domain = ingress.domain;
     this.protocol = ingress.protocol;
+    this.caCertificate = null;
+    if (this.protocol !== "https") return this;
     const secret = await this.kubectlJson(["-n", "educates-installer", "get", "secret", "educates-ingress-ca"]);
     this.caCertificate = Buffer.from(secret.data?.["ca.crt"] ?? "", "base64").toString("utf8");
     if (!this.caCertificate.includes("BEGIN CERTIFICATE")) {

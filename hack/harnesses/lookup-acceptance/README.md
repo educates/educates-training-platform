@@ -96,7 +96,10 @@ two of them, from the first cluster to the last check, fails the run with
   CA root in its secrets cache, as `educates local secrets add ca` arranges.
   Both clusters' certificates chain to that root, which is how the Lookup
   Service trusts the remote cluster's portal; the harness checks that the
-  two clusters' CA certificates are the same before it goes on.
+  two clusters' CA certificates are the same before it goes on. Clusters
+  that a run reuses with `--reuse` may both be served over plain HTTP
+  instead: the harness then reads no CA certificate and makes no such
+  check.
 - `kubectl` on the `PATH`.
 - A host that stays awake for the whole run. On macOS, `run.sh` runs the
   harness under `caffeinate -i`, which keeps the host from sleeping while

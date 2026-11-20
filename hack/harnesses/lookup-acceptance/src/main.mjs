@@ -280,17 +280,18 @@ async function check(run, { lookup, remote, markers, say }) {
     c.created = true;
   }
 
-  for (const c of clusters) {
-    await c.resolve();
-    if (c.protocol !== "https") throw new Error(`local cluster ${c.name} is served over ${c.protocol}; the harness checks clusters served over HTTPS`);
+  for (const c of clusters) await c.resolve();
+  if (lookup.protocol !== remote.protocol) {
+    throw new Error(`${lookup.name} is served over ${lookup.protocol} and ${remote.name} over ${remote.protocol}; the harness checks two clusters served the same way`);
   }
-  // The Lookup Service trusts its own cluster's CA, so the remote portal's
-  // certificate has to chain to the same root, as it does for clusters
-  // created from one CLI data home.
-  if (lookup.caCertificate.trim() !== remote.caCertificate.trim()) {
+  // The Lookup Service trusts its own cluster's CA, so over HTTPS the
+  // remote portal's certificate has to chain to the same root, as it does
+  // for clusters created from one CLI data home. Clusters served over plain
+  // HTTP have no CA.
+  if (lookup.protocol === "https" && lookup.caCertificate.trim() !== remote.caCertificate.trim()) {
     throw new Error(`the ingress CAs of ${lookup.name} and ${remote.name} differ, so the Lookup Service can't verify the remote portal; create both from one CLI data home`);
   }
-  say(`Lookup Service on ${lookup.name} (https://*.${lookup.domain} on ${lookup.listenAddress}); remote cluster ${remote.name} (https://*.${remote.domain} on ${remote.listenAddress})`);
+  say(`Lookup Service on ${lookup.name} (${lookup.protocol}://*.${lookup.domain} on ${lookup.listenAddress}); remote cluster ${remote.name} (${remote.protocol}://*.${remote.domain} on ${remote.listenAddress})`);
 
   run.lookupUrl = await waitFor(
     `the LookupService on ${lookup.name} becoming Ready`,

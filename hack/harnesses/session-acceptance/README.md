@@ -76,11 +76,11 @@ protocol from the cluster's `EducatesClusterConfig` status, so it works the
 same over HTTPS and plain HTTP.
 
 To reach a cluster served over plain HTTP, the harness's Chrome runs with
-its `HttpsUpgrades`, `HttpsFirstBalancedModeAutoEnable` and
-`LocalNetworkAccessChecks` features turned off. With them on, Chrome
-refuses plain HTTP to the private address such a cluster listens on. This
-makes the harness's Chrome looser than a user's, so a run over plain HTTP
-doesn't show what a user's Chrome does with that cluster.
+its `HttpsFirstBalancedModeAutoEnable` feature turned off. Chrome turns its
+HTTPS-First balanced mode on by itself, and with it on, headless Chrome
+refuses a page served over plain HTTP with `net::ERR_BLOCKED_BY_CLIENT`.
+This makes the harness's Chrome looser than a user's, so a run over plain
+HTTP doesn't show what a user's Chrome does with that cluster.
 
 It never prompts. It prints its progress, writes the report, prints the
 summary table and exits 0 when every fixture passed, 1 when one failed, and

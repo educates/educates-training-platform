@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -59,7 +60,28 @@ type Options struct {
 	// NewCache, when set, creates the cache the secrets-manager reads and
 	// watches through, in place of controller-runtime's.
 	NewCache cache.NewCacheFunc
+
+	// ProbeListener, when set, is where the liveness probe, /healthz, and
+	// the readiness probe, /readyz, are served. The secrets-manager is live
+	// while its process serves the probes, and ready once its caches have
+	// synced, whether or not it leads.
+	ProbeListener net.Listener
+
+	// LeaderElection has the secrets-manager reconcile only while it holds
+	// the Lease LeaseName in LeaderElectionNamespace, so that of several
+	// replicas only one writes. Every replica caches what it watches, so a
+	// standby takes over with its caches synced. A replica that stops
+	// releases the Lease, so another takes over at once.
+	LeaderElection bool
+
+	// LeaderElectionNamespace is the namespace of the Lease. Empty means the
+	// namespace of the pod's service account.
+	LeaderElectionNamespace string
 }
+
+// LeaseName names the Lease the replicas of the secrets-manager elect their
+// leader with.
+const LeaseName = "secrets-manager"
 
 // DefaultBackstop and DefaultBackoffCap are the backstop interval and the
 // backoff cap of the secrets-manager when Options leave them unset.
@@ -103,10 +125,15 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 		// Secrets are cached as metadata only, so the cache never holds the
 		// data of every Secret in the cluster; a Secret's data is read from
 		// the API server.
-		Client:                 client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}}}},
-		NewCache:               opts.NewCache,
-		Metrics:                metricsserver.Options{BindAddress: "0"},
-		HealthProbeBindAddress: "0",
+		Client:   client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}}}},
+		NewCache: opts.NewCache,
+		// The secrets-manager serves its probes itself, and no metrics.
+		Metrics:                       metricsserver.Options{BindAddress: "0"},
+		HealthProbeBindAddress:        "0",
+		LeaderElection:                opts.LeaderElection,
+		LeaderElectionID:              LeaseName,
+		LeaderElectionNamespace:       opts.LeaderElectionNamespace,
+		LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating the manager: %w", err)
@@ -159,10 +186,34 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 		return nil, fmt.Errorf("setting up the SecretInjector reconciler: %w", err)
 	}
 
+	if opts.ProbeListener != nil {
+		if err := addProbes(mgr, opts.ProbeListener); err != nil {
+			return nil, err
+		}
+	}
+
 	return &Operator{manager: mgr}, nil
 }
 
-// Run runs the secrets-manager until ctx is done or it fails.
+// addProbes serves the probes on listener. The manager starts its HTTP
+// servers before its caches, so the liveness probe answers while the caches
+// sync.
+func addProbes(mgr manager.Manager, listener net.Listener) error {
+	p := &probes{cache: mgr.GetCache()}
+	if err := mgr.Add(p); err != nil {
+		return fmt.Errorf("adding the readiness check: %w", err)
+	}
+	shutdownTimeout := probeTimeout
+	server := &manager.Server{Name: "probes", Server: p.server(), Listener: listener, ShutdownTimeout: &shutdownTimeout}
+	if err := mgr.Add(server); err != nil {
+		return fmt.Errorf("adding the probe server: %w", err)
+	}
+	return nil
+}
+
+// Run runs the secrets-manager until ctx is done or it fails. Under leader
+// election, losing the Lease is a failure: the process is meant to exit and
+// be restarted as a standby.
 func (o *Operator) Run(ctx context.Context) error {
 	return o.manager.Start(ctx)
 }

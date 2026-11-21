@@ -51,8 +51,8 @@ build: ## Build the secrets-manager binary.
 	go build -o bin/secrets-manager ./cmd/secrets-manager
 
 .PHONY: run
-run: ## Run the secrets-manager from your host against the current kubeconfig context.
-	go run ./cmd/secrets-manager
+run: ## Run the secrets-manager from your host against the current kubeconfig context, without leader election.
+	go run ./cmd/secrets-manager --leader-elect=false
 
 ##@ Dependencies
 

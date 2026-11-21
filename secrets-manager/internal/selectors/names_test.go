@@ -1,6 +1,7 @@
 package selectors
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -38,5 +39,27 @@ func TestMatchNames(t *testing.T) {
 				t.Errorf("MatchNames(%q, %q) = %v, want %v", test.patterns, test.input, got, test.want)
 			}
 		})
+	}
+}
+
+func TestMatchNamesKeepsBoundedMemoryOfPatterns(t *testing.T) {
+	// Every workshop environment and session adds patterns naming its own
+	// namespaces, so the patterns a long-lived process sees never stop
+	// growing.
+	for i := range 3 * maxCompiledGlobs {
+		name := fmt.Sprintf("session-%d", i)
+		if !MatchNames([]string{name}, name) {
+			t.Fatalf("MatchNames([%q], %q) = false, want true", name, name)
+		}
+	}
+
+	globsMu.Lock()
+	held := len(globs)
+	globsMu.Unlock()
+	if held > maxCompiledGlobs {
+		t.Errorf("%d compiled patterns held, want at most %d", held, maxCompiledGlobs)
+	}
+	if !MatchNames([]string{"session-*", "!session-1"}, "session-2") || MatchNames([]string{"session-*", "!session-1"}, "session-1") {
+		t.Errorf("patterns no longer match as before the memory was bounded")
 	}
 }

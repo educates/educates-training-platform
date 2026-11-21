@@ -44,6 +44,14 @@ func globMatches(pattern, name string) bool {
 	return compileGlob(pattern).MatchString(name)
 }
 
+// maxCompiledGlobs is how many compiled patterns the process keeps. The
+// patterns it sees keep growing, since every workshop environment and
+// session brings rules naming its own namespaces.
+const maxCompiledGlobs = 4096
+
+// globs holds the patterns compiled so far, so that a pattern is not
+// compiled again for each name it is matched against. It is emptied when it
+// is full: the patterns still in use are compiled again as they are used.
 var (
 	globsMu sync.Mutex
 	globs   = map[string]*regexp.Regexp{}
@@ -62,6 +70,9 @@ func compileGlob(pattern string) *regexp.Regexp {
 	re, err := regexp.Compile(translateGlob(pattern))
 	if err != nil {
 		re = neverMatches
+	}
+	if len(globs) >= maxCompiledGlobs {
+		clear(globs)
 	}
 	globs[pattern] = re
 	return re

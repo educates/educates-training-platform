@@ -17,9 +17,9 @@ import (
 // returns the result of the reconcile.
 func (r *ImporterReconciler) publish(ctx context.Context, importer *secretsv1beta1.SecretImporter,
 	state *ImportState) (ctrl.Result, error) {
-	updated := importer.DeepCopy()
-	updated.Status = importerStatus(importer, state)
-	err := r.feedback.Publish(ctx, importer, updated)
+	err := feedback.Publish(ctx, r.feedback, importer, func(i *secretsv1beta1.SecretImporter) {
+		i.Status = importerStatus(i.Status.Conditions, importer, state)
+	})
 	switch {
 	case err == nil:
 		return ctrl.Result{}, nil
@@ -31,11 +31,13 @@ func (r *ImporterReconciler) publish(ctx context.Context, importer *secretsv1bet
 }
 
 // importerStatus is the status state makes of importer: its Ready
-// condition, the resource its copy comes from and the copy's name.
-func importerStatus(importer *secretsv1beta1.SecretImporter, state *ImportState) secretsv1beta1.SecretImporterStatus {
+// condition, set on conditions, the importer's, the resource its copy comes
+// from and the copy's name.
+func importerStatus(conditions []metav1.Condition, importer *secretsv1beta1.SecretImporter,
+	state *ImportState) secretsv1beta1.SecretImporterStatus {
 	result := secretsv1beta1.SecretImporterStatus{
 		ObservedGeneration: importer.Generation,
-		Conditions:         slices.Clone(importer.Status.Conditions),
+		Conditions:         slices.Clone(conditions),
 		TargetSecretName:   importer.Name,
 	}
 	if state.BoundTo != nil {

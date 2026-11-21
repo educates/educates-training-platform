@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
@@ -28,9 +29,9 @@ func (r *Reconciler) publish(ctx context.Context, injector *secretsv1beta1.Secre
 		return ctrl.Result{RequeueAfter: conflictRetryDelay}, nil
 	}
 
-	updated := injector.DeepCopy()
-	updated.Status = status(injector, outcome)
-	statusErr := r.feedback.Publish(ctx, injector, updated)
+	statusErr := feedback.Publish(ctx, r.feedback, injector, func(i *secretsv1beta1.SecretInjector) {
+		i.Status = status(i.Status.Conditions, injector.Generation, outcome)
+	})
 	switch {
 	case statusErr == nil:
 		return ctrl.Result{}, err
@@ -43,12 +44,13 @@ func (r *Reconciler) publish(ctx context.Context, injector *secretsv1beta1.Secre
 	}
 }
 
-// status is the status outcome makes of injector: what each rule matched
-// and injected, counted, and the Ready condition of the dominant problem.
-func status(injector *secretsv1beta1.SecretInjector, outcome *Outcome) secretsv1beta1.SecretInjectorStatus {
+// status is the status outcome makes of a SecretInjector at generation:
+// what each rule matched and injected, counted, and the Ready condition of
+// the dominant problem, set on conditions, the SecretInjector's.
+func status(conditions []metav1.Condition, generation int64, outcome *Outcome) secretsv1beta1.SecretInjectorStatus {
 	result := secretsv1beta1.SecretInjectorStatus{
-		ObservedGeneration: injector.Generation,
-		Conditions:         slices.Clone(injector.Status.Conditions),
+		ObservedGeneration: generation,
+		Conditions:         slices.Clone(conditions),
 		Rules:              make([]secretsv1beta1.InjectionCounts, 0, len(outcome.Rules)),
 	}
 	var findings feedback.Findings
@@ -77,7 +79,7 @@ func status(injector *secretsv1beta1.SecretInjector, outcome *Outcome) secretsv1
 		InjectionCounts: summary,
 		InSyncRatio:     feedback.Ratio(summary.InjectionsInSync, summary.ServiceAccountsMatched),
 	}
-	feedback.SetReady(&result.Conditions, findings.Ready(), injector.Generation)
+	feedback.SetReady(&result.Conditions, findings.Ready(), generation)
 	return result
 }
 

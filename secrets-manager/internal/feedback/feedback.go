@@ -7,8 +7,9 @@
 // conditional on the resource version the cache holds, and only when it
 // differs from the status the cache holds or from the one last written, so
 // that reconciling a resource whose status has not changed makes no API
-// call. A status computed from a cache that has not yet seen the last write
-// is refused by the API server as a conflict, which the reconciler retries.
+// call. A patch from a cache that has not yet seen the latest version is
+// refused by the API server as a conflict; the status is then compared
+// with, and written against, the version the API server holds.
 //
 // Events go through the events.k8s.io API, on transitions only: a Warning
 // NotReady once a resource has not been Ready for a grace period, a Normal
@@ -28,6 +29,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,6 +41,7 @@ import (
 // every kind.
 type Feedback struct {
 	writer   client.StatusClient
+	reader   client.Reader
 	recorder events.EventRecorder
 	scheme   *runtime.Scheme
 	grace    time.Duration
@@ -63,13 +66,16 @@ type resourceKey struct {
 	types.NamespacedName
 }
 
-// New returns a Feedback that writes status through writer and records
-// Events with recorder, raising a Warning once a resource has not been
-// Ready for grace. scheme maps the four kinds' Go types to their kinds.
-func New(writer client.StatusClient, recorder events.EventRecorder, scheme *runtime.Scheme,
+// New returns a Feedback that writes status through writer, reads a
+// resource the cache holds an older version of through reader, from the API
+// server, and records Events with recorder, raising a Warning once a
+// resource has not been Ready for grace. scheme maps the four kinds' Go
+// types to their kinds.
+func New(writer client.StatusClient, reader client.Reader, recorder events.EventRecorder, scheme *runtime.Scheme,
 	grace time.Duration) *Feedback {
 	return &Feedback{
 		writer:    writer,
+		reader:    reader,
 		recorder:  recorder,
 		scheme:    scheme,
 		grace:     grace,
@@ -99,33 +105,41 @@ func (f *Feedback) Start(ctx context.Context) error {
 	return nil
 }
 
-// Publish writes the status of updated, the resource cached as the cache
-// holds it with the status a reconcile computed, unless the resource
-// already holds that status, and records the Events the change of its Ready
-// condition calls for. A conflict, returned as the API server's Conflict
-// error, means the cache had not seen the resource's latest version: the
-// reconcile is to be retried. A resource deleted meanwhile is forgotten.
-func (f *Feedback) Publish(ctx context.Context, cached, updated client.Object) error {
-	gvk, err := apiutil.GVKForObject(updated, f.scheme)
+// Publish writes the status a reconcile computed for cached, the resource as
+// the cache holds it, unless the resource already holds that status, and
+// records the Events the change of its Ready condition calls for. set gives
+// a copy of the resource the computed status, its Ready condition set on
+// the copy's own conditions. When the cache had not seen the resource's
+// latest version, Publish compares the status with the API server's
+// version and writes it against that version, once. A conflict that
+// remains is returned as the API server's Conflict error: the reconcile is
+// to be retried. A resource deleted meanwhile is forgotten.
+func Publish[T client.Object](ctx context.Context, f *Feedback, cached T, set func(T)) error {
+	gvk, err := apiutil.GVKForObject(cached, f.scheme)
 	if err != nil {
 		return err
 	}
-	key := resourceKey{kind: gvk.Kind, NamespacedName: client.ObjectKeyFromObject(updated)}
-	before, err := statusOf(cached)
-	if err != nil {
-		return err
-	}
-	after, err := statusOf(updated)
-	if err != nil {
-		return err
-	}
-
+	key := resourceKey{kind: gvk.Kind, NamespacedName: client.ObjectKeyFromObject(cached)}
 	f.mu.Lock()
 	last, known := f.written[key]
 	f.mu.Unlock()
-	if before != after || known && last != after {
-		patch := client.MergeFromWithOptions(cached, client.MergeFromWithOptimisticLock{})
-		err := f.writer.Status().Patch(ctx, updated, patch)
+
+	base, updated, after, inSync, err := withStatus(cached, set, last, known)
+	if err != nil {
+		return err
+	}
+	if !inSync {
+		err = f.patch(ctx, base, updated)
+		if apierrors.IsConflict(err) {
+			if base, err = live(ctx, f, gvk, cached); err == nil {
+				// The API server's version is the latest: what this process
+				// wrote last no longer counts.
+				base, updated, after, inSync, err = withStatus(base, set, "", false)
+			}
+			if err == nil && !inSync {
+				err = f.patch(ctx, base, updated)
+			}
+		}
 		switch {
 		case apierrors.IsNotFound(err):
 			f.Forget(gvk.Kind, key.NamespacedName)
@@ -133,13 +147,58 @@ func (f *Feedback) Publish(ctx context.Context, cached, updated client.Object) e
 		case err != nil:
 			return err
 		}
-		f.mu.Lock()
-		f.written[key] = after
-		f.mu.Unlock()
 	}
 
-	f.observe(key, gvk, updated, readyOf(cached), readyOf(updated))
+	f.mu.Lock()
+	f.written[key] = after
+	f.mu.Unlock()
+	f.observe(key, gvk, updated, readyOf(base), readyOf(updated))
 	return nil
+}
+
+// withStatus returns base, a copy of it that set gave the computed status,
+// that status as JSON, and whether base holds it already. last is the
+// status last written, as JSON, when known: when it differs from the
+// computed status, base, as a cache holds it, may hold a status that is no
+// longer the API server's.
+func withStatus[T client.Object](base T, set func(T), last string, known bool) (T, T, string, bool, error) {
+	updated, ok := base.DeepCopyObject().(T)
+	if !ok {
+		return base, updated, "", false, fmt.Errorf("copying %s", base.GetName())
+	}
+	set(updated)
+	before, err := statusOf(base)
+	if err != nil {
+		return base, updated, "", false, err
+	}
+	after, err := statusOf(updated)
+	if err != nil {
+		return base, updated, "", false, err
+	}
+	return base, updated, after, before == after && (!known || last == after), nil
+}
+
+// patch writes the status of updated as a merge patch from base,
+// conditional on the resource version of base.
+func (f *Feedback) patch(ctx context.Context, base, updated client.Object) error {
+	return f.writer.Status().Patch(ctx, updated, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
+}
+
+// live reads the resource cached names, of gvk, from the API server.
+func live[T client.Object](ctx context.Context, f *Feedback, gvk schema.GroupVersionKind, cached T) (T, error) {
+	var none T
+	obj, err := f.scheme.New(gvk)
+	if err != nil {
+		return none, err
+	}
+	fresh, ok := obj.(T)
+	if !ok {
+		return none, fmt.Errorf("the scheme makes %T for %s", obj, gvk)
+	}
+	if err := f.reader.Get(ctx, client.ObjectKeyFromObject(cached), fresh); err != nil {
+		return none, err
+	}
+	return fresh, nil
 }
 
 // Forget drops what Feedback holds of the resource of kind, such as

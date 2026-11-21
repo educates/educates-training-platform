@@ -156,7 +156,7 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 	if grace <= 0 {
 		grace = DefaultNotReadyGrace
 	}
-	reports := feedback.New(mgr.GetClient(), mgr.GetEventRecorder(FieldManager), scheme, grace)
+	reports := feedback.New(mgr.GetClient(), mgr.GetAPIReader(), mgr.GetEventRecorder(FieldManager), scheme, grace)
 	if err := mgr.Add(reports); err != nil {
 		return nil, fmt.Errorf("adding the status and Events writer: %w", err)
 	}

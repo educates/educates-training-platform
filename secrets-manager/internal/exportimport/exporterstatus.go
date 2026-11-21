@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
@@ -24,9 +25,9 @@ func (r *ExporterReconciler) publish(ctx context.Context, exporter *secretsv1bet
 		return result, err
 	}
 
-	updated := exporter.DeepCopy()
-	updated.Status = exporterStatus(exporter, &report)
-	statusErr := r.feedback.Publish(ctx, exporter, updated)
+	statusErr := feedback.Publish(ctx, r.feedback, exporter, func(e *secretsv1beta1.SecretExporter) {
+		e.Status = exporterStatus(e.Status.Conditions, exporter.Generation, &report)
+	})
 	switch {
 	case statusErr == nil:
 		return result, err
@@ -52,14 +53,16 @@ func (report *exporterReport) writeConflicted() bool {
 	return false
 }
 
-// exporterStatus is the status report makes of exporter: whether the
-// exported Secret exists, the targets of each rule counted, and the Ready
-// condition of the dominant problem.
-func exporterStatus(exporter *secretsv1beta1.SecretExporter, report *exporterReport) secretsv1beta1.SecretExporterStatus {
+// exporterStatus is the status report makes of a SecretExporter at
+// generation: whether the exported Secret exists, the targets of each rule
+// counted, and the Ready condition of the dominant problem, set on
+// conditions, the SecretExporter's.
+func exporterStatus(conditions []metav1.Condition, generation int64,
+	report *exporterReport) secretsv1beta1.SecretExporterStatus {
 	sourceExists := report.sourceExists
 	result := secretsv1beta1.SecretExporterStatus{
-		ObservedGeneration: exporter.Generation,
-		Conditions:         slices.Clone(exporter.Status.Conditions),
+		ObservedGeneration: generation,
+		Conditions:         slices.Clone(conditions),
 		SourceExists:       &sourceExists,
 		Rules:              make([]secretsv1beta1.TargetCounts, 0, len(report.rules)),
 	}
@@ -91,7 +94,7 @@ func exporterStatus(exporter *secretsv1beta1.SecretExporter, report *exporterRep
 		TargetCounts: summary,
 		InSyncRatio:  feedback.Ratio(summary.InSync, summary.TargetNamespaces),
 	}
-	feedback.SetReady(&result.Conditions, findings.Ready(), exporter.Generation)
+	feedback.SetReady(&result.Conditions, findings.Ready(), generation)
 	return result
 }
 

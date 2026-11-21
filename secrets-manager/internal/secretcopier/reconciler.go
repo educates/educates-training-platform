@@ -48,11 +48,12 @@ func New(cache client.Reader, engine *copyengine.Engine, policy convergence.Poli
 // a name it gives its copies, changes, when a namespace it may select is
 // created, relabelled or given other owners, when a SecretImporter named
 // after its copies is created, changed or deleted, and when another
-// SecretCopier or a SecretExporter that names copies as it does is deleted,
-// leaving those copies for it to take over. Besides, the reconciler's
-// policy reconciles each SecretCopier again a backstop interval after its
-// last reconcile, and retries a failed one with backoff. The cache must
-// hold the indexes eventmap.IndexSecretCopiers registers.
+// SecretCopier or a SecretExporter that names copies as it does changes its
+// rules or is deleted, which may leave those copies for it to take over.
+// Besides, the reconciler's policy reconciles each SecretCopier again a
+// backstop interval after its last reconcile, and retries a failed one with
+// backoff. The cache must hold the indexes eventmap.IndexSecretCopiers
+// registers.
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.convergence.Complete(ctrl.NewControllerManagedBy(mgr).
 		Named("secretcopier").
@@ -64,10 +65,10 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			eventmap.NamespaceSelectionChanged())).
 		WatchesRawSource(source.Kind(mgr.GetCache(), &secretsv1beta1.SecretCopier{},
 			handler.TypedEnqueueRequestsFromMapFunc(eventmap.SecretCopiersSharingCopies(mgr.GetClient())),
-			eventmap.Deletions[*secretsv1beta1.SecretCopier]())).
+			eventmap.RuleChanges[*secretsv1beta1.SecretCopier]())).
 		WatchesRawSource(source.Kind(mgr.GetCache(), &secretsv1beta1.SecretExporter{},
 			handler.TypedEnqueueRequestsFromMapFunc(eventmap.SecretCopiersSharingExportedCopies(mgr.GetClient())),
-			eventmap.Deletions[*secretsv1beta1.SecretExporter]())).
+			eventmap.RuleChanges[*secretsv1beta1.SecretExporter]())).
 		WatchesRawSource(source.Kind(mgr.GetCache(), &secretsv1beta1.SecretImporter{},
 			handler.TypedEnqueueRequestsFromMapFunc(eventmap.SecretCopiersForImporter(mgr.GetClient())),
 			predicate.TypedGenerationChangedPredicate[*secretsv1beta1.SecretImporter]{})),

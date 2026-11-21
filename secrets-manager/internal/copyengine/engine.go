@@ -13,16 +13,17 @@
 //   - A target whose copier-rule names the resource asking for the copy,
 //     and whose secret-name names the asking rule's source, is that rule's
 //     own.
-//   - A target whose copier-rule names the resource asking for the copy,
-//     and whose secret-name names another source, is another rule's of that
-//     resource, and an ownership conflict, while one of the resource's
-//     rules copies that source under the copy's name. Otherwise it is an
+//   - Any other target whose copier-rule names a resource, the asking one
+//     included, one of whose rules still targets the copy, stays that
+//     rule's: the rule selects the copy's namespace, names its copies as the
+//     copy is named, and copies the source secret-name names. It agrees with
+//     the asking rule when that rule copies the same source, and is an
+//     ownership conflict otherwise.
+//   - A target whose copier-rule names a resource none of whose rules
+//     targets the copy any more, or a resource that no longer exists, is an
 //     orphan, which the asking rule adopts.
-//   - A target whose copier-rule names another resource that exists stays
-//     that resource's. It agrees with the asking rule when secret-name
-//     names the same source, and is an ownership conflict otherwise.
-//   - A target whose copier-rule names a resource that no longer exists is
-//     an orphan, which the asking rule adopts.
+//   - A target whose copier-rule names no resource is an ownership
+//     conflict.
 //
 // The engine converges one copy for one rule. Of the rules of one resource
 // that copy the same source under the same name into one namespace, only
@@ -154,7 +155,7 @@ type Engine struct {
 // metadata, reads their content through reader, which must read from the
 // API server rather than a cache, writes copies through writer, applying
 // them as fieldManager, and asks rules whether the resource a target's
-// copier-rule annotation names still exists.
+// copier-rule annotation names still exists, and still targets the copy.
 func New(kind *Kind, cache, reader client.Reader, writer client.Client, fieldManager string,
 	rules RuleLookup) *Engine {
 	return &Engine{kind: kind, cache: cache, reader: reader, writer: writer, fieldManager: fieldManager,

@@ -87,25 +87,27 @@ func SecretCopiersForSecret(reader client.Reader) handler.MapFunc {
 	}
 }
 
-// SecretCopiersSharingCopies maps the deletion of a SecretCopier to the
-// other SecretCopiers with a rule that names its copies as one of the
-// deleted SecretCopier's rules does. Those copies were kept from them while
-// the deleted SecretCopier existed, and are theirs to take over. It reads
-// the SecretCopiers from reader, a cache holding the indexes
-// IndexSecretCopiers registers.
+// SecretCopiersSharingCopies maps a change to the rules of a SecretCopier,
+// or its deletion, to the other SecretCopiers with a rule that names its
+// copies as one of the changed SecretCopier's rules does, or did before the
+// change. Copies kept from them while a rule of the changed SecretCopier
+// targeted them are theirs to take over once none does. On a change, it is
+// called with the SecretCopier before and after it. It reads the
+// SecretCopiers from reader, a cache holding the indexes IndexSecretCopiers
+// registers.
 func SecretCopiersSharingCopies(reader client.Reader) handler.TypedMapFunc[*secretsv1beta1.SecretCopier,
 	reconcile.Request] {
-	return func(ctx context.Context, deleted *secretsv1beta1.SecretCopier) []reconcile.Request {
+	return func(ctx context.Context, changed *secretsv1beta1.SecretCopier) []reconcile.Request {
 		names := map[string]struct{}{}
-		for _, copyName := range ruleValues(deleted, (*secretsv1beta1.SecretCopierRule).CopyName) {
+		for _, copyName := range ruleValues(changed, (*secretsv1beta1.SecretCopierRule).CopyName) {
 			copiers := &secretsv1beta1.SecretCopierList{}
 			if err := reader.List(ctx, copiers, client.MatchingFields{SecretCopierTargetNameIndex: copyName}); err != nil {
-				ctrl.LoggerFrom(ctx).Error(err, "Listing SecretCopiers for a deleted SecretCopier failed",
-					"secretCopier", deleted.Name)
+				ctrl.LoggerFrom(ctx).Error(err, "Listing SecretCopiers for a changed SecretCopier failed",
+					"secretCopier", changed.Name)
 				continue
 			}
 			for _, copier := range copiers.Items {
-				if copier.UID != deleted.UID {
+				if copier.UID != changed.UID {
 					names[copier.Name] = struct{}{}
 				}
 			}

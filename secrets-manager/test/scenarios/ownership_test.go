@@ -289,6 +289,88 @@ var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 		})
 	})
 
+	It("lets a second copier of the same source take over a copy the first copier's rule stops selecting",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			narrowed := s.namespace("a", nil)
+			kept := s.namespace("b", nil)
+			src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+			first := s.secretCopier(s.name("first"), copierRule(src, inNamespaces(narrowed, kept)))
+			eventually(func(g Gomega) {
+				expectCopy(g, narrowed.Name, src.Name, src, ruleOf(first))
+			})
+			second := s.secretCopier(s.name("second"), copierRule(src, inNamespaces(narrowed)))
+			eventually(func(g Gomega) {
+				expectReady(g, second, "True", "InSync")
+			})
+			expectCopyUnwritten(narrowed.Name, src.Name, src, ruleOf(first))
+
+			s.update(first, func() { setRules(first, copierRule(src, inNamespaces(kept))) })
+
+			eventually(func(g Gomega) {
+				copied := expectCopy(g, narrowed.Name, src.Name, src, ruleOf(second))
+				expectOwnedBy(g, copied, second)
+				g.Expect(ownerUIDs(copied)).NotTo(ContainElement(first.GetUID()))
+				expectCopy(g, kept.Name, src.Name, src, ruleOf(first))
+			})
+		})
+
+	It("lets a copier of another source take over a copy, clearing its conflict, once the copier holding it "+
+		"stops selecting its namespace", Label(expectedDifference), func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		other := s.namespace("b", nil)
+		firstSource := s.secret(sourceNS.Name, "first", data("token", "f0"))
+		secondSource := s.secret(sourceNS.Name, "second", data("token", "s0"))
+		first := s.secretCopier(s.name("first"), copierRule(firstSource, inNamespaces(targetNS),
+			shaped(copyShape{Name: copyName})))
+		eventually(func(g Gomega) {
+			expectCopy(g, targetNS.Name, copyName, firstSource, ruleOf(first))
+		})
+		second := s.secretCopier(s.name("second"), copierRule(secondSource, inNamespaces(targetNS),
+			shaped(copyShape{Name: copyName})))
+		eventually(func(g Gomega) {
+			expectReady(g, second, "False", "Conflict")
+		})
+
+		s.update(first, func() {
+			setRules(first, copierRule(firstSource, inNamespaces(other), shaped(copyShape{Name: copyName})))
+		})
+
+		eventually(func(g Gomega) {
+			copied := expectCopy(g, targetNS.Name, copyName, secondSource, ruleOf(second))
+			expectOwnedBy(g, copied, second)
+			expectReady(g, second, "True", "InSync")
+		})
+	})
+
+	It("lets a second copier of the same source take over a copy whose rule the first copier drops",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+			unrelated := s.secret(sourceNS.Name, "unrelated", data("token", "u0"))
+			first := s.secretCopier(s.name("first"),
+				copierRule(unrelated, inNamespaces(targetNS)), copierRule(src, inNamespaces(targetNS)))
+			eventually(func(g Gomega) {
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(first))
+			})
+			second := s.secretCopier(s.name("second"), copierRule(src, inNamespaces(targetNS)))
+			eventually(func(g Gomega) {
+				expectReady(g, second, "True", "InSync")
+			})
+
+			s.update(first, func() { setRules(first, copierRule(unrelated, inNamespaces(targetNS))) })
+
+			eventually(func(g Gomega) {
+				copied := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(second))
+				expectOwnedBy(g, copied, second)
+			})
+		})
+
 	It("keeps a copy with the one of its rules whose source it holds, when two copy different Secrets under one name",
 		func() {
 			s := newScenario()

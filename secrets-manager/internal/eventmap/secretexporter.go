@@ -99,24 +99,26 @@ func SecretExportersForNamespace(reader client.Reader) handler.TypedMapFunc[*cor
 	}
 }
 
-// SecretExportersSharingCopies maps the deletion of a SecretCopier or
-// SecretExporter to the other SecretExporters with a rule that names its
-// copies as one of the deleted resource's rules does. Those copies were
-// kept from them while the deleted resource existed, and are theirs to take
-// over. It reads the SecretExporters from reader, a cache holding the index
+// SecretExportersSharingCopies maps a change to the rules of a SecretCopier
+// or SecretExporter, or its deletion, to the other SecretExporters with a
+// rule that names its copies as one of the changed resource's rules does,
+// or did before the change. Copies kept from them while a rule of the
+// changed resource targeted them are theirs to take over once none does.
+// On a change, it is called with the resource before and after it. It
+// reads the SecretExporters from reader, a cache holding the index
 // IndexSecretExporters registers.
 func SecretExportersSharingCopies[T client.Object](reader client.Reader) handler.TypedMapFunc[T, reconcile.Request] {
-	return func(ctx context.Context, deleted T) []reconcile.Request {
+	return func(ctx context.Context, changed T) []reconcile.Request {
 		keys := map[types.NamespacedName]struct{}{}
-		for _, name := range copyNames(deleted) {
+		for _, name := range copyNames(changed) {
 			exporters := &secretsv1beta1.SecretExporterList{}
 			if err := reader.List(ctx, exporters, client.MatchingFields{SecretExporterTargetNameIndex: name}); err != nil {
-				ctrl.LoggerFrom(ctx).Error(err, "Listing SecretExporters for a deleted resource failed",
-					"resource", client.ObjectKeyFromObject(deleted))
+				ctrl.LoggerFrom(ctx).Error(err, "Listing SecretExporters for a changed resource failed",
+					"resource", client.ObjectKeyFromObject(changed))
 				continue
 			}
 			for i := range exporters.Items {
-				if exporters.Items[i].UID != deleted.GetUID() {
+				if exporters.Items[i].UID != changed.GetUID() {
 					keys[client.ObjectKeyFromObject(&exporters.Items[i])] = struct{}{}
 				}
 			}
@@ -125,20 +127,22 @@ func SecretExportersSharingCopies[T client.Object](reader client.Reader) handler
 	}
 }
 
-// SecretCopiersSharingExportedCopies maps the deletion of a SecretExporter
-// to the SecretCopiers with a rule that names its copies as one of the
-// deleted SecretExporter's rules does, so that they take over those copies.
-// It reads the SecretCopiers from reader, a cache holding the indexes
-// IndexSecretCopiers registers.
+// SecretCopiersSharingExportedCopies maps a change to the rules of a
+// SecretExporter, or its deletion, to the SecretCopiers with a rule that
+// names its copies as one of the changed SecretExporter's rules does, or
+// did before the change, so that they take over those copies once none of
+// its rules targets them. On a change, it is called with the
+// SecretExporter before and after it. It reads the SecretCopiers from
+// reader, a cache holding the indexes IndexSecretCopiers registers.
 func SecretCopiersSharingExportedCopies(reader client.Reader) handler.TypedMapFunc[*secretsv1beta1.SecretExporter,
 	reconcile.Request] {
-	return func(ctx context.Context, deleted *secretsv1beta1.SecretExporter) []reconcile.Request {
+	return func(ctx context.Context, changed *secretsv1beta1.SecretExporter) []reconcile.Request {
 		names := map[string]struct{}{}
-		for _, name := range copyNames(deleted) {
+		for _, name := range copyNames(changed) {
 			copiers := &secretsv1beta1.SecretCopierList{}
 			if err := reader.List(ctx, copiers, client.MatchingFields{SecretCopierTargetNameIndex: name}); err != nil {
-				ctrl.LoggerFrom(ctx).Error(err, "Listing SecretCopiers for a deleted SecretExporter failed",
-					"secretExporter", client.ObjectKeyFromObject(deleted))
+				ctrl.LoggerFrom(ctx).Error(err, "Listing SecretCopiers for a changed SecretExporter failed",
+					"secretExporter", client.ObjectKeyFromObject(changed))
 				continue
 			}
 			for _, copier := range copiers.Items {

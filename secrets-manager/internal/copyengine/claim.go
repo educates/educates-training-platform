@@ -4,6 +4,7 @@ import (
 	"context"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 )
@@ -24,22 +25,23 @@ const (
 	Recreated Outcome = "Recreated"
 
 	// Adopted means the copy was written by a resource that no longer
-	// exists, or by a rule of the asking resource that no longer copies the
-	// copy's source, and was written as the asking rule's.
+	// exists, or none of whose rules still targets the copy, and was
+	// written as the asking rule's.
 	Adopted Outcome = "Adopted"
 
 	// InSync means the copy already held what it should, and nothing was
 	// written.
 	InSync Outcome = "InSync"
 
-	// Agreed means another existing resource's rule manages the copy, from
-	// the same source, and nothing was written: that rule keeps the copy
-	// and decides its shape.
+	// Agreed means another resource's rule that still targets the copy
+	// manages it, from the same source, and nothing was written: that rule
+	// keeps the copy and decides its shape.
 	Agreed Outcome = "Agreed"
 
 	// OwnershipConflict means the target is not the asking rule's to write:
-	// no rule wrote it, or another existing rule wrote it from another
-	// source. Nothing was written.
+	// no rule wrote it, its copier-rule annotation names no resource, or
+	// another rule that still targets it wrote it from another source.
+	// Nothing was written.
 	OwnershipConflict Outcome = "OwnershipConflict"
 
 	// TargetDeleting means the target is being deleted, and nothing was
@@ -83,7 +85,7 @@ type Result struct {
 }
 
 // RuleState says whether the resource a copy's copier-rule annotation names
-// exists, and whether one of its rules still makes the copy.
+// exists, and whether one of its rules still targets the copy.
 type RuleState int
 
 const (
@@ -91,29 +93,38 @@ const (
 	// find.
 	RuleUnknown RuleState = iota
 
-	// RuleExists means the resource exists, and one of its rules copies the
-	// copy's source under the copy's name.
-	RuleExists
+	// RuleTargets means the resource exists, and one of its rules still
+	// targets the copy: it selects the copy's namespace, names its copies
+	// as the copy is named, and copies the source the copy's secret-name
+	// annotation names.
+	RuleTargets
 
-	// RuleDropped means the resource exists, and none of its rules copies
-	// the copy's source under the copy's name any more.
+	// RuleDropped means the resource exists, and none of its rules targets
+	// the copy any more: the rule that wrote it stopped selecting its
+	// namespace, was given another source or copy name, or was removed.
 	RuleDropped
 
 	// RuleGone means the resource no longer exists.
 	RuleGone
 )
 
-// RuleLookup reports the state of the rule that wrote the copy named name,
+// RuleLookup reports the state of the rule that wrote the copy named key,
 // given the copy's copier-rule annotation, writer, and its secret-name
 // annotation, source, which also places a resource that lives in its
 // source's namespace.
-type RuleLookup func(ctx context.Context, writer, source, name string) (RuleState, error)
+type RuleLookup func(ctx context.Context, writer, source string, key types.NamespacedName) (RuleState, error)
 
 // claim decides whether target, the target of c as the cache or the API
 // server has it, is c.Rule's to write, and returns true when it is: when a
 // rule of the resource c.Rule names wrote it from c's source, or when c's
 // rule adopts it, the Result then saying Adopted. Otherwise the Result
 // says why the target is left untouched.
+//
+// A target another rule wrote stays that rule's while the rule still
+// targets it: c's rule agrees with it when both copy the same source, and
+// is kept from the target as an ownership conflict otherwise. Once no rule
+// of that resource targets the copy, or the resource is gone, the target is
+// an orphan, which c's rule adopts.
 func (e *Engine) claim(ctx context.Context, c Copy, target metav1.Object) (Result, bool, error) {
 	annotations := target.GetAnnotations()
 	writer, tracked := annotations[secretsv1beta1.CopierRuleAnnotation]
@@ -126,13 +137,13 @@ func (e *Engine) claim(ctx context.Context, c Copy, target metav1.Object) (Resul
 		return Result{}, true, nil
 	}
 
-	state, err := e.rules(ctx, writer, source, c.Name)
+	state, err := e.rules(ctx, writer, source, types.NamespacedName{Namespace: c.Namespace, Name: c.Name})
 	switch {
 	case err != nil:
 		return Result{}, false, err
-	case state == RuleGone, state == RuleDropped && writer == c.Rule:
+	case state == RuleGone, state == RuleDropped:
 		return Result{Outcome: Adopted}, true, nil
-	case state != RuleUnknown && sameSource:
+	case state == RuleTargets && sameSource:
 		return Result{Outcome: Agreed, ManagedBy: writer}, false, nil
 	default:
 		return Result{Outcome: OwnershipConflict, ManagedBy: writer}, false, nil

@@ -46,11 +46,11 @@ func NewExporterReconciler(cache client.Reader, engine *copyengine.Engine,
 // namespace it may select is created, relabelled or given other owners,
 // when a SecretImporter named after its copies is created, changed or
 // deleted, and when a SecretCopier or another SecretExporter that names
-// copies as it does is deleted, leaving those copies for it to take over.
-// Besides, the reconciler's policy reconciles each SecretExporter again a
-// backstop interval after its last reconcile, and retries a failed one with
-// backoff. The cache must hold the indexes eventmap.IndexSecretExporters
-// registers.
+// copies as it does changes its rules or is deleted, which may leave those
+// copies for it to take over. Besides, the reconciler's policy reconciles
+// each SecretExporter again a backstop interval after its last reconcile,
+// and retries a failed one with backoff. The cache must hold the indexes
+// eventmap.IndexSecretExporters registers.
 func (r *ExporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.convergence.Complete(ctrl.NewControllerManagedBy(mgr).
 		Named("secretexporter").
@@ -66,11 +66,11 @@ func (r *ExporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WatchesRawSource(source.Kind(mgr.GetCache(), &secretsv1beta1.SecretExporter{},
 			handler.TypedEnqueueRequestsFromMapFunc(
 				eventmap.SecretExportersSharingCopies[*secretsv1beta1.SecretExporter](mgr.GetClient())),
-			eventmap.Deletions[*secretsv1beta1.SecretExporter]())).
+			eventmap.RuleChanges[*secretsv1beta1.SecretExporter]())).
 		WatchesRawSource(source.Kind(mgr.GetCache(), &secretsv1beta1.SecretCopier{},
 			handler.TypedEnqueueRequestsFromMapFunc(
 				eventmap.SecretExportersSharingCopies[*secretsv1beta1.SecretCopier](mgr.GetClient())),
-			eventmap.Deletions[*secretsv1beta1.SecretCopier]())),
+			eventmap.RuleChanges[*secretsv1beta1.SecretCopier]())),
 		&secretsv1beta1.SecretExporter{}, mgr.GetClient(), r)
 }
 

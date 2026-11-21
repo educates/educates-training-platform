@@ -19,18 +19,12 @@ type NamespaceSelector struct {
 // Namespaces returns the selector of the targetNamespaces of a
 // SecretCopier, SecretExporter or SecretInjector rule.
 func Namespaces(targets secretsv1beta1.TargetNamespaces) NamespaceSelector {
-	return NamespacesOf(Fields{
+	return NamespaceSelector{selector: New(Fields{
 		Names:  targets.NameSelector,
 		UIDs:   targets.UIDSelector,
 		Owners: targets.OwnerSelector,
 		Labels: targets.LabelSelector,
-	})
-}
-
-// NamespacesOf returns the selector of a rule's target namespaces, given as
-// fields, for a kind whose target namespaces have a type of their own.
-func NamespacesOf(fields Fields) NamespaceSelector {
-	return NamespaceSelector{selector: New(fields, defaultNamespaceNames)}
+	}, defaultNamespaceNames)}
 }
 
 // Err returns why the selector is invalid, and nil when it is valid. An

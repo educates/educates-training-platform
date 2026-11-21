@@ -2,8 +2,8 @@
 // account matches the selectors of a secrets.educates.dev rule. Its
 // functions are pure: they look only at the object and the rule, and are
 // shared by all four kinds. A rule's selectors for one kind of object go
-// through New, its target namespaces through Namespaces or NamespacesOf,
-// and a SecretInjector rule's source Secrets and service accounts through
+// through New, its target namespaces through Namespaces, and a
+// SecretInjector rule's source Secrets and service accounts through
 // SourceSecrets and ServiceAccounts; a selector that is invalid matches
 // nothing, and its Err says why.
 package selectors

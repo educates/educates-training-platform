@@ -36,9 +36,6 @@ const targetFieldScenarios = "targetSecret.annotations and targetSecret.keys "
 // the secrets-manager does not pass yet, by their full text or by the full
 // text of a container that holds them. They skip on envtest.
 var awaitingOnEnvtest = map[string][]string{
-	"complete namespace selection": {
-		"Namespace selection",
-	},
 	"the copy ownership rules": {
 		"Copy ownership and reclaim",
 		"SecretCopier copying recreates the copies with the new type when the source is recreated with " +

@@ -182,6 +182,27 @@ var _ = Describe("Namespace selection", Label(areaSelection), func() {
 		})
 	})
 
+	It("does not update a copy in a terminating namespace", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+		var copied *corev1.Secret
+		eventually(func(g Gomega) {
+			copied = expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+		})
+		before := src.DeepCopy()
+		s.holdSource(copied)
+		s.terminate(targetNS)
+
+		s.update(src, func() { src.Data = data("token", "t1") })
+
+		consistently(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, before, ruleOf(copier))
+		})
+	})
+
 	It("copies into a namespace relabelled into the rule's scope", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

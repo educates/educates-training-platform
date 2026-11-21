@@ -340,7 +340,7 @@ A service account which cannot be updated never stops injection into the others.
 Events of the secret injector
 -----------------------------
 
-When a ``SecretInjector`` has not been ``Ready`` for a minute, the secrets manager records a ``Warning`` Event with reason ``NotReady``, giving the reason and message of the ``Ready`` condition. When a ``SecretInjector`` which got that Event is ``Ready`` again, it records a ``Normal`` Event with reason ``Recovered``. No Event is recorded for a ``SecretInjector`` which is ``Ready`` again within a minute, while its status shows the problem at once.
+When a ``SecretInjector`` has not been ``Ready`` for a minute, the secrets manager records a ``Warning`` Event with reason ``NotReady``, giving the reason and message of the ``Ready`` condition. When a ``SecretInjector`` which got that Event is ``Ready`` again, it records a ``Normal`` Event with reason ``Recovered``. No Event is recorded for a ``SecretInjector`` which is ``Ready`` again within a minute, while its status shows the problem at once. When the secrets manager restarts, or another of its replicas takes over, it records the ``NotReady`` Event again for a resource which has still not been ``Ready`` for a minute, and the ``Recovered`` Event only follows a ``NotReady`` Event the running secrets manager recorded.
 
 As a ``SecretInjector`` has no namespace, its Events are recorded in the ``default`` namespace. Run ``kubectl describe secretinjector <name>`` to see them.
 

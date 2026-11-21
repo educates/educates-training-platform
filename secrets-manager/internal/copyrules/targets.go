@@ -214,9 +214,9 @@ func (c *Converger) record(rule *Rule, target Target) {
 			Copy: &corev1.ObjectReference{
 				APIVersion: apiVersion, Kind: kind, Namespace: target.Namespace, Name: rule.Copy.Name,
 			},
-			Source:        types.NamespacedName{Namespace: rule.Source.GetNamespace(), Name: rule.Source.GetName()},
-			SourceVersion: immutable.SourceVersion,
-			Field:         immutable.Field,
+			Source: types.NamespacedName{Namespace: rule.Source.GetNamespace(), Name: rule.Source.GetName()},
+			Field:  immutable.Field,
+			Change: immutable.Change,
 		})
 	}
 }
@@ -224,7 +224,7 @@ func (c *Converger) record(rule *Rule, target Target) {
 // WarnNotUpdated has reports raise a CopyNotUpdated Warning about resource,
 // the resource whose rules the Converger converged, for each copy another
 // writer made immutable that could not take a change of its source. reports
-// raises it once for each version of the source a copy does not take.
+// raises it once for each change of the source a copy does not take.
 func (c *Converger) WarnNotUpdated(reports *feedback.Feedback, resource client.Object) {
 	for _, notUpdated := range c.notUpdated {
 		reports.CopyNotUpdated(resource, notUpdated)

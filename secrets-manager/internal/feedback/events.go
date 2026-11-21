@@ -61,7 +61,8 @@ type readiness struct {
 	since time.Time
 	// ready is the resource's latest Ready condition.
 	ready metav1.Condition
-	// warned reports that the resource got its NotReady Warning.
+	// warned reports that this process recorded the resource's NotReady
+	// Warning.
 	warned bool
 	// timer raises the Warning once the grace period has passed.
 	timer *time.Timer
@@ -123,14 +124,12 @@ func (f *Feedback) observe(key resourceKey, gvk schema.GroupVersionKind, obj cli
 			action:    actions[gvk.Kind],
 			since:     current.LastTransitionTime.Time,
 		}
-		// A resource not Ready for the whole grace period before this
-		// process started had the time to get its Warning from the process
-		// before it.
-		state.warned = state.since.Add(f.grace).Before(f.started)
 		f.readiness[key] = state
 	}
 	state.ready = *current
 	if !state.warned && state.timer == nil {
+		// The timer fires at once for a resource this process finds not
+		// Ready past the grace period.
 		state.timer = time.AfterFunc(time.Until(state.since.Add(f.grace)), func() { f.warn(key, state) })
 	}
 }

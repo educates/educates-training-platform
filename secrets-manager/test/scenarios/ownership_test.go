@@ -231,7 +231,7 @@ var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 			s := newScenario()
 			sourceNS := s.namespace("src", nil)
 			targetNS := s.namespace("a", nil)
-			src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+			src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
 			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
 			var copied *corev1.Secret
 			eventually(func(g Gomega) {
@@ -254,6 +254,16 @@ var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 					ContainSubstring("data")))
 			})
 			// The copy keeps failing, and is retried with backoff.
+			consistently(func(g Gomega) {
+				events := eventsAbout(g, eventsNamespace, copier, "CopyNotUpdated")
+				g.Expect(events).To(HaveLen(1), "CopyNotUpdated Events of %s", ruleOf(copier))
+				g.Expect(events[0].Series).To(BeNil(), "CopyNotUpdated Event of %s recorded again", ruleOf(copier))
+			})
+
+			// A change of the source that alters nothing a copy holds is no
+			// change the copy could not take.
+			s.update(src, func() { setMapEntry(&src.Annotations, "example.com/touched", "yes") })
+
 			consistently(func(g Gomega) {
 				events := eventsAbout(g, eventsNamespace, copier, "CopyNotUpdated")
 				g.Expect(events).To(HaveLen(1), "CopyNotUpdated Events of %s", ruleOf(copier))

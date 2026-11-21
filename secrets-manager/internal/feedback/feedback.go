@@ -13,14 +13,15 @@
 //
 // Events go through the events.k8s.io API, on transitions only: a Warning
 // NotReady once a resource has not been Ready for a grace period, a Normal
-// Recovered when a resource that got that Warning becomes Ready again, and a
-// Normal Imported when a SecretImporter imports. The grace period runs from
-// the Ready condition's last transition, so it survives a restart; a
-// resource that was not Ready for the whole grace period before this
-// process started is taken to have had its Warning already. Besides, a
-// Warning CopyNotUpdated says that a copy another writer made immutable
-// could not take a change of its source, once for each version of the
-// source it did not take.
+// Recovered when a resource this process recorded that Warning about becomes
+// Ready again, and a Normal Imported when a SecretImporter imports. The
+// grace period runs from the Ready condition's last transition, so it
+// survives a restart or a change of leader: a resource the process finds
+// not Ready past the grace period gets its Warning at once, whether or not
+// the process before it recorded one. Besides, a Warning CopyNotUpdated
+// says that a copy another writer made immutable could not take a change of
+// its source, once for each change it did not take, and once more after a
+// restart or a change of leader.
 package feedback
 
 import (
@@ -50,9 +51,6 @@ type Feedback struct {
 	grace    time.Duration
 
 	mu sync.Mutex
-	// started is when the process started leading, or was composed, until
-	// it leads.
-	started time.Time
 	// stopped is set once the process stops leading, after which no Event
 	// is recorded.
 	stopped bool
@@ -62,7 +60,7 @@ type Feedback struct {
 	// not been and whether it got its Warning.
 	readiness map[resourceKey]*readiness
 	// notUpdated holds, for each copy that got a CopyNotUpdated Warning, the
-	// version of its source the Warning was about.
+	// change of its source the Warning was about.
 	notUpdated map[types.NamespacedName]string
 }
 
@@ -85,22 +83,16 @@ func New(writer client.StatusClient, reader client.Reader, recorder events.Event
 		recorder:   recorder,
 		scheme:     scheme,
 		grace:      grace,
-		started:    time.Now(),
 		written:    map[resourceKey]string{},
 		readiness:  map[resourceKey]*readiness{},
 		notUpdated: map[types.NamespacedName]string{},
 	}
 }
 
-// Start marks when the process started leading, then waits until ctx is
-// done and stops every pending Warning, so that a process that no longer
-// leads records no Event. It makes Feedback a runnable of the manager,
-// started once the process leads.
+// Start waits until ctx is done and stops every pending Warning, so that a
+// process that no longer leads records no Event. It makes Feedback a
+// runnable of the manager, started once the process leads.
 func (f *Feedback) Start(ctx context.Context) error {
-	f.mu.Lock()
-	f.started = time.Now()
-	f.mu.Unlock()
-
 	<-ctx.Done()
 	f.mu.Lock()
 	defer f.mu.Unlock()

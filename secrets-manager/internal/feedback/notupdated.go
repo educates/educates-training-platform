@@ -15,20 +15,22 @@ type NotUpdatedCopy struct {
 	// Copy names the copy.
 	Copy *corev1.ObjectReference
 
-	// Source names the copy's source, and SourceVersion is the resource
-	// version of the source the copy did not take.
-	Source        types.NamespacedName
-	SourceVersion string
+	// Source names the copy's source.
+	Source types.NamespacedName
 
 	// Field is the field of the source whose change the copy did not take,
-	// such as a Secret's data or type.
-	Field string
+	// such as a Secret's data or type, and Change identifies what the copy
+	// would hold in it: another change of the source the copy cannot take
+	// has another Change, and a change that alters nothing the copy holds
+	// has the same.
+	Field  string
+	Change string
 }
 
 // CopyNotUpdated records a Warning CopyNotUpdated Event about obj, the
 // SecretCopier or SecretExporter whose rule converges notUpdated, naming the
 // copy, its source and the field the copy did not take. It records it once
-// for each version of the source the copy does not take, however often
+// for each change of the source the copy does not take, however often
 // converging the copy fails again.
 func (f *Feedback) CopyNotUpdated(obj client.Object, notUpdated NotUpdatedCopy) {
 	gvk, err := apiutil.GVKForObject(obj, f.scheme)
@@ -36,16 +38,17 @@ func (f *Feedback) CopyNotUpdated(obj client.Object, notUpdated NotUpdatedCopy) 
 		return
 	}
 	key := types.NamespacedName{Namespace: notUpdated.Copy.Namespace, Name: notUpdated.Copy.Name}
+	change := notUpdated.Field + ":" + notUpdated.Change
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.stopped || f.notUpdated[key] == notUpdated.SourceVersion {
+	if f.stopped || f.notUpdated[key] == change {
 		return
 	}
 	regarding := f.reference(obj, gvk)
 	if regarding == nil {
 		return
 	}
-	f.notUpdated[key] = notUpdated.SourceVersion
+	f.notUpdated[key] = change
 	f.record(regarding, notUpdated.Copy, corev1.EventTypeWarning, EventCopyNotUpdated, actions[gvk.Kind],
 		fmt.Sprintf("%s %s, the copy of %s, is immutable and was not updated: its source's %s changed",
 			notUpdated.Copy.Kind, key, notUpdated.Source, notUpdated.Field))

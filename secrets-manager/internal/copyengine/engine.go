@@ -55,8 +55,8 @@
 // would accept the new copy: a copy whose replacement it would reject is
 // kept as it is, and is a failure. A copy another writer made
 // immutable, whose payload or fixed field must change, is a failure, an
-// ImmutableCopyError naming the field and the version of the source the
-// copy did not take; it is never deleted.
+// ImmutableCopyError naming the field of the source the copy did not take
+// and identifying what it would hold in it; it is never deleted.
 //
 // A copy carries a third tracking annotation, source-version: the resource
 // version of the source it was last written from. The engine remembers,
@@ -79,6 +79,7 @@ package copyengine
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -105,9 +106,11 @@ type ImmutableCopyError struct {
 	// fixed field when one differs, and otherwise a keyed field.
 	Field string
 
-	// SourceVersion is the resource version of the source the copy did not
-	// take.
-	SourceVersion string
+	// Change identifies what the copy would hold in Field, without
+	// revealing it: it differs between two changes of the source the copy
+	// did not take, and stays the same when the source changes in nothing
+	// the copy would hold.
+	Change string
 }
 
 func (e *ImmutableCopyError) Error() string {
@@ -282,7 +285,7 @@ func (e *Engine) converge(ctx context.Context, c Copy, key types.NamespacedName)
 			changed = differingKeyedField(live, desired, e.kind.KeyedFields)
 		}
 		if changed != "" {
-			return Result{}, nil, &ImmutableCopyError{Field: changed, SourceVersion: c.Source.GetResourceVersion()}
+			return Result{}, nil, &ImmutableCopyError{Field: changed, Change: digest(desired.Object[changed])}
 		}
 	}
 	if fixedField != "" {
@@ -611,6 +614,15 @@ func differingKeyedField(a, b *unstructured.Unstructured, fields []string) strin
 		}
 	}
 	return ""
+}
+
+// digest identifies value, an unstructured value, without revealing it.
+func digest(value any) string {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(raw))
 }
 
 // sameContent reports whether two unstructured values hold the same fields

@@ -361,7 +361,37 @@ var _ = Describe("Status, printer columns and Events", Label(areaFeedback, expec
 		consistentlyFor(time.Until(created.Add(target.Timing.NotReadyGrace+target.Timing.NotReadyGrace/4)),
 			func(g Gomega) {
 				g.Expect(eventsAbout(g, eventsNamespace, copier, "NotReady")).To(BeEmpty())
+				g.Expect(eventsAbout(g, eventsNamespace, copier, "Recovered")).To(BeEmpty())
 			})
+	})
+
+	It("raises the Warning NotReady Event of a resource it finds not Ready past the grace period when it starts, "+
+		"and a Normal Recovered Event on recovery", func() {
+		requireRestart()
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		pending := newSecret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+		copier := s.secretCopier(s.name("copier"), copierRule(pending, inNamespaces(targetNS)))
+		Eventually(func(g Gomega) {
+			g.Expect(eventsAbout(g, eventsNamespace, copier, "NotReady")).To(HaveLen(1))
+		}).WithTimeout(target.Timing.NotReadyGrace + target.Timing.Converge).WithPolling(target.Timing.Poll).
+			Should(Succeed())
+
+		Expect(target.Restart()).To(Succeed())
+
+		eventually(func(g Gomega) {
+			g.Expect(eventsAbout(g, eventsNamespace, copier, "NotReady")).To(HaveLen(2),
+				"NotReady Events of %s, one from each run of the secrets-manager", ruleOf(copier))
+		})
+		g := NewWithT(GinkgoT())
+		g.Expect(eventsAbout(g, eventsNamespace, copier, "Recovered")).To(BeEmpty())
+
+		s.secret(sourceNS.Name, pending.Name, pending.Data)
+
+		eventually(func(g Gomega) {
+			g.Expect(eventsAbout(g, eventsNamespace, copier, "Recovered")).To(HaveLen(1))
+		})
 	})
 
 	It("does not reconcile a resource again for a change of its status alone", func() {

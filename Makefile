@@ -406,7 +406,6 @@ prune-builds:
 	rm -rf workshop-images/base-environment/client-programs
 	rm -rf lookup-service/bin
 	rm -rf secrets-manager/bin
-	rm -rf secrets-manager/venv
 	rm -rf session-manager/venv
 	rm -rf training-portal/venv
 	rm -rf tunnel-manager/venv

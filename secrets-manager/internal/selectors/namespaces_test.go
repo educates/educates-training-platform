@@ -208,6 +208,17 @@ func TestNamespacesErr(t *testing.T) {
 		{"NotIn without values", expressions(requirement("tier", metav1.LabelSelectorOpNotIn)), true},
 		{"a valid expression beside one without values", expressions(
 			requirement("tier", metav1.LabelSelectorOpExists), requirement("team", metav1.LabelSelectorOpIn)), true},
+		{"Exists with values", expressions(requirement("tier", metav1.LabelSelectorOpExists, "gold")), true},
+		{"DoesNotExist with values", expressions(requirement("tier", metav1.LabelSelectorOpDoesNotExist, "gold")), true},
+		{"an unknown operator", expressions(requirement("tier", metav1.LabelSelectorOperator("Near"), "gold")), true},
+		{"an invalid key in an expression", expressions(requirement("not a key", metav1.LabelSelectorOpExists)), true},
+		{"an invalid value in an expression", expressions(requirement("tier", metav1.LabelSelectorOpIn, "not a value")), true},
+		{"valid matchLabels", secretsv1beta1.TargetNamespaces{
+			LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"tier": "gold"}}}, false},
+		{"an invalid key in matchLabels", secretsv1beta1.TargetNamespaces{
+			LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"not a key": "gold"}}}, true},
+		{"an invalid value in matchLabels", secretsv1beta1.TargetNamespaces{
+			LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"tier": "not a value"}}}, true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

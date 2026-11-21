@@ -194,13 +194,54 @@ var _ = Describe("SecretInjector", Label(areaInjection), func() {
 		ns := s.namespace("a", nil)
 		pull := s.pullSecret(ns.Name, pullSecretName)
 		s.serviceAccount(ns.Name, builder, nil)
+		s.serviceAccount(ns.Name, runner, nil)
 
-		s.secretInjector(s.name("injector"), injectorRule(inNamespaces(ns), byName(pull.Name), accounts("build*")))
+		s.secretInjector(s.name("injector"),
+			injectorRule(inNamespaces(ns), byName(pull.Name), accounts("build*", runner)))
 
+		eventually(func(g Gomega) {
+			g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, runner))).To(ConsistOf(pull.Name))
+		})
 		consistently(func(g Gomega) {
 			g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).To(BeEmpty())
 		})
 	})
+
+	It("keeps injecting into the other service accounts when one cannot be written, and reports TargetErrors",
+		Label(expectedDifference, areaFeedback), func() {
+			s := newScenario()
+			// The namespaces sort with the failing one first.
+			failing := s.namespace("a", s.scope())
+			healthy := s.namespace("b", nil)
+			s.pullSecret(failing.Name, pullSecretName)
+			s.pullSecret(healthy.Name, pullSecretName)
+			s.serviceAccount(failing.Name, builder, nil)
+			s.serviceAccount(healthy.Name, builder, nil)
+			lift := s.rejectWrites(failing, "serviceaccounts",
+				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: failing.Name, Name: s.name("probe")}})
+
+			injector := s.secretInjector(s.name("injector"),
+				injectorRule(inNamespaces(failing, healthy), byName(pullSecretName), accounts(builder)))
+
+			eventually(func(g Gomega) {
+				g.Expect(pullSecretNames(serviceAccountIn(g, healthy.Name, builder))).To(ConsistOf(pullSecretName))
+				ready := expectReady(g, injector, "False", "TargetErrors")
+				g.Expect(ready["message"]).To(ContainSubstring(failing.Name))
+				expectCounts(g, statusRule(g, injector, 0), map[string]int64{
+					countTargetNamespaces: 2, "serviceAccountsMatched": 2, "injectionsInSync": 1, countFailures: 1,
+				})
+			})
+			NewWithT(GinkgoT()).Expect(pullSecretNames(serviceAccountIn(NewWithT(GinkgoT()), failing.Name, builder))).
+				To(BeEmpty())
+
+			lift()
+
+			Eventually(func(g Gomega) {
+				g.Expect(pullSecretNames(serviceAccountIn(g, failing.Name, builder))).To(ConsistOf(pullSecretName))
+				expectReady(g, injector, "True", "InSync")
+			}).WithTimeout(target.Timing.BackoffCap + target.Timing.Converge).WithPolling(target.Timing.Poll).
+				Should(Succeed())
+		})
 
 	It("adds a kubernetes.io/dockercfg Secret to imagePullSecrets", Label(expectedDifference), func() {
 		s := newScenario()

@@ -125,6 +125,78 @@ var _ = Describe("SecretExporter and SecretImporter", Label(areaExportImport), f
 		})
 	})
 
+	It("copies once the importer's sourceNamespaces are changed to admit the exporter's namespace", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("exported"), data("token", "t0"))
+		exporter := s.secretExporter(sourceNS.Name, src.Name, exporterRule(inNamespaces(targetNS)))
+		importer := s.secretImporter(targetNS.Name, src.Name, sharedSecret(uidOf(exporter)),
+			sourceNamespaces("*", "!"+sourceNS.Name))
+		eventually(func(g Gomega) {
+			expectReady(g, importer, "False", "AwaitingAuthorization")
+		})
+		expectNoSecret(NewWithT(GinkgoT()), targetNS.Name, src.Name)
+
+		s.update(importer, func() {
+			Expect(unstructured.SetNestedStringSlice(importer.Object, []string{sourceNS.Name},
+				"spec", "sourceNamespaces", "nameSelector", "matchNames")).To(Succeed())
+		})
+
+		promptly(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+			expectReady(g, importer, "True", "Imported")
+		})
+	})
+
+	It("copies once the importer's shared secret is changed to the one the exporter's rule names", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("exported"), data("token", "t0"))
+		exporter := s.secretExporter(sourceNS.Name, src.Name,
+			exporterRule(inNamespaces(targetNS), sharedSecret(passphrase)))
+		importer := s.secretImporter(targetNS.Name, src.Name, sharedSecret("wrong"))
+		eventually(func(g Gomega) {
+			expectReady(g, importer, "False", "AwaitingAuthorization")
+		})
+		expectNoSecret(NewWithT(GinkgoT()), targetNS.Name, src.Name)
+
+		s.update(importer, func() {
+			Expect(unstructured.SetNestedField(importer.Object, passphrase, "spec", "copyAuthorization", "sharedSecret")).
+				To(Succeed())
+		})
+
+		promptly(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+		})
+	})
+
+	It("has an exported copy owned by the importer created again after its importer was deleted", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("exported"), data("token", "t0"))
+		exporter := s.secretExporter(sourceNS.Name, src.Name,
+			exporterRule(inNamespaces(targetNS), sharedSecret(passphrase)))
+		first := s.secretImporter(targetNS.Name, src.Name, sharedSecret(passphrase))
+		eventually(func(g Gomega) {
+			expectOwnedBy(g, expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter)), first)
+		})
+
+		s.deleteObject(first)
+		eventually(func(g Gomega) {
+			g.Expect(isGone(first)).To(BeTrue())
+		})
+		second := s.secretImporter(targetNS.Name, src.Name, sharedSecret(passphrase))
+
+		eventually(func(g Gomega) {
+			copied := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+			expectOwnedBy(g, copied, second)
+			g.Expect(ownerUIDs(copied)).NotTo(ContainElement(first.GetUID()))
+		})
+	})
+
 	It("has Kubernetes delete an exported copy with its importer", Label(liveOnly), func() {
 		requireGarbageCollector()
 		s := newScenario()
@@ -275,6 +347,25 @@ var _ = Describe("SecretImporter gating SecretCopier rules", Label(areaExportImp
 		consistently(func(g Gomega) {
 			expectNoSecret(g, mismatched.Name, src.Name)
 			expectNoSecret(g, without.Name, src.Name)
+		})
+	})
+
+	It("copies a copyAuthorization rule once an importer holding its shared secret is created", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS), sharedSecret(passphrase)))
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "False", "AwaitingAuthorization")
+		})
+		expectNoSecret(NewWithT(GinkgoT()), targetNS.Name, src.Name)
+
+		s.secretImporter(targetNS.Name, src.Name, sharedSecret(passphrase))
+
+		promptly(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+			expectReady(g, copier, "True", "InSync")
 		})
 	})
 

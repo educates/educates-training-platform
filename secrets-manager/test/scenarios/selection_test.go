@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // A label scenarios put on namespaces, with its values.
@@ -124,26 +125,58 @@ var _ = Describe("Namespace selection", Label(areaSelection), func() {
 		Entry("with DoesNotExist", byExpressions(expression(tierLabel, "DoesNotExist")), tierNone),
 	)
 
-	DescribeTable("selects no namespace with an expression that needs values and has none",
+	DescribeTable("selects no namespace, and reports InvalidSelector, with a labelSelector Kubernetes rejects",
 		Label(expectedDifference),
-		func(operator string) {
+		func(invalid object) {
 			s := newScenario()
 			sourceNS := s.namespace("src", nil)
 			first := s.namespace("a", map[string]string{tierLabel: tierGold})
 			second := s.namespace("b", nil)
-			src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+			valid := s.namespace("c", nil)
+			src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
 
-			s.secretCopier(s.name("copier"), copierRule(src, merged(
-				inNamespaces(first, second), byExpressions(expression(tierLabel, operator)))))
+			copier := s.secretCopier(s.name("copier"),
+				copierRule(src, merged(inNamespaces(first, second), invalid)),
+				copierRule(src, inNamespaces(valid)))
 
+			eventually(func(g Gomega) {
+				expectCopy(g, valid.Name, src.Name, src, ruleOf(copier))
+				expectReady(g, copier, "False", "InvalidSelector")
+			})
 			consistently(func(g Gomega) {
 				expectNoSecret(g, first.Name, src.Name)
 				expectNoSecret(g, second.Name, src.Name)
 			})
 		},
-		Entry("with In", "In"),
-		Entry("with NotIn", "NotIn"),
+		Entry("In without values", byExpressions(expression(tierLabel, "In"))),
+		Entry("NotIn without values", byExpressions(expression(tierLabel, "NotIn"))),
+		Entry("Exists with values", byExpressions(expression(tierLabel, "Exists", tierGold))),
+		Entry("DoesNotExist with values", byExpressions(expression(tierLabel, "DoesNotExist", tierGold))),
+		Entry("a matchLabels key that is no label key", byLabels(map[string]string{"not a label key": tierGold})),
+		Entry("a matchLabels value that is no label value", byLabels(map[string]string{tierLabel: "not a value"})),
 	)
+
+	It("copies into a namespace given an owner the rule selects after its creation", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		owner := s.namespace("owner", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+		copier := s.secretCopier(s.name("copier"), copierRule(src, byOwners(namespaceOwner(owner))))
+		consistentlyFor(5*target.Timing.Poll, func(g Gomega) {
+			expectNoSecret(g, targetNS.Name, src.Name)
+		})
+
+		s.update(targetNS, func() {
+			targetNS.OwnerReferences = []metav1.OwnerReference{{
+				APIVersion: "v1", Kind: "Namespace", Name: owner.Name, UID: owner.UID,
+			}}
+		})
+
+		promptly(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+		})
+	})
 
 	It("selects namespaces by UID", func() {
 		s := newScenario()

@@ -222,6 +222,13 @@ var _ = Describe("Admission", Label(areaAdmission), func() {
 			}
 			return []object{unmatchedCopierRule(s, shaped(copyShape{Annotations: annotations}))}
 		}),
+		Entry("a SecretExporter rule with 33 annotations", kindSecretExporter, func(s *scenario) []object {
+			annotations := map[string]string{}
+			for i := range 33 {
+				annotations[fmt.Sprintf("example.com/a%d", i)] = "x"
+			}
+			return []object{exporterRule(byName(s.name("none")), shaped(copyShape{Annotations: annotations}))}
+		}),
 		Entry("a SecretCopier rule with an empty targetSecret.keys", kindSecretCopier, func(s *scenario) []object {
 			return []object{unmatchedCopierRule(s, noKeys())}
 		}),

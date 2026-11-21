@@ -306,6 +306,48 @@ var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 		})
 	})
 
+	It("leaves a Secret whose copier-rule annotation names no resource untouched", Label(expectedDifference), func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+		marked := s.secret(targetNS.Name, src.Name, data("password", "unrelated"), func(secret *corev1.Secret) {
+			setMapEntry(&secret.Annotations, annotationCopierRule, "not-a-rule")
+			setMapEntry(&secret.Annotations, annotationSecretName, src.Namespace+"/"+src.Name)
+		})
+
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "False", "Conflict")
+		})
+		consistently(func(g Gomega) {
+			latest := secretIn(g, targetNS.Name, src.Name)
+			g.Expect(latest.Data).To(Equal(marked.Data))
+			g.Expect(latest.Annotations).To(HaveKeyWithValue(annotationCopierRule, "not-a-rule"))
+			g.Expect(latest.OwnerReferences).To(BeEmpty())
+		})
+	})
+
+	It("copies, clearing its conflict, once a Secret it did not create under a copy's name is deleted", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+		unrelated := s.secret(targetNS.Name, src.Name, data("password", "unrelated"))
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "False", "Conflict")
+		})
+
+		s.deleteObject(unrelated)
+
+		promptly(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+			expectReady(g, copier, "True", "InSync")
+		})
+	})
+
 	It("leaves a copy another copier of a different source manages", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

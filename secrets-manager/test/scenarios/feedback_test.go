@@ -202,6 +202,57 @@ var _ = Describe("Status, printer columns and Events", Label(areaFeedback, expec
 		})
 	})
 
+	It("reports SourceMissing before TargetErrors, before Conflict, before AwaitingAuthorization", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		rejected := s.namespace("a", nil)
+		conflicting := s.namespace("b", nil)
+		waiting := s.namespace("c", nil)
+		pending := newSecret(sourceNS.Name, s.name("pending"), data("token", "t0"))
+		tls := s.secret(sourceNS.Name, s.name("ingress-tls"), data("tls.crt", "cert", "tls.key", "key", "ca.crt", "ca"),
+			withType(corev1.SecretTypeTLS))
+		src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+		gated := s.secret(sourceNS.Name, s.name("gated"), data("token", "t0"))
+		unrelated := s.secret(conflicting.Name, src.Name, data("password", "unrelated"))
+		// The API server rejects a kubernetes.io/tls copy without its
+		// tls.crt and tls.key.
+		unwritable := copierRule(tls, inNamespaces(rejected), shaped(copyShape{Keys: []string{"ca.crt"}}))
+		others := []object{
+			copierRule(src, inNamespaces(conflicting)),
+			copierRule(gated, inNamespaces(waiting), sharedSecret(passphrase)),
+		}
+
+		copier := s.secretCopier(s.name("copier"),
+			append([]object{copierRule(pending, inNamespaces(rejected)), unwritable}, others...)...)
+
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "False", "SourceMissing")
+			expectCounts(g, summaryOf(g, copier), map[string]int64{
+				countTargetNamespaces: 4, countFailures: 1, countConflicts: 1, countAwaitingAuthorization: 1,
+			})
+		})
+
+		s.secret(sourceNS.Name, pending.Name, pending.Data)
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "False", "TargetErrors")
+		})
+
+		s.update(copier, func() { setRules(copier, others...) })
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "False", "Conflict")
+		})
+
+		s.deleteObject(unrelated)
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "False", "AwaitingAuthorization")
+		})
+
+		s.secretImporter(waiting.Name, gated.Name, sharedSecret(passphrase))
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "True", "InSync")
+		})
+	})
+
 	It("reports a second copier of the same source in sync while the first keeps the copy", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

@@ -1,10 +1,14 @@
 package scenarios
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -234,6 +238,149 @@ var _ = Describe("SecretCopier copying", Label(areaCopying), func() {
 
 		eventually(func(g Gomega) {
 			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+		})
+	})
+
+	It("takes back a label, the owner reference and the source a copy names when another writer changes them",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS),
+				shaped(copyShape{Labels: map[string]string{teamLabel: teamValue}})))
+			var copied *corev1.Secret
+			eventually(func(g Gomega) {
+				copied = expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+				expectOwnedBy(g, copied, copier)
+			})
+
+			s.update(copied, func() {
+				copied.Labels[teamLabel] = "changed-by-hand"
+				copied.OwnerReferences = nil
+				copied.Annotations[annotationSecretName] = sourceNS.Name + "/another-secret"
+			})
+
+			eventually(func(g Gomega) {
+				restored := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+				g.Expect(restored.Labels).To(HaveKeyWithValue(teamLabel, teamValue))
+				expectOwnedBy(g, restored, copier)
+			})
+		})
+
+	It("takes back a key another server-side applier forces on a copy, and leaves that applier's own label",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+			eventually(func(g Gomega) {
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+			})
+
+			forced := &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]any{
+					"namespace": targetNS.Name,
+					"name":      src.Name,
+					"labels":    map[string]any{"example.com/backup": "daily"},
+				},
+				"stringData": map[string]any{"token": "forced"},
+			}}
+			Expect(target.Client.Apply(context.Background(), client.ApplyConfigurationFromUnstructured(forced),
+				client.FieldOwner("another-applier"), client.ForceOwnership)).To(Succeed())
+
+			eventually(func(g Gomega) {
+				restored := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+				g.Expect(restored.Labels).To(HaveKeyWithValue("example.com/backup", "daily"))
+			})
+		})
+
+	It("removes a key another writer added to a copy as it writes a change of the source",
+		Label(expectedDifference), func() {
+			requireMissedEvents()
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+			var copied *corev1.Secret
+			eventually(func(g Gomega) {
+				copied = expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+			})
+			// The secrets-manager does not hear of the added key, so it
+			// first meets it when it writes the copy for another reason.
+			heard := target.MissedEvents.Miss(func(obj client.Object) bool {
+				return obj.GetNamespace() == targetNS.Name
+			})
+			DeferCleanup(heard)
+			s.update(copied, func() { copied.Data["added-by-hand"] = []byte("x") })
+			consistently(func(g Gomega) {
+				g.Expect(secretIn(g, targetNS.Name, src.Name).Data).To(HaveKey("added-by-hand"))
+			})
+			heard()
+
+			s.update(src, func() { src.Data = data("token", "t1", "more", "m") })
+
+			eventually(func(g Gomega) {
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+			})
+		})
+
+	It("copies a key whose value is empty, and does not write the copy again", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("ingress"), map[string][]byte{"ca.crt": {}, "tls.crt": []byte("cert")})
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+		holdsCopy := func(g Gomega, copied *corev1.Secret) {
+			g.Expect(copied.Annotations).To(HaveKeyWithValue(annotationCopierRule, ruleOf(copier)))
+			g.Expect(copied.Data).To(HaveLen(2))
+			g.Expect(copied.Data).To(HaveKeyWithValue("ca.crt", BeEmpty()))
+			g.Expect(copied.Data).To(HaveKeyWithValue("tls.crt", []byte("cert")))
+		}
+		eventually(func(g Gomega) {
+			holdsCopy(g, secretIn(g, targetNS.Name, src.Name))
+			expectReady(g, copier, "True", "InSync")
+		})
+
+		settled := settledSecret(targetNS.Name, src.Name)
+		// An event that has the copier compare the copy again.
+		s.update(src, func() { setMapEntry(&src.Annotations, "example.com/touched", "yes") })
+
+		consistently(func(g Gomega) {
+			copied := secretIn(g, targetNS.Name, src.Name)
+			holdsCopy(g, copied)
+			g.Expect(copied.ResourceVersion).To(Equal(settled.ResourceVersion))
+		})
+	})
+
+	It("still changes the labels of a copy another writer made immutable", Label(expectedDifference), func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS),
+			shaped(copyShape{Labels: map[string]string{teamLabel: "before"}})))
+		var copied *corev1.Secret
+		eventually(func(g Gomega) {
+			copied = expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+		})
+		immutable := true
+		s.update(copied, func() { copied.Immutable = &immutable })
+
+		s.update(copier, func() {
+			setRules(copier, copierRule(src, inNamespaces(targetNS),
+				shaped(copyShape{Labels: map[string]string{teamLabel: "after"}})))
+		})
+
+		eventually(func(g Gomega) {
+			changed := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+			g.Expect(changed.Labels).To(HaveKeyWithValue(teamLabel, "after"))
+			g.Expect(changed.UID).To(Equal(copied.UID))
+			expectReady(g, copier, "True", "InSync")
 		})
 	})
 

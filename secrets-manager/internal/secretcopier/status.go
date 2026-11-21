@@ -20,6 +20,7 @@ import (
 // reconcile that retries it.
 func (r *Reconciler) publish(ctx context.Context, copier *secretsv1beta1.SecretCopier,
 	converger *copyrules.Converger, reports []ruleReport) (ctrl.Result, error) {
+	converger.WarnNotUpdated(r.feedback, copier)
 	result, err := converger.Result()
 	if converger.Conflicted() {
 		return result, err

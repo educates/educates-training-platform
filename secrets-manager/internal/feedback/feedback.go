@@ -17,7 +17,10 @@
 // Normal Imported when a SecretImporter imports. The grace period runs from
 // the Ready condition's last transition, so it survives a restart; a
 // resource that was not Ready for the whole grace period before this
-// process started is taken to have had its Warning already.
+// process started is taken to have had its Warning already. Besides, a
+// Warning CopyNotUpdated says that a copy another writer made immutable
+// could not take a change of its source, once for each version of the
+// source it did not take.
 package feedback
 
 import (
@@ -58,6 +61,9 @@ type Feedback struct {
 	// readiness holds, for each resource that is not Ready, how long it has
 	// not been and whether it got its Warning.
 	readiness map[resourceKey]*readiness
+	// notUpdated holds, for each copy that got a CopyNotUpdated Warning, the
+	// version of its source the Warning was about.
+	notUpdated map[types.NamespacedName]string
 }
 
 // resourceKey names a resource of one of the four kinds.
@@ -74,14 +80,15 @@ type resourceKey struct {
 func New(writer client.StatusClient, reader client.Reader, recorder events.EventRecorder, scheme *runtime.Scheme,
 	grace time.Duration) *Feedback {
 	return &Feedback{
-		writer:    writer,
-		reader:    reader,
-		recorder:  recorder,
-		scheme:    scheme,
-		grace:     grace,
-		started:   time.Now(),
-		written:   map[resourceKey]string{},
-		readiness: map[resourceKey]*readiness{},
+		writer:     writer,
+		reader:     reader,
+		recorder:   recorder,
+		scheme:     scheme,
+		grace:      grace,
+		started:    time.Now(),
+		written:    map[resourceKey]string{},
+		readiness:  map[resourceKey]*readiness{},
+		notUpdated: map[types.NamespacedName]string{},
 	}
 }
 

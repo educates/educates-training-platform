@@ -20,6 +20,7 @@ import (
 // that retries it.
 func (r *ExporterReconciler) publish(ctx context.Context, exporter *secretsv1beta1.SecretExporter,
 	converger *copyrules.Converger, report exporterReport) (ctrl.Result, error) {
+	converger.WarnNotUpdated(r.feedback, exporter)
 	result, err := converger.Result()
 	if converger.Conflicted() {
 		return result, err

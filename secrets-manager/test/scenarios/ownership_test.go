@@ -225,6 +225,59 @@ var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 		})
 	})
 
+	It("reports a copy another writer made immutable as not updated, with one Warning for each source change",
+		Label(expectedDifference, areaFeedback), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+			var copied *corev1.Secret
+			eventually(func(g Gomega) {
+				copied = expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+			})
+			immutable := true
+			s.update(copied, func() { copied.Immutable = &immutable })
+			copyKey := targetNS.Name + "/" + src.Name
+			sourceKey := sourceNS.Name + "/" + src.Name
+
+			s.update(src, func() { src.Data = data("token", "t1") })
+
+			eventually(func(g Gomega) {
+				ready := expectReady(g, copier, "False", "TargetErrors")
+				g.Expect(ready["message"]).To(And(ContainSubstring("immutable"), ContainSubstring("not updated")))
+				events := eventsAbout(g, eventsNamespace, copier, "CopyNotUpdated")
+				g.Expect(events).To(HaveLen(1), "CopyNotUpdated Events of %s", ruleOf(copier))
+				g.Expect(events[0].Type).To(Equal(corev1.EventTypeWarning))
+				g.Expect(events[0].Note).To(And(ContainSubstring(copyKey), ContainSubstring(sourceKey),
+					ContainSubstring("data")))
+			})
+			// The copy keeps failing, and is retried with backoff.
+			consistently(func(g Gomega) {
+				events := eventsAbout(g, eventsNamespace, copier, "CopyNotUpdated")
+				g.Expect(events).To(HaveLen(1), "CopyNotUpdated Events of %s", ruleOf(copier))
+				g.Expect(events[0].Series).To(BeNil(), "CopyNotUpdated Event of %s recorded again", ruleOf(copier))
+			})
+
+			s.deleteObject(src)
+			s.secret(sourceNS.Name, src.Name, src.Data, withType("example.com/token"))
+
+			eventually(func(g Gomega) {
+				events := eventsAbout(g, eventsNamespace, copier, "CopyNotUpdated")
+				g.Expect(events).To(HaveLen(2), "CopyNotUpdated Events of %s", ruleOf(copier))
+				g.Expect(events).To(ContainElement(HaveField("Note", And(ContainSubstring(copyKey),
+					ContainSubstring(sourceKey), ContainSubstring("type")))))
+			})
+			consistently(func(g Gomega) {
+				events := eventsAbout(g, eventsNamespace, copier, "CopyNotUpdated")
+				g.Expect(events).To(HaveLen(2), "CopyNotUpdated Events of %s", ruleOf(copier))
+				for _, event := range events {
+					g.Expect(event.Series).To(BeNil(), "CopyNotUpdated Event of %s recorded again", ruleOf(copier))
+				}
+				g.Expect(secretIn(g, targetNS.Name, src.Name).UID).To(Equal(copied.UID))
+			})
+		})
+
 	It("leaves a Secret it did not create untouched, even under a copy's name", Label(expectedDifference), func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

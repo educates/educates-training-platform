@@ -14,6 +14,7 @@ import (
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
 
@@ -83,6 +84,10 @@ type Converger struct {
 
 	failures   []error
 	conflicted bool
+
+	// notUpdated are the copies another writer made immutable that could
+	// not take a change of their source.
+	notUpdated []feedback.NotUpdatedCopy
 }
 
 // convergedCopy names a copy a rule converged, and the source it copies,
@@ -167,7 +172,7 @@ func agreeing(earlier Target, rule *Rule) Target {
 }
 
 // record collects the failure or write conflict of target, a target of
-// rule.
+// rule, and the copy that could not take a change of rule's source.
 func (c *Converger) record(rule *Rule, target Target) {
 	switch {
 	case target.Err == nil:
@@ -177,6 +182,27 @@ func (c *Converger) record(rule *Rule, target Target) {
 		c.failures = append(c.failures, fmt.Errorf("copying Secret %s into namespace %s as %s: %w",
 			secretsv1beta1.SecretName(rule.Source.GetNamespace(), rule.Source.GetName()), target.Namespace,
 			rule.Copy.Name, target.Err))
+	}
+	if immutable := (*copyengine.ImmutableCopyError)(nil); errors.As(target.Err, &immutable) {
+		apiVersion, kind := rule.Source.GroupVersionKind().ToAPIVersionAndKind()
+		c.notUpdated = append(c.notUpdated, feedback.NotUpdatedCopy{
+			Copy: &corev1.ObjectReference{
+				APIVersion: apiVersion, Kind: kind, Namespace: target.Namespace, Name: rule.Copy.Name,
+			},
+			Source:        types.NamespacedName{Namespace: rule.Source.GetNamespace(), Name: rule.Source.GetName()},
+			SourceVersion: immutable.SourceVersion,
+			Field:         immutable.Field,
+		})
+	}
+}
+
+// WarnNotUpdated has reports raise a CopyNotUpdated Warning about resource,
+// the resource whose rules the Converger converged, for each copy another
+// writer made immutable that could not take a change of its source. reports
+// raises it once for each version of the source a copy does not take.
+func (c *Converger) WarnNotUpdated(reports *feedback.Feedback, resource client.Object) {
+	for _, notUpdated := range c.notUpdated {
+		reports.CopyNotUpdated(resource, notUpdated)
 	}
 }
 

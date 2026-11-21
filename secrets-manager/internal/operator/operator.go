@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	toolscache "k8s.io/client-go/tools/cache"
@@ -168,9 +169,6 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 	// metadata.
 	secrets := copyengine.New(copyengine.Secret, mgr.GetCache(), mgr.GetAPIReader(), mgr.GetClient(),
 		FieldManager, lookupRules(mgr.GetClient()))
-	if err := forgetDeletedCopies(ctx, mgr.GetCache(), secrets); err != nil {
-		return nil, err
-	}
 	policy := convergence.Policy{Backstop: opts.Backstop, BackoffCap: opts.BackoffCap}
 	if policy.Backstop <= 0 {
 		policy.Backstop = DefaultBackstop
@@ -186,6 +184,9 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 	reports := feedback.New(mgr.GetClient(), mgr.GetAPIReader(), mgr.GetEventRecorder(FieldManager), scheme, grace)
 	if err := mgr.Add(reports); err != nil {
 		return nil, fmt.Errorf("adding the status and Events writer: %w", err)
+	}
+	if err := forgetDeletedCopies(ctx, mgr.GetCache(), secrets.Forget, reports.ForgetCopy); err != nil {
+		return nil, err
 	}
 
 	if err := secretcopier.New(mgr.GetClient(), secrets, policy, reports).SetupWithManager(mgr); err != nil {
@@ -260,10 +261,10 @@ func secretMetadata() *metav1.PartialObjectMetadata {
 	return metadata
 }
 
-// forgetDeletedCopies has engine forget each Secret the cache sees
-// deleted, so that what it remembers of copies stays bounded by the
-// Secrets that exist.
-func forgetDeletedCopies(ctx context.Context, c cache.Cache, engine *copyengine.Engine) error {
+// forgetDeletedCopies calls each of forget with the key of each Secret the
+// cache sees deleted, so that what the copy engine and the feedback
+// remember of copies stays bounded by the Secrets that exist.
+func forgetDeletedCopies(ctx context.Context, c cache.Cache, forget ...func(types.NamespacedName)) error {
 	informer, err := c.GetInformer(ctx, secretMetadata())
 	if err != nil {
 		return fmt.Errorf("caching Secret metadata: %w", err)
@@ -274,7 +275,9 @@ func forgetDeletedCopies(ctx context.Context, c cache.Cache, engine *copyengine.
 				obj = tombstone.Obj
 			}
 			if deleted, ok := obj.(client.Object); ok {
-				engine.Forget(client.ObjectKeyFromObject(deleted))
+				for _, f := range forget {
+					f(client.ObjectKeyFromObject(deleted))
+				}
 			}
 		},
 	})

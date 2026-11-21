@@ -52,7 +52,9 @@
 //
 // A copy whose fixed field, such as a Secret's type, differs from the
 // source's is deleted and written anew. A copy another writer made
-// immutable, whose payload must change, is a failure; it is never deleted.
+// immutable, whose payload or fixed field must change, is a failure, an
+// ImmutableCopyError naming the field and the version of the source the
+// copy did not take; it is never deleted.
 //
 // A copy carries a third tracking annotation, source-version: the resource
 // version of the source it was last written from. The engine remembers,
@@ -76,7 +78,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 
@@ -92,9 +93,22 @@ import (
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 )
 
-// ErrImmutable is the failure of a copy another writer made immutable,
-// whose payload must change.
-var ErrImmutable = errors.New("the copy is immutable")
+// ImmutableCopyError is the failure of a copy another writer made
+// immutable, which was not updated to its source: the source's Field, such
+// as a Secret's data or type, differs from the copy's.
+type ImmutableCopyError struct {
+	// Field is the top-level field of the source the copy did not take: a
+	// fixed field when one differs, and otherwise a keyed field.
+	Field string
+
+	// SourceVersion is the resource version of the source the copy did not
+	// take.
+	SourceVersion string
+}
+
+func (e *ImmutableCopyError) Error() string {
+	return "the copy is immutable and was not updated: its source's " + e.Field + " changed"
+}
 
 // Copy is one copy of a source for the engine to converge. Every field but
 // Source makes up the shape of the copy, which the engine remembers with
@@ -257,11 +271,17 @@ func (e *Engine) converge(ctx context.Context, c Copy, key types.NamespacedName)
 		written = Adopted
 	}
 
-	fixedFieldsDiffer := !sameFields(live, desired, e.kind.FixedFields)
-	if e.immutable(live) && (fixedFieldsDiffer || !sameKeyedFields(live, desired, e.kind.KeyedFields)) {
-		return Result{}, nil, fmt.Errorf("%w, and differs from its source", ErrImmutable)
+	fixedField := differingField(live, desired, e.kind.FixedFields)
+	if e.immutable(live) {
+		changed := fixedField
+		if changed == "" {
+			changed = differingKeyedField(live, desired, e.kind.KeyedFields)
+		}
+		if changed != "" {
+			return Result{}, nil, &ImmutableCopyError{Field: changed, SourceVersion: c.Source.GetResourceVersion()}
+		}
 	}
-	if fixedFieldsDiffer {
+	if fixedField != "" {
 		if err := e.delete(ctx, live); err != nil {
 			return Result{}, nil, err
 		}
@@ -517,28 +537,29 @@ func withoutSourceVersion(content map[string]any) map[string]any {
 	return result
 }
 
-// sameFields reports whether live holds the value desired gives each of
-// fields that desired sets.
-func sameFields(live, desired *unstructured.Unstructured, fields []string) bool {
+// differingField returns the first of fields that desired sets to a value
+// live does not hold, or "" when live holds every one.
+func differingField(live, desired *unstructured.Unstructured, fields []string) string {
 	for _, field := range fields {
 		if value, ok := desired.Object[field]; ok && !sameContent(value, live.Object[field]) {
-			return false
+			return field
 		}
 	}
-	return true
+	return ""
 }
 
-// sameKeyedFields reports whether a and b hold the same entries in each of
-// fields, an absent field holding none.
-func sameKeyedFields(a, b *unstructured.Unstructured, fields []string) bool {
+// differingKeyedField returns the first of fields in which a and b hold
+// different entries, an absent field holding none, or "" when they hold the
+// same entries in every one.
+func differingKeyedField(a, b *unstructured.Unstructured, fields []string) string {
 	for _, field := range fields {
 		entriesA, _ := a.Object[field].(map[string]any)
 		entriesB, _ := b.Object[field].(map[string]any)
 		if len(entriesA) != len(entriesB) || (len(entriesA) > 0 && !sameContent(entriesA, entriesB)) {
-			return false
+			return field
 		}
 	}
-	return true
+	return ""
 }
 
 // sameContent reports whether two unstructured values hold the same fields

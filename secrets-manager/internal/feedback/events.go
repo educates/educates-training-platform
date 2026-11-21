@@ -30,6 +30,11 @@ const (
 	// EventImported is the reason of the Normal Event about a SecretImporter
 	// that imports its Secret.
 	EventImported = "Imported"
+
+	// EventCopyNotUpdated is the reason of the Warning about a SecretCopier
+	// or SecretExporter whose copy, which another writer made immutable,
+	// could not take a change of its source.
+	EventCopyNotUpdated = "CopyNotUpdated"
 )
 
 // maxNoteLength is the longest note an events.k8s.io Event takes, in bytes.
@@ -96,12 +101,12 @@ func (f *Feedback) observe(key resourceKey, gvk schema.GroupVersionKind, obj cli
 			state.stop()
 			delete(f.readiness, key)
 			if state.warned {
-				f.record(state.regarding, corev1.EventTypeNormal, EventRecovered, state.action, current.Message)
+				f.record(state.regarding, nil, corev1.EventTypeNormal, EventRecovered, state.action, current.Message)
 			}
 		}
 		if current.Reason == secretsv1beta1.ReasonImported && !imported(previous) {
 			if regarding := f.reference(obj, gvk); regarding != nil {
-				f.record(regarding, corev1.EventTypeNormal, EventImported, actions[gvk.Kind], current.Message)
+				f.record(regarding, nil, corev1.EventTypeNormal, EventImported, actions[gvk.Kind], current.Message)
 			}
 		}
 		return
@@ -139,14 +144,19 @@ func (f *Feedback) warn(key resourceKey, state *readiness) {
 		return
 	}
 	state.warned = true
-	f.record(state.regarding, corev1.EventTypeWarning, EventNotReady, state.action,
+	f.record(state.regarding, nil, corev1.EventTypeWarning, EventNotReady, state.action,
 		"Not Ready since "+state.since.UTC().Format(time.RFC3339)+": "+state.ready.Reason+": "+state.ready.Message)
 }
 
-// record records an Event of eventType and reason about regarding, with
-// note, shortened to the length an Event takes.
-func (f *Feedback) record(regarding *corev1.ObjectReference, eventType, reason, action, note string) {
-	f.recorder.Eventf(regarding, nil, eventType, reason, action, "%s", truncate(note, maxNoteLength))
+// record records an Event of eventType and reason about regarding, and
+// related when it is not nil, with note, shortened to the length an Event
+// takes.
+func (f *Feedback) record(regarding, related *corev1.ObjectReference, eventType, reason, action, note string) {
+	var relatedObject runtime.Object
+	if related != nil {
+		relatedObject = related
+	}
+	f.recorder.Eventf(regarding, relatedObject, eventType, reason, action, "%s", truncate(note, maxNoteLength))
 }
 
 // reference names obj, of gvk, in an Event, or is nil when it cannot.

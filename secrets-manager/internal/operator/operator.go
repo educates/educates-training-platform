@@ -88,7 +88,8 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 		return nil, fmt.Errorf("indexing SecretCopiers: %w", err)
 	}
 
-	secrets := copyengine.New(copyengine.Secret, mgr.GetAPIReader(), mgr.GetClient(), FieldManager)
+	secrets := copyengine.New(copyengine.Secret, mgr.GetAPIReader(), mgr.GetClient(), FieldManager,
+		lookupRules(mgr.GetClient()))
 	if err := secretcopier.New(mgr.GetClient(), secrets).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretCopier reconciler: %w", err)
 	}

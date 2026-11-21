@@ -4,6 +4,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// SecretExporterKind is the kind of a SecretExporter.
+const SecretExporterKind = "SecretExporter"
+
 // ExporterCopyAuthorization holds the shared secret a SecretImporter must
 // hold to accept an exported copy.
 type ExporterCopyAuthorization struct {

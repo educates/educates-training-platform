@@ -98,6 +98,29 @@ var _ = Describe("Convergence", Label(areaConvergence), func() {
 			})
 		})
 
+	It("makes no API calls reconciling an injector whose Secrets, service accounts and spec have not changed",
+		Label(expectedDifference), func() {
+			requireAPICalls()
+			s := newScenario()
+			ns := s.namespace("a", nil)
+			pull := s.pullSecret(ns.Name, pullSecretName)
+			s.serviceAccount(ns.Name, builder, nil)
+			s.secretInjector(s.name("injector"), injectorRule(inNamespaces(ns), byName(pull.Name), accounts(builder)))
+			eventually(func(g Gomega) {
+				g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).To(ContainElement(pull.Name))
+			})
+			calls := settledAPICalls(s.id)
+
+			// An event that reconciles the injector, changing none of its
+			// Secrets, service accounts or spec: the namespace relabelled,
+			// still selected.
+			s.update(ns, func() { setMapEntry(&ns.Labels, unrelatedLabel, "yes") })
+
+			consistently(func(g Gomega) {
+				g.Expect(target.APICalls.About(s.id)).To(Equal(calls))
+			})
+		})
+
 	It("retries a failing target within the backoff cap, though nothing it watches changes", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

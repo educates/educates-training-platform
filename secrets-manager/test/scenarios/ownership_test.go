@@ -4,8 +4,49 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 )
+
+// configMap creates an empty ConfigMap in namespace ns, for a scenario that
+// needs an object to own a Secret.
+func (s *scenario) configMap(ns, name string) *corev1.ConfigMap {
+	GinkgoHelper()
+	configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
+	s.create(configMap)
+	return configMap
+}
+
+// orphanedCopyOf marks a Secret as a copy of src that the SecretCopier
+// named copier wrote, as a copy retained after that SecretCopier was
+// deleted is marked.
+func orphanedCopyOf(src *corev1.Secret, copier string) func(*corev1.Secret) {
+	return func(secret *corev1.Secret) {
+		setMapEntry(&secret.Annotations, annotationCopierRule, "secretcopier/"+copier)
+		setMapEntry(&secret.Annotations, annotationSecretName, src.Namespace+"/"+src.Name)
+	}
+}
+
+// ownedBy gives a Secret an owner reference to owner, marking owner its
+// controller when controller is true.
+func ownedBy(owner *corev1.ConfigMap, controller bool) func(*corev1.Secret) {
+	return func(secret *corev1.Secret) {
+		secret.OwnerReferences = append(secret.OwnerReferences, metav1.OwnerReference{
+			APIVersion: "v1", Kind: "ConfigMap", Name: owner.Name, UID: owner.UID, Controller: &controller,
+		})
+	}
+}
+
+// ownerUIDs lists the UIDs a Secret's owner references name.
+func ownerUIDs(secret *corev1.Secret) []types.UID {
+	result := make([]types.UID, 0, len(secret.OwnerReferences))
+	for _, ref := range secret.OwnerReferences {
+		result = append(result, ref.UID)
+	}
+	return result
+}
 
 var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 	It("owns its copies under reclaimPolicy Delete, the default", func() {
@@ -114,6 +155,70 @@ var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 		eventually(func(g Gomega) {
 			copied := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(adopter))
 			expectOwnedBy(g, copied, adopter)
+		})
+	})
+
+	It("keeps an owner reference another writer set on a copy it adopts", Label(expectedDifference), func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+		holder := s.configMap(targetNS.Name, "holder")
+		s.secret(targetNS.Name, src.Name, data("token", "stale"),
+			orphanedCopyOf(src, s.name("deleted")), ownedBy(holder, false))
+
+		adopter := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+
+		eventually(func(g Gomega) {
+			copied := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(adopter))
+			expectOwnedBy(g, copied, adopter)
+			g.Expect(ownerUIDs(copied)).To(ContainElement(holder.UID))
+		})
+	})
+
+	It("fails only the target whose orphaned copy another writer gave a controller", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		// The namespaces sort with the failing one first.
+		failing := s.namespace("a", nil)
+		healthy := s.namespace("b", nil)
+		src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+		holder := s.configMap(failing.Name, "holder")
+		orphan := s.secret(failing.Name, src.Name, data("token", "stale"),
+			orphanedCopyOf(src, s.name("deleted")), ownedBy(holder, true))
+
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(failing, healthy)))
+
+		eventually(func(g Gomega) {
+			expectCopy(g, healthy.Name, src.Name, src, ruleOf(copier))
+		})
+		consistently(func(g Gomega) {
+			latest := secretIn(g, failing.Name, src.Name)
+			g.Expect(latest.UID).To(Equal(orphan.UID))
+			g.Expect(latest.Data).To(Equal(orphan.Data))
+			g.Expect(ownerUIDs(latest)).To(ConsistOf(holder.UID))
+		})
+	})
+
+	It("never deletes a copy another writer made immutable, when its data must change", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+		var copied *corev1.Secret
+		eventually(func(g Gomega) {
+			copied = expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+		})
+		before := src.DeepCopy()
+
+		immutable := true
+		s.update(copied, func() { copied.Immutable = &immutable })
+		s.update(src, func() { src.Data = data("token", "t1") })
+
+		consistently(func(g Gomega) {
+			latest := expectCopy(g, targetNS.Name, src.Name, before, ruleOf(copier))
+			g.Expect(latest.UID).To(Equal(copied.UID))
 		})
 	})
 

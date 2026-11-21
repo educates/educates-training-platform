@@ -25,6 +25,7 @@ import (
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/secretcopier"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/secretinjector"
 )
 
 // FieldManager is the field manager the secrets-manager applies copies as,
@@ -90,6 +91,9 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 	secrets := copyengine.New(copyengine.Secret, mgr.GetAPIReader(), mgr.GetClient(), FieldManager)
 	if err := secretcopier.New(mgr.GetClient(), secrets).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretCopier reconciler: %w", err)
+	}
+	if err := secretinjector.New(mgr.GetCache(), mgr.GetAPIReader(), mgr.GetClient()).SetupWithManager(mgr); err != nil {
+		return nil, fmt.Errorf("setting up the SecretInjector reconciler: %w", err)
 	}
 
 	return &Operator{manager: mgr}, nil

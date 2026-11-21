@@ -20,6 +20,7 @@ import (
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/copyrules"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
@@ -77,7 +78,7 @@ type ImportOffer struct {
 
 	// Refusal says why the importer refuses the offer, and is empty when it
 	// accepts it.
-	Refusal Refusal
+	Refusal copyrules.Refusal
 }
 
 // ImportState is where a SecretImporter stands: whether it has imported its
@@ -206,7 +207,7 @@ func (r *ImporterReconciler) State(ctx context.Context, importer *secretsv1beta1
 	state.Phase = AwaitingAuthorization
 	for i := range state.Offers {
 		offer := &state.Offers[i]
-		if offer.Refusal != Accepted {
+		if offer.Refusal != copyrules.Accepted {
 			continue
 		}
 		if offer.writes(writer, copied) {
@@ -251,7 +252,7 @@ func (r *ImporterReconciler) exporterOffers(ctx context.Context, importer *secre
 			offers = append(offers, ImportOffer{
 				From:    Offerer{Kind: secretsv1beta1.SecretExporterKind, Namespace: exporter.Namespace, Name: exporter.Name},
 				Source:  secretsv1beta1.SecretName(exporter.Namespace, exporter.Name),
-				Refusal: Authorize(importer, ExporterOffer(exporter, rule)),
+				Refusal: copyrules.Authorize(importer, copyrules.ExporterOffer(exporter, rule)),
 			})
 			break
 		}
@@ -285,7 +286,7 @@ func (r *ImporterReconciler) copierOffers(ctx context.Context, importer *secrets
 			offers = append(offers, ImportOffer{
 				From:    Offerer{Kind: secretsv1beta1.SecretCopierKind, Name: copier.Name},
 				Source:  secretsv1beta1.SecretName(rule.SourceSecret.Namespace, rule.SourceSecret.Name),
-				Refusal: Authorize(importer, CopierOffer(rule)),
+				Refusal: copyrules.Authorize(importer, copyrules.CopierOffer(rule)),
 			})
 		}
 	}

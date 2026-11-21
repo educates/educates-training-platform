@@ -5,25 +5,23 @@ import (
 	"fmt"
 	"slices"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
-	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
-	"github.com/educates/educates-training-platform/secrets-manager/internal/exportimport"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/copyrules"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 )
 
 // publish writes the status that reports, what reconciling the rules of
-// copier found, make of it, and returns the result of the reconcile. When a
-// write of a copy conflicted, the status waits for the reconcile that
-// retries it.
+// copier with converger found, make of it, and returns the result of the
+// reconcile. When a write of a copy conflicted, the status waits for the
+// reconcile that retries it.
 func (r *Reconciler) publish(ctx context.Context, copier *secretsv1beta1.SecretCopier,
-	reports []ruleReport) (ctrl.Result, error) {
-	result, err := reconcileResult(reports)
-	if writeConflicted(reports) {
+	converger *copyrules.Converger, reports []ruleReport) (ctrl.Result, error) {
+	result, err := converger.Result()
+	if converger.Conflicted() {
 		return result, err
 	}
 
@@ -31,19 +29,6 @@ func (r *Reconciler) publish(ctx context.Context, copier *secretsv1beta1.SecretC
 		c.Status = status(c.Status.Conditions, copier.Generation, reports)
 	})
 	return convergence.AfterStatus(result, err, statusErr)
-}
-
-// writeConflicted reports whether a write of a copy conflicted with another
-// writer's.
-func writeConflicted(reports []ruleReport) bool {
-	for _, report := range reports {
-		for _, target := range report.targets {
-			if apierrors.IsConflict(target.err) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // status is the status reports make of a SecretCopier at generation: the
@@ -56,20 +41,13 @@ func status(conditions []metav1.Condition, generation int64, reports []ruleRepor
 		Rules:              make([]secretsv1beta1.SecretCopierRuleStatus, 0, len(reports)),
 	}
 	var findings feedback.Findings
-	var summary secretsv1beta1.TargetCounts
+	counts := make([]secretsv1beta1.TargetCounts, 0, len(reports))
 	for i := range reports {
 		rule := ruleStatus(&findings, i, &reports[i])
-		summary.TargetNamespaces += rule.TargetNamespaces
-		summary.InSync += rule.InSync
-		summary.Conflicts += rule.Conflicts
-		summary.AwaitingAuthorization += rule.AwaitingAuthorization
-		summary.Failures += rule.Failures
 		result.Rules = append(result.Rules, rule)
+		counts = append(counts, rule.TargetCounts)
 	}
-	result.Summary = &secretsv1beta1.CopySummary{
-		TargetCounts: summary,
-		InSyncRatio:  feedback.Ratio(summary.InSync, summary.TargetNamespaces),
-	}
+	result.Summary = copyrules.Summary(counts)
 	feedback.SetReady(&result.Conditions, findings.Ready(), generation)
 	return result
 }
@@ -95,27 +73,6 @@ func ruleStatus(findings *feedback.Findings, index int, report *ruleReport) secr
 	if missing != "" {
 		findings.Add(secretsv1beta1.ReasonSourceMissing, "", missing)
 	}
-
-	for _, target := range report.targets {
-		rule.TargetNamespaces++
-		switch {
-		case missing != "":
-			findings.Add(secretsv1beta1.ReasonSourceMissing, target.namespace, "")
-		case target.refusal != exportimport.Accepted:
-			rule.AwaitingAuthorization++
-			findings.Add(secretsv1beta1.ReasonAwaitingAuthorization, target.namespace, "")
-		case target.err != nil:
-			rule.Failures++
-			findings.Add(secretsv1beta1.ReasonTargetErrors, target.namespace, target.err.Error())
-		case target.result.Outcome.Converged():
-			rule.InSync++
-		case target.result.Outcome == copyengine.OwnershipConflict:
-			rule.Conflicts++
-			findings.Add(secretsv1beta1.ReasonConflict, target.namespace, "")
-		default:
-			rule.Failures++
-			findings.Add(secretsv1beta1.ReasonTargetErrors, target.namespace, "the copy is being deleted")
-		}
-	}
+	rule.TargetCounts = copyrules.Count(findings, report.targets, missing != "")
 	return rule
 }

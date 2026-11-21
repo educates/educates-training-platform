@@ -1,6 +1,8 @@
-// Package exportimport reconciles SecretExporters and SecretImporters, and
-// holds the handshake between a rule offering a copy and the SecretImporter
-// named after that copy in the target namespace.
+// Package copyrules holds what the rules of SecretCopiers and
+// SecretExporters share: the handshake between a rule offering a copy and
+// the SecretImporter named after that copy in the target namespace,
+// converging the copies a rule offers into the namespaces it selects, and
+// counting them for the status of the rule's resource.
 //
 // A SecretExporter offers the Secret of its own name in its own namespace to
 // the namespaces its rules select. A copy is made into a selected namespace
@@ -17,7 +19,7 @@
 // A copy the importer no longer accepts, because its shared secret changed
 // or it was deleted, or whose SecretExporter was deleted, stays in place and
 // is no longer updated.
-package exportimport
+package copyrules
 
 import (
 	"context"

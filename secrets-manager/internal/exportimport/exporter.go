@@ -2,10 +2,8 @@ package exportimport
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,6 +17,7 @@ import (
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/copyrules"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
@@ -99,9 +98,6 @@ type exporterReport struct {
 
 // ruleReport is what reconciling one rule of a SecretExporter found.
 type ruleReport struct {
-	// copyName is the name of the rule's copies.
-	copyName string
-
 	// invalidSelector says why the rule's targetNamespaces are invalid,
 	// when they are, in which case the rule selects no namespace.
 	invalidSelector error
@@ -109,28 +105,7 @@ type ruleReport struct {
 	// targets are the rule's copies, one in each namespace it selects.
 	// Nothing is copied into them when the exported Secret does not exist or
 	// its namespace is being deleted.
-	targets []targetReport
-}
-
-// targetReport is what reconciling one copy of a rule found.
-type targetReport struct {
-	// namespace is the namespace of the copy.
-	namespace string
-
-	// refusal says why the target does not accept the copy, when it awaits
-	// authorization: no SecretImporter is named after the copy there, or
-	// the one there holds another shared secret or does not admit the
-	// source's namespace. Nothing is converged then.
-	refusal Refusal
-
-	// result says what converging the copy did, or why it wrote nothing,
-	// when the target accepts the copy and converging it did not fail.
-	result copyengine.Result
-
-	// err is the failure to read the SecretImporter or to converge the
-	// copy, when either failed. A write conflict is the API server's
-	// Conflict error.
-	err error
+	targets []copyrules.Target
 }
 
 // Reconcile copies the Secret the SecretExporter req names exports into
@@ -150,13 +125,15 @@ func (r *ExporterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		r.feedback.Forget(secretsv1beta1.SecretExporterKind, req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
-	return r.publish(ctx, exporter, r.export(ctx, exporter))
+	converger := copyrules.NewConverger(r.cache, r.engine)
+	return r.publish(ctx, exporter, converger, r.export(ctx, converger, exporter))
 }
 
-// export copies the Secret exporter exports into each namespace its rules
-// select where a SecretImporter accepts the copy, and reports what it
-// found.
-func (r *ExporterReconciler) export(ctx context.Context, exporter *secretsv1beta1.SecretExporter) exporterReport {
+// export copies the Secret exporter exports, with converger, into each
+// namespace its rules select where a SecretImporter accepts the copy, and
+// reports what it found.
+func (r *ExporterReconciler) export(ctx context.Context, converger *copyrules.Converger,
+	exporter *secretsv1beta1.SecretExporter) exporterReport {
 	report := exporterReport{source: client.ObjectKeyFromObject(exporter)}
 	log := ctrl.LoggerFrom(ctx)
 
@@ -166,6 +143,7 @@ func (r *ExporterReconciler) export(ctx context.Context, exporter *secretsv1beta
 		log.V(1).Info("The exported Secret does not exist: nothing to copy")
 	case err != nil:
 		report.err = fmt.Errorf("reading the exported Secret %s: %w", report.source, err)
+		converger.Fail(report.err)
 		return report
 	default:
 		report.sourceExists = true
@@ -174,141 +152,61 @@ func (r *ExporterReconciler) export(ctx context.Context, exporter *secretsv1beta
 	namespaces := &corev1.NamespaceList{}
 	if err := r.cache.List(ctx, namespaces); err != nil {
 		report.err = fmt.Errorf("listing namespaces: %w", err)
+		converger.Fail(report.err)
 		return report
 	}
-	if report.sourceExists && terminating(namespaces.Items, exporter.Namespace) {
+	if report.sourceExists && copyrules.Terminating(namespaces.Items, exporter.Namespace) {
 		log.V(1).Info("The exported Secret's namespace is being deleted: not copying it")
 		report.sourceTerminating = true
+	}
+	if !report.sourceExists || report.sourceTerminating {
 		src = nil
 	}
 
 	report.rules = make([]ruleReport, 0, len(exporter.Spec.Rules))
 	for i := range exporter.Spec.Rules {
-		report.rules = append(report.rules, r.exportRule(ctx, exporter, &exporter.Spec.Rules[i], src, namespaces.Items))
+		report.rules = append(report.rules,
+			exportRule(ctx, converger, exporter, &exporter.Spec.Rules[i], src, namespaces.Items))
 	}
 	return report
 }
 
-// exportRule copies src, the Secret exporter exports, into every namespace
-// of namespaces that rule selects where a SecretImporter accepts the copy,
-// and reports what it found. src is nil when the Secret is not copied, and
-// the rule's targets are then only counted.
-func (r *ExporterReconciler) exportRule(ctx context.Context, exporter *secretsv1beta1.SecretExporter,
+// exportRule copies src, the Secret exporter exports, with converger, into
+// every namespace of namespaces that rule selects where a SecretImporter
+// accepts the copy, and reports what it found. src is nil when the Secret
+// is not copied, and the rule's targets are then only counted.
+func exportRule(ctx context.Context, converger *copyrules.Converger, exporter *secretsv1beta1.SecretExporter,
 	rule *secretsv1beta1.SecretExporterRule, src *copyengine.Source, namespaces []corev1.Namespace) ruleReport {
-	report := ruleReport{copyName: rule.CopyName(exporter.Name)}
-	log := ctrl.LoggerFrom(ctx).WithValues("name", report.copyName)
-
+	var report ruleReport
+	copyName := rule.CopyName(exporter.Name)
 	selector := selectors.Namespaces(rule.TargetNamespaces)
 	if err := selector.Err(); err != nil {
-		log.Info("The rule's targetNamespaces are invalid: the rule selects no namespace", "reason", err.Error())
+		ctrl.LoggerFrom(ctx).Info("The rule's targetNamespaces are invalid: the rule selects no namespace",
+			"name", copyName, "reason", err.Error())
 		report.invalidSelector = err
 		return report
 	}
 
-	offer := ExporterOffer(exporter, rule)
-	for i := range namespaces {
-		ns := &namespaces[i]
-		if ns.Name == exporter.Namespace || !selector.Match(ns) {
-			continue
-		}
-		target := targetReport{namespace: ns.Name}
-		if src == nil {
-			report.targets = append(report.targets, target)
-			continue
-		}
-		targetLog := log.WithValues("namespace", ns.Name)
-		importer, err := Importer(ctx, r.cache, types.NamespacedName{Namespace: ns.Name, Name: report.copyName})
-		if err != nil {
-			target.err = fmt.Errorf("reading the SecretImporter: %w", err)
-			report.targets = append(report.targets, target)
-			continue
-		}
-		if target.refusal = Authorize(importer, offer); target.refusal != Accepted {
-			targetLog.V(1).Info("The target does not accept the copy: awaiting authorization", "refusal", target.refusal)
-			report.targets = append(report.targets, target)
-			continue
-		}
-		target.result, target.err = r.engine.Converge(ctx, copyengine.Copy{
-			Source:      src,
-			Namespace:   ns.Name,
-			Name:        report.copyName,
+	report.targets = converger.Converge(ctx, &copyrules.Rule{
+		Source:          src,
+		SourceNamespace: exporter.Namespace,
+		Namespaces:      selector,
+		Offer:           copyrules.ExporterOffer(exporter, rule),
+		Copy: copyengine.Copy{
+			Name:        copyName,
 			Rule:        secretsv1beta1.CopierRule(secretsv1beta1.SecretExporterKind, exporter.Name),
 			Labels:      rule.TargetSecret.Labels,
 			Annotations: rule.TargetSecret.Annotations,
 			Keys:        rule.TargetSecret.Keys,
-			Owner: &copyengine.Owner{
+		},
+		Owner: func(importer *secretsv1beta1.SecretImporter) *copyengine.Owner {
+			return &copyengine.Owner{
 				APIVersion: secretsv1beta1.GroupVersion.String(),
 				Kind:       secretsv1beta1.SecretImporterKind,
 				Name:       importer.Name,
 				UID:        importer.UID,
-			},
-		})
-		report.targets = append(report.targets, target)
-		logTarget(targetLog, target.result, target.err)
-		if target.err == nil && target.result.Outcome.Wrote() {
-			convergence.Repaired(ctx)
-		}
-	}
-	return report
-}
-
-// terminating reports whether the namespace name of namespaces is being
-// deleted.
-func terminating(namespaces []corev1.Namespace, name string) bool {
-	for i := range namespaces {
-		if namespaces[i].Name == name {
-			return namespaces[i].Status.Phase == corev1.NamespaceTerminating ||
-				!namespaces[i].DeletionTimestamp.IsZero()
-		}
-	}
-	return false
-}
-
-// logTarget logs what converging one copy did, when it wrote or was kept
-// from writing.
-func logTarget(log logr.Logger, result copyengine.Result, err error) {
-	switch {
-	case apierrors.IsConflict(err):
-		log.V(1).Info("Writing the copy conflicted with another writer: retrying")
-	case err != nil:
-		// The failure is returned, and logged, with the reconcile's error.
-	case result.Outcome == copyengine.OwnershipConflict:
-		log.V(1).Info("Leaving a Secret the rule does not manage untouched", "managedBy", result.ManagedBy)
-	case result.Outcome == copyengine.Agreed:
-		log.V(1).Info("Another rule copying the same source manages the copy", "managedBy", result.ManagedBy)
-	case result.Outcome == copyengine.InSync, result.Outcome == copyengine.TargetDeleting:
-	default:
-		log.Info("Exported the Secret", "outcome", result.Outcome)
-	}
-}
-
-// exporterResult turns what reconciling a SecretExporter found into the
-// result of the reconcile. The failures are its error, which the work queue
-// retries with backoff. A write conflict is no failure: it is retried by
-// requeueing.
-func exporterResult(report exporterReport) (ctrl.Result, error) {
-	var failures []error
-	if report.err != nil {
-		failures = append(failures, report.err)
-	}
-	conflicted := false
-	for _, rule := range report.rules {
-		for _, target := range rule.targets {
-			switch {
-			case target.err == nil:
-			case apierrors.IsConflict(target.err):
-				conflicted = true
-			default:
-				failures = append(failures, fmt.Errorf("exporting Secret %s into namespace %s as %s: %w",
-					report.source, target.namespace, rule.copyName, target.err))
 			}
-		}
-	}
-	if len(failures) > 0 {
-		return ctrl.Result{}, errors.Join(failures...)
-	}
-	if conflicted {
-		return convergence.RetryConflict(), nil
-	}
-	return ctrl.Result{}, nil
+		},
+	}, namespaces)
+	return report
 }

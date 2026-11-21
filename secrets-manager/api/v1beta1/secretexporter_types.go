@@ -31,6 +31,16 @@ type SecretExporterRule struct {
 	CopyAuthorization *ExporterCopyAuthorization `json:"copyAuthorization,omitempty"`
 }
 
+// CopyName is the name of the copies of a rule of the SecretExporter
+// exporter names: targetSecret.name, or the exported Secret's name, which
+// is the SecretExporter's.
+func (r *SecretExporterRule) CopyName(exporter string) string {
+	if r.TargetSecret.Name != "" {
+		return r.TargetSecret.Name
+	}
+	return exporter
+}
+
 // SecretExporterSpec holds the rules of a SecretExporter.
 type SecretExporterSpec struct {
 	// rules each offer the Secret to the namespaces they select.

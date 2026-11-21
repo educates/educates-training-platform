@@ -24,6 +24,7 @@ import (
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/exportimport"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/secretcopier"
 )
 
@@ -86,11 +87,20 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 	if err := eventmap.IndexSecretCopiers(ctx, mgr.GetFieldIndexer()); err != nil {
 		return nil, fmt.Errorf("indexing SecretCopiers: %w", err)
 	}
+	if err := eventmap.IndexSecretExporters(ctx, mgr.GetFieldIndexer()); err != nil {
+		return nil, fmt.Errorf("indexing SecretExporters: %w", err)
+	}
+	if err := eventmap.IndexSecretImporters(ctx, mgr.GetFieldIndexer()); err != nil {
+		return nil, fmt.Errorf("indexing SecretImporters: %w", err)
+	}
 
 	secrets := copyengine.New(copyengine.Secret, mgr.GetAPIReader(), mgr.GetClient(), FieldManager,
 		lookupRules(mgr.GetClient()))
 	if err := secretcopier.New(mgr.GetClient(), secrets).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretCopier reconciler: %w", err)
+	}
+	if err := exportimport.NewExporterReconciler(mgr.GetClient(), secrets).SetupWithManager(mgr); err != nil {
+		return nil, fmt.Errorf("setting up the SecretExporter reconciler: %w", err)
 	}
 
 	return &Operator{manager: mgr}, nil

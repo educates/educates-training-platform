@@ -45,9 +45,6 @@ var awaitingOnEnvtest = map[string][]string{
 		"SecretExporter and SecretImporter",
 		"SecretImporter gating SecretCopier rules",
 	},
-	"secret injection": {
-		"SecretInjector",
-	},
 	"targetSecret.annotations and targetSecret.keys": {
 		targetFieldScenarios + "sets targetSecret.annotations on every copy",
 		targetFieldScenarios + "removes an annotation dropped from targetSecret.annotations from the copies",

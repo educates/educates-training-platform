@@ -45,7 +45,7 @@ spec:
         - "!legacy-pull-secret"
 ```
 
-A rule must select its source secrets with at least one of ``nameSelector``, ``labelSelector``, ``uidSelector`` and ``ownerSelector`` under ``sourceSecrets``, so that a rule cannot inject every secret by accident. A ``nameSelector`` whose ``matchNames`` is an empty list counts as no ``nameSelector`` at all: the other selectors of ``sourceSecrets`` decide which secrets are injected. A rule left with no other selector selects no secret, and the ``SecretInjector`` reports ``InvalidSelector`` in its status.
+A rule must select its source secrets with at least one of ``nameSelector``, ``labelSelector``, ``uidSelector`` and ``ownerSelector`` under ``sourceSecrets``, so that a rule cannot inject every secret by accident. An empty selector counts as no selector at all: a ``nameSelector`` whose ``matchNames`` is an empty list, a ``uidSelector`` whose ``matchUIDs`` is an empty list, an ``ownerSelector`` whose ``matchOwners`` is an empty list, and a ``labelSelector`` with neither ``matchLabels`` nor ``matchExpressions``. The other selectors of ``sourceSecrets`` then decide which secrets are injected. A rule left with no selector which is not empty selects no secret, and the ``SecretInjector`` reports ``InvalidSelector`` in its status. This applies only to ``sourceSecrets``: an empty ``labelSelector`` under ``targetNamespaces`` or ``serviceAccounts`` restricts nothing, as an empty Kubernetes label selector does.
 
 Selecting source secrets by owner or UID
 ----------------------------------------
@@ -329,7 +329,7 @@ registry-credentials   True    InSync   12/12     5m
 
 The ``Ready`` condition is ``True``, with reason ``InSync``, when every service account each rule selects holds every secret the rule injects into it. Otherwise it is ``False``, with the reason of the first of these problems which applies:
 
-* ``InvalidSelector``: a selector of a rule is not valid, or the only selector of its ``sourceSecrets`` is an empty ``matchNames``, so the rule selects nothing.
+* ``InvalidSelector``: a selector of a rule is not valid, or every selector of its ``sourceSecrets`` is empty, so the rule selects nothing.
 
 * ``TargetErrors``: some service accounts could not be updated, or the contents of some namespaces could not be read, and they are retried.
 

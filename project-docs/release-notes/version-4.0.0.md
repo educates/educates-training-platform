@@ -1851,14 +1851,17 @@ Features Changed
   matched every namespace the other selectors of the rule matched, and the
   values of an ``Exists`` or ``DoesNotExist`` expression were ignored.
 
-* An empty ``matchNames`` in the ``sourceSecrets.nameSelector`` of a
-  ``SecretInjector`` rule now counts as no ``nameSelector`` at all, so the
-  other selectors of ``sourceSecrets`` decide which secrets are injected. A
-  rule whose only source selector is an empty ``matchNames`` now selects no
-  secret, and its ``SecretInjector`` reports ``InvalidSelector`` in its
-  status. Previously such a rule injected every secret in the namespaces it
-  targeted into the service accounts it selected. No Educates chart renders
-  such a rule.
+* An empty selector in the ``sourceSecrets`` of a ``SecretInjector`` rule now
+  counts as no selector at all: a ``matchNames``, ``matchUIDs`` or
+  ``matchOwners`` which is an empty list, and a ``labelSelector`` with neither
+  ``matchLabels`` nor ``matchExpressions``. The other selectors of
+  ``sourceSecrets`` decide which secrets are injected. A rule whose source
+  selectors are all empty now selects no secret, and its ``SecretInjector``
+  reports ``InvalidSelector`` in its status. Previously a rule whose only
+  source selector was an empty ``matchNames`` or an empty ``labelSelector``
+  injected every secret in the namespaces it targeted into the service
+  accounts it selected. No Educates chart renders such a rule. Selectors
+  under ``targetNamespaces`` and ``serviceAccounts`` are not affected.
 
 Removed Features
 ----------------

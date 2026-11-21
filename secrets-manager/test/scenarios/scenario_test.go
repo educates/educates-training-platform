@@ -3,6 +3,7 @@ package scenarios
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -64,9 +65,12 @@ type scenario struct {
 	ctx context.Context
 }
 
-// newScenario starts a scenario.
+// newScenario starts a scenario. Its id starts with the number of the
+// parallel process running it, since processes that start in the same
+// microsecond draw the same random strings.
 func newScenario() *scenario {
-	return &scenario{id: "smt-" + utilrand.String(6), ctx: context.Background()}
+	id := fmt.Sprintf("smt-%d%s", GinkgoParallelProcess(), utilrand.String(5))
+	return &scenario{id: id, ctx: context.Background()}
 }
 
 // name returns a name unique to the scenario, ending in part.

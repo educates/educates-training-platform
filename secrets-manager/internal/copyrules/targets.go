@@ -67,6 +67,10 @@ type Target struct {
 	// copy, when either failed. A write conflict is the API server's
 	// Conflict error.
 	Err error
+
+	// refused names the copy the target does not accept, when Refusal is
+	// set.
+	refused convergedCopy
 }
 
 // Converger converges the copies the rules of one resource offer, during
@@ -135,14 +139,14 @@ func (c *Converger) converge(ctx context.Context, rule *Rule, namespace string) 
 		c.record(rule, target)
 		return target
 	}
-	if target.Refusal = Authorize(importer, rule.Offer); target.Refusal != Accepted {
-		log.V(1).Info("The target does not accept the copy: awaiting authorization", "refusal", target.Refusal)
-		return target
-	}
-
 	key := convergedCopy{
 		NamespacedName: types.NamespacedName{Namespace: namespace, Name: rule.Copy.Name},
 		source:         secretsv1beta1.SecretName(rule.Source.GetNamespace(), rule.Source.GetName()),
+	}
+	if target.Refusal = Authorize(importer, rule.Offer); target.Refusal != Accepted {
+		log.V(1).Info("The target does not accept the copy: awaiting authorization", "refusal", target.Refusal)
+		target.refused = key
+		return target
 	}
 	if earlier, ok := c.converged[key]; ok {
 		return agreeing(earlier, rule)
@@ -158,6 +162,27 @@ func (c *Converger) converge(ctx context.Context, rule *Rule, namespace string) 
 	c.record(rule, target)
 	c.converged[key] = target
 	return target
+}
+
+// Settle replaces, in targets, the targets of rule, each target that does
+// not accept rule's copy while another rule of the resource keeps that very
+// copy, from the same source, in sync there: the copy is in sync for rule
+// too, which agrees with the rule that keeps it. It is to be called once
+// every rule of the resource has been converged.
+func (c *Converger) Settle(rule string, targets []Target) {
+	for i := range targets {
+		target := &targets[i]
+		if target.Refusal == Accepted {
+			continue
+		}
+		kept, ok := c.converged[target.refused]
+		if ok && kept.Err == nil && kept.Result.Outcome.Converged() {
+			*target = Target{
+				Namespace: target.Namespace,
+				Result:    copyengine.Result{Outcome: copyengine.Agreed, ManagedBy: rule},
+			}
+		}
+	}
 }
 
 // agreeing is the target of rule whose copy an earlier rule of the same

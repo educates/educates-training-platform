@@ -192,6 +192,29 @@ var _ = Describe("Status, printer columns and Events", Label(areaFeedback, expec
 		})
 	})
 
+	It("reports a SecretImporter Imported, and its exporter in sync, when only a later rule of the exporter "+
+		"holds its shared secret", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, "exported", data("token", "t0"))
+		exporter := s.secretExporter(sourceNS.Name, src.Name,
+			exporterRule(inNamespaces(targetNS), sharedSecret("retired")),
+			exporterRule(inNamespaces(targetNS), sharedSecret(passphrase)))
+
+		importer := s.secretImporter(targetNS.Name, src.Name, sharedSecret(passphrase))
+
+		eventually(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+			expectReady(g, importer, "True", "Imported")
+			g.Expect(jsonText(g, statusValue(g, importer, "boundTo"))).To(ContainSubstring(exporter.GetName()))
+			expectReady(g, exporter, "True", "InSync")
+			summary := summaryOf(g, exporter)
+			expectCounts(g, summary, map[string]int64{countAwaitingAuthorization: 0, countInSync: 2})
+			g.Expect(summary).To(HaveKeyWithValue("inSyncRatio", inSyncRatio(2, 2)))
+		})
+	})
+
 	It("reports a SecretImporter AwaitingAuthorization when its shared secret does not match", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

@@ -93,7 +93,7 @@ type ImportState struct {
 	BoundTo *Offerer
 
 	// Offers are the offers of the copy into the importer's namespace, one
-	// for each exporter or copier rule that makes one, ordered by the
+	// for each exporter and each copier rule that makes one, ordered by the
 	// resource making it.
 	Offers []ImportOffer
 }
@@ -230,7 +230,9 @@ func (o *ImportOffer) writes(writer, copied string) bool {
 // exporterOffers lists the offers SecretExporters make of the copy importer
 // is named after into ns, its namespace: one for each SecretExporter in
 // another namespace with a rule naming its copies after the importer that
-// selects ns.
+// selects ns. A SecretExporter copies under the first of those rules the
+// importer accepts, so its offer is accepted when the importer accepts any
+// of them, and is otherwise refused as the first of them is.
 func (r *ImporterReconciler) exporterOffers(ctx context.Context, importer *secretsv1beta1.SecretImporter,
 	ns *corev1.Namespace) ([]ImportOffer, error) {
 	exporters := &secretsv1beta1.SecretExporterList{}
@@ -244,17 +246,27 @@ func (r *ImporterReconciler) exporterOffers(ctx context.Context, importer *secre
 		if exporter.Namespace == ns.Name || !exporter.DeletionTimestamp.IsZero() {
 			continue
 		}
+		offered, refusal := false, copyrules.Accepted
 		for j := range exporter.Spec.Rules {
 			rule := &exporter.Spec.Rules[j]
 			if rule.CopyName(exporter.Name) != importer.Name || !selectors.Namespaces(rule.TargetNamespaces).Match(ns) {
 				continue
 			}
+			ruleRefusal := copyrules.Authorize(importer, copyrules.ExporterOffer(exporter, rule))
+			if !offered || ruleRefusal == copyrules.Accepted {
+				refusal = ruleRefusal
+			}
+			offered = true
+			if refusal == copyrules.Accepted {
+				break
+			}
+		}
+		if offered {
 			offers = append(offers, ImportOffer{
 				From:    Offerer{Kind: secretsv1beta1.SecretExporterKind, Namespace: exporter.Namespace, Name: exporter.Name},
 				Source:  secretsv1beta1.SecretName(exporter.Namespace, exporter.Name),
-				Refusal: copyrules.Authorize(importer, copyrules.ExporterOffer(exporter, rule)),
+				Refusal: refusal,
 			})
-			break
 		}
 	}
 	return offers, nil

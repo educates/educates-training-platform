@@ -127,6 +127,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	for i := range copier.Spec.Rules {
 		reports = append(reports, r.reconcileRule(ctx, converger, copier, &copier.Spec.Rules[i], namespaces.Items))
 	}
+	for i := range reports {
+		converger.Settle(secretsv1beta1.CopierRule(secretsv1beta1.SecretCopierKind, copier.Name), reports[i].targets)
+	}
 	return r.publish(ctx, copier, converger, reports)
 }
 

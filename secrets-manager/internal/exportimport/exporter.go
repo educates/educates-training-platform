@@ -168,6 +168,10 @@ func (r *ExporterReconciler) export(ctx context.Context, converger *copyrules.Co
 		report.rules = append(report.rules,
 			exportRule(ctx, converger, exporter, &exporter.Spec.Rules[i], src, namespaces.Items))
 	}
+	for i := range report.rules {
+		converger.Settle(secretsv1beta1.CopierRule(secretsv1beta1.SecretExporterKind, exporter.Name),
+			report.rules[i].targets)
+	}
 	return report
 }
 

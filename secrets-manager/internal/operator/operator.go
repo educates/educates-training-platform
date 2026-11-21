@@ -130,9 +130,7 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 		Scheme:     scheme,
 		Logger:     opts.Logger,
 		Controller: config.Controller{SkipNameValidation: &skipNameValidation},
-		// Nothing the secrets-manager reads from the cache needs the
-		// managed fields: the copy engine reads them from the API server.
-		Cache: cache.Options{DefaultTransform: cache.TransformStripManagedFields()},
+		Cache: cache.Options{DefaultTransform: cacheTransform()},
 		// Secrets are cached as metadata only, so the cache never holds the
 		// data of every Secret in the cluster; a Secret's data is read from
 		// the API server.
@@ -251,6 +249,25 @@ func cachedKinds() []client.Object {
 		&secretsv1beta1.SecretImporter{},
 		&secretsv1beta1.SecretInjector{},
 		secretMetadata(),
+	}
+}
+
+// lastAppliedAnnotation is where kubectl apply keeps the manifest it last
+// applied to an object: for a Secret, its data.
+const lastAppliedAnnotation = "kubectl.kubernetes.io/last-applied-configuration"
+
+// cacheTransform is what the cache drops from each object before holding
+// it. Nothing the secrets-manager reads from the cache needs the managed
+// fields: the copy engine reads them from the API server. From the metadata
+// of Secrets it also drops the manifest kubectl apply keeps in an
+// annotation, which holds the Secret's data.
+func cacheTransform() toolscache.TransformFunc {
+	stripManagedFields := cache.TransformStripManagedFields()
+	return func(obj any) (any, error) {
+		if metadata, ok := obj.(*metav1.PartialObjectMetadata); ok {
+			delete(metadata.Annotations, lastAppliedAnnotation)
+		}
+		return stripManagedFields(obj)
 	}
 }
 

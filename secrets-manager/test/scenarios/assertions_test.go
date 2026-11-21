@@ -43,6 +43,15 @@ func eventually(assertion func(g Gomega)) {
 	Eventually(assertion).WithTimeout(target.Timing.Converge).WithPolling(target.Timing.Poll).Should(Succeed())
 }
 
+// promptly waits until assertion passes, well within the backstop interval,
+// so that it passes only on an event the secrets-manager reconciles for, and
+// not on its backstop.
+func promptly(assertion func(g Gomega)) {
+	GinkgoHelper()
+	Eventually(assertion).WithTimeout(min(target.Timing.Converge, target.Timing.Backstop/3)).
+		WithPolling(target.Timing.Poll).Should(Succeed())
+}
+
 // consistently asserts that assertion keeps passing for the target's hold
 // time.
 func consistently(assertion func(g Gomega)) {

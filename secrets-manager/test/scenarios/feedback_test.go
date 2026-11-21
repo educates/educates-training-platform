@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -84,6 +85,90 @@ var _ = Describe("Status, printer columns and Events", Label(areaFeedback, expec
 				}
 			}
 			g.Expect(named).To(Equal(5), "namespaces named in %q", message)
+		})
+	})
+
+	It("reports SourceMissing as soon as the namespace of a rule's source starts terminating", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+		s.holdSource(src)
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "True", "InSync")
+		})
+
+		s.terminate(sourceNS)
+
+		promptly(func(g Gomega) {
+			ready := expectReady(g, copier, "False", "SourceMissing")
+			g.Expect(ready["message"]).To(ContainSubstring("being deleted"))
+		})
+	})
+
+	It("stops counting a target namespace as soon as it starts terminating", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		healthy := s.namespace("a", nil)
+		conflicting := s.namespace("b", nil)
+		src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+		s.secret(conflicting.Name, src.Name, data("password", "unrelated"))
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(healthy, conflicting)))
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "False", "Conflict")
+			expectCounts(g, summaryOf(g, copier), map[string]int64{countTargetNamespaces: 2, countConflicts: 1})
+		})
+
+		s.deleteObject(conflicting)
+
+		promptly(func(g Gomega) {
+			expectReady(g, copier, "True", "InSync")
+			expectCounts(g, summaryOf(g, copier), map[string]int64{countTargetNamespaces: 1, countConflicts: 0})
+		})
+	})
+
+	It("stops counting a namespace a SecretExporter offers to as soon as it starts terminating", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		accepting := s.namespace("a", nil)
+		waiting := s.namespace("b", nil)
+		src := s.secret(sourceNS.Name, s.name("exported"), data("token", "t0"))
+		exporter := s.secretExporter(sourceNS.Name, src.Name, exporterRule(inNamespaces(accepting, waiting)))
+		s.secretImporter(accepting.Name, src.Name, sharedSecret(uidOf(exporter)))
+		eventually(func(g Gomega) {
+			expectReady(g, exporter, "False", "AwaitingAuthorization")
+		})
+
+		s.deleteObject(waiting)
+
+		promptly(func(g Gomega) {
+			expectReady(g, exporter, "True", "InSync")
+			expectCounts(g, summaryOf(g, exporter), map[string]int64{
+				countTargetNamespaces: 1, countAwaitingAuthorization: 0,
+			})
+		})
+	})
+
+	It("stops counting a service account a SecretInjector selects as soon as it is deleted", func() {
+		s := newScenario()
+		ns := s.namespace("a", nil)
+		pull := s.pullSecret(ns.Name, pullSecretName)
+		s.serviceAccount(ns.Name, builder, nil)
+		s.serviceAccount(ns.Name, runner, nil)
+		injector := s.secretInjector(s.name("injector"),
+			injectorRule(inNamespaces(ns), byName(pull.Name), accounts(builder, runner)))
+		eventually(func(g Gomega) {
+			expectCounts(g, statusRule(g, injector, 0), map[string]int64{"serviceAccountsMatched": 2})
+		})
+
+		s.deleteObject(&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: ns.Name, Name: runner}})
+
+		promptly(func(g Gomega) {
+			expectCounts(g, statusRule(g, injector, 0), map[string]int64{
+				"serviceAccountsMatched": 1, "injectionsInSync": 1,
+			})
+			g.Expect(summaryOf(g, injector)).To(HaveKeyWithValue("inSyncRatio", inSyncRatio(1, 1)))
 		})
 	})
 

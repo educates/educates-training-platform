@@ -74,7 +74,8 @@ func SecretExportersForSecret(reader client.Reader) handler.MapFunc {
 
 // SecretExportersForNamespace maps an event on a namespace to the
 // SecretExporters with a rule that targets it, evaluating the selectors of
-// the SecretExporters reader holds.
+// the SecretExporters reader holds, and to the SecretExporters in it, whose
+// Secrets are not copied while the namespace is being deleted.
 func SecretExportersForNamespace(reader client.Reader) handler.TypedMapFunc[*corev1.Namespace, reconcile.Request] {
 	return func(ctx context.Context, ns *corev1.Namespace) []reconcile.Request {
 		exporters := &secretsv1beta1.SecretExporterList{}
@@ -86,6 +87,7 @@ func SecretExportersForNamespace(reader client.Reader) handler.TypedMapFunc[*cor
 		for i := range exporters.Items {
 			exporter := &exporters.Items[i]
 			if exporter.Namespace == ns.Name {
+				keys[client.ObjectKeyFromObject(exporter)] = struct{}{}
 				continue
 			}
 			for _, rule := range exporter.Spec.Rules {

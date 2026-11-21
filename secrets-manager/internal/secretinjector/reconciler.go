@@ -55,9 +55,10 @@ func New(objects cache.Cache, live client.Reader, writer client.Writer, policy c
 
 // SetupWithManager registers the reconciler with mgr. It reconciles a
 // SecretInjector when its spec changes; when a Secret it may select is
-// created, relabelled or given other owners; when a service account it may
-// select is created, relabelled or loses a name; and when a namespace it
-// may select is created, relabelled or given other owners. Besides, the
+// created, relabelled, given other owners or deleted; when a service account
+// it may select is created, relabelled, loses a name or is deleted; and when
+// a namespace it may select is created, relabelled, given other owners or
+// starts being deleted. Besides, the
 // reconciler's policy reconciles each SecretInjector again a backstop
 // interval after its last reconcile, and retries a failed one with backoff.
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {

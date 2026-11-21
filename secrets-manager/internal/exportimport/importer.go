@@ -120,7 +120,7 @@ func NewImporterReconciler(cache client.Reader, policy convergence.Policy,
 // SecretImporter when its spec changes, when the Secret named after it in
 // its namespace changes, when a SecretExporter or SecretCopier with a rule
 // that names its copies after it changes, and when its namespace is
-// relabelled or given other owners. Besides, the reconciler's policy
+// relabelled, given other owners or starts being deleted. Besides, the reconciler's policy
 // reconciles each SecretImporter again a backstop interval after its last
 // reconcile, and retries a failed one with backoff. The cache must hold the
 // indexes eventmap.IndexSecretCopiers, eventmap.IndexSecretExporters and

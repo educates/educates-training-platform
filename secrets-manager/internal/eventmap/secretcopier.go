@@ -118,7 +118,8 @@ func SecretCopiersSharingCopies(reader client.Reader) handler.TypedMapFunc[*secr
 
 // SecretCopiersForNamespace maps an event on a namespace to the
 // SecretCopiers with a rule that targets it, evaluating the selectors of
-// the SecretCopiers reader holds.
+// the SecretCopiers reader holds, and to those with a rule that copies a
+// Secret in it, which is not copied while the namespace is being deleted.
 func SecretCopiersForNamespace(reader client.Reader) handler.TypedMapFunc[*corev1.Namespace, reconcile.Request] {
 	return func(ctx context.Context, ns *corev1.Namespace) []reconcile.Request {
 		copiers := &secretsv1beta1.SecretCopierList{}
@@ -129,7 +130,7 @@ func SecretCopiersForNamespace(reader client.Reader) handler.TypedMapFunc[*corev
 		names := map[string]struct{}{}
 		for _, copier := range copiers.Items {
 			for _, rule := range copier.Spec.Rules {
-				if rule.SourceSecret.Namespace != ns.Name && selectors.Namespaces(rule.TargetNamespaces).Match(ns) {
+				if rule.SourceSecret.Namespace == ns.Name || selectors.Namespaces(rule.TargetNamespaces).Match(ns) {
 					names[copier.Name] = struct{}{}
 					break
 				}

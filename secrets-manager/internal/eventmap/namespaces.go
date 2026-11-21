@@ -10,13 +10,18 @@ import (
 )
 
 // NamespaceSelectionChanged passes the events that can change which rules
-// select a namespace: its creation, and a change of its labels or owners.
+// select a namespace, or copy a source in it: its creation, a change of its
+// labels or owners, and the start of its deletion, from which no rule
+// selects it and no source in it is copied. A namespace is being deleted
+// long before it is gone, so its removal changes nothing more.
 func NamespaceSelectionChanged() predicate.TypedPredicate[*corev1.Namespace] {
 	return predicate.TypedFuncs[*corev1.Namespace]{
 		CreateFunc: func(event.TypedCreateEvent[*corev1.Namespace]) bool { return true },
 		UpdateFunc: func(e event.TypedUpdateEvent[*corev1.Namespace]) bool {
 			return !maps.Equal(e.ObjectOld.Labels, e.ObjectNew.Labels) ||
-				!equality.Semantic.DeepEqual(e.ObjectOld.OwnerReferences, e.ObjectNew.OwnerReferences)
+				!equality.Semantic.DeepEqual(e.ObjectOld.OwnerReferences, e.ObjectNew.OwnerReferences) ||
+				e.ObjectOld.Status.Phase != e.ObjectNew.Status.Phase ||
+				e.ObjectOld.DeletionTimestamp.IsZero() != e.ObjectNew.DeletionTimestamp.IsZero()
 		},
 		DeleteFunc:  func(event.TypedDeleteEvent[*corev1.Namespace]) bool { return false },
 		GenericFunc: func(event.TypedGenericEvent[*corev1.Namespace]) bool { return false },

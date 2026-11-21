@@ -45,8 +45,9 @@ func New(cache client.Reader, engine *copyengine.Engine, policy convergence.Poli
 
 // SetupWithManager registers the reconciler with mgr. It reconciles a
 // SecretCopier when its spec changes, when a Secret it copies, or one with
-// a name it gives its copies, changes, when a namespace it may select is
-// created, relabelled or given other owners, when a SecretImporter named
+// a name it gives its copies, changes, when a namespace it may select, or
+// the namespace of a Secret it copies, is created, relabelled, given other
+// owners or starts being deleted, when a SecretImporter named
 // after its copies is created, changed or deleted, and when another
 // SecretCopier or a SecretExporter that names copies as it does changes its
 // rules or is deleted, which may leave those copies for it to take over.

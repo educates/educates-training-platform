@@ -22,9 +22,10 @@ import (
 )
 
 // SecretSelectionChanged passes the events on a Secret, of which it needs
-// only the metadata, that can make a SecretInjector rule select it: its
-// creation, and a change of its labels or owners. An injector never
-// removes a name, so a deleted Secret needs no reconcile.
+// only the metadata, that can change whether a SecretInjector rule selects
+// it: its creation, a change of its labels or owners, and its deletion. An
+// injector never removes a name, and the status of the SecretInjectors that
+// selected a deleted Secret no longer counts it.
 func SecretSelectionChanged() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(event.CreateEvent) bool { return true },
@@ -32,15 +33,16 @@ func SecretSelectionChanged() predicate.Predicate {
 			return !maps.Equal(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
 				!equality.Semantic.DeepEqual(e.ObjectOld.GetOwnerReferences(), e.ObjectNew.GetOwnerReferences())
 		},
-		DeleteFunc:  func(event.DeleteEvent) bool { return false },
+		DeleteFunc:  func(event.DeleteEvent) bool { return true },
 		GenericFunc: func(event.GenericEvent) bool { return false },
 	}
 }
 
 // ServiceAccountInjectionChanged passes the events on a service account
-// that can leave it lacking a name a SecretInjector rule injects: its
-// creation, a change of its labels, and a change of its secrets or
-// imagePullSecrets, such as a name removed by hand.
+// that can leave it lacking a name a SecretInjector rule injects, or change
+// what the status of a SecretInjector counts: its creation, a change of its
+// labels, a change of its secrets or imagePullSecrets, such as a name
+// removed by hand, and its deletion.
 func ServiceAccountInjectionChanged() predicate.TypedPredicate[*corev1.ServiceAccount] {
 	return predicate.TypedFuncs[*corev1.ServiceAccount]{
 		CreateFunc: func(event.TypedCreateEvent[*corev1.ServiceAccount]) bool { return true },
@@ -49,7 +51,7 @@ func ServiceAccountInjectionChanged() predicate.TypedPredicate[*corev1.ServiceAc
 				!equality.Semantic.DeepEqual(e.ObjectOld.Secrets, e.ObjectNew.Secrets) ||
 				!equality.Semantic.DeepEqual(e.ObjectOld.ImagePullSecrets, e.ObjectNew.ImagePullSecrets)
 		},
-		DeleteFunc:  func(event.TypedDeleteEvent[*corev1.ServiceAccount]) bool { return false },
+		DeleteFunc:  func(event.TypedDeleteEvent[*corev1.ServiceAccount]) bool { return true },
 		GenericFunc: func(event.TypedGenericEvent[*corev1.ServiceAccount]) bool { return false },
 	}
 }

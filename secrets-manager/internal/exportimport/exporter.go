@@ -43,7 +43,8 @@ func NewExporterReconciler(cache client.Reader, engine *copyengine.Engine,
 // SetupWithManager registers the reconciler with mgr. It reconciles a
 // SecretExporter when its spec changes, when the Secret it exports, one of
 // its copies, or a Secret with a name it gives its copies, changes, when a
-// namespace it may select is created, relabelled or given other owners,
+// namespace it may select, or its own, is created, relabelled, given other
+// owners or starts being deleted,
 // when a SecretImporter named after its copies is created, changed or
 // deleted, and when a SecretCopier or another SecretExporter that names
 // copies as it does changes its rules or is deleted, which may leave those

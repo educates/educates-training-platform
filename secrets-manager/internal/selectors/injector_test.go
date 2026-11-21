@@ -46,6 +46,35 @@ func TestSourceSecretsMatch(t *testing.T) {
 				NameSelector:  &secretsv1beta1.NameSelector{MatchNames: []string{}},
 				LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"inject": "yes"}},
 			}, secret("kube-root-ca", map[string]string{"inject": "yes"}), true},
+		{"an empty matchUIDs alone matches nothing", uids(), secret("registry-credentials", nil), false},
+		{"an empty matchUIDs beside a nameSelector passes any UID the names match", secretsv1beta1.SourceSecrets{
+			NameSelector: &secretsv1beta1.NameSelector{MatchNames: []string{"registry-*"}},
+			UIDSelector:  &secretsv1beta1.UIDSelector{MatchUIDs: []string{}},
+		}, secret("registry-credentials", nil), true},
+		{"an ownerSelector without matchOwners alone matches nothing",
+			secretsv1beta1.SourceSecrets{OwnerSelector: &secretsv1beta1.OwnerSelector{}},
+			secret("registry-credentials", nil), false},
+		{"an empty matchOwners alone matches nothing", owners(), secret("registry-credentials", nil), false},
+		{"an empty matchOwners beside a nameSelector passes any owner the names match", secretsv1beta1.SourceSecrets{
+			NameSelector:  &secretsv1beta1.NameSelector{MatchNames: []string{"registry-*"}},
+			OwnerSelector: &secretsv1beta1.OwnerSelector{MatchOwners: []secretsv1beta1.OwnerReference{}},
+		}, secret("registry-credentials", nil), true},
+		{"an empty labelSelector alone matches nothing", labelled(metav1.LabelSelector{}),
+			secret("registry-credentials", map[string]string{"inject": "yes"}), false},
+		{"a labelSelector with empty matchLabels and matchExpressions alone matches nothing",
+			labelled(metav1.LabelSelector{MatchLabels: map[string]string{},
+				MatchExpressions: []metav1.LabelSelectorRequirement{}}),
+			secret("registry-credentials", map[string]string{"inject": "yes"}), false},
+		{"an empty labelSelector beside a nameSelector passes any labels the names match", secretsv1beta1.SourceSecrets{
+			NameSelector:  &secretsv1beta1.NameSelector{MatchNames: []string{"registry-*"}},
+			LabelSelector: &metav1.LabelSelector{},
+		}, secret("registry-credentials", nil), true},
+		{"every selector empty matches nothing", secretsv1beta1.SourceSecrets{
+			NameSelector:  &secretsv1beta1.NameSelector{MatchNames: []string{}},
+			UIDSelector:   &secretsv1beta1.UIDSelector{MatchUIDs: []string{}},
+			OwnerSelector: &secretsv1beta1.OwnerSelector{MatchOwners: []secretsv1beta1.OwnerReference{}},
+			LabelSelector: &metav1.LabelSelector{},
+		}, secret("registry-credentials", nil), false},
 		{"a glob", names("*-pull-secret"), secret("first-pull-secret", nil), true},
 		{"a name the glob does not match", names("*-pull-secret"), secret("registry-credentials", nil), false},
 		{"a name a ! pattern excludes", names("*-pull-secret", "!skip-pull-secret"),
@@ -105,6 +134,65 @@ func TestSourceSecretsErr(t *testing.T) {
 	emptyNames.UIDSelector = &secretsv1beta1.UIDSelector{MatchUIDs: []string{"secret-uid"}}
 	if err := SourceSecrets(emptyNames).Err(); err != nil {
 		t.Errorf("an empty matchNames beside a uidSelector is invalid: %v", err)
+	}
+}
+
+func TestSourceSecretsErrWithOnlyEmptySelectors(t *testing.T) {
+	tests := []struct {
+		name    string
+		sources secretsv1beta1.SourceSecrets
+	}{
+		{"an empty matchUIDs", secretsv1beta1.SourceSecrets{
+			UIDSelector: &secretsv1beta1.UIDSelector{MatchUIDs: []string{}}}},
+		{"an ownerSelector without matchOwners", secretsv1beta1.SourceSecrets{
+			OwnerSelector: &secretsv1beta1.OwnerSelector{}}},
+		{"an empty matchOwners", secretsv1beta1.SourceSecrets{
+			OwnerSelector: &secretsv1beta1.OwnerSelector{MatchOwners: []secretsv1beta1.OwnerReference{}}}},
+		{"an empty labelSelector", secretsv1beta1.SourceSecrets{LabelSelector: &metav1.LabelSelector{}}},
+		{"every selector empty", secretsv1beta1.SourceSecrets{
+			NameSelector:  &secretsv1beta1.NameSelector{MatchNames: []string{}},
+			UIDSelector:   &secretsv1beta1.UIDSelector{MatchUIDs: []string{}},
+			OwnerSelector: &secretsv1beta1.OwnerSelector{},
+			LabelSelector: &metav1.LabelSelector{},
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if SourceSecrets(test.sources).Err() == nil {
+				t.Errorf("%s with no other selector is valid, want invalid", test.name)
+			}
+		})
+	}
+
+	beside := []struct {
+		name    string
+		sources secretsv1beta1.SourceSecrets
+	}{
+		{"an empty matchUIDs beside a labelSelector", secretsv1beta1.SourceSecrets{
+			UIDSelector:   &secretsv1beta1.UIDSelector{MatchUIDs: []string{}},
+			LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"inject": "yes"}},
+		}},
+		{"an empty matchOwners beside a uidSelector", secretsv1beta1.SourceSecrets{
+			UIDSelector:   &secretsv1beta1.UIDSelector{MatchUIDs: []string{"secret-uid"}},
+			OwnerSelector: &secretsv1beta1.OwnerSelector{},
+		}},
+		{"an empty labelSelector beside an ownerSelector", secretsv1beta1.SourceSecrets{
+			OwnerSelector: &secretsv1beta1.OwnerSelector{MatchOwners: []secretsv1beta1.OwnerReference{{
+				APIVersion: "v1", Kind: "ConfigMap", Name: "owner", UID: "owner-uid",
+			}}},
+			LabelSelector: &metav1.LabelSelector{},
+		}},
+		{"a labelSelector with only matchExpressions", secretsv1beta1.SourceSecrets{
+			LabelSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{
+				requirement("inject", metav1.LabelSelectorOpExists)}},
+		}},
+	}
+	for _, test := range beside {
+		t.Run(test.name, func(t *testing.T) {
+			if err := SourceSecrets(test.sources).Err(); err != nil {
+				t.Errorf("%s is invalid: %v", test.name, err)
+			}
+		})
 	}
 }
 

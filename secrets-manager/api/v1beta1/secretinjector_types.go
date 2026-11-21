@@ -8,22 +8,26 @@ import (
 const SecretInjectorKind = "SecretInjector"
 
 // SourceSecrets selects the Secrets a SecretInjector rule injects. Every
-// selector present must pass, and the rule gives at least one.
+// selector present must pass. An empty selector counts as absent, and a
+// rule with no selector that is not empty selects no Secret.
 type SourceSecrets struct {
 	// nameSelector selects Secrets by name. An empty matchNames counts as
 	// absent: it selects no Secret by itself.
 	// +optional
 	NameSelector *NameSelector `json:"nameSelector,omitempty"`
 
-	// uidSelector selects Secrets by UID.
+	// uidSelector selects Secrets by UID. An empty matchUIDs counts as
+	// absent: it selects no Secret by itself.
 	// +optional
 	UIDSelector *UIDSelector `json:"uidSelector,omitempty"`
 
-	// ownerSelector selects Secrets by owner.
+	// ownerSelector selects Secrets by owner. An empty matchOwners counts as
+	// absent: it selects no Secret by itself.
 	// +optional
 	OwnerSelector *OwnerSelector `json:"ownerSelector,omitempty"`
 
-	// labelSelector selects Secrets by label.
+	// labelSelector selects Secrets by label. One with neither matchLabels
+	// nor matchExpressions counts as absent: it selects no Secret by itself.
 	// +optional
 	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
 }

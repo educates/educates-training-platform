@@ -97,14 +97,15 @@ func expression(key, operator string, values ...string) object {
 	return entry
 }
 
-// byUIDs selects by UID.
+// byUIDs selects by UID. Without UIDs, matchUIDs is an empty list.
 func byUIDs(uids ...types.UID) object {
-	return object{"uidSelector": object{"matchUIDs": uids}}
+	return object{"uidSelector": object{"matchUIDs": append([]types.UID{}, uids...)}}
 }
 
-// byOwners selects by owner reference.
+// byOwners selects by owner reference. Without owners, matchOwners is an
+// empty list.
 func byOwners(owners ...object) object {
-	return object{"ownerSelector": object{"matchOwners": owners}}
+	return object{"ownerSelector": object{"matchOwners": append([]object{}, owners...)}}
 }
 
 // ownerOf is a matchOwners entry.

@@ -10,15 +10,16 @@ import (
 )
 
 // errNoSourceSelector is why a SecretInjector rule whose sourceSecrets give
-// no selector but an empty matchNames selects no Secret.
-var errNoSourceSelector = errors.New("sourceSecrets select no Secrets: matchNames is empty, and no other " +
-	"selector is given")
+// no selector but empty ones selects no Secret.
+var errNoSourceSelector = errors.New("sourceSecrets select no Secrets: every selector given is empty")
 
 // SourceSecrets returns the selector of the Secrets a SecretInjector rule
 // injects: names as globs with ! excludes, UIDs, owners and labels. An
-// empty matchNames counts as absent, passing every name, so that the rule's
-// other selectors decide; a rule left with no selector at all is invalid,
-// and selects no Secret rather than every one.
+// empty selector counts as absent, passing every Secret, so that the rule's
+// other selectors decide: an empty matchNames, matchUIDs or matchOwners,
+// and a labelSelector with neither matchLabels nor matchExpressions. A rule
+// left with no non-empty selector is invalid, and selects no Secret rather
+// than every one.
 func SourceSecrets(sources secretsv1beta1.SourceSecrets) Selector {
 	s := New(Fields{
 		Names:  sources.NameSelector,
@@ -26,11 +27,20 @@ func SourceSecrets(sources secretsv1beta1.SourceSecrets) Selector {
 		Owners: sources.OwnerSelector,
 		Labels: sources.LabelSelector,
 	}, nil)
-	if s.err == nil && (sources.NameSelector == nil || len(sources.NameSelector.MatchNames) == 0) &&
-		sources.UIDSelector == nil && sources.OwnerSelector == nil && sources.LabelSelector == nil {
+	if s.err == nil && !hasSourceSelector(sources) {
 		s.err = errNoSourceSelector
 	}
 	return s
+}
+
+// hasSourceSelector reports whether sources give at least one selector that
+// is not empty.
+func hasSourceSelector(sources secretsv1beta1.SourceSecrets) bool {
+	return (sources.NameSelector != nil && len(sources.NameSelector.MatchNames) > 0) ||
+		(sources.UIDSelector != nil && len(sources.UIDSelector.MatchUIDs) > 0) ||
+		(sources.OwnerSelector != nil && len(sources.OwnerSelector.MatchOwners) > 0) ||
+		(sources.LabelSelector != nil &&
+			(len(sources.LabelSelector.MatchLabels) > 0 || len(sources.LabelSelector.MatchExpressions) > 0))
 }
 
 // ServiceAccountSelector decides which service accounts a SecretInjector

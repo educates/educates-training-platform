@@ -361,14 +361,15 @@ var _ = Describe("SecretInjector", Label(areaInjection), func() {
 		})
 	})
 
-	It("injects nothing, and reports InvalidSelector, for a rule whose only source selector is an empty matchNames",
-		Label(expectedDifference), func() {
+	DescribeTable("injects nothing, and reports InvalidSelector, for a rule whose only source selectors are empty",
+		Label(expectedDifference),
+		func(sources object) {
 			s := newScenario()
 			ns := s.namespace("a", nil)
-			s.pullSecret(ns.Name, pullSecretName)
+			s.pullSecret(ns.Name, pullSecretName, withLabels(map[string]string{injectLabel: "yes"}))
 			s.serviceAccount(ns.Name, builder, nil)
 
-			injector := s.secretInjector(s.name("injector"), injectorRule(inNamespaces(ns), byName(), accounts(builder)))
+			injector := s.secretInjector(s.name("injector"), injectorRule(inNamespaces(ns), sources, accounts(builder)))
 
 			eventually(func(g Gomega) {
 				expectReady(g, injector, "False", "InvalidSelector")
@@ -376,26 +377,41 @@ var _ = Describe("SecretInjector", Label(areaInjection), func() {
 			consistently(func(g Gomega) {
 				g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).To(BeEmpty())
 			})
-		})
+		},
+		Entry("with an empty matchNames", byName()),
+		Entry("with an empty matchUIDs", byUIDs()),
+		Entry("with an empty matchOwners", byOwners()),
+		Entry("with an empty labelSelector", byLabelSelector(nil)),
+		Entry("with every source selector empty", merged(byName(), byUIDs(), byOwners(), byLabelSelector(nil))),
+	)
 
-	It("selects source Secrets by the rule's other selectors when matchNames is empty", func() {
-		s := newScenario()
-		ns := s.namespace("a", nil)
-		s.pullSecret(ns.Name, "labelled", withLabels(map[string]string{injectLabel: "yes"}))
-		s.pullSecret(ns.Name, "unlabelled")
-		s.serviceAccount(ns.Name, builder, nil)
+	DescribeTable("selects source Secrets by the rule's other selectors when one is empty",
+		func(empty, selecting object) {
+			s := newScenario()
+			ns := s.namespace("a", nil)
+			s.pullSecret(ns.Name, "selected", withLabels(map[string]string{injectLabel: "yes"}))
+			s.pullSecret(ns.Name, "unselected")
+			s.serviceAccount(ns.Name, builder, nil)
 
-		injector := s.secretInjector(s.name("injector"), injectorRule(inNamespaces(ns),
-			merged(byName(), byLabels(map[string]string{injectLabel: "yes"})), accounts(builder)))
+			injector := s.secretInjector(s.name("injector"), injectorRule(inNamespaces(ns),
+				merged(empty, selecting), accounts(builder)))
 
-		eventually(func(g Gomega) {
-			g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).To(ContainElement("labelled"))
-			expectReady(g, injector, "True", "InSync")
-		})
-		consistently(func(g Gomega) {
-			g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).NotTo(ContainElement("unlabelled"))
-		})
-	})
+			eventually(func(g Gomega) {
+				g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).To(ContainElement("selected"))
+				expectReady(g, injector, "True", "InSync")
+			})
+			consistently(func(g Gomega) {
+				g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).NotTo(ContainElement("unselected"))
+			})
+		},
+		Entry("with an empty matchNames beside a labelSelector",
+			byName(), byLabels(map[string]string{injectLabel: "yes"})),
+		Entry("with an empty matchUIDs beside a labelSelector",
+			byUIDs(), byLabels(map[string]string{injectLabel: "yes"})),
+		Entry("with an empty matchOwners beside a labelSelector",
+			byOwners(), byLabels(map[string]string{injectLabel: "yes"})),
+		Entry("with an empty labelSelector beside a nameSelector", byLabelSelector(nil), byName("selected")),
+	)
 })
 
 // countServiceAccountUpdates watches the service account name in namespace

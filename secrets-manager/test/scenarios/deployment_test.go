@@ -22,6 +22,10 @@ import (
 // the Lease its replicas elect their leader with, in its namespace.
 const secretsManagerName = "secrets-manager"
 
+// scenariosFieldManager is the field manager the scenarios scale the
+// secrets-manager's Deployment as.
+const scenariosFieldManager = "secrets-manager-scenarios"
+
 // requireDeployedSecretsManager skips the scenario on a target whose
 // secrets-manager does not run as a Deployment on the cluster.
 func requireDeployedSecretsManager() {
@@ -88,7 +92,8 @@ func (s *scenario) scaleSecretsManager(replicas int32) {
 			return err
 		}
 		scale.Spec.Replicas = replicas
-		return target.Client.SubResource("scale").Update(s.ctx, deployment, client.WithSubResourceBody(scale))
+		return target.Client.SubResource("scale").Update(s.ctx, deployment, client.WithSubResourceBody(scale),
+			client.FieldOwner(scenariosFieldManager))
 	})).To(Succeed())
 
 	eventually(func(g Gomega) {

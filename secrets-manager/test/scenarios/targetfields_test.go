@@ -71,6 +71,32 @@ var _ = Describe("targetSecret.annotations and targetSecret.keys", Label(areaTar
 			})
 		})
 
+	It("leaves an annotation another writer adds when targetSecret.annotations change",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS),
+				shaped(copyShape{Annotations: map[string]string{"example.com/drop": "dropped"}})))
+			var copied *corev1.Secret
+			eventually(func(g Gomega) {
+				copied = expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+				g.Expect(copied.Annotations).To(HaveKey("example.com/drop"))
+			})
+
+			s.update(copied, func() { setMapEntry(&copied.Annotations, "example.com/note", "added by hand") })
+			s.update(copier, func() { setRules(copier, copierRule(src, inNamespaces(targetNS))) })
+
+			eventually(func(g Gomega) {
+				g.Expect(secretIn(g, targetNS.Name, src.Name).Annotations).NotTo(HaveKey("example.com/drop"))
+			})
+			consistently(func(g Gomega) {
+				g.Expect(secretIn(g, targetNS.Name, src.Name).Annotations).
+					To(HaveKeyWithValue("example.com/note", "added by hand"))
+			})
+		})
+
 	It("copies only the keys targetSecret.keys lists that the source has", Label(expectedDifference), func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

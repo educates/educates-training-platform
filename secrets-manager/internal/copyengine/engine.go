@@ -27,9 +27,9 @@
 // taken back by the next apply. Adopting an orphan applies the adopting
 // rule's whole configuration, which replaces the owner reference the engine
 // applied for the orphan's former rule. Keyed payload, such as a Secret's
-// data, is replaced whole: a key outside the source's is removed with a
-// JSON merge patch, conditional on the resource version the engine last
-// saw.
+// data, holds the source's keys, or those of them the rule selects, and is
+// replaced whole: any other key is removed with a JSON merge patch,
+// conditional on the resource version the engine last saw.
 //
 // A copy whose fixed field, such as a Secret's type, differs from the
 // source's is deleted and written anew. A copy another writer made
@@ -82,6 +82,11 @@ type Copy struct {
 	// Annotations are set on the copy besides the tracking annotations.
 	// The source's annotations are never copied.
 	Annotations map[string]string
+
+	// Keys, when not empty, limits the copy's keyed fields, such as a
+	// Secret's data, to these keys, those the source has. When empty, the
+	// copy holds every key of the source.
+	Keys []string
 
 	// Owner, when set, is given an owner reference on the copy, so that
 	// Kubernetes deletes the copy with it.
@@ -182,7 +187,7 @@ func (e *Engine) Converge(ctx context.Context, c Copy) (Result, error) {
 
 // desired is the configuration the engine applies for c: the copy's name,
 // labels, annotations and owner reference, and the payload the source's
-// kind copies.
+// kind copies, its keyed fields limited to c.Keys when c lists any.
 func (e *Engine) desired(c Copy) *unstructured.Unstructured {
 	desired := e.object(types.NamespacedName{Namespace: c.Namespace, Name: c.Name})
 	labels := maps.Clone(c.Source.GetLabels())
@@ -217,11 +222,26 @@ func (e *Engine) desired(c Copy) *unstructured.Unstructured {
 		}
 	}
 	for _, field := range e.kind.KeyedFields {
-		if entries, ok := c.Source.Object[field].(map[string]any); ok && len(entries) > 0 {
+		entries, _ := c.Source.Object[field].(map[string]any)
+		if len(c.Keys) > 0 {
+			entries = selectKeys(entries, c.Keys)
+		}
+		if len(entries) > 0 {
 			desired.Object[field] = runtime.DeepCopyJSONValue(entries)
 		}
 	}
 	return desired
+}
+
+// selectKeys returns the entries of entries whose keys are in keys.
+func selectKeys(entries map[string]any, keys []string) map[string]any {
+	selected := map[string]any{}
+	for _, key := range keys {
+		if value, ok := entries[key]; ok {
+			selected[key] = value
+		}
+	}
+	return selected
 }
 
 // write applies desired, removes the keys the API server's copy then holds

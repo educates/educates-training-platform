@@ -165,12 +165,14 @@ func (r *Reconciler) reconcileRule(ctx context.Context, copier *secretsv1beta1.S
 			continue
 		}
 		result, err := r.engine.Converge(ctx, copyengine.Copy{
-			Source:    src,
-			Namespace: ns.Name,
-			Name:      copyName,
-			Rule:      secretsv1beta1.CopierRule(secretsv1beta1.SecretCopierKind, copier.Name),
-			Labels:    rule.TargetSecret.Labels,
-			Owner:     owner(copier, rule),
+			Source:      src,
+			Namespace:   ns.Name,
+			Name:        copyName,
+			Rule:        secretsv1beta1.CopierRule(secretsv1beta1.SecretCopierKind, copier.Name),
+			Labels:      rule.TargetSecret.Labels,
+			Annotations: rule.TargetSecret.Annotations,
+			Keys:        rule.TargetSecret.Keys,
+			Owner:       owner(copier, rule),
 		})
 		report.targets = append(report.targets, targetReport{namespace: ns.Name, result: result, err: err})
 		logTarget(log.WithValues("namespace", ns.Name, "name", copyName), result, err)

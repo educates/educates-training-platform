@@ -36,7 +36,7 @@ The kubebuilder-default `config/` kustomize tree is intentionally absent;
 | `make envtest` | Download envtest binaries only |
 | `make docker-build` | Build the operator image (`IMG=…` to override) |
 | `make smoke-test` | Local kind-based smoke test |
-| `make rbac-verify` | Local kind install+teardown under the fine-grained role (cluster-admin off), asserting no RBAC-forbidden errors |
+| `make rbac-verify` | Local kind install+teardown under the fine-grained role (cluster-admin off), asserting no RBAC-forbidden errors. Builds the operator and runtime images it runs from the checkout, tagged `rbac-verify`; `SKIP_BUILD=true` reuses them |
 | `make lint` | golangci-lint |
 | `make build` | Build the manager binary |
 | `make run` | Run the manager against `~/.kube/config` |

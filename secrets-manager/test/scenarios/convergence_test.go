@@ -1,13 +1,73 @@
 package scenarios
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // unrelatedLabel is a label scenarios put on a namespace that no rule
 // selects by.
 const unrelatedLabel = "example.com/unrelated"
+
+// rejectSecretWrites has the API server reject every write of a Secret in
+// the namespaces labelled with the scenario's scope, ns among them, until
+// the function it returns is called. Lifting the rejection changes nothing
+// the secrets-manager watches.
+func (s *scenario) rejectSecretWrites(ns *corev1.Namespace) (lift func()) {
+	GinkgoHelper()
+	fail := admissionregistrationv1.Fail
+	policy := &admissionregistrationv1.ValidatingAdmissionPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: s.name("reject-secret-writes")},
+		Spec: admissionregistrationv1.ValidatingAdmissionPolicySpec{
+			FailurePolicy: &fail,
+			MatchConstraints: &admissionregistrationv1.MatchResources{
+				ResourceRules: []admissionregistrationv1.NamedRuleWithOperations{{
+					RuleWithOperations: admissionregistrationv1.RuleWithOperations{
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Create, admissionregistrationv1.Update,
+						},
+						Rule: admissionregistrationv1.Rule{
+							APIGroups: []string{""}, APIVersions: []string{"v1"}, Resources: []string{"secrets"},
+						},
+					},
+				}},
+			},
+			Validations: []admissionregistrationv1.Validation{{
+				Expression: "false",
+				Message:    "Secrets are not written in this namespace",
+			}},
+		},
+	}
+	s.create(policy)
+	binding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: s.name("reject-secret-writes")},
+		Spec: admissionregistrationv1.ValidatingAdmissionPolicyBindingSpec{
+			PolicyName:        policy.Name,
+			ValidationActions: []admissionregistrationv1.ValidationAction{admissionregistrationv1.Deny},
+			MatchResources: &admissionregistrationv1.MatchResources{
+				NamespaceSelector: &metav1.LabelSelector{MatchLabels: s.scope()},
+			},
+		},
+	}
+	s.create(binding)
+
+	eventually(func(g Gomega) {
+		probe := newSecret(ns.Name, s.name("probe"), data("probe", "p"))
+		g.Expect(target.Client.Create(context.Background(), probe, client.DryRunAll)).NotTo(Succeed(),
+			"writes of Secrets in %s should be rejected", ns.Name)
+	})
+	return func() {
+		GinkgoHelper()
+		s.deleteObject(binding)
+	}
+}
 
 var _ = Describe("Convergence", Label(areaConvergence), func() {
 	It("makes no API calls reconciling a copier whose sources, copies and spec have not changed",
@@ -37,6 +97,53 @@ var _ = Describe("Convergence", Label(areaConvergence), func() {
 				g.Expect(target.APICalls.About(s.id)).To(Equal(calls))
 			})
 		})
+
+	It("retries a failing target within the backoff cap, though nothing it watches changes", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		failing := s.namespace("a", s.scope())
+		src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+		lift := s.rejectSecretWrites(failing)
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(failing)))
+
+		// The target fails long enough for a backoff without a cap to
+		// outgrow the cap.
+		consistentlyFor(2*target.Timing.Hold, func(g Gomega) {
+			expectNoSecret(g, failing.Name, src.Name)
+		})
+		lift()
+
+		Eventually(func(g Gomega) {
+			expectCopy(g, failing.Name, src.Name, src, ruleOf(copier))
+		}).WithTimeout(target.Timing.BackoffCap + 5*target.Timing.Poll).WithPolling(target.Timing.Poll).
+			Should(Succeed())
+	})
+
+	It("repairs a copy whose change it missed within the backstop interval", Label(expectedDifference), func() {
+		requireMissedEvents()
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+		var copied *corev1.Secret
+		eventually(func(g Gomega) {
+			copied = expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+		})
+		DeferCleanup(target.MissedEvents.Miss(func(obj client.Object) bool {
+			return obj.GetNamespace() == targetNS.Name
+		}))
+
+		s.update(copied, func() { copied.Data["token"] = []byte("tampered") })
+
+		consistently(func(g Gomega) {
+			g.Expect(secretIn(g, targetNS.Name, src.Name).Data).To(Equal(data("token", "tampered")))
+		})
+		Eventually(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+		}).WithTimeout(target.Timing.Backstop + target.Timing.Converge).WithPolling(target.Timing.Poll).
+			Should(Succeed())
+	})
 
 	It("records on each copy the version of the source it was last written from", Label(expectedDifference), func() {
 		s := newScenario()

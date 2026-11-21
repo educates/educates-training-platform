@@ -59,6 +59,10 @@ type Target struct {
 	// secrets-manager makes to the API server.
 	APICalls *APICalls
 
+	// MissedEvents, when not nil, makes the target's secrets-manager miss
+	// the events about objects a scenario names.
+	MissedEvents *MissedEvents
+
 	// Restart, when not nil, stops the target's secrets-manager and starts
 	// it again, with nothing kept in memory.
 	Restart func() error
@@ -90,16 +94,28 @@ type Timing struct {
 	// NotReadyGrace is how long a resource stays not Ready before the
 	// secrets-manager raises a Warning Event about it.
 	NotReadyGrace time.Duration
+
+	// Backstop is how long after its last reconcile the secrets-manager
+	// reconciles a resource again, though no event asks it to.
+	Backstop time.Duration
+
+	// BackoffCap is the longest the secrets-manager waits before it tries
+	// a failing target again.
+	BackoffCap time.Duration
 }
 
 // liveTiming allows for a secrets-manager that, besides reacting to
 // events, passes over each resource every 60 seconds, the first pass 30
-// seconds after it sees the resource.
+// seconds after it sees the resource, and for one that reconciles each
+// resource 5 minutes after its last reconcile and retries a failing one
+// at least every 5 minutes.
 var liveTiming = Timing{
 	Converge:      150 * time.Second,
 	Hold:          75 * time.Second,
 	Poll:          time.Second,
 	NotReadyGrace: 60 * time.Second,
+	Backstop:      5 * time.Minute,
+	BackoffCap:    5 * time.Minute,
 }
 
 // selectTarget picks the target of this run: the live cluster the

@@ -1,14 +1,19 @@
 package scenarios
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"k8s.io/client-go/rest"
+	toolscache "k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // APICalls counts the requests a secrets-manager makes to the API server,
@@ -99,5 +104,134 @@ func settledAPICalls(part string) APICallCount {
 func requireRestart() {
 	if target.Restart == nil {
 		Skip(target.Name + " cannot restart its secrets-manager")
+	}
+}
+
+// MissedEvents keeps the event handlers of a secrets-manager's cache from
+// hearing of changes to the objects it is told about. The cache itself
+// still holds those changes, as when an event reaches the cache but is
+// mapped to the wrong resource, or to none.
+type MissedEvents struct {
+	mu      sync.Mutex
+	next    int
+	missing map[int]func(client.Object) bool
+}
+
+// Miss keeps the event handlers from hearing of changes to the objects
+// about selects, until the function it returns is called.
+func (m *MissedEvents) Miss(about func(client.Object) bool) (stop func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.missing == nil {
+		m.missing = map[int]func(client.Object) bool{}
+	}
+	id := m.next
+	m.next++
+	m.missing[id] = about
+	return func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		delete(m.missing, id)
+	}
+}
+
+// missed reports whether an event about obj is to be missed.
+func (m *MissedEvents) missed(obj any) bool {
+	if tombstone, ok := obj.(toolscache.DeletedFinalStateUnknown); ok {
+		obj = tombstone.Obj
+	}
+	o, ok := obj.(client.Object)
+	if !ok {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, about := range m.missing {
+		if about(o) {
+			return true
+		}
+	}
+	return false
+}
+
+// newCache creates the cache controller-runtime would, its event handlers
+// missing the events m says.
+func (m *MissedEvents) newCache(config *rest.Config, opts cache.Options) (cache.Cache, error) {
+	c, err := cache.New(config, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &missingCache{Cache: c, events: m}, nil
+}
+
+// requireMissedEvents skips the scenario on a target that cannot make its
+// secrets-manager miss events.
+func requireMissedEvents() {
+	if target.MissedEvents == nil {
+		Skip(target.Name + " cannot make its secrets-manager miss events")
+	}
+}
+
+// missingCache is a cache whose informers' event handlers miss the events
+// its MissedEvents says.
+type missingCache struct {
+	cache.Cache
+	events *MissedEvents
+}
+
+func (c *missingCache) GetInformer(ctx context.Context, obj client.Object,
+	opts ...cache.InformerGetOption) (cache.Informer, error) {
+	informer, err := c.Cache.GetInformer(ctx, obj, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &missingInformer{Informer: informer, events: c.events}, nil
+}
+
+// missingInformer is an informer whose event handlers miss the events its
+// MissedEvents says.
+type missingInformer struct {
+	cache.Informer
+	events *MissedEvents
+}
+
+func (i *missingInformer) AddEventHandler(
+	handler toolscache.ResourceEventHandler) (toolscache.ResourceEventHandlerRegistration, error) {
+	return i.Informer.AddEventHandler(&missingHandler{handler: handler, events: i.events})
+}
+
+func (i *missingInformer) AddEventHandlerWithResyncPeriod(handler toolscache.ResourceEventHandler,
+	resyncPeriod time.Duration) (toolscache.ResourceEventHandlerRegistration, error) {
+	return i.Informer.AddEventHandlerWithResyncPeriod(&missingHandler{handler: handler, events: i.events},
+		resyncPeriod)
+}
+
+func (i *missingInformer) AddEventHandlerWithOptions(handler toolscache.ResourceEventHandler,
+	options toolscache.HandlerOptions) (toolscache.ResourceEventHandlerRegistration, error) {
+	return i.Informer.AddEventHandlerWithOptions(&missingHandler{handler: handler, events: i.events}, options)
+}
+
+// missingHandler passes on the events its MissedEvents does not say to
+// miss.
+type missingHandler struct {
+	handler toolscache.ResourceEventHandler
+	events  *MissedEvents
+}
+
+func (h *missingHandler) OnAdd(obj any, isInInitialList bool) {
+	if !h.events.missed(obj) {
+		h.handler.OnAdd(obj, isInInitialList)
+	}
+}
+
+func (h *missingHandler) OnUpdate(oldObj, newObj any) {
+	if !h.events.missed(newObj) {
+		h.handler.OnUpdate(oldObj, newObj)
+	}
+}
+
+func (h *missingHandler) OnDelete(obj any) {
+	if !h.events.missed(obj) {
+		h.handler.OnDelete(obj)
 	}
 }

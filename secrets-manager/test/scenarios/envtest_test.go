@@ -21,12 +21,23 @@ import (
 var chartCRDs = filepath.Join("..", "..", "..", "installer", "charts", "educates-training-platform", "charts",
 	"secrets-manager", "crds")
 
+// envtestBackstop and envtestBackoffCap shorten the secrets-manager's
+// backstop and backoff cap on envtest. The backstop stays longer than the
+// time scenarios allow to converge, so that no scenario passes on the
+// backstop where events should have converged it.
+const (
+	envtestBackstop   = 45 * time.Second
+	envtestBackoffCap = time.Second
+)
+
 // envtestTiming allows for a secrets-manager that reacts to events within
 // moments, on an API server with nothing else running.
 var envtestTiming = Timing{
-	Converge: 30 * time.Second,
-	Hold:     3 * time.Second,
-	Poll:     200 * time.Millisecond,
+	Converge:   30 * time.Second,
+	Hold:       3 * time.Second,
+	Poll:       200 * time.Millisecond,
+	Backstop:   envtestBackstop,
+	BackoffCap: envtestBackoffCap,
 }
 
 // targetFieldScenarios is the container of the targetSecret.annotations and
@@ -68,7 +79,8 @@ var awaitingOnEnvtest = map[string][]string{
 // from the subchart's CRDs, and the secrets-manager's composition in this
 // process against it. envtest runs no garbage collector and no namespace
 // controller: a deleted namespace stays Terminating. The requests of the
-// secrets-manager are counted, and it can be restarted.
+// secrets-manager are counted, and it can be made to miss events and be
+// restarted.
 func newEnvtestTarget() (*Target, error) {
 	env := &envtest.Environment{CRDDirectoryPaths: []string{chartCRDs}, ErrorIfCRDPathMissing: true}
 	if dir := firstEnvTestBinaryDir(); dir != "" {
@@ -89,21 +101,26 @@ func newEnvtestTarget() (*Target, error) {
 	calls := &APICalls{}
 	composedConfig := rest.CopyConfig(config)
 	calls.instrument(composedConfig)
+	missed := &MissedEvents{}
 	secretsManager := &inProcess{options: operator.Options{
 		RESTConfig: composedConfig,
 		Logger:     logf.Log.WithName("secrets-manager"),
+		Backstop:   envtestBackstop,
+		BackoffCap: envtestBackoffCap,
+		NewCache:   missed.newCache,
 	}}
 	if err := secretsManager.start(); err != nil {
 		return nil, errors.Join(err, env.Stop())
 	}
 
 	return &Target{
-		Name:     "envtest API server, with the secrets-manager in process",
-		Config:   config,
-		Client:   c,
-		Timing:   envtestTiming,
-		Awaiting: awaitingOnEnvtest,
-		APICalls: calls,
+		Name:         "envtest API server, with the secrets-manager in process",
+		Config:       config,
+		Client:       c,
+		Timing:       envtestTiming,
+		Awaiting:     awaitingOnEnvtest,
+		APICalls:     calls,
+		MissedEvents: missed,
 		Restart: func() error {
 			if err := secretsManager.stop(); err != nil {
 				return err

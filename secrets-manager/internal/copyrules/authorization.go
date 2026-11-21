@@ -118,11 +118,12 @@ func Importer(ctx context.Context, reader client.Reader, key types.NamespacedNam
 }
 
 // CopierOffer is the offer a SecretCopier rule makes of its source: one
-// that requires an importer when the rule names a shared secret.
+// that requires an importer when the rule names a shared secret, an empty
+// one included.
 func CopierOffer(rule *secretsv1beta1.SecretCopierRule) Offer {
 	offer := Offer{SourceNamespace: rule.SourceSecret.Namespace}
-	if auth := rule.CopyAuthorization; auth != nil && auth.SharedSecret != "" {
-		offer.SharedSecret, offer.RequiresImporter = auth.SharedSecret, true
+	if auth := rule.CopyAuthorization; auth != nil && auth.SharedSecret != nil {
+		offer.SharedSecret, offer.RequiresImporter = *auth.SharedSecret, true
 	}
 	return offer
 }

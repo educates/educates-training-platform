@@ -53,10 +53,11 @@ type TargetSecret struct {
 // CopyAuthorization gates a copy on a SecretImporter that holds the same
 // shared secret.
 type CopyAuthorization struct {
-	// sharedSecret must equal the sharedSecret of the SecretImporter named
-	// after the copy in the target namespace.
+	// sharedSecret, when set, even to an empty string, must equal the
+	// sharedSecret of the SecretImporter named after the copy in the target
+	// namespace.
 	// +optional
-	SharedSecret string `json:"sharedSecret,omitempty"`
+	SharedSecret *string `json:"sharedSecret,omitempty"`
 }
 
 // SecretCopierRule copies one source Secret into the namespaces it

@@ -256,6 +256,28 @@ var _ = Describe("SecretImporter gating SecretCopier rules", Label(areaExportImp
 		})
 	})
 
+	It("gates a copyAuthorization rule whose shared secret is empty, as it gates any other", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		matching := s.namespace("a", nil)
+		mismatched := s.namespace("b", nil)
+		without := s.namespace("c", nil)
+		src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+		s.secretImporter(matching.Name, src.Name, sharedSecret(""))
+		s.secretImporter(mismatched.Name, src.Name, sharedSecret("wrong"))
+
+		copier := s.secretCopier(s.name("copier"),
+			copierRule(src, inNamespaces(matching, mismatched, without), sharedSecret("")))
+
+		eventually(func(g Gomega) {
+			expectCopy(g, matching.Name, src.Name, src, ruleOf(copier))
+		})
+		consistently(func(g Gomega) {
+			expectNoSecret(g, mismatched.Name, src.Name)
+			expectNoSecret(g, without.Name, src.Name)
+		})
+	})
+
 	It("lets an importer refuse a copier's copy from a namespace its sourceNamespaces exclude", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

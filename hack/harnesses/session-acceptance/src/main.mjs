@@ -259,11 +259,16 @@ async function main() {
 
     const queue = [...fixtures];
     const worker = async () => {
-      for (let f = queue.shift(); f; f = queue.shift()) results.push(await runFixture(h, f));
+      // An interrupted run starts no further fixture.
+      for (let f = queue.shift(); f && !interruption.signal; f = queue.shift()) results.push(await runFixture(h, f));
     };
     await Promise.all(Array.from({ length: Math.min(parallel, fixtures.length) }, worker));
     results.sort((a, b) => a.fixture.localeCompare(b.fixture));
     exitCode = results.every((r) => r.passed) ? 0 : 1;
+  } catch (e) {
+    // What fails once the run is interrupted fails for its browsers and
+    // portal going away, and the run still ends with its signal's status.
+    if (!interruption.signal) throw e;
   } finally {
     await restore();
   }

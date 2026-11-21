@@ -23,11 +23,12 @@ import (
 
 // SecretsManagerSpec defines the desired state of SecretsManager.
 //
-// secrets-manager is a singleton at the pod level (the upstream
-// implementation can't scale beyond one replica) so no replicas knob is
-// exposed. Image-pull credentials are inherited from
-// EducatesClusterConfig.status.imageRegistry.pullSecrets and are not
-// duplicated here.
+// The operator installs the secrets-manager with one replica, so no
+// replicas knob is exposed. The chart's replicas value and the
+// secrets-manager's leader election serve a standalone chart install until
+// the platform exposes high availability. Image-pull credentials are
+// inherited from EducatesClusterConfig.status.imageRegistry.pullSecrets and
+// are not duplicated here.
 type SecretsManagerSpec struct {
 	// image overrides the default image reference. Both fields are
 	// optional; defaults come from the chart's appVersion-derived

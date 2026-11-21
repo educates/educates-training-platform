@@ -132,6 +132,15 @@ with `--fixtures`, and shorten or lengthen the hold with `--hold`.
 | `--chrome <path>` | The Chrome to drive. |
 | `--headful` | Show Chrome's windows instead of running it headless. |
 
+### Interrupting a run
+
+A run interrupted with Ctrl+C, or ended with `SIGTERM`, first removes what
+it changed, as a run that ends by itself does: the test portal, the website
+theme in the SessionManager, and the mirror with the `base-environment`
+image and the pull secret it changed. It writes no report and exits with the
+signal's status, 130 or 143. With `--keep` it leaves them in place. A second
+signal ends the run at once: `run.sh --clean` then removes what is left.
+
 ### Examples
 
 ```

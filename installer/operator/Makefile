@@ -96,7 +96,10 @@ smoke-test: ## Local kind-based smoke test of the operator + chart.
 # kind with the operator running under only its fine-grained roles (no
 # cluster-admin), asserting no RBAC-forbidden errors. The real gate for the
 # fine-grained-role change — envtest runs privileged and cannot catch an
-# under-grant. Not run in CI (kind-in-Actions is a separate follow-up).
+# under-grant. It builds the operator image and the runtime images the samples
+# deploy from this checkout, under the tag rbac-verify, and loads them into
+# its own kind cluster; SKIP_BUILD=true reuses the images already built.
+# Not run in CI (kind-in-Actions is a separate follow-up).
 .PHONY: rbac-verify
 rbac-verify: ## Local kind-based RBAC acceptance test (install+teardown, cluster-admin off).
 	bash hack/rbac-verify.sh

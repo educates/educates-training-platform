@@ -127,6 +127,8 @@ make restart-training-platform
 
 For the operator itself, `make image-operator` then `kubectl rollout restart deployment -n educates-installer`. See the [operator README](../installer/operator/README.md) and the make targets there (`make smoke-test`, `make test`) for the operator development loop.
 
+`make -C installer/operator rbac-verify` checks that the operator can install and tear down the platform under its fine-grained roles, without cluster-admin. It needs no cluster and no earlier build: it builds the operator image and the runtime images the samples deploy from the checkout, for the host architecture and under the tag `rbac-verify`, so the `latest` images of a local build are left alone, creates a kind cluster of its own, `educates-rbac-verify`, loads the images into it, and deletes the cluster when it ends. `SKIP_BUILD=true` reuses the images an earlier run built, and `KEEP_CLUSTER=true` keeps the cluster. The script switches the current context of the kube config to its cluster, so set `KUBECONFIG` to a file of its own to leave yours as it is.
+
 If the cluster is already up and you only want to (re)deploy the platform, run:
 
 ```

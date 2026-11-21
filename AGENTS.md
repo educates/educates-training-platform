@@ -340,7 +340,11 @@ components knowing the difference.
   hard error, so a chart bump can't silently under-grant. `ci-operator`
   drift-checks it in `templates/rbac` alongside the marker-generated role;
   `make rbac-verify` proves sufficiency with a real kind install+teardown
-  (envtest runs privileged and can't catch an under-grant).
+  (envtest runs privileged and can't catch an under-grant). It builds the
+  operator image and the runtime images the samples deploy from the
+  checkout, tagged `rbac-verify`, and loads them into a kind cluster of its
+  own, so it needs no published or local-registry image; `SKIP_BUILD=true`
+  reuses the images of an earlier run.
 - The EducatesClusterConfig reconciler has read-only `get/list/watch` on
   its referenced kinds (Secrets, ClusterIssuers, IngressClasses) plus full
   access on its own kind. Platform reconcilers carry full access on their

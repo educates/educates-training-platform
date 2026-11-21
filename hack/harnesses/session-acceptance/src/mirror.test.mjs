@@ -1,6 +1,36 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
-import { mirrorOf, pullSecret } from "./mirror.mjs";
+import { htpasswdEntry, mirrorOf, pullSecret } from "./mirror.mjs";
+
+// fakeHtpasswd writes an executable standing for htpasswd, removed when the
+// test ends, and returns its path.
+function fakeHtpasswd(t, script) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "session-acceptance-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const command = path.join(dir, "htpasswd");
+  fs.writeFileSync(command, `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+  return command;
+}
+
+test("the mirror's password reaches htpasswd on its standard input, never as an argument", async (t) => {
+  const command = fakeHtpasswd(t, 'echo "args=$*"; echo "stdin=$(cat)"');
+  const out = await htpasswdEntry("session-acceptance", "p4ss", { command });
+  assert.match(out, /^args=-niB session-acceptance$/m);
+  assert.match(out, /^stdin=p4ss$/m);
+});
+
+test("a failing htpasswd is reported without the mirror's password", async (t) => {
+  const command = fakeHtpasswd(t, 'echo "htpasswd: $* $(cat)" >&2; exit 3');
+  await assert.rejects(htpasswdEntry("session-acceptance", "p4ss", { command }), (e) => {
+    assert.match(e.message, /htpasswd/);
+    assert.match(e.message, /exit 3/);
+    assert.doesNotMatch(e.message, /p4ss/);
+    return true;
+  });
+});
 
 test("an image of the local registry is mirrored from the local registry's in-cluster address", () => {
   assert.deepEqual(mirrorOf("localhost:5001/educates-base-environment:4.0.0-dev", "localhost:31234"), {

@@ -1794,9 +1794,10 @@ Features Changed
   account token instead of the long-lived ``secrets-manager-token`` secret,
   which is no longer created. The ``educates:secrets-manager`` cluster role
   grants only what the secrets manager uses: it no longer grants
-  ``deletecollection`` on secrets, nor ``patch`` and ``update`` on the four
-  ``secrets.educates.dev`` kinds, and it keeps ``delete`` on secrets, used
-  only to recreate a copy whose source secret changed type. It gains
+  ``deletecollection`` on secrets, ``patch`` and ``update`` on the four
+  ``secrets.educates.dev`` kinds, nor ``create`` on core ``events`` in every
+  namespace, and it keeps ``delete`` on secrets, used only to recreate a copy
+  whose source secret changed type. It gains
   ``update`` and ``patch`` on the status of the four kinds, ``update`` on the
   finalizers of ``SecretCopier`` and ``SecretImporter`` resources, which
   setting ``blockOwnerDeletion`` on the owner reference of a copy requires,
@@ -1838,8 +1839,13 @@ Features Changed
   annotations tracking copies. The limits keep the check of the reserved
   prefix within the cost Kubernetes allows for validating a resource. They and
   the reserved prefix are the only changes to the custom resource definitions
-  which reject a resource that was accepted before. ``SecretInjector`` rules
-  are not limited.
+  which reject a resource that worked before. The new ``targetSecret.keys``
+  must list at least one key when it is set, and the selectors new to
+  ``SecretInjector`` rules must be well formed, but these fields did nothing
+  before, so no resource which relied on them exists. The session manager turns the ``environment.secrets`` list of a
+  workshop, and that of a ``WorkshopEnvironment``, into the rules of one
+  ``SecretCopier`` each, so such a list can now name at most 100 secrets.
+  ``SecretInjector`` rules are not limited.
 
 * The ``matchLabels`` and ``matchExpressions`` of the ``labelSelector`` of a
   rule are now evaluated, and validated, as a Kubernetes label selector is. A
@@ -2752,7 +2758,8 @@ Bugs Fixed
   someone else adds to a copy, is removed. A label which the source secret or
   ``targetSecret.labels`` drops is removed from the copies, labels and
   annotations which other tools add to a copy are left alone, and a copy is
-  written only when what it should hold changes.
+  written only when what it should hold changes. This fixes
+  [#50](https://github.com/educates/educates-training-platform/issues/50).
 
 * A copy was created with only the labels of the ``targetSecret.labels`` of
   its rule, and got the labels of its source secret when it was first updated,
@@ -2779,7 +2786,11 @@ Bugs Fixed
   account, now never stops the others: it is reported in the status of the
   resource and retried with an increasing delay, at most 5 minutes apart. A
   write which conflicts with another is retried shortly, and is not reported
-  as a failure.
+  as a failure. This fixes
+  [#392](https://github.com/educates/educates-training-platform/issues/392),
+  and what
+  [#323](https://github.com/educates/educates-training-platform/issues/323)
+  left open: one namespace which fails no longer holds up the others.
 
 * A copy kept after its ``SecretCopier`` was deleted, under the ``Retain``
   reclaim policy, blocked every other ``SecretCopier`` from managing it,
@@ -2804,14 +2815,18 @@ Bugs Fixed
   manager was uninstalled a namespace holding a ``SecretExporter`` stayed
   ``Terminating``. The secrets manager now adds no finalizer to any of the
   four resources, and copies are removed only through their owner references,
-  which Kubernetes acts on by itself.
+  which Kubernetes acts on by itself. This fixes
+  [#208](https://github.com/educates/educates-training-platform/issues/208)
+  and
+  [#291](https://github.com/educates/educates-training-platform/issues/291).
 
 * A watch of the Kubernetes API which stopped delivering events could go
   unnoticed, leaving the secrets manager no longer reacting to the changes it
   watched, and its liveness probe did not check its watches. Its watches now
   come from the Kubernetes client's informers, which start a watch again
   whenever it ends or fails, and each resource is checked again 5 minutes
-  after its last check, which repairs a change that was missed.
+  after its last check, which repairs a change that was missed. This fixes
+  [#202](https://github.com/educates/educates-training-platform/issues/202).
 
 * A ``SecretInjector`` added every secret but one of type
   ``kubernetes.io/dockerconfigjson`` to the ``secrets`` of a service account,

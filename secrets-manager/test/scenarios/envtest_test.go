@@ -32,6 +32,10 @@ var envtestTiming = Timing{
 // targetSecret.keys scenarios.
 const targetFieldScenarios = "targetSecret.annotations and targetSecret.keys "
 
+// noFinalizerScenario checks every kind for finalizers, so it waits for
+// both exporting and injecting.
+const noFinalizerScenario = "Copy ownership and reclaim adds no finalizer to any of the four kinds"
+
 // awaitingOnEnvtest names, under the behavior they wait for, the scenarios
 // the secrets-manager does not pass yet, by their full text or by the full
 // text of a container that holds them. They skip on envtest.
@@ -39,17 +43,14 @@ var awaitingOnEnvtest = map[string][]string{
 	"complete namespace selection": {
 		"Namespace selection",
 	},
-	"the copy ownership rules": {
-		"Copy ownership and reclaim",
-		"SecretCopier copying recreates the copies with the new type when the source is recreated with " +
-			"another type",
-	},
 	"export and import": {
 		"SecretExporter and SecretImporter",
 		"SecretImporter gating SecretCopier rules",
+		noFinalizerScenario,
 	},
 	"secret injection": {
 		"SecretInjector",
+		noFinalizerScenario,
 	},
 	"targetSecret.annotations and targetSecret.keys": {
 		targetFieldScenarios + "sets targetSecret.annotations on every copy",

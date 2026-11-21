@@ -93,6 +93,33 @@ func SecretCopiersForSecret(reader client.Reader) handler.MapFunc {
 	}
 }
 
+// SecretCopiersSharingCopies maps the deletion of a SecretCopier to the
+// other SecretCopiers with a rule that names its copies as one of the
+// deleted SecretCopier's rules does. Those copies were kept from them while
+// the deleted SecretCopier existed, and are theirs to take over. It reads
+// the SecretCopiers from reader, a cache holding the indexes
+// IndexSecretCopiers registers.
+func SecretCopiersSharingCopies(reader client.Reader) handler.TypedMapFunc[*secretsv1beta1.SecretCopier,
+	reconcile.Request] {
+	return func(ctx context.Context, deleted *secretsv1beta1.SecretCopier) []reconcile.Request {
+		names := map[string]struct{}{}
+		for _, copyName := range ruleValues(deleted, (*secretsv1beta1.SecretCopierRule).CopyName) {
+			copiers := &secretsv1beta1.SecretCopierList{}
+			if err := reader.List(ctx, copiers, client.MatchingFields{SecretCopierTargetNameIndex: copyName}); err != nil {
+				ctrl.LoggerFrom(ctx).Error(err, "Listing SecretCopiers for a deleted SecretCopier failed",
+					"secretCopier", deleted.Name)
+				continue
+			}
+			for _, copier := range copiers.Items {
+				if copier.UID != deleted.UID {
+					names[copier.Name] = struct{}{}
+				}
+			}
+		}
+		return requests(names)
+	}
+}
+
 // SecretCopiersForNamespace maps an event on a namespace to the
 // SecretCopiers with a rule that targets it, evaluating the selectors of
 // the SecretCopiers reader holds.

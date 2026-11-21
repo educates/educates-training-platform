@@ -12,8 +12,9 @@ import (
 )
 
 // Kind describes the kind of object the engine copies: which of its
-// top-level fields a copy takes from the source, and how to read back what
-// a field manager applied to an object of the kind.
+// top-level fields a copy takes from the source, which of them an object
+// of the kind cannot change, and how to read back what a field manager
+// applied to an object of the kind.
 type Kind struct {
 	// GroupVersionKind of the source and its copies.
 	GroupVersionKind schema.GroupVersionKind
@@ -22,10 +23,20 @@ type Kind struct {
 	// source.
 	WholeFields []string
 
+	// FixedFields are the WholeFields the API server never lets an object
+	// change. A copy whose value of one differs from the source's is
+	// deleted and written anew.
+	FixedFields []string
+
 	// KeyedFields are the top-level maps a copy takes from the source key
 	// by key. The copy holds exactly the source's keys, and a key another
 	// writer adds to a copy is removed.
 	KeyedFields []string
+
+	// ImmutableField is the top-level boolean that, set to true on an
+	// object, keeps its KeyedFields from changing. Empty when the kind has
+	// none.
+	ImmutableField string
 
 	// Extract returns the configuration fieldManager applied to obj and
 	// still owns, as unstructured content: the fields of the configuration
@@ -33,11 +44,14 @@ type Kind struct {
 	Extract func(obj *unstructured.Unstructured, fieldManager string) (map[string]any, error)
 }
 
-// Secret is the Kind of a Secret: a copy takes its type and its data.
+// Secret is the Kind of a Secret: a copy takes its type, which a Secret
+// cannot change, and its data, which immutable keeps.
 var Secret = &Kind{
 	GroupVersionKind: corev1.SchemeGroupVersion.WithKind("Secret"),
 	WholeFields:      []string{"type"},
+	FixedFields:      []string{"type"},
 	KeyedFields:      []string{"data"},
+	ImmutableField:   "immutable",
 	Extract:          extractSecret,
 }
 

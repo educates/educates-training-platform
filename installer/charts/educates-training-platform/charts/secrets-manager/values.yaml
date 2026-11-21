@@ -26,6 +26,13 @@ image:
 # Kubernetes LocalObjectReference: { name: <secret-name> }.
 imagePullSecrets: []
 
+# Number of secrets-manager pods. The replicas elect a leader with the Lease
+# `secrets-manager` in the release namespace, so only one reconciles while
+# the others stand by, ready to take over. Above 1 the chart also renders a
+# PodDisruptionBudget and prefers to spread the pods over nodes. The
+# operator does not set it, so an operator install runs one replica.
+replicas: 1
+
 # Pod-level resource requests and limits.
 resources: {}
 
@@ -38,5 +45,6 @@ resources: {}
 clusterSecurity:
   policyEngine: Kyverno   # Kyverno | PodSecurityStandards | OpenShiftSCC | None
 
-# Operator log level.
+# The secrets-manager's log level: debug, info, warn or error. The operator
+# sets it from the SecretsManager's `spec.logLevel`.
 logLevel: info

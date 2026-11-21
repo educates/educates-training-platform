@@ -379,7 +379,7 @@ The ``rules`` property is a list, so rules for more than one set of target names
 Overlapping rules for target secret
 -----------------------------------
 
-A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. A ``SecretExporter`` and a ``SecretCopier`` which copy the same secret under the same name into a namespace agree: the one which created the copy keeps it and decides what it holds, and the other counts the copy as in sync. A rule which would copy another secret under the name of the copy leaves the copy untouched and reports a ``Conflict``, as a rule does for a secret the secrets manager did not create. A copy stays with the resource whose rule created it only while one of that resource's rules still targets the copy. Once none does, such as when the rule no longer selects the namespace of the copy or was removed, another rule which targets the copy takes it over within seconds.
+A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. A ``SecretExporter`` and a ``SecretCopier`` which copy the same secret under the same name into a namespace agree: the one which created the copy keeps it and decides what it holds, and the other counts the copy as in sync. A rule which would copy another secret under the name of the copy leaves the copy untouched and reports a ``Conflict``, as a rule does for a secret the secrets manager did not create. A copy stays with the resource whose rule created it only while one of that resource's rules still targets the copy, which for a ``SecretExporter`` also needs the ``SecretImporter`` to still accept the rule, and while that resource is not being deleted. Once none does, such as when the rule no longer selects the namespace of the copy, was removed, or is no longer accepted by the ``SecretImporter``, another rule which targets the copy takes it over within seconds.
 
 The page for the ``SecretCopier`` custom resource describes overlapping rules in full.
 
@@ -390,7 +390,7 @@ The secrets manager never deletes a copy because the secret exported is deleted,
 
 When a secret is copied into a namespace due to use of paired ``SecretExporter`` and ``SecretImporter``, the target secret is owned by the ``SecretImporter`` custom resource instance, through an owner reference which marks it as the controller of the copy. If the ``SecretImporter`` custom resource instance is deleted, then the target secret will also be deleted.
 
-Deleting the ``SecretExporter``, or changing the shared secret of the ``SecretImporter`` so that it no longer matches, leaves a copy already made in place, and the copy is no longer updated. A rule which copies the same secret under the same name takes such a copy over once the ``SecretExporter`` is deleted.
+Deleting the ``SecretExporter``, or changing the shared secret of the ``SecretImporter`` so that it no longer matches, leaves a copy already made in place, and the copy is no longer updated. A rule of another resource which targets such a copy, and which the ``SecretImporter`` accepts, takes it over within seconds and updates it from its own source secret.
 
 The secrets manager adds no finalizer to a ``SecretExporter``, so deleting a ``SecretExporter``, or its namespace, never waits for the secrets manager, even when it is not running or has been uninstalled.
 

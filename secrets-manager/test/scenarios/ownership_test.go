@@ -342,6 +342,33 @@ var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 		})
 	})
 
+	It("lets a second copier of the same source take over the copy of a copier that is being deleted",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+			first := s.secretCopier(s.name("first"), copierRule(src, inNamespaces(targetNS)))
+			eventually(func(g Gomega) {
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(first))
+			})
+			second := s.secretCopier(s.name("second"), copierRule(src, inNamespaces(targetNS)))
+			eventually(func(g Gomega) {
+				expectReady(g, second, "True", "InSync")
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(first))
+			})
+			s.update(first, func() { first.SetFinalizers([]string{holdFinalizer}) })
+			DeferCleanup(func() { s.update(first, func() { first.SetFinalizers(nil) }) })
+
+			s.deleteObject(first)
+
+			eventually(func(g Gomega) {
+				g.Expect(get(g, first).GetDeletionTimestamp()).NotTo(BeNil())
+				copied := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(second))
+				expectOwnedBy(g, copied, second)
+			})
+		})
+
 	It("lets a second copier of the same source take over a copy the first copier's rule stops selecting",
 		Label(expectedDifference), func() {
 			s := newScenario()

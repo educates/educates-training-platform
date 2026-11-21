@@ -16,12 +16,12 @@
 //   - Any other target whose copier-rule names a resource, the asking one
 //     included, one of whose rules still targets the copy, stays that
 //     rule's: the rule selects the copy's namespace, names its copies as the
-//     copy is named, and copies the source secret-name names. It agrees with
-//     the asking rule when that rule copies the same source, and is an
-//     ownership conflict otherwise.
+//     copy is named, copies the source secret-name names, and is still
+//     allowed to write the copy. It agrees with the asking rule when that
+//     rule copies the same source, and is an ownership conflict otherwise.
 //   - A target whose copier-rule names a resource none of whose rules
-//     targets the copy any more, or a resource that no longer exists, is an
-//     orphan, which the asking rule adopts.
+//     targets the copy any more, or a resource that no longer exists or is
+//     being deleted, is an orphan, which the asking rule adopts.
 //   - A target whose copier-rule names no resource is an ownership
 //     conflict.
 //

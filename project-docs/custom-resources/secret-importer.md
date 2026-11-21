@@ -107,14 +107,14 @@ The ``SecretImporter`` refuses a copy of a source secret from a namespace its ``
 Revoking authorization to copy
 ------------------------------
 
-Changing the shared secret of the ``SecretImporter`` so that it no longer matches that of the rule which made the copy, or deleting the ``SecretExporter`` which made the copy, leaves a copy already made in place, and the copy is no longer updated. What happens to a copy made by a ``SecretCopier`` when the ``SecretCopier`` is deleted is set by the reclaim policy of its rule.
+Changing the shared secret of the ``SecretImporter`` so that it no longer matches that of the rule which made the copy, or deleting the ``SecretExporter`` which made the copy, leaves a copy already made in place, and that rule no longer updates the copy. A rule of another resource which targets the copy, and which the ``SecretImporter`` accepts, takes the copy over within seconds and updates it from its own source secret. What happens to a copy made by a ``SecretCopier`` when the ``SecretCopier`` is deleted is set by the reclaim policy of its rule.
 
 Deletion of the secret importer
 -------------------------------
 
 When a secret is copied into a namespace due to use of paired ``SecretExporter`` and ``SecretImporter``, the target secret is owned by the ``SecretImporter`` custom resource instance, through an owner reference which marks it as the controller of the copy. If the ``SecretImporter`` custom resource instance is deleted, then the target secret will also be deleted.
 
-A copy made by a ``SecretCopier`` is owned by the ``SecretCopier``, or by nothing under the ``Retain`` reclaim policy, so deleting a ``SecretImporter`` which authorized it leaves the copy in place, and the copy is no longer updated.
+A copy made by a ``SecretCopier`` is owned by the ``SecretCopier``, or by nothing under the ``Retain`` reclaim policy, so deleting a ``SecretImporter`` which authorized it leaves the copy in place, and the rule which made it no longer updates it.
 
 Status of the secret importer
 -----------------------------

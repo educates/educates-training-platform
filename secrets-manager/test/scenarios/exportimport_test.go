@@ -315,4 +315,66 @@ var _ = Describe("SecretImporter gating SecretCopier rules", Label(areaExportImp
 			expectCopy(g, targetNS.Name, src.Name, before, ruleOf(copier))
 		})
 	})
+
+	It("lets a rule the importer accepts take over a copy whose rule the importer no longer accepts",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+			importer := s.secretImporter(targetNS.Name, src.Name, sharedSecret(passphrase))
+			gated := s.secretCopier(s.name("gated"), copierRule(src, inNamespaces(targetNS), sharedSecret(passphrase)))
+			eventually(func(g Gomega) {
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(gated))
+			})
+			ungated := s.secretCopier(s.name("ungated"), copierRule(src, inNamespaces(targetNS)))
+			eventually(func(g Gomega) {
+				expectReady(g, ungated, "True", "InSync")
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(gated))
+			})
+
+			s.update(importer, func() {
+				Expect(unstructured.SetNestedField(importer.Object, "changed", "spec", "copyAuthorization", "sharedSecret")).
+					To(Succeed())
+			})
+			s.update(src, func() { src.Data = data("token", "t1") })
+
+			eventually(func(g Gomega) {
+				copied := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(ungated))
+				expectOwnedBy(g, copied, ungated)
+				expectReady(g, ungated, "True", "InSync")
+				expectReady(g, gated, "False", "AwaitingAuthorization")
+			})
+		})
+
+	It("lets a copier take over an exported copy whose exporter the importer no longer accepts",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, s.name("exported"), data("token", "t0"))
+			exporter := s.secretExporter(sourceNS.Name, src.Name, exporterRule(inNamespaces(targetNS)))
+			importer := s.secretImporter(targetNS.Name, src.Name, sharedSecret(uidOf(exporter)))
+			eventually(func(g Gomega) {
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+			})
+			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+			eventually(func(g Gomega) {
+				expectReady(g, copier, "True", "InSync")
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+			})
+
+			s.update(importer, func() {
+				Expect(unstructured.SetNestedField(importer.Object, "changed", "spec", "copyAuthorization", "sharedSecret")).
+					To(Succeed())
+			})
+			s.update(src, func() { src.Data = data("token", "t1") })
+
+			eventually(func(g Gomega) {
+				copied := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+				expectOwnedBy(g, copied, copier)
+				expectReady(g, copier, "True", "InSync")
+				expectReady(g, exporter, "False", "AwaitingAuthorization")
+			})
+		})
 })

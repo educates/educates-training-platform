@@ -95,16 +95,17 @@ const (
 
 	// RuleTargets means the resource exists, and one of its rules still
 	// targets the copy: it selects the copy's namespace, names its copies
-	// as the copy is named, and copies the source the copy's secret-name
-	// annotation names.
+	// as the copy is named, copies the source the copy's secret-name
+	// annotation names, and is still allowed to write the copy.
 	RuleTargets
 
 	// RuleDropped means the resource exists, and none of its rules targets
 	// the copy any more: the rule that wrote it stopped selecting its
-	// namespace, was given another source or copy name, or was removed.
+	// namespace, was given another source or copy name, was removed, or is
+	// no longer allowed to write the copy.
 	RuleDropped
 
-	// RuleGone means the resource no longer exists.
+	// RuleGone means the resource no longer exists, or is being deleted.
 	RuleGone
 )
 

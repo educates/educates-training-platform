@@ -18,7 +18,9 @@
 //
 // A copy the importer no longer accepts, because its shared secret changed
 // or it was deleted, or whose SecretExporter was deleted, stays in place and
-// is no longer updated.
+// is no longer updated by the rule that wrote it. It is then an orphan,
+// which another rule that targets it, and that the importer accepts,
+// adopts.
 package copyrules
 
 import (

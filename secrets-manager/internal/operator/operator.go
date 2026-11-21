@@ -15,9 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	toolscache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -61,9 +63,15 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 		return nil, err
 	}
 
+	// Controller names are unique within the composition, which runs no
+	// metrics server, so the process-wide check of their names is skipped:
+	// it would refuse to compose the secrets-manager a second time in one
+	// process.
+	skipNameValidation := true
 	mgr, err := ctrl.NewManager(opts.RESTConfig, ctrl.Options{
-		Scheme: scheme,
-		Logger: opts.Logger,
+		Scheme:     scheme,
+		Logger:     opts.Logger,
+		Controller: config.Controller{SkipNameValidation: &skipNameValidation},
 		// Nothing the secrets-manager reads from the cache needs the
 		// managed fields: the copy engine reads them from the API server.
 		Cache: cache.Options{DefaultTransform: cache.TransformStripManagedFields()},
@@ -87,8 +95,13 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 		return nil, fmt.Errorf("indexing SecretCopiers: %w", err)
 	}
 
-	secrets := copyengine.New(copyengine.Secret, mgr.GetAPIReader(), mgr.GetClient(), FieldManager,
-		lookupRules(mgr.GetClient()))
+	// The client reads Secrets from the API server; the cache serves their
+	// metadata.
+	secrets := copyengine.New(copyengine.Secret, mgr.GetCache(), mgr.GetAPIReader(), mgr.GetClient(),
+		FieldManager, lookupRules(mgr.GetClient()))
+	if err := forgetDeletedCopies(ctx, mgr.GetCache(), secrets); err != nil {
+		return nil, err
+	}
 	if err := secretcopier.New(mgr.GetClient(), secrets).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretCopier reconciler: %w", err)
 	}
@@ -105,8 +118,6 @@ func (o *Operator) Run(ctx context.Context) error {
 // reconciler reads them: namespaces, service accounts and the four
 // secrets.educates.dev kinds in full, and Secrets as metadata only.
 func cachedKinds() []client.Object {
-	secretMetadata := &metav1.PartialObjectMetadata{}
-	secretMetadata.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
 	return []client.Object{
 		&corev1.Namespace{},
 		&corev1.ServiceAccount{},
@@ -114,6 +125,37 @@ func cachedKinds() []client.Object {
 		&secretsv1beta1.SecretExporter{},
 		&secretsv1beta1.SecretImporter{},
 		&secretsv1beta1.SecretInjector{},
-		secretMetadata,
+		secretMetadata(),
 	}
+}
+
+// secretMetadata is the object the cache holds a Secret's metadata in.
+func secretMetadata() *metav1.PartialObjectMetadata {
+	metadata := &metav1.PartialObjectMetadata{}
+	metadata.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
+	return metadata
+}
+
+// forgetDeletedCopies has engine forget each Secret the cache sees
+// deleted, so that what it remembers of copies stays bounded by the
+// Secrets that exist.
+func forgetDeletedCopies(ctx context.Context, c cache.Cache, engine *copyengine.Engine) error {
+	informer, err := c.GetInformer(ctx, secretMetadata())
+	if err != nil {
+		return fmt.Errorf("caching Secret metadata: %w", err)
+	}
+	_, err = informer.AddEventHandler(toolscache.ResourceEventHandlerFuncs{
+		DeleteFunc: func(obj any) {
+			if tombstone, ok := obj.(toolscache.DeletedFinalStateUnknown); ok {
+				obj = tombstone.Obj
+			}
+			if deleted, ok := obj.(client.Object); ok {
+				engine.Forget(client.ObjectKeyFromObject(deleted))
+			}
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("watching Secret deletions: %w", err)
+	}
+	return nil
 }

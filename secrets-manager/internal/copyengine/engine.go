@@ -35,6 +35,19 @@
 // source's is deleted and written anew. A copy another writer made
 // immutable, whose payload must change, is a failure; it is never deleted.
 //
+// A copy carries a third tracking annotation, source-version: the resource
+// version of the source it was last written from. The engine remembers,
+// for each copy it finds in sync or writes, the resource versions of the
+// source and of the copy, and the shape the rule gives the copy. While the
+// cache holds those versions and the rule asks for that shape, the copy is
+// in sync, and converging it reads and writes nothing on the API server.
+// Otherwise the engine reads the source and the copy from the API server
+// and compares them, writing the copy only for a real difference in its
+// payload, labels, annotations or owner reference: a source change that
+// alters none of them is compared once and remembered, and does not
+// rewrite the copy to refresh source-version. The memory lives as long as
+// the process, so after a restart each copy is compared once more.
+//
 // The engine knows nothing of the resource whose rule asks for the copy
 // beyond the copier-rule value naming it and the owner it gives the copy,
 // and assumes nothing of the copied kind beyond what its Kind says.
@@ -62,10 +75,12 @@ import (
 // whose payload must change.
 var ErrImmutable = errors.New("the copy is immutable")
 
-// Copy is one copy of a source for the engine to converge.
+// Copy is one copy of a source for the engine to converge. Every field but
+// Source makes up the shape of the copy, which the engine remembers with
+// the copy: a change to any of them has the engine compare the copy again.
 type Copy struct {
-	// Source is the object copied, as read from the API server.
-	Source *unstructured.Unstructured
+	// Source is the object copied, as the engine's Source returns it.
+	Source *Source
 
 	// Namespace and Name name the copy.
 	Namespace string
@@ -101,51 +116,109 @@ type Owner struct {
 // Engine converges copies of one kind of object.
 type Engine struct {
 	kind         *Kind
+	cache        client.Reader
 	reader       client.Reader
 	writer       client.Client
 	fieldManager string
 	rules        RuleLookup
+	memory       *memory
 }
 
-// New returns an engine copying objects of kind. It reads sources and
-// targets through reader, which must read from the API server rather than
-// a cache, writes copies through writer, applying them as fieldManager,
-// and asks rules whether the resource a target's copier-rule annotation
-// names still exists.
-func New(kind *Kind, reader client.Reader, writer client.Client, fieldManager string, rules RuleLookup) *Engine {
-	return &Engine{kind: kind, reader: reader, writer: writer, fieldManager: fieldManager, rules: rules}
+// New returns an engine copying objects of kind. It reads the metadata of
+// sources and targets through cache, which must serve objects of kind as
+// metadata, reads their content through reader, which must read from the
+// API server rather than a cache, writes copies through writer, applying
+// them as fieldManager, and asks rules whether the resource a target's
+// copier-rule annotation names still exists.
+func New(kind *Kind, cache, reader client.Reader, writer client.Client, fieldManager string,
+	rules RuleLookup) *Engine {
+	return &Engine{kind: kind, cache: cache, reader: reader, writer: writer, fieldManager: fieldManager,
+		rules: rules, memory: newMemory()}
 }
 
-// Source reads the source named key from the API server.
-func (e *Engine) Source(ctx context.Context, key types.NamespacedName) (*unstructured.Unstructured, error) {
-	source := e.object(key)
-	if err := e.reader.Get(ctx, key, source); err != nil {
-		return nil, err
-	}
-	return source, nil
+// Forget drops what the engine remembers of the copy named key, which no
+// longer exists.
+func (e *Engine) Forget(key types.NamespacedName) {
+	e.memory.forget(key)
 }
 
 // Converge brings the copy c describes to what it should hold, when the
 // target is c.Rule's to write, writing it only when it differs. A write
 // conflict is returned as the API server's Conflict error.
+//
+// It decides from the cache, reading nothing from the API server, that a
+// target is not c.Rule's to write, that it is being deleted, or that it is
+// in sync, as the engine last found or wrote it.
 func (e *Engine) Converge(ctx context.Context, c Copy) (Result, error) {
+	key := types.NamespacedName{Namespace: c.Namespace, Name: c.Name}
+	copyShape, err := shapeOf(c)
+	if err != nil {
+		return Result{}, err
+	}
+
+	cached := &metav1.PartialObjectMetadata{}
+	cached.SetGroupVersionKind(e.kind.GroupVersionKind)
+	err = e.cache.Get(ctx, key, cached)
+	switch {
+	case apierrors.IsNotFound(err):
+	case err != nil:
+		return Result{}, err
+	case cached.GetDeletionTimestamp() != nil:
+		return Result{Outcome: TargetDeleting}, nil
+	default:
+		result, mine, err := e.claim(ctx, c, cached)
+		if err != nil || !mine {
+			return result, err
+		}
+		if result.Outcome != Adopted && e.memory.holds(key, e.remembered(c, cached, copyShape)) {
+			return Result{Outcome: InSync}, nil
+		}
+	}
+
+	result, current, err := e.converge(ctx, c, key)
+	if err != nil || current == nil {
+		e.memory.forget(key)
+		return result, err
+	}
+	e.memory.remember(key, e.remembered(c, current, copyShape))
+	return result, nil
+}
+
+// remembered is what the engine remembers of c's copy, when it is target,
+// with the shape c gives it.
+func (e *Engine) remembered(c Copy, target metav1.Object, copyShape shape) remembered {
+	return remembered{
+		source:        types.NamespacedName{Namespace: c.Source.GetNamespace(), Name: c.Source.GetName()},
+		sourceVersion: c.Source.GetResourceVersion(),
+		copyVersion:   target.GetResourceVersion(),
+		shape:         copyShape,
+	}
+}
+
+// converge brings the copy c describes, named key, to what it should hold,
+// comparing the source and the target as the API server has them. When
+// the target is then c.Rule's copy, in sync, it returns the copy as the
+// API server holds it.
+func (e *Engine) converge(ctx context.Context, c Copy, key types.NamespacedName) (Result, metav1.Object, error) {
+	if err := e.read(ctx, c.Source); err != nil {
+		return Result{}, nil, fmt.Errorf("reading the source %s: %w", sourceName(c.Source), err)
+	}
 	desired := e.desired(c)
 
-	key := types.NamespacedName{Namespace: c.Namespace, Name: c.Name}
 	live := e.object(key)
 	err := e.reader.Get(ctx, key, live)
 	switch {
 	case apierrors.IsNotFound(err):
 		return e.write(ctx, desired, Created)
 	case err != nil:
-		return Result{}, err
+		return Result{}, nil, err
 	case live.GetDeletionTimestamp() != nil:
-		return Result{Outcome: TargetDeleting}, nil
+		return Result{Outcome: TargetDeleting}, nil, nil
 	}
 
 	result, mine, err := e.claim(ctx, c, live)
 	if err != nil || !mine {
-		return result, err
+		return result, nil, err
 	}
 	written := Updated
 	if result.Outcome == Adopted {
@@ -154,35 +227,36 @@ func (e *Engine) Converge(ctx context.Context, c Copy) (Result, error) {
 
 	fixedFieldsDiffer := !sameFields(live, desired, e.kind.FixedFields)
 	if e.immutable(live) && (fixedFieldsDiffer || !sameKeyedFields(live, desired, e.kind.KeyedFields)) {
-		return Result{}, fmt.Errorf("%w, and differs from its source", ErrImmutable)
+		return Result{}, nil, fmt.Errorf("%w, and differs from its source", ErrImmutable)
 	}
 	if fixedFieldsDiffer {
 		if err := e.delete(ctx, live); err != nil {
-			return Result{}, err
+			return Result{}, nil, err
 		}
 		return e.write(ctx, desired, Recreated)
 	}
 
 	applied, err := e.kind.Extract(live, e.fieldManager)
 	if err != nil {
-		return Result{}, err
+		return Result{}, nil, err
 	}
-	if !sameContent(desired.Object, applied) {
+	if !sameContent(withoutSourceVersion(desired.Object), withoutSourceVersion(applied)) {
 		return e.write(ctx, desired, written)
 	}
-	removed, err := e.removeStrayKeys(ctx, live, desired)
-	if err != nil {
-		return Result{}, err
+	patched, err := e.removeStrayKeys(ctx, live, desired)
+	switch {
+	case err != nil:
+		return Result{}, nil, err
+	case patched != nil:
+		return Result{Outcome: written}, patched, nil
+	default:
+		return Result{Outcome: InSync}, live, nil
 	}
-	if removed {
-		return Result{Outcome: written}, nil
-	}
-	return Result{Outcome: InSync}, nil
 }
 
 // desired is the configuration the engine applies for c: the copy's name,
 // labels, annotations and owner reference, and the payload the source's
-// kind copies.
+// kind copies. c.Source must hold the source read from the API server.
 func (e *Engine) desired(c Copy) *unstructured.Unstructured {
 	desired := e.object(types.NamespacedName{Namespace: c.Namespace, Name: c.Name})
 	labels := maps.Clone(c.Source.GetLabels())
@@ -199,6 +273,7 @@ func (e *Engine) desired(c Copy) *unstructured.Unstructured {
 	}
 	annotations[secretsv1beta1.CopierRuleAnnotation] = c.Rule
 	annotations[secretsv1beta1.SecretNameAnnotation] = sourceName(c.Source)
+	annotations[secretsv1beta1.SourceVersionAnnotation] = c.Source.GetResourceVersion()
 	desired.SetAnnotations(annotations)
 	if c.Owner != nil {
 		controller, blockOwnerDeletion := true, true
@@ -225,16 +300,23 @@ func (e *Engine) desired(c Copy) *unstructured.Unstructured {
 }
 
 // write applies desired, removes the keys the API server's copy then holds
-// beyond it, and reports outcome.
-func (e *Engine) write(ctx context.Context, desired *unstructured.Unstructured, outcome Outcome) (Result, error) {
+// beyond it, and reports outcome, with the copy the API server holds after
+// the writes.
+func (e *Engine) write(ctx context.Context, desired *unstructured.Unstructured,
+	outcome Outcome) (Result, metav1.Object, error) {
 	current, err := e.apply(ctx, desired)
 	if err != nil {
-		return Result{}, err
+		return Result{}, nil, err
 	}
-	if _, err := e.removeStrayKeys(ctx, current, desired); err != nil {
-		return Result{}, err
+	patched, err := e.removeStrayKeys(ctx, current, desired)
+	switch {
+	case err != nil:
+		return Result{}, nil, err
+	case patched != nil:
+		return Result{Outcome: outcome}, patched, nil
+	default:
+		return Result{Outcome: outcome}, current, nil
 	}
-	return Result{Outcome: outcome}, nil
 }
 
 // apply writes desired with server-side apply, forced, and returns the
@@ -258,10 +340,12 @@ func (e *Engine) delete(ctx context.Context, live *unstructured.Unstructured) er
 }
 
 // removeStrayKeys removes from current the keys of its keyed fields that
-// desired does not hold, and reports whether it wrote. The patch carries
-// current's resource version, so it fails with a conflict when the copy
-// has changed since.
-func (e *Engine) removeStrayKeys(ctx context.Context, current, desired *unstructured.Unstructured) (bool, error) {
+// desired does not hold, and returns the copy the API server holds after
+// the removal, or nil when it wrote nothing. The patch carries current's
+// resource version, so it fails with a conflict when the copy has changed
+// since.
+func (e *Engine) removeStrayKeys(ctx context.Context,
+	current, desired *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	patch := map[string]any{}
 	for _, field := range e.kind.KeyedFields {
 		held, _ := current.Object[field].(map[string]any)
@@ -277,19 +361,19 @@ func (e *Engine) removeStrayKeys(ctx context.Context, current, desired *unstruct
 		}
 	}
 	if len(patch) == 0 {
-		return false, nil
+		return nil, nil
 	}
 	patch["metadata"] = map[string]any{"resourceVersion": current.GetResourceVersion()}
 	body, err := json.Marshal(patch)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	target := e.object(types.NamespacedName{Namespace: current.GetNamespace(), Name: current.GetName()})
 	if err := e.writer.Patch(ctx, target, client.RawPatch(types.MergePatchType, body),
 		client.FieldOwner(e.fieldManager)); err != nil {
-		return false, err
+		return nil, err
 	}
-	return true, nil
+	return target, nil
 }
 
 // immutable reports whether obj is marked immutable.
@@ -312,8 +396,30 @@ func (e *Engine) object(key types.NamespacedName) *unstructured.Unstructured {
 
 // sourceName names source as the secret-name annotation does:
 // <namespace>/<name>.
-func sourceName(source *unstructured.Unstructured) string {
+func sourceName(source metav1.Object) string {
 	return source.GetNamespace() + "/" + source.GetName()
+}
+
+// withoutSourceVersion returns content, an object's unstructured content,
+// without the source-version annotation, which records when a copy was
+// written rather than what it holds. content is left as it is.
+func withoutSourceVersion(content map[string]any) map[string]any {
+	metadata, _ := content["metadata"].(map[string]any)
+	annotations, _ := metadata["annotations"].(map[string]any)
+	if _, ok := annotations[secretsv1beta1.SourceVersionAnnotation]; !ok {
+		return content
+	}
+	annotations = maps.Clone(annotations)
+	delete(annotations, secretsv1beta1.SourceVersionAnnotation)
+	metadata = maps.Clone(metadata)
+	if len(annotations) == 0 {
+		delete(metadata, "annotations")
+	} else {
+		metadata["annotations"] = annotations
+	}
+	result := maps.Clone(content)
+	result["metadata"] = metadata
+	return result
 }
 
 // sameFields reports whether live holds the value desired gives each of

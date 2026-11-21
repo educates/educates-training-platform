@@ -3,7 +3,7 @@ package copyengine
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 )
@@ -92,12 +92,12 @@ const (
 // lives in its source's namespace.
 type RuleLookup func(ctx context.Context, rule, source string) (RuleState, error)
 
-// claim decides whether live, the target of c, is c.Rule's to write, and
-// returns true when it is: when c.Rule wrote it, or adopts it, the Result
-// then saying Adopted. Otherwise the Result says why the target is left
-// untouched.
-func (e *Engine) claim(ctx context.Context, c Copy, live *unstructured.Unstructured) (Result, bool, error) {
-	annotations := live.GetAnnotations()
+// claim decides whether target, the target of c as the cache or the API
+// server has it, is c.Rule's to write, and returns true when it is: when
+// c.Rule wrote it, or adopts it, the Result then saying Adopted. Otherwise
+// the Result says why the target is left untouched.
+func (e *Engine) claim(ctx context.Context, c Copy, target metav1.Object) (Result, bool, error) {
+	annotations := target.GetAnnotations()
 	writer, tracked := annotations[secretsv1beta1.CopierRuleAnnotation]
 	switch {
 	case !tracked:

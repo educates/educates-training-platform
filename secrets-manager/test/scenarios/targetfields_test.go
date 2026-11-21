@@ -222,6 +222,12 @@ var _ = Describe("Admission", Label(areaAdmission), func() {
 			}
 			return []object{unmatchedCopierRule(s, shaped(copyShape{Annotations: annotations}))}
 		}),
+		Entry("a SecretCopier rule with an empty targetSecret.keys", kindSecretCopier, func(s *scenario) []object {
+			return []object{unmatchedCopierRule(s, noKeys())}
+		}),
+		Entry("a SecretExporter rule with an empty targetSecret.keys", kindSecretExporter, func(s *scenario) []object {
+			return []object{exporterRule(byName(s.name("none")), noKeys())}
+		}),
 		Entry("a SecretCopier with 101 rules", kindSecretCopier, func(s *scenario) []object {
 			rules := make([]object, 0, 101)
 			for range 101 {
@@ -238,6 +244,11 @@ var _ = Describe("Admission", Label(areaAdmission), func() {
 		}),
 	)
 })
+
+// noKeys is the targetSecret of a rule that lists keys, but none.
+func noKeys() object {
+	return object{"targetSecret": object{"keys": []string{}}}
+}
 
 // unmatchedCopierRule is a SecretCopier rule copying a Secret of the
 // scenario into a namespace that does not exist, with the other fields of

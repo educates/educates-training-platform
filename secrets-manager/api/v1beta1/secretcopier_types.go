@@ -45,7 +45,8 @@ type TargetSecret struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 
 	// keys limits the copies to these keys of the source, those the source
-	// has. The copies hold every key of the source when it is empty.
+	// has. When it is set it lists at least one key; the copies hold every
+	// key of the source when it is absent.
 	// +optional
 	Keys []string `json:"keys,omitempty"`
 }

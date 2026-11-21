@@ -38,6 +38,16 @@ type TargetSecret struct {
 	// over a source label with the same key.
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+
+	// annotations are set on the copies. The source's annotations are
+	// never copied. At most 32, none of them under secrets.educates.dev/.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// keys limits the copies to these keys of the source, those the source
+	// has. The copies hold every key of the source when it is empty.
+	// +optional
+	Keys []string `json:"keys,omitempty"`
 }
 
 // CopyAuthorization gates a copy on a SecretImporter that holds the same

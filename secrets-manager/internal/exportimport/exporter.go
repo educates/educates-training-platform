@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
@@ -29,15 +30,17 @@ const conflictRetryDelay = time.Second
 
 // ExporterReconciler reconciles one SecretExporter at a time.
 type ExporterReconciler struct {
-	cache  client.Reader
-	engine *copyengine.Engine
+	cache       client.Reader
+	engine      *copyengine.Engine
+	convergence convergence.Policy
 }
 
 // NewExporterReconciler returns a reconciler that reads SecretExporters,
-// SecretImporters and namespaces from cache, and converges copies with
-// engine, a Secret engine.
-func NewExporterReconciler(cache client.Reader, engine *copyengine.Engine) *ExporterReconciler {
-	return &ExporterReconciler{cache: cache, engine: engine}
+// SecretImporters and namespaces from cache, converges copies with engine,
+// a Secret engine, and retries under policy.
+func NewExporterReconciler(cache client.Reader, engine *copyengine.Engine,
+	policy convergence.Policy) *ExporterReconciler {
+	return &ExporterReconciler{cache: cache, engine: engine, convergence: policy}
 }
 
 // SetupWithManager registers the reconciler with mgr. It reconciles a
@@ -47,9 +50,12 @@ func NewExporterReconciler(cache client.Reader, engine *copyengine.Engine) *Expo
 // when a SecretImporter named after its copies is created, changed or
 // deleted, and when a SecretCopier or another SecretExporter that names
 // copies as it does is deleted, leaving those copies for it to take over.
-// The cache must hold the indexes eventmap.IndexSecretExporters registers.
+// Besides, the reconciler's policy reconciles each SecretExporter again a
+// backstop interval after its last reconcile, and retries a failed one with
+// backoff. The cache must hold the indexes eventmap.IndexSecretExporters
+// registers.
 func (r *ExporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	return r.convergence.Complete(ctrl.NewControllerManagedBy(mgr).
 		Named("secretexporter").
 		For(&secretsv1beta1.SecretExporter{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(eventmap.SecretExportersForSecret(mgr.GetClient())),
@@ -67,8 +73,8 @@ func (r *ExporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WatchesRawSource(source.Kind(mgr.GetCache(), &secretsv1beta1.SecretCopier{},
 			handler.TypedEnqueueRequestsFromMapFunc(
 				eventmap.SecretExportersSharingCopies[*secretsv1beta1.SecretCopier](mgr.GetClient())),
-			eventmap.Deletions[*secretsv1beta1.SecretCopier]())).
-		Complete(r)
+			eventmap.Deletions[*secretsv1beta1.SecretCopier]())),
+		&secretsv1beta1.SecretExporter{}, mgr.GetClient(), r)
 }
 
 // exporterReport is what reconciling a SecretExporter found.
@@ -230,6 +236,9 @@ func (r *ExporterReconciler) exportRule(ctx context.Context, exporter *secretsv1
 		})
 		report.targets = append(report.targets, target)
 		logTarget(targetLog, target.result, target.err)
+		if target.err == nil && target.result.Outcome.Wrote() {
+			convergence.Repaired(ctx)
+		}
 	}
 	return report
 }

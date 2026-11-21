@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
@@ -90,25 +91,28 @@ type ImportState struct {
 // nothing: a SecretImporter is accepted or refused by the reconcilers of
 // the rules that offer it a copy. It works out where the importer stands.
 type ImporterReconciler struct {
-	cache client.Reader
+	cache       client.Reader
+	convergence convergence.Policy
 }
 
 // NewImporterReconciler returns a reconciler that reads SecretImporters,
 // SecretExporters, SecretCopiers, namespaces and the metadata of Secrets
-// from cache.
-func NewImporterReconciler(cache client.Reader) *ImporterReconciler {
-	return &ImporterReconciler{cache: cache}
+// from cache, and retries under policy.
+func NewImporterReconciler(cache client.Reader, policy convergence.Policy) *ImporterReconciler {
+	return &ImporterReconciler{cache: cache, convergence: policy}
 }
 
 // SetupWithManager registers the reconciler with mgr. It reconciles a
 // SecretImporter when its spec changes, when the Secret named after it in
 // its namespace changes, when a SecretExporter or SecretCopier with a rule
 // that names its copies after it changes, and when its namespace is
-// relabelled or given other owners. The cache must hold the indexes
-// eventmap.IndexSecretCopiers, eventmap.IndexSecretExporters and
+// relabelled or given other owners. Besides, the reconciler's policy
+// reconciles each SecretImporter again a backstop interval after its last
+// reconcile, and retries a failed one with backoff. The cache must hold the
+// indexes eventmap.IndexSecretCopiers, eventmap.IndexSecretExporters and
 // eventmap.IndexSecretImporters register.
 func (r *ImporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	return r.convergence.Complete(ctrl.NewControllerManagedBy(mgr).
 		Named("secretimporter").
 		For(&secretsv1beta1.SecretImporter{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(eventmap.SecretImporterForSecret(mgr.GetClient())),
@@ -123,8 +127,8 @@ func (r *ImporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			predicate.TypedGenerationChangedPredicate[*secretsv1beta1.SecretCopier]{})).
 		WatchesRawSource(source.Kind(mgr.GetCache(), &corev1.Namespace{},
 			handler.TypedEnqueueRequestsFromMapFunc(eventmap.SecretImportersForNamespace(mgr.GetClient())),
-			eventmap.NamespaceSelectionChanged())).
-		Complete(r)
+			eventmap.NamespaceSelectionChanged())),
+		&secretsv1beta1.SecretImporter{}, r.cache, r)
 }
 
 // Reconcile works out where the SecretImporter req names stands.

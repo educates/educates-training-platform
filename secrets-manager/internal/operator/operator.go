@@ -145,13 +145,13 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 	if err := secretcopier.New(mgr.GetClient(), secrets, policy).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretCopier reconciler: %w", err)
 	}
-	if err := exportimport.NewExporterReconciler(mgr.GetClient(), secrets).SetupWithManager(mgr); err != nil {
+	if err := exportimport.NewExporterReconciler(mgr.GetClient(), secrets, policy).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretExporter reconciler: %w", err)
 	}
 	// The SecretImporter reconciler reads the metadata of Secrets, which
 	// only the cache itself serves: the client reads Secrets from the API
 	// server.
-	if err := exportimport.NewImporterReconciler(mgr.GetCache()).SetupWithManager(mgr); err != nil {
+	if err := exportimport.NewImporterReconciler(mgr.GetCache(), policy).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretImporter reconciler: %w", err)
 	}
 	injectors := secretinjector.New(mgr.GetCache(), mgr.GetAPIReader(), mgr.GetClient(), policy)

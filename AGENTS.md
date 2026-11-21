@@ -34,12 +34,13 @@ go-containerregistry. Sessions still download content with the vendir
 and imgpkg binaries in the base image (`workshop-images/`).
 
 **The Educates runtime is Python/kopf/Django, moving to Go one component
-at a time** (ADR 0011 in `developer-docs/adr/`). `lookup-service/` is the
-first ported: a Go service on controller-runtime, client-go and `net/http`.
-Components in `session-manager/`, `secrets-manager/`, `training-portal/`,
-`tunnel-manager/`, `workshop-images/`, and supporting services keep their
-Python implementations. The installer is the operator + chart; it installs
-the runtime but does not reimplement it.
+at a time** (ADR 0011 in `developer-docs/adr/`). `lookup-service/` was the
+first ported, a Go service on controller-runtime, client-go and `net/http`,
+and `secrets-manager/` the second, a Go operator on controller-runtime.
+Components in `session-manager/`, `training-portal/`, `tunnel-manager/`,
+`workshop-images/`, and supporting services keep their Python
+implementations. The installer is the operator + chart; it installs the
+runtime but does not reimplement it.
 
 ---
 
@@ -193,17 +194,18 @@ make prune-all                                # Clean caches and build artifacts
 ### CI parity (run the gating workflows locally)
 
 ```bash
-make ci                                       # All CI checks (CLI, operator, Lookup Service)
+make ci                                       # All CI checks (CLI, operator, Lookup Service, secrets-manager)
 make ci-cli                                   # client-programs-ci.yaml: vet/build/test + chart/schema drift
 make ci-operator                              # installer-operator-ci.yaml: vet/build + manifest/deepcopy drift + envtest + lint
 make ci-lookup-service                        # lookup-service-ci.yaml: vet/build + deepcopy drift + envtest REST suite + lint
+make ci-secrets-manager                       # secrets-manager-ci.yaml: vet/build + deepcopy drift + envtest scenario suite + lint
 make stage-renderer-files                     # Stage the gitignored CLI theme embed dir (also done by build-cli/ci-cli)
 ```
 
-`ci-operator` and `ci-lookup-service` need the Go version pinned in
-`installer/operator/go.mod` and `lookup-service/go.mod` on `PATH` (or
-`GOTOOLCHAIN=go1.x.y`) to avoid mixed-toolchain compile errors. See
-`developer-docs/build-instructions.md`.
+`ci-operator`, `ci-lookup-service` and `ci-secrets-manager` need the Go
+version pinned in `installer/operator/go.mod`, `lookup-service/go.mod` and
+`secrets-manager/go.mod` on `PATH` (or `GOTOOLCHAIN=go1.x.y`) to avoid
+mixed-toolchain compile errors. See `developer-docs/build-instructions.md`.
 
 ---
 
@@ -214,8 +216,17 @@ make stage-renderer-files                     # Stage the gitignored CLI theme e
 - **session-manager/** — Python/kopf operator managing workshop sessions,
   environments, allocations, training portals, vcluster integration. Main
   control plane.
-- **secrets-manager/** — Python/kopf operator handling secret copying,
-  exporting, importing, injection across namespaces.
+- **secrets-manager/**: Go operator on controller-runtime that copies
+  Secrets between namespaces and injects them into service accounts, as
+  the `secrets.educates.dev` SecretCopier, SecretExporter, SecretImporter
+  and SecretInjector resources ask, and reports their status and Events.
+  It converges on events, with Secrets watched as metadata only and their
+  data read live, and copies with server-side apply under the field
+  manager `educates-secrets-manager`. The four CRDs in its subchart are the
+  schema of record for its hand-written Go types. Its scenario suite runs
+  the real composition in process against envtest, and the same scenarios
+  run against a live cluster by kubeconfig. The image is a static binary
+  on `gcr.io/distroless/static:nonroot`.
 - **training-portal/** — Django web app, user-facing portal. Exposes REST API.
 - **lookup-service/**: Go service giving a tenant's API client a workshop
   session on whichever training portal, on whichever cluster, offers the
@@ -257,9 +268,9 @@ The installer has three layers:
 ### Go workspace
 
 `go.work` covers `client-programs/`, `installer/operator/`,
-`lookup-service/` and `node-ca-injector/`. Other Go services
-(`assets-server/`, `image-puller/`) have their own `go.mod` and are built
-only via Docker. CI runs no tests outside the workspace, so
+`lookup-service/`, `node-ca-injector/` and `secrets-manager/`. Other Go
+services (`assets-server/`, `image-puller/`) have their own `go.mod` and
+are built only via Docker. CI runs no tests outside the workspace, so
 `image-puller/`'s Dockerfile runs its tests in the build stage.
 
 ### The four CRDs

@@ -327,7 +327,10 @@ var _ = Describe("Status, printer columns and Events", Label(areaFeedback, expec
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)
 		targetNS := s.namespace("a", nil)
-		src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+		// A Secret or SecretImporter named like the copy, in any namespace,
+		// reconciles the copier, so the source has a name no other scenario
+		// running at once gives a Secret.
+		src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
 		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
 		eventually(func(g Gomega) {
 			g.Expect(summaryOf(g, copier)).To(HaveKeyWithValue("inSyncRatio", inSyncRatio(1, 1)))

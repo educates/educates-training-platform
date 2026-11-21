@@ -395,6 +395,35 @@ var _ = Describe("SecretCopier copying", Label(areaCopying), func() {
 			})
 		})
 
+	It("keeps a copy as it is, and reports the failure, when the source's new type would have its recreation rejected",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, s.name("ingress"), data("ca.crt", "ca", "tls.crt", "cert", "tls.key", "key"))
+			copier := s.secretCopier(s.name("copier"),
+				copierRule(src, inNamespaces(targetNS), shaped(copyShape{Keys: []string{"ca.crt"}})))
+			var before *corev1.Secret
+			eventually(func(g Gomega) {
+				before = secretIn(g, targetNS.Name, src.Name)
+				g.Expect(before.Data).To(Equal(data("ca.crt", "ca")))
+			})
+
+			s.deleteObject(src)
+			s.secret(sourceNS.Name, src.Name, data("ca.crt", "ca", "tls.crt", "cert", "tls.key", "key"),
+				withType(corev1.SecretTypeTLS))
+
+			eventually(func(g Gomega) {
+				expectReady(g, copier, "False", "TargetErrors")
+			})
+			consistently(func(g Gomega) {
+				kept := secretIn(g, targetNS.Name, src.Name)
+				g.Expect(kept.UID).To(Equal(before.UID))
+				g.Expect(kept.Type).To(Equal(corev1.SecretTypeOpaque))
+				g.Expect(kept.Data).To(Equal(data("ca.crt", "ca")))
+			})
+		})
+
 	It("keeps the copies of a rule removed from its copier", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

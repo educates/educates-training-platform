@@ -51,7 +51,9 @@
 // them.
 //
 // A copy whose fixed field, such as a Secret's type, differs from the
-// source's is deleted and written anew. A copy another writer made
+// source's is deleted and written anew, once the API server has said it
+// would accept the new copy: a copy whose replacement it would reject is
+// kept as it is, and is a failure. A copy another writer made
 // immutable, whose payload or fixed field must change, is a failure, an
 // ImmutableCopyError naming the field and the version of the source the
 // copy did not take; it is never deleted.
@@ -282,6 +284,10 @@ func (e *Engine) converge(ctx context.Context, c Copy, key types.NamespacedName)
 		}
 	}
 	if fixedField != "" {
+		if err := e.accepted(ctx, desired); err != nil {
+			return Result{}, nil, fmt.Errorf("the copy is kept as it is: recreating it with its source's %s: %w",
+				fixedField, err)
+		}
 		if err := e.delete(ctx, live); err != nil {
 			return Result{}, nil, err
 		}
@@ -406,6 +412,19 @@ func (e *Engine) create(ctx context.Context, desired *unstructured.Unstructured,
 		return Result{}, nil, err
 	}
 	return Result{Outcome: outcome}, current, nil
+}
+
+// accepted reports, as nil, that the API server would accept desired as a
+// new object once the object holding its name is gone, and otherwise
+// returns why it would not. It asks with a create that writes nothing: the
+// API server validates and admits the object before it finds its name
+// taken.
+func (e *Engine) accepted(ctx context.Context, desired *unstructured.Unstructured) error {
+	err := e.writer.Create(ctx, desired.DeepCopy(), client.DryRunAll, client.FieldOwner(e.fieldManager))
+	if apierrors.IsAlreadyExists(err) {
+		return nil
+	}
+	return err
 }
 
 // ownAsApplied has the fields the field manager owns on obj, the object as

@@ -3,8 +3,8 @@ import { test } from "node:test";
 import { mirrorOf, pullSecret } from "./mirror.mjs";
 
 test("an image of the local registry is mirrored from the local registry's in-cluster address", () => {
-  assert.deepEqual(mirrorOf("localhost:5001/educates-base-environment:smgo-py-e823f507", "localhost:31234"), {
-    image: "localhost:31234/educates-base-environment:smgo-py-e823f507",
+  assert.deepEqual(mirrorOf("localhost:5001/educates-base-environment:4.0.0-dev", "localhost:31234"), {
+    image: "localhost:31234/educates-base-environment:4.0.0-dev",
     upstream: "http://registry.default.svc.cluster.local",
   });
 });

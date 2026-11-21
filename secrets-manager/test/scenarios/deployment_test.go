@@ -75,7 +75,8 @@ func restoreCluster(ctx context.Context, t *Target) error {
 	if err != nil {
 		return fmt.Errorf("reading the replicas Deployment %s had: %w", key, err)
 	}
-	patch := fmt.Sprintf(`{"metadata":{"annotations":{%q:null}},"spec":{"replicas":%d}}`, replicasBeforeAnnotation, replicas)
+	patch := fmt.Sprintf(`{"metadata":{"annotations":{%q:null}},"spec":{"replicas":%d}}`,
+		replicasBeforeAnnotation, replicas)
 	if err := t.Client.Patch(ctx, deployment, client.RawPatch(types.MergePatchType, []byte(patch)),
 		client.FieldOwner(scenariosFieldManager)); err != nil {
 		return fmt.Errorf("scaling Deployment %s back to %d replicas: %w", key, replicas, err)
@@ -86,8 +87,10 @@ func restoreCluster(ctx context.Context, t *Target) error {
 // The patches that make a node unschedulable, as kubectl cordon does, and
 // schedulable again, marking it for as long as it is unschedulable.
 var (
-	cordonPatch   = fmt.Sprintf(`{"metadata":{"annotations":{%q:"true"}},"spec":{"unschedulable":true}}`, cordonedAnnotation)
-	uncordonPatch = fmt.Sprintf(`{"metadata":{"annotations":{%q:null}},"spec":{"unschedulable":null}}`, cordonedAnnotation)
+	cordonPatch = fmt.Sprintf(`{"metadata":{"annotations":{%q:"true"}},"spec":{"unschedulable":true}}`,
+		cordonedAnnotation)
+	uncordonPatch = fmt.Sprintf(`{"metadata":{"annotations":{%q:null}},"spec":{"unschedulable":null}}`,
+		cordonedAnnotation)
 )
 
 // requireDeployedSecretsManager skips the scenario on a target whose

@@ -1,9 +1,8 @@
-**/*.swp
-**/__pycache__
-**/.pytest_cache
-.git
-.gitignore
-.venv
-venv
-bin
-cover.out
+# The image builds the secrets-manager from go.mod, go.sum, api, cmd and
+# internal. Everything else stays out of the build context.
+*
+!go.mod
+!go.sum
+!api
+!cmd
+!internal

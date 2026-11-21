@@ -188,6 +188,32 @@ var _ = Describe("Status, printer columns and Events", Label(areaFeedback, expec
 		})
 	})
 
+	It("reports a SecretImporter AwaitingCopy, bound to its exporter, while the exported Secret does not exist",
+		func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			pending := newSecret(sourceNS.Name, "exported", data("token", "t0"))
+			exporter := s.secretExporter(sourceNS.Name, pending.Name, exporterRule(inNamespaces(targetNS)))
+
+			importer := s.secretImporter(targetNS.Name, pending.Name, sharedSecret(uidOf(exporter)))
+
+			eventually(func(g Gomega) {
+				expectReady(g, importer, "False", "AwaitingCopy")
+				g.Expect(jsonText(g, statusValue(g, importer, "boundTo"))).To(ContainSubstring(exporter.GetName()))
+				expectReady(g, exporter, "False", "SourceMissing")
+				g.Expect(statusValue(g, exporter, "sourceExists")).To(BeFalse())
+				expectCounts(g, summaryOf(g, exporter), map[string]int64{countTargetNamespaces: 1, countInSync: 0})
+			})
+
+			s.secret(sourceNS.Name, pending.Name, pending.Data)
+
+			eventually(func(g Gomega) {
+				expectReady(g, importer, "True", "Imported")
+				expectReady(g, exporter, "True", "InSync")
+			})
+		})
+
 	It("reports a SecretImporter NoMatchingExporter when nothing offers its Secret", func() {
 		s := newScenario()
 		targetNS := s.namespace("a", nil)

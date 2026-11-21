@@ -56,10 +56,11 @@ func (report *exporterReport) writeConflicted() bool {
 // exported Secret exists, the targets of each rule counted, and the Ready
 // condition of the dominant problem.
 func exporterStatus(exporter *secretsv1beta1.SecretExporter, report *exporterReport) secretsv1beta1.SecretExporterStatus {
+	sourceExists := report.sourceExists
 	result := secretsv1beta1.SecretExporterStatus{
 		ObservedGeneration: exporter.Generation,
 		Conditions:         slices.Clone(exporter.Status.Conditions),
-		SourceExists:       report.sourceExists,
+		SourceExists:       &sourceExists,
 		Rules:              make([]secretsv1beta1.TargetCounts, 0, len(report.rules)),
 	}
 	var findings feedback.Findings

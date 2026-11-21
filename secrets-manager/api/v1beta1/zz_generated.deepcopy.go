@@ -437,6 +437,11 @@ func (in *SecretExporterStatus) DeepCopyInto(out *SecretExporterStatus) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.SourceExists != nil {
+		in, out := &in.SourceExists, &out.SourceExists
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Summary != nil {
 		in, out := &in.Summary, &out.Summary
 		*out = new(CopySummary)

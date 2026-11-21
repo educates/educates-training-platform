@@ -76,8 +76,10 @@ type SecretExporterStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// sourceExists reports whether the exported Secret exists.
-	SourceExists bool `json:"sourceExists"`
+	// sourceExists reports whether the exported Secret exists. It is a
+	// pointer so that a status that says false holds the field.
+	// +optional
+	SourceExists *bool `json:"sourceExists,omitempty"`
 
 	// summary counts the targets of every rule.
 	// +optional

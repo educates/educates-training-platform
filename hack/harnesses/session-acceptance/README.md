@@ -134,12 +134,15 @@ with `--fixtures`, and shorten or lengthen the hold with `--hold`.
 
 ### Interrupting a run
 
-A run interrupted with Ctrl+C, or ended with `SIGTERM`, first removes what
-it changed, as a run that ends by itself does: the test portal, the website
-theme in the SessionManager, and the mirror with the `base-environment`
-image and the pull secret it changed. It writes no report and exits with the
-signal's status, 130 or 143. With `--keep` it leaves them in place. A second
-signal ends the run at once: `run.sh --clean` then removes what is left.
+A run interrupted with Ctrl+C, ended with `SIGTERM`, or whose terminal is
+closed (`SIGHUP`), first closes the Chrome processes it launched and removes
+what it changed, as a run that ends by itself does: the test portal, the
+website theme in the SessionManager, and the mirror with the
+`base-environment` image and the pull secret it changed. This holds at any
+point of the run, with Chrome running or not. It writes no report and exits
+with the signal's status, 130, 143 or 129. With `--keep` it leaves them in
+place. A second signal ends the run at once, Chrome included: `run.sh
+--clean` then removes what is left.
 
 ### Examples
 

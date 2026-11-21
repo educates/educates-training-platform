@@ -1,8 +1,8 @@
-// What a run does when it is interrupted or terminated: it restores what it
-// changed in the cluster, as a run that ends by itself does, and only then
-// ends.
+// What a run does when it is interrupted or terminated, or its terminal
+// goes away: it restores what it changed in the cluster, as a run that ends
+// by itself does, and only then ends.
 
-const SIGNALS = { SIGINT: 2, SIGTERM: 15 };
+const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 };
 
 // once returns a function that runs fn the first time it is called and
 // gives every caller that run's result, so that a step a run's end and a
@@ -12,10 +12,11 @@ export function once(fn) {
   return () => (result ??= fn());
 }
 
-// onInterrupt runs restore when the process gets SIGINT or SIGTERM and then
-// exits with the signal's status, 128 plus its number. A second signal exits
-// at once, leaving the restore unfinished. It returns the state of the
-// interruption: the signal received, if any, and the promise of the exit.
+// onInterrupt runs restore when the process gets SIGINT, SIGTERM or SIGHUP
+// and then exits with the signal's status, 128 plus its number. A second
+// signal exits at once, leaving the restore unfinished. It returns the state
+// of the interruption: the signal received, if any, and the promise of the
+// exit.
 export function onInterrupt(restore, { proc = process, log = console.error } = {}) {
   const state = { signal: null, exiting: null };
   for (const [signal, number] of Object.entries(SIGNALS)) {

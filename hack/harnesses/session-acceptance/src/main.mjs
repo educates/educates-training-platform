@@ -183,12 +183,20 @@ async function main() {
   };
 
   let results = [];
-  let browser = null;
+  // Every browser the run launches, its fixtures' own included, so that the
+  // run closes them all when it ends or is interrupted.
+  const browsers = new Set();
+  const launch = async (profileDir) => {
+    const launched = await launchBrowser({ chrome, cluster, profileDir, headful: values.headful });
+    browsers.add(launched);
+    launched.once("disconnected", () => browsers.delete(launched));
+    return launched;
+  };
   let exitCode = 0;
   // restore puts the cluster back as the run found it. The run's end and a
   // signal that interrupts the run both ask for it, and it runs once.
   const restore = once(async () => {
-    if (browser) await browser.close().catch(() => {});
+    await Promise.all([...browsers].map((b) => b.close().catch(() => {})));
     fs.rmSync(path.join(outDir, "chrome-profile"), { recursive: true, force: true });
     if (values.keep) {
       say(`Keeping the test portal ${values.portal}, its website theme and any mirror; remove them with 'run.sh --clean' and the same --local-cluster and --portal`);
@@ -232,12 +240,12 @@ async function main() {
       workshops[f.name] = await cluster.kubectlJson(["get", "workshops.training.educates.dev", `${values.portal}-${f.name}`]);
     }
 
-    browser = await launchBrowser({ chrome, cluster, profileDir: path.join(outDir, "chrome-profile"), headful: values.headful });
+    const browser = await launch(path.join(outDir, "chrome-profile"));
     const h = {
       cluster,
       browser,
       // A fixture that needs a browser of its own launches it alike.
-      launchBrowser: (profileDir) => launchBrowser({ chrome, cluster, profileDir, headful: values.headful }),
+      launchBrowser: launch,
       outDir,
       portal: values.portal,
       portalUrl: trainingPortal.status.educates.url.replace(/\/$/, ""),

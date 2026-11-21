@@ -80,6 +80,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 
@@ -87,6 +88,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/csaupgrade"
@@ -299,7 +301,7 @@ func (e *Engine) converge(ctx context.Context, c Copy, key types.NamespacedName)
 		return Result{}, nil, err
 	}
 	if !sameContent(withoutSourceVersion(desired.Object), withoutSourceVersion(applied)) {
-		return e.write(ctx, desired, written)
+		return e.write(ctx, desired, live, written)
 	}
 	patched, err := e.removeStrayKeys(ctx, live, desired)
 	switch {
@@ -373,12 +375,12 @@ func selectKeys(entries map[string]any, keys []string) map[string]any {
 	return selected
 }
 
-// write applies desired, removes the keys the API server's copy then holds
-// beyond it, and reports outcome, with the copy the API server holds after
-// the writes.
-func (e *Engine) write(ctx context.Context, desired *unstructured.Unstructured,
+// write applies desired over live, the copy as the engine read it, removes
+// the keys the API server's copy then holds beyond it, and reports outcome,
+// with the copy the API server holds after the writes.
+func (e *Engine) write(ctx context.Context, desired, live *unstructured.Unstructured,
 	outcome Outcome) (Result, metav1.Object, error) {
-	current, err := e.apply(ctx, desired)
+	current, err := e.apply(ctx, desired, live)
 	if err != nil {
 		return Result{}, nil, err
 	}
@@ -447,23 +449,53 @@ func (e *Engine) ownAsApplied(ctx context.Context, obj *unstructured.Unstructure
 }
 
 // IsWriteConflict reports whether err, an error of Converge, is a write
-// that conflicted with another writer's: the copy changed since the engine
-// read it, or another writer created an object of its name since the
-// engine found none. Converging the copy again judges it anew.
+// that conflicted with another writer's: the copy changed, or was deleted
+// or replaced by another object, since the engine read it, or another
+// writer created an object of its name since the engine found none.
+// Converging the copy again judges it anew.
 func IsWriteConflict(err error) bool {
 	return apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)
 }
 
-// apply writes desired with server-side apply, forced, and returns the
-// object the API server holds after it.
-func (e *Engine) apply(ctx context.Context, desired *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+// apply writes desired with server-side apply, forced, on condition that
+// the API server still holds live, the copy as the engine read and judged
+// it, and returns the object the API server holds after it. The applied
+// configuration carries live's UID and resource version, which the API
+// server holds an apply to: when the copy has changed, was deleted, or was
+// replaced by another object of its name, nothing is written and the
+// failure is a conflict.
+func (e *Engine) apply(ctx context.Context, desired, live *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	applied := desired.DeepCopy()
+	applied.SetUID(live.GetUID())
+	applied.SetResourceVersion(live.GetResourceVersion())
 	err := e.writer.Apply(ctx, client.ApplyConfigurationFromUnstructured(applied),
 		client.FieldOwner(e.fieldManager), client.ForceOwnership)
-	if err != nil {
+	switch {
+	case replaced(err):
+		// The API server refuses an apply naming another UID than the
+		// object's as a change of an immutable field.
+		resource := schema.GroupResource{Group: e.kind.GroupVersionKind.Group, Resource: e.kind.GroupVersionKind.Kind}
+		return nil, apierrors.NewConflict(resource, live.GetName(),
+			errors.New("another object has taken the place of the copy"))
+	case err != nil:
 		return nil, err
 	}
 	return applied, nil
+}
+
+// replaced reports whether err is the API server's refusal of an apply
+// whose UID is not that of the object it holds.
+func replaced(err error) bool {
+	var status apierrors.APIStatus
+	if !apierrors.IsInvalid(err) || !errors.As(err, &status) || status.Status().Details == nil {
+		return false
+	}
+	for _, cause := range status.Status().Details.Causes {
+		if cause.Field == "metadata.uid" {
+			return true
+		}
+	}
+	return false
 }
 
 // delete deletes live, on condition that it is still the version the

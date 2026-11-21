@@ -2,6 +2,7 @@ package scenarios
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -523,6 +524,45 @@ var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 			eventually(func(g Gomega) {
 				ran, err := race.Ran()
 				g.Expect(ran).To(BeTrue(), "the other writer has created its Secret")
+				g.Expect(err).NotTo(HaveOccurred())
+				expectReady(g, copier, "False", "Conflict")
+			})
+			consistently(func(g Gomega) {
+				latest := secretIn(g, targetNS.Name, src.Name)
+				g.Expect(latest.Data).To(Equal(unrelated.Data))
+				g.Expect(latest.Annotations).NotTo(HaveKey(annotationCopierRule))
+				g.Expect(latest.OwnerReferences).To(BeEmpty())
+			})
+		})
+
+	It("leaves a Secret another writer puts in a copy's place, as the copy is updated, untouched",
+		Label(expectedDifference), func() {
+			requireRacedWrites()
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, s.name("credentials"), data("token", "t0"))
+			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+			eventually(func(g Gomega) {
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+			})
+			copied := settledSecret(targetNS.Name, src.Name)
+			unrelated := newSecret(targetNS.Name, src.Name, data("password", "unrelated"))
+			race := target.RacedWrites.Before(func(method, path string) bool {
+				return method == http.MethodPatch && path == "/api/v1/namespaces/"+targetNS.Name+"/secrets/"+src.Name
+			}, func() error {
+				if err := target.Client.Delete(context.Background(), copied); err != nil {
+					return err
+				}
+				return target.Client.Create(context.Background(), unrelated.DeepCopy())
+			})
+			DeferCleanup(race.Cancel)
+
+			s.update(src, func() { src.Data = data("token", "t1") })
+
+			eventually(func(g Gomega) {
+				ran, err := race.Ran()
+				g.Expect(ran).To(BeTrue(), "the other writer has put its Secret in the copy's place")
 				g.Expect(err).NotTo(HaveOccurred())
 				expectReady(g, copier, "False", "Conflict")
 			})

@@ -130,7 +130,7 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 		Scheme:     scheme,
 		Logger:     opts.Logger,
 		Controller: config.Controller{SkipNameValidation: &skipNameValidation},
-		Cache: cache.Options{DefaultTransform: cacheTransform()},
+		Cache:      cache.Options{DefaultTransform: cacheTransform()},
 		// Secrets are cached as metadata only, so the cache never holds the
 		// data of every Secret in the cluster; a Secret's data is read from
 		// the API server.

@@ -24,6 +24,7 @@ import (
 	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/exportimport"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
 
@@ -48,12 +49,13 @@ func New(cache client.Reader, engine *copyengine.Engine, policy convergence.Poli
 // SetupWithManager registers the reconciler with mgr. It reconciles a
 // SecretCopier when its spec changes, when a Secret it copies, or one with
 // a name it gives its copies, changes, when a namespace it may select is
-// created, relabelled or given other owners, and when another SecretCopier
-// that names copies as it does is deleted, leaving those copies for it to
-// take over. Besides, the reconciler's policy reconciles each SecretCopier
-// again a backstop interval after its last reconcile, and retries a failed
-// one with backoff. The cache must hold the indexes
-// eventmap.IndexSecretCopiers registers.
+// created, relabelled or given other owners, when a SecretImporter named
+// after its copies is created, changed or deleted, and when another
+// SecretCopier or a SecretExporter that names copies as it does is deleted,
+// leaving those copies for it to take over. Besides, the reconciler's
+// policy reconciles each SecretCopier again a backstop interval after its
+// last reconcile, and retries a failed one with backoff. The cache must
+// hold the indexes eventmap.IndexSecretCopiers registers.
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.convergence.Complete(ctrl.NewControllerManagedBy(mgr).
 		Named("secretcopier").
@@ -65,7 +67,13 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			eventmap.NamespaceSelectionChanged())).
 		WatchesRawSource(source.Kind(mgr.GetCache(), &secretsv1beta1.SecretCopier{},
 			handler.TypedEnqueueRequestsFromMapFunc(eventmap.SecretCopiersSharingCopies(mgr.GetClient())),
-			eventmap.Deletions[*secretsv1beta1.SecretCopier]())),
+			eventmap.Deletions[*secretsv1beta1.SecretCopier]())).
+		WatchesRawSource(source.Kind(mgr.GetCache(), &secretsv1beta1.SecretExporter{},
+			handler.TypedEnqueueRequestsFromMapFunc(eventmap.SecretCopiersSharingExportedCopies(mgr.GetClient())),
+			eventmap.Deletions[*secretsv1beta1.SecretExporter]())).
+		WatchesRawSource(source.Kind(mgr.GetCache(), &secretsv1beta1.SecretImporter{},
+			handler.TypedEnqueueRequestsFromMapFunc(eventmap.SecretCopiersForImporter(mgr.GetClient())),
+			predicate.TypedGenerationChangedPredicate[*secretsv1beta1.SecretImporter]{})),
 		&secretsv1beta1.SecretCopier{}, mgr.GetClient(), r)
 }
 
@@ -97,6 +105,11 @@ type ruleReport struct {
 type targetReport struct {
 	// namespace is the namespace of the copy.
 	namespace string
+
+	// refusal says why the SecretImporter named after the copy, or its
+	// absence, does not accept it, when the target awaits authorization.
+	// Nothing is converged then.
+	refusal exportimport.Refusal
 
 	// result says what converging the copy did, or why it wrote nothing,
 	// when it did not fail.
@@ -164,9 +177,22 @@ func (r *Reconciler) reconcileRule(ctx context.Context, copier *secretsv1beta1.S
 	}
 
 	copyName := rule.CopyName()
+	offer := exportimport.CopierOffer(rule)
 	for i := range namespaces {
 		ns := &namespaces[i]
 		if ns.Name == report.source.Namespace || !selector.Match(ns) {
+			continue
+		}
+		targetLog := log.WithValues("namespace", ns.Name, "name", copyName)
+		importer, err := exportimport.Importer(ctx, r.cache, types.NamespacedName{Namespace: ns.Name, Name: copyName})
+		if err != nil {
+			report.targets = append(report.targets, targetReport{namespace: ns.Name,
+				err: fmt.Errorf("reading the SecretImporter: %w", err)})
+			continue
+		}
+		if refusal := exportimport.Authorize(importer, offer); refusal != exportimport.Accepted {
+			report.targets = append(report.targets, targetReport{namespace: ns.Name, refusal: refusal})
+			targetLog.V(1).Info("The target does not accept the copy: awaiting authorization", "refusal", refusal)
 			continue
 		}
 		result, err := r.engine.Converge(ctx, copyengine.Copy{
@@ -180,7 +206,7 @@ func (r *Reconciler) reconcileRule(ctx context.Context, copier *secretsv1beta1.S
 			Owner:       owner(copier, rule),
 		})
 		report.targets = append(report.targets, targetReport{namespace: ns.Name, result: result, err: err})
-		logTarget(log.WithValues("namespace", ns.Name, "name", copyName), result, err)
+		logTarget(targetLog, result, err)
 		if err == nil && result.Outcome.Wrote() {
 			convergence.Repaired(ctx)
 		}

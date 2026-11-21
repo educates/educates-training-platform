@@ -28,6 +28,7 @@ import (
 	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/exportimport"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/secretcopier"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/secretinjector"
 )
@@ -119,6 +120,12 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 	if err := eventmap.IndexSecretCopiers(ctx, mgr.GetFieldIndexer()); err != nil {
 		return nil, fmt.Errorf("indexing SecretCopiers: %w", err)
 	}
+	if err := eventmap.IndexSecretExporters(ctx, mgr.GetFieldIndexer()); err != nil {
+		return nil, fmt.Errorf("indexing SecretExporters: %w", err)
+	}
+	if err := eventmap.IndexSecretImporters(ctx, mgr.GetFieldIndexer()); err != nil {
+		return nil, fmt.Errorf("indexing SecretImporters: %w", err)
+	}
 
 	// The client reads Secrets from the API server; the cache serves their
 	// metadata.
@@ -137,6 +144,15 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 
 	if err := secretcopier.New(mgr.GetClient(), secrets, policy).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretCopier reconciler: %w", err)
+	}
+	if err := exportimport.NewExporterReconciler(mgr.GetClient(), secrets).SetupWithManager(mgr); err != nil {
+		return nil, fmt.Errorf("setting up the SecretExporter reconciler: %w", err)
+	}
+	// The SecretImporter reconciler reads the metadata of Secrets, which
+	// only the cache itself serves: the client reads Secrets from the API
+	// server.
+	if err := exportimport.NewImporterReconciler(mgr.GetCache()).SetupWithManager(mgr); err != nil {
+		return nil, fmt.Errorf("setting up the SecretImporter reconciler: %w", err)
 	}
 	injectors := secretinjector.New(mgr.GetCache(), mgr.GetAPIReader(), mgr.GetClient(), policy)
 	if err := injectors.SetupWithManager(mgr); err != nil {

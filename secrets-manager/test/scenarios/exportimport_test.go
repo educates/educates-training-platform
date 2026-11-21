@@ -67,6 +67,27 @@ var _ = Describe("SecretExporter and SecretImporter", Label(areaExportImport), f
 		})
 	})
 
+	It("exports a Secret created after its exporter and importer, and updates the copy when it changes", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		pending := newSecret(sourceNS.Name, "exported", data("token", "t0"))
+		exporter := s.secretExporter(sourceNS.Name, pending.Name, exporterRule(inNamespaces(targetNS)))
+		s.secretImporter(targetNS.Name, pending.Name, sharedSecret(uidOf(exporter)))
+
+		src := s.secret(sourceNS.Name, pending.Name, pending.Data)
+
+		eventually(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+		})
+
+		s.update(src, func() { src.Data = data("token", "t1") })
+
+		eventually(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+		})
+	})
+
 	It("names the exported copy targetSecret.name, accepted by an importer of that name", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)
@@ -167,6 +188,33 @@ var _ = Describe("SecretExporter and SecretImporter", Label(areaExportImport), f
 			expectCopy(g, targetNS.Name, src.Name, before, ruleOf(exporter))
 		})
 	})
+
+	It("lets a copier of the same source agree with an exporter, and take over its copy once the exporter is deleted",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, "exported", data("token", "t0"))
+			exporter := s.secretExporter(sourceNS.Name, src.Name, exporterRule(inNamespaces(targetNS)))
+			importer := s.secretImporter(targetNS.Name, src.Name, sharedSecret(uidOf(exporter)))
+			eventually(func(g Gomega) {
+				copied := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+				expectOwnedBy(g, copied, importer)
+			})
+
+			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+
+			consistently(func(g Gomega) {
+				expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+			})
+
+			s.deleteObject(exporter)
+
+			eventually(func(g Gomega) {
+				copied := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
+				expectOwnedBy(g, copied, copier)
+			})
+		})
 
 	It("accepts an exporter rule that selects namespaces only by owner", Label(expectedDifference), func() {
 		s := newScenario()

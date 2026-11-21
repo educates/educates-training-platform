@@ -4,6 +4,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// SecretImporterKind is the kind of a SecretImporter.
+const SecretImporterKind = "SecretImporter"
+
 // SourceNamespaces selects the namespaces a SecretImporter accepts copies
 // from.
 type SourceNamespaces struct {

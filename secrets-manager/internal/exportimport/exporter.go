@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -24,10 +23,6 @@ import (
 	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
-
-// conflictRetryDelay is how long a SecretExporter waits to be reconciled
-// again after a write conflicted with another writer's.
-const conflictRetryDelay = time.Second
 
 // ExporterReconciler reconciles one SecretExporter at a time.
 type ExporterReconciler struct {
@@ -313,7 +308,7 @@ func exporterResult(report exporterReport) (ctrl.Result, error) {
 		return ctrl.Result{}, errors.Join(failures...)
 	}
 	if conflicted {
-		return ctrl.Result{RequeueAfter: conflictRetryDelay}, nil
+		return convergence.RetryConflict(), nil
 	}
 	return ctrl.Result{}, nil
 }

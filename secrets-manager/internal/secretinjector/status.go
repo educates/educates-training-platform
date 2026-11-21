@@ -2,16 +2,15 @@ package secretinjector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"slices"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 )
 
@@ -26,22 +25,13 @@ func (r *Reconciler) publish(ctx context.Context, injector *secretsv1beta1.Secre
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: conflictRetryDelay}, nil
+		return convergence.RetryConflict(), nil
 	}
 
 	statusErr := feedback.Publish(ctx, r.feedback, injector, func(i *secretsv1beta1.SecretInjector) {
 		i.Status = status(i.Status.Conditions, injector.Generation, outcome)
 	})
-	switch {
-	case statusErr == nil:
-		return ctrl.Result{}, err
-	case apierrors.IsConflict(statusErr) && err == nil:
-		return ctrl.Result{RequeueAfter: conflictRetryDelay}, nil
-	case apierrors.IsConflict(statusErr):
-		return ctrl.Result{}, err
-	default:
-		return ctrl.Result{}, errors.Join(err, fmt.Errorf("writing the status: %w", statusErr))
-	}
+	return convergence.AfterStatus(ctrl.Result{}, err, statusErr)
 }
 
 // status is the status outcome makes of a SecretInjector at generation:

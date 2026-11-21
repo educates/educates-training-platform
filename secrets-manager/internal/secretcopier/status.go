@@ -2,7 +2,6 @@ package secretcopier
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 
@@ -11,6 +10,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/exportimport"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
@@ -30,16 +30,7 @@ func (r *Reconciler) publish(ctx context.Context, copier *secretsv1beta1.SecretC
 	statusErr := feedback.Publish(ctx, r.feedback, copier, func(c *secretsv1beta1.SecretCopier) {
 		c.Status = status(c.Status.Conditions, copier.Generation, reports)
 	})
-	switch {
-	case statusErr == nil:
-		return result, err
-	case apierrors.IsConflict(statusErr) && err == nil:
-		return ctrl.Result{RequeueAfter: conflictRetryDelay}, nil
-	case apierrors.IsConflict(statusErr):
-		return result, err
-	default:
-		return ctrl.Result{}, errors.Join(err, fmt.Errorf("writing the status: %w", statusErr))
-	}
+	return convergence.AfterStatus(result, err, statusErr)
 }
 
 // writeConflicted reports whether a write of a copy conflicted with another

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"slices"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 )
 
@@ -17,17 +17,10 @@ import (
 // returns the result of the reconcile.
 func (r *ImporterReconciler) publish(ctx context.Context, importer *secretsv1beta1.SecretImporter,
 	state *ImportState) (ctrl.Result, error) {
-	err := feedback.Publish(ctx, r.feedback, importer, func(i *secretsv1beta1.SecretImporter) {
+	statusErr := feedback.Publish(ctx, r.feedback, importer, func(i *secretsv1beta1.SecretImporter) {
 		i.Status = importerStatus(i.Status.Conditions, importer, state)
 	})
-	switch {
-	case err == nil:
-		return ctrl.Result{}, nil
-	case apierrors.IsConflict(err):
-		return ctrl.Result{RequeueAfter: conflictRetryDelay}, nil
-	default:
-		return ctrl.Result{}, fmt.Errorf("writing the status: %w", err)
-	}
+	return convergence.AfterStatus(ctrl.Result{}, nil, statusErr)
 }
 
 // importerStatus is the status state makes of importer: its Ready

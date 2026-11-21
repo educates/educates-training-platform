@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,11 +30,6 @@ import (
 	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
-
-// conflictRetryDelay is how long a SecretInjector waits to be reconciled
-// again after a service account changed while it was written, time for the
-// cache to catch up with the change.
-const conflictRetryDelay = time.Second
 
 // Reconciler reconciles one SecretInjector at a time.
 type Reconciler struct {

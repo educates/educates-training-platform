@@ -2,7 +2,6 @@ package exportimport
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 
@@ -11,6 +10,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 )
@@ -28,16 +28,7 @@ func (r *ExporterReconciler) publish(ctx context.Context, exporter *secretsv1bet
 	statusErr := feedback.Publish(ctx, r.feedback, exporter, func(e *secretsv1beta1.SecretExporter) {
 		e.Status = exporterStatus(e.Status.Conditions, exporter.Generation, &report)
 	})
-	switch {
-	case statusErr == nil:
-		return result, err
-	case apierrors.IsConflict(statusErr) && err == nil:
-		return ctrl.Result{RequeueAfter: conflictRetryDelay}, nil
-	case apierrors.IsConflict(statusErr):
-		return result, err
-	default:
-		return ctrl.Result{}, errors.Join(err, fmt.Errorf("writing the status: %w", statusErr))
-	}
+	return convergence.AfterStatus(result, err, statusErr)
 }
 
 // writeConflicted reports whether a write of a copy conflicted with another

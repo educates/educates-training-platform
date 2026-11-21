@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -28,10 +27,6 @@ import (
 	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
-
-// conflictRetryDelay is how long a SecretCopier waits to be reconciled
-// again after a write conflicted with another writer's.
-const conflictRetryDelay = time.Second
 
 // Reconciler reconciles one SecretCopier at a time.
 type Reconciler struct {
@@ -297,7 +292,7 @@ func reconcileResult(reports []ruleReport) (ctrl.Result, error) {
 		return ctrl.Result{}, errors.Join(failures...)
 	}
 	if conflicted {
-		return ctrl.Result{RequeueAfter: conflictRetryDelay}, nil
+		return convergence.RetryConflict(), nil
 	}
 	return ctrl.Result{}, nil
 }

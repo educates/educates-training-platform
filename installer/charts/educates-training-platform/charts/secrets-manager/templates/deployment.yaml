@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "secrets-manager.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicas }}
+  replicas: {{ .Values.replicas | default 1 }}
   # Replicas elect a leader with the Lease secrets-manager, so a new pod
   # starts as a standby while the old one still leads, and takes over once
   # the old one stops and releases the Lease: an update leaves no gap and

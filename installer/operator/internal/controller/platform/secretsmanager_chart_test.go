@@ -175,6 +175,22 @@ func TestSecretsManagerChart_RunsOneReplicaForTheOperator(t *testing.T) {
 	}
 }
 
+// A null replicas value removes the chart's default, and the chart still
+// asks for one pod, where an empty replicas field would leave the number to
+// the API server.
+func TestSecretsManagerChart_RunsOneReplicaForNullReplicas(t *testing.T) {
+	manifest := renderSecretsManagerChart(t, &platformv1alpha1.SecretsManager{}, valuesTestClusterConfig(),
+		map[string]any{"replicas": nil})
+
+	deployment := manifest.deployment(t)
+	if deployment.Spec.Replicas == nil || *deployment.Spec.Replicas != 1 {
+		t.Errorf("Deployment secrets-manager has replicas %v, want 1", deployment.Spec.Replicas)
+	}
+	if manifest.has("PodDisruptionBudget", platformNamespace, "secrets-manager") {
+		t.Errorf("the chart renders PodDisruptionBudget secrets-manager for one replica")
+	}
+}
+
 // A standalone install can run a standby: above one replica the chart keeps
 // a pod through voluntary disruptions and prefers to spread the pods over
 // nodes, so a standby survives the loss of the leader's node.

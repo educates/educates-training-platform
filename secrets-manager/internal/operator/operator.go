@@ -102,6 +102,12 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 	if err := exportimport.NewExporterReconciler(mgr.GetClient(), secrets).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretExporter reconciler: %w", err)
 	}
+	// The SecretImporter reconciler reads the metadata of Secrets, which
+	// only the cache itself serves: the client reads Secrets from the API
+	// server.
+	if err := exportimport.NewImporterReconciler(mgr.GetCache()).SetupWithManager(mgr); err != nil {
+		return nil, fmt.Errorf("setting up the SecretImporter reconciler: %w", err)
+	}
 
 	return &Operator{manager: mgr}, nil
 }

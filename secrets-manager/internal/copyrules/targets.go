@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -138,7 +137,7 @@ func (c *Converger) converge(ctx context.Context, log logr.Logger, rule *Rule, n
 func (c *Converger) record(rule *Rule, target Target) {
 	switch {
 	case target.Err == nil:
-	case apierrors.IsConflict(target.Err):
+	case copyengine.IsWriteConflict(target.Err):
 		c.conflicted = true
 	default:
 		c.failures = append(c.failures, fmt.Errorf("copying Secret %s into namespace %s as %s: %w",
@@ -180,7 +179,7 @@ func (c *Converger) Result() (ctrl.Result, error) {
 // from writing.
 func logTarget(log logr.Logger, result copyengine.Result, err error) {
 	switch {
-	case apierrors.IsConflict(err):
+	case copyengine.IsWriteConflict(err):
 		log.V(1).Info("Writing the copy conflicted with another writer: retrying")
 	case err != nil:
 		// The failure is returned, and logged, with the reconcile's error.

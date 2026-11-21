@@ -99,6 +99,89 @@ func settledAPICalls(part string) APICallCount {
 	return *last
 }
 
+// RacedWrites lets a scenario act just before a write of the
+// secrets-manager reaches the API server, as another writer acting at that
+// moment would, from the transport of the client configuration the
+// secrets-manager is given.
+type RacedWrites struct {
+	mu    sync.Mutex
+	races []*Race
+}
+
+// Race is what a scenario does just before a write of the secrets-manager
+// it picks.
+type Race struct {
+	picks func(method, path string) bool
+	act   func() error
+
+	mu   sync.Mutex
+	ran  bool
+	err  error
+	done bool
+}
+
+// Before has act run once, just before the first write request of the
+// secrets-manager that picks chooses by its method and path, holding the
+// request until act returns. Reads are never picked.
+func (w *RacedWrites) Before(picks func(method, path string) bool, act func() error) *Race {
+	race := &Race{picks: picks, act: act}
+	w.mu.Lock()
+	w.races = append(w.races, race)
+	w.mu.Unlock()
+	return race
+}
+
+// Ran reports whether the race has run, and what its act returned.
+func (r *Race) Ran() (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.ran, r.err
+}
+
+// Cancel keeps the race from running, when it has not run yet.
+func (r *Race) Cancel() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.done = true
+}
+
+// instrument has config's transport run the races of w before the write
+// requests they pick.
+func (w *RacedWrites) instrument(config *rest.Config) {
+	config.Wrap(func(next http.RoundTripper) http.RoundTripper {
+		return roundTripper(func(request *http.Request) (*http.Response, error) {
+			if request.Method != http.MethodGet {
+				w.run(request.Method, request.URL.Path)
+			}
+			return next.RoundTrip(request)
+		})
+	})
+}
+
+// run runs the races that pick a write request of method to path, and have
+// not run.
+func (w *RacedWrites) run(method, path string) {
+	w.mu.Lock()
+	races := append([]*Race(nil), w.races...)
+	w.mu.Unlock()
+	for _, race := range races {
+		race.mu.Lock()
+		if !race.done && race.picks(method, path) {
+			race.done, race.ran = true, true
+			race.err = race.act()
+		}
+		race.mu.Unlock()
+	}
+}
+
+// requireRacedWrites skips the scenario on a target that cannot race the
+// writes of its secrets-manager.
+func requireRacedWrites() {
+	if target.RacedWrites == nil {
+		Skip(target.Name + " cannot race the writes of its secrets-manager")
+	}
+}
+
 // requireRestart skips the scenario on a target that cannot restart its
 // secrets-manager.
 func requireRestart() {

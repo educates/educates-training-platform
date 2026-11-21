@@ -31,6 +31,13 @@
 // replaced whole: any other key is removed with a JSON merge patch,
 // conditional on the resource version the engine last saw.
 //
+// A copy the API server does not hold is created, rather than applied, so
+// that an object another writer creates under its name meanwhile is refused
+// as a conflict rather than written to: the next attempt judges that object
+// as it judges any existing target. The fields the create sets are then
+// owned as the field manager's applied configuration, as if it had applied
+// them.
+//
 // A copy whose fixed field, such as a Secret's type, differs from the
 // source's is deleted and written anew. A copy another writer made
 // immutable, whose payload must change, is a failure; it is never deleted.
@@ -66,6 +73,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/util/csaupgrade"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
@@ -149,7 +158,8 @@ func (e *Engine) Forget(key types.NamespacedName) {
 
 // Converge brings the copy c describes to what it should hold, when the
 // target is c.Rule's to write, writing it only when it differs. A write
-// conflict is returned as the API server's Conflict error.
+// that conflicted with another writer's is returned as an error
+// IsWriteConflict reports.
 //
 // It decides from the cache, reading nothing from the API server, that a
 // target is not c.Rule's to write, that it is being deleted, or that it is
@@ -214,7 +224,7 @@ func (e *Engine) converge(ctx context.Context, c Copy, key types.NamespacedName)
 	err := e.reader.Get(ctx, key, live)
 	switch {
 	case apierrors.IsNotFound(err):
-		return e.write(ctx, desired, Created)
+		return e.create(ctx, desired, Created)
 	case err != nil:
 		return Result{}, nil, err
 	case live.GetDeletionTimestamp() != nil:
@@ -224,6 +234,11 @@ func (e *Engine) converge(ctx context.Context, c Copy, key types.NamespacedName)
 	result, mine, err := e.claim(ctx, c, live)
 	if err != nil || !mine {
 		return result, nil, err
+	}
+	// A copy whose create was not followed by its change of ownership still
+	// has the fields the create set owned as an update.
+	if live, err = e.ownAsApplied(ctx, live); err != nil {
+		return Result{}, nil, err
 	}
 	written := Updated
 	if result.Outcome == Adopted {
@@ -238,7 +253,7 @@ func (e *Engine) converge(ctx context.Context, c Copy, key types.NamespacedName)
 		if err := e.delete(ctx, live); err != nil {
 			return Result{}, nil, err
 		}
-		return e.write(ctx, desired, Recreated)
+		return e.create(ctx, desired, Recreated)
 	}
 
 	applied, err := e.kind.Extract(live, e.fieldManager)
@@ -338,6 +353,54 @@ func (e *Engine) write(ctx context.Context, desired *unstructured.Unstructured,
 	default:
 		return Result{Outcome: outcome}, current, nil
 	}
+}
+
+// create writes desired as a copy the API server does not hold, reporting
+// outcome. It creates the copy whole, so that the copy holds its labels,
+// annotations and owner reference from the start, and so that the API
+// server refuses it, as AlreadyExists, when another writer has created an
+// object of the copy's name since the engine found none. The API server
+// records the fields a create sets as the field manager's update, which a
+// later apply leaving one out would not remove, so create then has them
+// owned as the field manager's applied configuration.
+func (e *Engine) create(ctx context.Context, desired *unstructured.Unstructured,
+	outcome Outcome) (Result, metav1.Object, error) {
+	created := desired.DeepCopy()
+	if err := e.writer.Create(ctx, created, client.FieldOwner(e.fieldManager)); err != nil {
+		return Result{}, nil, err
+	}
+	current, err := e.ownAsApplied(ctx, created)
+	if err != nil {
+		return Result{}, nil, err
+	}
+	return Result{Outcome: outcome}, current, nil
+}
+
+// ownAsApplied has the fields the field manager owns on obj, the object as
+// the API server holds it, through an update, such as the create of a
+// copy, owned as the field manager's applied configuration instead, as
+// kubectl does when an object moves from client-side to server-side apply.
+// It returns the object the API server then holds, or obj itself when the
+// field manager owns no field through an update. The patch is conditional
+// on obj's resource version.
+func (e *Engine) ownAsApplied(ctx context.Context, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	patch, err := csaupgrade.UpgradeManagedFieldsPatch(obj, sets.New(e.fieldManager), e.fieldManager)
+	if err != nil || patch == nil {
+		return obj, err
+	}
+	patched := e.object(types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+	if err := e.writer.Patch(ctx, patched, client.RawPatch(types.JSONPatchType, patch)); err != nil {
+		return nil, err
+	}
+	return patched, nil
+}
+
+// IsWriteConflict reports whether err, an error of Converge, is a write
+// that conflicted with another writer's: the copy changed since the engine
+// read it, or another writer created an object of its name since the
+// engine found none. Converging the copy again judges it anew.
+func IsWriteConflict(err error) bool {
+	return apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err)
 }
 
 // apply writes desired with server-side apply, forced, and returns the

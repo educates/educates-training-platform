@@ -72,6 +72,10 @@ type Target struct {
 	// the events about objects a scenario names.
 	MissedEvents *MissedEvents
 
+	// RacedWrites, when not nil, lets a scenario act just before a write of
+	// the target's secrets-manager.
+	RacedWrites *RacedWrites
+
 	// Restart, when not nil, stops the target's secrets-manager and starts
 	// it again, with nothing kept in memory.
 	Restart func() error

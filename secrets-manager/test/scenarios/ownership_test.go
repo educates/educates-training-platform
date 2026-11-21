@@ -1,6 +1,9 @@
 package scenarios
 
 import (
+	"context"
+	"strings"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -285,6 +288,37 @@ var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 			g.Expect(copied.Labels).To(HaveKeyWithValue("chart", "second"))
 		})
 	})
+
+	It("leaves a Secret another writer creates under a copy's name, as the copy is first written, untouched",
+		Label(expectedDifference), func() {
+			requireRacedWrites()
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+			unrelated := newSecret(targetNS.Name, src.Name, data("password", "unrelated"))
+			race := target.RacedWrites.Before(func(_, path string) bool {
+				return strings.HasPrefix(path, "/api/v1/namespaces/"+targetNS.Name+"/secrets")
+			}, func() error {
+				return target.Client.Create(context.Background(), unrelated.DeepCopy())
+			})
+			DeferCleanup(race.Cancel)
+
+			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+
+			eventually(func(g Gomega) {
+				ran, err := race.Ran()
+				g.Expect(ran).To(BeTrue(), "the other writer has created its Secret")
+				g.Expect(err).NotTo(HaveOccurred())
+				expectReady(g, copier, "False", "Conflict")
+			})
+			consistently(func(g Gomega) {
+				latest := secretIn(g, targetNS.Name, src.Name)
+				g.Expect(latest.Data).To(Equal(unrelated.Data))
+				g.Expect(latest.Annotations).NotTo(HaveKey(annotationCopierRule))
+				g.Expect(latest.OwnerReferences).To(BeEmpty())
+			})
+		})
 
 	It("removes the owner reference from its copies when reclaimPolicy changes to Retain",
 		Label(expectedDifference), func() {

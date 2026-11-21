@@ -49,8 +49,8 @@ var envtestTiming = Timing{
 // from the subchart's CRDs, and the secrets-manager's composition in this
 // process against it. envtest runs no garbage collector and no namespace
 // controller: a deleted namespace stays Terminating. The requests of the
-// secrets-manager are counted, and it can be made to miss events and be
-// restarted.
+// secrets-manager are counted, its writes can be raced, and it can be made
+// to miss events and be restarted.
 func newEnvtestTarget() (*Target, error) {
 	env := &envtest.Environment{CRDDirectoryPaths: []string{chartCRDs}, ErrorIfCRDPathMissing: true}
 	if dir := firstEnvTestBinaryDir(); dir != "" {
@@ -69,8 +69,10 @@ func newEnvtestTarget() (*Target, error) {
 	}
 
 	calls := &APICalls{}
+	races := &RacedWrites{}
 	composedConfig := rest.CopyConfig(config)
 	calls.instrument(composedConfig)
+	races.instrument(composedConfig)
 	missed := &MissedEvents{}
 	secretsManager := &inProcess{options: operator.Options{
 		RESTConfig:    composedConfig,
@@ -91,6 +93,7 @@ func newEnvtestTarget() (*Target, error) {
 		Timing:       envtestTiming,
 		APICalls:     calls,
 		MissedEvents: missed,
+		RacedWrites:  races,
 		Restart: func() error {
 			if err := secretsManager.stop(); err != nil {
 				return err

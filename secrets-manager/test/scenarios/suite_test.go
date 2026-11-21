@@ -7,7 +7,9 @@
 //
 // The target is a live cluster named by the kubeconfig in
 // SECRETS_MANAGER_LIVE_KUBECONFIG, using the context in
-// SECRETS_MANAGER_LIVE_CONTEXT or else the kubeconfig's current one. With
+// SECRETS_MANAGER_LIVE_CONTEXT or else the kubeconfig's current one, its
+// secrets-manager running in the namespace SECRETS_MANAGER_LIVE_NAMESPACE
+// names, or else educates. With
 // no live cluster named, the target is an envtest API server with the four
 // kinds loaded from the secrets-manager subchart's CRDs, and the
 // secrets-manager's real composition running in this process against it;
@@ -18,15 +20,18 @@
 //   - expected-difference: a fix or an addition over the secrets-manager
 //     Educates 3.x shipped, written in Python; that secrets-manager fails
 //     the scenario.
-//   - live-only: the scenario needs Kubernetes garbage collection or the
-//     namespace controller, and is skipped on a target without them.
+//   - live-only: the scenario needs Kubernetes garbage collection, the
+//     namespace controller or a secrets-manager deployed on the cluster, and
+//     is skipped on a target without them.
 //   - copying, selection, ownership, export-import, injection,
 //     target-fields, feedback, admission and convergence: the area of
 //     behavior the scenario covers.
 //
 // Every scenario creates uniquely named namespaces and cluster-scoped
 // resources of its own and deletes them when it ends, so scenarios can run
-// in parallel against one cluster.
+// in parallel against one cluster. A scenario that stops the
+// secrets-manager, or replaces its pods, runs alone, after the others, and
+// puts the secrets-manager back as it found it.
 package scenarios
 
 import (

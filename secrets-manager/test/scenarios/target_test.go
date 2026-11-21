@@ -25,6 +25,14 @@ const (
 	// liveContextEnv names the context of that kubeconfig to use, its
 	// current context when unset.
 	liveContextEnv = "SECRETS_MANAGER_LIVE_CONTEXT"
+
+	// liveNamespaceEnv names the namespace the live cluster's
+	// secrets-manager runs in, educates when unset.
+	liveNamespaceEnv = "SECRETS_MANAGER_LIVE_NAMESPACE"
+
+	// defaultLiveNamespace is the namespace the Educates installer runs the
+	// secrets-manager in.
+	defaultLiveNamespace = "educates"
 )
 
 // Target is a Kubernetes API server with a secrets-manager reconciling the
@@ -47,6 +55,11 @@ type Target struct {
 	// NamespaceController reports whether the namespace controller runs
 	// on the target, emptying and removing a deleted namespace.
 	NamespaceController bool
+
+	// SecretsManagerNamespace, when not empty, is the namespace in which
+	// the target's secrets-manager runs as the Deployment secrets-manager,
+	// its replicas electing their leader with the Lease secrets-manager.
+	SecretsManagerNamespace string
 
 	// Timing bounds how long scenarios wait on the target.
 	Timing Timing
@@ -149,13 +162,19 @@ func newLiveTarget(kubeconfig, kubeContext string) (*Target, error) {
 		name = fmt.Sprintf("live cluster %q", current)
 	}
 
+	namespace := os.Getenv(liveNamespaceEnv)
+	if namespace == "" {
+		namespace = defaultLiveNamespace
+	}
+
 	return &Target{
-		Name:                name,
-		Config:              config,
-		Client:              c,
-		GarbageCollector:    true,
-		NamespaceController: true,
-		Timing:              liveTiming,
+		Name:                    name,
+		Config:                  config,
+		Client:                  c,
+		GarbageCollector:        true,
+		NamespaceController:     true,
+		SecretsManagerNamespace: namespace,
+		Timing:                  liveTiming,
 	}, nil
 }
 

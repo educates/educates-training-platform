@@ -360,6 +360,42 @@ var _ = Describe("SecretInjector", Label(areaInjection), func() {
 			g.Expect(pullSecretNames(serviceAccountIn(g, other.Name, builder))).To(BeEmpty())
 		})
 	})
+
+	It("injects nothing, and reports InvalidSelector, for a rule whose only source selector is an empty matchNames",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			ns := s.namespace("a", nil)
+			s.pullSecret(ns.Name, pullSecretName)
+			s.serviceAccount(ns.Name, builder, nil)
+
+			injector := s.secretInjector(s.name("injector"), injectorRule(inNamespaces(ns), byName(), accounts(builder)))
+
+			eventually(func(g Gomega) {
+				expectReady(g, injector, "False", "InvalidSelector")
+			})
+			consistently(func(g Gomega) {
+				g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).To(BeEmpty())
+			})
+		})
+
+	It("selects source Secrets by the rule's other selectors when matchNames is empty", func() {
+		s := newScenario()
+		ns := s.namespace("a", nil)
+		s.pullSecret(ns.Name, "labelled", withLabels(map[string]string{injectLabel: "yes"}))
+		s.pullSecret(ns.Name, "unlabelled")
+		s.serviceAccount(ns.Name, builder, nil)
+
+		injector := s.secretInjector(s.name("injector"), injectorRule(inNamespaces(ns),
+			merged(byName(), byLabels(map[string]string{injectLabel: "yes"})), accounts(builder)))
+
+		eventually(func(g Gomega) {
+			g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).To(ContainElement("labelled"))
+			expectReady(g, injector, "True", "InSync")
+		})
+		consistently(func(g Gomega) {
+			g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).NotTo(ContainElement("unlabelled"))
+		})
+	})
 })
 
 // countServiceAccountUpdates watches the service account name in namespace

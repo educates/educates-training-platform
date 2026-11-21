@@ -1,6 +1,7 @@
 package selectors
 
 import (
+	"errors"
 	"slices"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -8,16 +9,28 @@ import (
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 )
 
+// errNoSourceSelector is why a SecretInjector rule whose sourceSecrets give
+// no selector but an empty matchNames selects no Secret.
+var errNoSourceSelector = errors.New("sourceSecrets select no Secrets: matchNames is empty, and no other " +
+	"selector is given")
+
 // SourceSecrets returns the selector of the Secrets a SecretInjector rule
 // injects: names as globs with ! excludes, UIDs, owners and labels. An
-// absent or empty matchNames passes every name.
+// empty matchNames counts as absent, passing every name, so that the rule's
+// other selectors decide; a rule left with no selector at all is invalid,
+// and selects no Secret rather than every one.
 func SourceSecrets(sources secretsv1beta1.SourceSecrets) Selector {
-	return New(Fields{
+	s := New(Fields{
 		Names:  sources.NameSelector,
 		UIDs:   sources.UIDSelector,
 		Owners: sources.OwnerSelector,
 		Labels: sources.LabelSelector,
 	}, nil)
+	if s.err == nil && (sources.NameSelector == nil || len(sources.NameSelector.MatchNames) == 0) &&
+		sources.UIDSelector == nil && sources.OwnerSelector == nil && sources.LabelSelector == nil {
+		s.err = errNoSourceSelector
+	}
+	return s
 }
 
 // ServiceAccountSelector decides which service accounts a SecretInjector

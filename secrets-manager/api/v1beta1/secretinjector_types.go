@@ -10,7 +10,8 @@ const SecretInjectorKind = "SecretInjector"
 // SourceSecrets selects the Secrets a SecretInjector rule injects. Every
 // selector present must pass, and the rule gives at least one.
 type SourceSecrets struct {
-	// nameSelector selects Secrets by name.
+	// nameSelector selects Secrets by name. An empty matchNames counts as
+	// absent: it selects no Secret by itself.
 	// +optional
 	NameSelector *NameSelector `json:"nameSelector,omitempty"`
 

@@ -40,8 +40,12 @@ func TestSourceSecretsMatch(t *testing.T) {
 	}{
 		{"an exact name", names("registry-credentials"), secret("registry-credentials", nil), true},
 		{"another name", names("registry-credentials"), secret("api-token", nil), false},
-		{"an empty matchNames passes any name, kube- prefixed ones included", names(),
-			secret("kube-root-ca", nil), true},
+		{"an empty matchNames alone matches nothing", names(), secret("registry-credentials", nil), false},
+		{"an empty matchNames beside a labelSelector passes any name the labels match, kube- prefixed ones included",
+			secretsv1beta1.SourceSecrets{
+				NameSelector:  &secretsv1beta1.NameSelector{MatchNames: []string{}},
+				LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"inject": "yes"}},
+			}, secret("kube-root-ca", map[string]string{"inject": "yes"}), true},
 		{"a glob", names("*-pull-secret"), secret("first-pull-secret", nil), true},
 		{"a name the glob does not match", names("*-pull-secret"), secret("registry-credentials", nil), false},
 		{"a name a ! pattern excludes", names("*-pull-secret", "!skip-pull-secret"),
@@ -93,6 +97,14 @@ func TestSourceSecretsErr(t *testing.T) {
 	valid := secretsv1beta1.SourceSecrets{NameSelector: &secretsv1beta1.NameSelector{MatchNames: []string{"*"}}}
 	if err := SourceSecrets(valid).Err(); err != nil {
 		t.Errorf("a name selector is invalid: %v", err)
+	}
+	emptyNames := secretsv1beta1.SourceSecrets{NameSelector: &secretsv1beta1.NameSelector{MatchNames: []string{}}}
+	if SourceSecrets(emptyNames).Err() == nil {
+		t.Error("an empty matchNames with no other selector is valid, want invalid")
+	}
+	emptyNames.UIDSelector = &secretsv1beta1.UIDSelector{MatchUIDs: []string{"secret-uid"}}
+	if err := SourceSecrets(emptyNames).Err(); err != nil {
+		t.Errorf("an empty matchNames beside a uidSelector is invalid: %v", err)
 	}
 }
 

@@ -415,6 +415,25 @@ var _ = Describe("SecretCopier copying", Label(areaCopying), func() {
 		})
 	})
 
+	It("copies a rule's new source into its copies when its sourceSecret changes", Label(expectedDifference), func() {
+		s := newScenario()
+		firstNS := s.namespace("src-a", nil)
+		secondNS := s.namespace("src-b", nil)
+		targetNS := s.namespace("a", nil)
+		first := s.secret(firstNS.Name, "credentials", data("token", "first"))
+		second := s.secret(secondNS.Name, "credentials", data("token", "second"))
+		copier := s.secretCopier(s.name("copier"), copierRule(first, inNamespaces(targetNS)))
+		eventually(func(g Gomega) {
+			expectCopy(g, targetNS.Name, first.Name, first, ruleOf(copier))
+		})
+
+		s.update(copier, func() { setRules(copier, copierRule(second, inNamespaces(targetNS))) })
+
+		eventually(func(g Gomega) {
+			expectCopy(g, targetNS.Name, second.Name, second, ruleOf(copier))
+		})
+	})
+
 	It("keeps copying into the other namespaces when one target cannot be written (#323)",
 		Label(expectedDifference), func() {
 			s := newScenario()

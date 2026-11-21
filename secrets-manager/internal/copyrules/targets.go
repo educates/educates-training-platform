@@ -70,19 +70,32 @@ type Target struct {
 
 // Converger converges the copies the rules of one resource offer, during
 // one reconcile of the resource, and collects their failures and write
-// conflicts for the reconcile's result.
+// conflicts for the reconcile's result. Of the resource's rules that copy
+// the same source under the same name into one namespace, the first to be
+// converged decides the copy: the others agree with it, and write nothing.
 type Converger struct {
 	cache  client.Reader
 	engine *copyengine.Engine
+
+	// converged holds what converging each copy found, for the first rule
+	// that converged it.
+	converged map[convergedCopy]Target
 
 	failures   []error
 	conflicted bool
 }
 
+// convergedCopy names a copy a rule converged, and the source it copies,
+// as the secret-name annotation names it.
+type convergedCopy struct {
+	types.NamespacedName
+	source string
+}
+
 // NewConverger returns a Converger that reads SecretImporters from cache
 // and converges copies with engine, for one reconcile.
 func NewConverger(cache client.Reader, engine *copyengine.Engine) *Converger {
-	return &Converger{cache: cache, engine: engine}
+	return &Converger{cache: cache, engine: engine, converged: map[convergedCopy]Target{}}
 }
 
 // Converge converges the copy rule offers into each namespace of
@@ -121,6 +134,14 @@ func (c *Converger) converge(ctx context.Context, log logr.Logger, rule *Rule, n
 		return target
 	}
 
+	key := convergedCopy{
+		NamespacedName: types.NamespacedName{Namespace: namespace, Name: rule.Copy.Name},
+		source:         secretsv1beta1.SecretName(rule.Source.GetNamespace(), rule.Source.GetName()),
+	}
+	if earlier, ok := c.converged[key]; ok {
+		return agreeing(earlier, rule)
+	}
+
 	desired := rule.Copy
 	desired.Source, desired.Namespace, desired.Owner = rule.Source, namespace, rule.Owner(importer)
 	target.Result, target.Err = c.engine.Converge(ctx, desired)
@@ -129,7 +150,19 @@ func (c *Converger) converge(ctx context.Context, log logr.Logger, rule *Rule, n
 		convergence.Repaired(ctx)
 	}
 	c.record(rule, target)
+	c.converged[key] = target
 	return target
+}
+
+// agreeing is the target of rule whose copy an earlier rule of the same
+// resource converged, finding earlier: the copy is in sync for rule when it
+// is for the earlier rule, which decides its shape, and fails or is kept
+// from rule as it is from the earlier rule otherwise.
+func agreeing(earlier Target, rule *Rule) Target {
+	if earlier.Err == nil && earlier.Result.Outcome.Converged() {
+		earlier.Result = copyengine.Result{Outcome: copyengine.Agreed, ManagedBy: rule.Copy.Rule}
+	}
+	return earlier
 }
 
 // record collects the failure or write conflict of target, a target of

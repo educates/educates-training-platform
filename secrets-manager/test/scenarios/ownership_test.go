@@ -289,6 +289,58 @@ var _ = Describe("Copy ownership and reclaim", Label(areaOwnership), func() {
 		})
 	})
 
+	It("keeps a copy with the one of its rules whose source it holds, when two copy different Secrets under one name",
+		func() {
+			s := newScenario()
+			firstNS := s.namespace("src-a", nil)
+			secondNS := s.namespace("src-b", nil)
+			targetNS := s.namespace("a", nil)
+			first := s.secret(firstNS.Name, "credentials", data("token", "first"))
+			second := s.secret(secondNS.Name, "credentials", data("token", "second"))
+
+			copier := s.secretCopier(s.name("copier"),
+				copierRule(first, inNamespaces(targetNS)), copierRule(second, inNamespaces(targetNS)))
+
+			eventually(func(g Gomega) {
+				expectCopy(g, targetNS.Name, first.Name, first, ruleOf(copier))
+			})
+			expectCopyUnwritten(targetNS.Name, first.Name, first, ruleOf(copier))
+
+			// The rule copying the Secret the copy holds keeps it once it
+			// comes second.
+			s.update(copier, func() {
+				setRules(copier, copierRule(second, inNamespaces(targetNS)), copierRule(first, inNamespaces(targetNS)))
+			})
+			s.update(first, func() { first.Data = data("token", "first-1") })
+
+			eventually(func(g Gomega) {
+				expectCopy(g, targetNS.Name, first.Name, first, ruleOf(copier))
+			})
+			expectCopyUnwritten(targetNS.Name, first.Name, first, ruleOf(copier))
+		})
+
+	It("shapes a copy as the first of a SecretExporter's rules that select its namespace, without rewriting it",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", s.scope())
+			src := s.secret(sourceNS.Name, "exported", data("token", "t0"))
+
+			exporter := s.secretExporter(sourceNS.Name, src.Name,
+				exporterRule(inNamespaces(targetNS), shaped(copyShape{Labels: map[string]string{"rule": "first"}})),
+				exporterRule(byLabels(s.scope()), shaped(copyShape{Labels: map[string]string{"rule": "second"}})))
+			s.secretImporter(targetNS.Name, src.Name, sharedSecret(uidOf(exporter)))
+
+			eventually(func(g Gomega) {
+				copied := expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+				g.Expect(copied.Labels).To(HaveKeyWithValue("rule", "first"))
+				expectReady(g, exporter, "True", "InSync")
+				expectCounts(g, statusRule(g, exporter, 1), map[string]int64{countInSync: 1})
+			})
+			copied := expectCopyUnwritten(targetNS.Name, src.Name, src, ruleOf(exporter))
+			Expect(copied.Labels).To(HaveKeyWithValue("rule", "first"))
+		})
+
 	It("leaves a Secret another writer creates under a copy's name, as the copy is first written, untouched",
 		Label(expectedDifference), func() {
 			requireRacedWrites()

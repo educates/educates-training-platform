@@ -135,6 +135,24 @@ var _ = Describe("Status, printer columns and Events", Label(areaFeedback, expec
 		})
 	})
 
+	It("reports Conflict for a rule whose copy another rule of its copier holds from another Secret", func() {
+		s := newScenario()
+		firstNS := s.namespace("src-a", nil)
+		secondNS := s.namespace("src-b", nil)
+		targetNS := s.namespace("a", nil)
+		first := s.secret(firstNS.Name, "credentials", data("token", "first"))
+		second := s.secret(secondNS.Name, "credentials", data("token", "second"))
+
+		copier := s.secretCopier(s.name("copier"),
+			copierRule(first, inNamespaces(targetNS)), copierRule(second, inNamespaces(targetNS)))
+
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "False", "Conflict")
+			expectCounts(g, statusRule(g, copier, 0), map[string]int64{countInSync: 1, countConflicts: 0})
+			expectCounts(g, statusRule(g, copier, 1), map[string]int64{countInSync: 0, countConflicts: 1})
+		})
+	})
+
 	It("reports a SecretExporter's source and how many targets are in sync or awaiting authorization", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

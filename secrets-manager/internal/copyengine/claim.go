@@ -24,7 +24,8 @@ const (
 	Recreated Outcome = "Recreated"
 
 	// Adopted means the copy was written by a resource that no longer
-	// exists, and was written as the asking rule's.
+	// exists, or by a rule of the asking resource that no longer copies the
+	// copy's source, and was written as the asking rule's.
 	Adopted Outcome = "Adopted"
 
 	// InSync means the copy already held what it should, and nothing was
@@ -37,8 +38,8 @@ const (
 	Agreed Outcome = "Agreed"
 
 	// OwnershipConflict means the target is not the asking rule's to write:
-	// no rule wrote it, or another existing resource's rule wrote it from
-	// another source. Nothing was written.
+	// no rule wrote it, or another existing rule wrote it from another
+	// source. Nothing was written.
 	OwnershipConflict Outcome = "OwnershipConflict"
 
 	// TargetDeleting means the target is being deleted, and nothing was
@@ -81,8 +82,8 @@ type Result struct {
 	ManagedBy string
 }
 
-// RuleState says whether the resource a copier-rule annotation names
-// exists.
+// RuleState says whether the resource a copy's copier-rule annotation names
+// exists, and whether one of its rules still makes the copy.
 type RuleState int
 
 const (
@@ -90,41 +91,48 @@ const (
 	// find.
 	RuleUnknown RuleState = iota
 
-	// RuleExists means the resource exists.
+	// RuleExists means the resource exists, and one of its rules copies the
+	// copy's source under the copy's name.
 	RuleExists
+
+	// RuleDropped means the resource exists, and none of its rules copies
+	// the copy's source under the copy's name any more.
+	RuleDropped
 
 	// RuleGone means the resource no longer exists.
 	RuleGone
 )
 
-// RuleLookup reports the state of the resource that rule, the value of a
-// target's copier-rule annotation, names. source is the target's
-// secret-name annotation, <namespace>/<name>, which places a resource that
-// lives in its source's namespace.
-type RuleLookup func(ctx context.Context, rule, source string) (RuleState, error)
+// RuleLookup reports the state of the rule that wrote the copy named name,
+// given the copy's copier-rule annotation, writer, and its secret-name
+// annotation, source, which also places a resource that lives in its
+// source's namespace.
+type RuleLookup func(ctx context.Context, writer, source, name string) (RuleState, error)
 
 // claim decides whether target, the target of c as the cache or the API
-// server has it, is c.Rule's to write, and returns true when it is: when
-// c.Rule wrote it, or adopts it, the Result then saying Adopted. Otherwise
-// the Result says why the target is left untouched.
+// server has it, is c.Rule's to write, and returns true when it is: when a
+// rule of the resource c.Rule names wrote it from c's source, or when c's
+// rule adopts it, the Result then saying Adopted. Otherwise the Result
+// says why the target is left untouched.
 func (e *Engine) claim(ctx context.Context, c Copy, target metav1.Object) (Result, bool, error) {
 	annotations := target.GetAnnotations()
 	writer, tracked := annotations[secretsv1beta1.CopierRuleAnnotation]
+	source := annotations[secretsv1beta1.SecretNameAnnotation]
+	sameSource := source == sourceName(c.Source)
 	switch {
 	case !tracked:
 		return Result{Outcome: OwnershipConflict}, false, nil
-	case writer == c.Rule:
+	case writer == c.Rule && sameSource:
 		return Result{}, true, nil
 	}
 
-	source := annotations[secretsv1beta1.SecretNameAnnotation]
-	state, err := e.rules(ctx, writer, source)
+	state, err := e.rules(ctx, writer, source, c.Name)
 	switch {
 	case err != nil:
 		return Result{}, false, err
-	case state == RuleGone:
+	case state == RuleGone, state == RuleDropped && writer == c.Rule:
 		return Result{Outcome: Adopted}, true, nil
-	case state == RuleExists && source == sourceName(c.Source):
+	case state != RuleUnknown && sameSource:
 		return Result{Outcome: Agreed, ManagedBy: writer}, false, nil
 	default:
 		return Result{Outcome: OwnershipConflict, ManagedBy: writer}, false, nil

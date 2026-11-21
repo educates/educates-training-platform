@@ -10,13 +10,24 @@
 //
 //   - A target without copier-rule was not written by a rule. It is left
 //     untouched, as an ownership conflict.
-//   - A target whose copier-rule names the resource asking for the copy is
-//     that resource's own.
+//   - A target whose copier-rule names the resource asking for the copy,
+//     and whose secret-name names the asking rule's source, is that rule's
+//     own.
+//   - A target whose copier-rule names the resource asking for the copy,
+//     and whose secret-name names another source, is another rule's of that
+//     resource, and an ownership conflict, while one of the resource's
+//     rules copies that source under the copy's name. Otherwise it is an
+//     orphan, which the asking rule adopts.
 //   - A target whose copier-rule names another resource that exists stays
 //     that resource's. It agrees with the asking rule when secret-name
 //     names the same source, and is an ownership conflict otherwise.
 //   - A target whose copier-rule names a resource that no longer exists is
 //     an orphan, which the asking rule adopts.
+//
+// The engine converges one copy for one rule. Of the rules of one resource
+// that copy the same source under the same name into one namespace, only
+// the first is to ask for the copy: it decides the copy's shape, and the
+// others agree with it.
 //
 // Copies are written with server-side apply, forced, under one field
 // manager. The applied configuration holds the copy's payload, taken from

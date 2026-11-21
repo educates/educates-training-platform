@@ -123,6 +123,19 @@ func settledSecret(ns, name string) *corev1.Secret {
 	return last
 }
 
+// expectCopyUnwritten waits until the copy of src named name in namespace
+// ns settles, asserts that it stays that copy, marked with writer, and is
+// not written again for the target's hold time, and returns it.
+func expectCopyUnwritten(ns, name string, src *corev1.Secret, writer string) *corev1.Secret {
+	GinkgoHelper()
+	settled := settledSecret(ns, name)
+	consistently(func(g Gomega) {
+		copied := expectCopy(g, ns, name, src, writer)
+		g.Expect(copied.ResourceVersion).To(Equal(settled.ResourceVersion), "resource version of %s/%s", ns, name)
+	})
+	return settled
+}
+
 // expectOwnedBy asserts that a copy carries an owner reference to owner,
 // which blocks the owner's deletion until the copy is gone.
 func expectOwnedBy(g Gomega, copied *corev1.Secret, owner *unstructured.Unstructured) {

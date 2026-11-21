@@ -1,6 +1,7 @@
 package v1beta1
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -81,12 +83,24 @@ func compareSchema(path string, schema map[string]any, goType reflect.Type, root
 		items, _ := schema["items"].(map[string]any)
 		return compareSchema(path+"[]", items, goType.Elem(), false)
 	case "string":
+		if schema["format"] == "date-time" {
+			if goType != reflect.TypeFor[metav1.Time]() {
+				return []string{path + ": the CRD has a date-time, the Go type " + goType.String()}
+			}
+			return nil
+		}
 		if goType.Kind() != reflect.String {
 			return []string{path + ": the CRD has a string, the Go type " + goType.String()}
 		}
 	case "boolean":
 		if goType.Kind() != reflect.Bool {
 			return []string{path + ": the CRD has a boolean, the Go type " + goType.String()}
+		}
+	case "integer":
+		kinds := map[any]reflect.Kind{"int32": reflect.Int32, "int64": reflect.Int64}
+		if kind, ok := kinds[schema["format"]]; !ok || goType.Kind() != kind {
+			return []string{fmt.Sprintf("%s: the CRD has an integer of format %v, the Go type %s",
+				path, schema["format"], goType)}
 		}
 	default:
 		return []string{path + ": the CRD has a property of type " + schemaType + ", which the check does not know"}

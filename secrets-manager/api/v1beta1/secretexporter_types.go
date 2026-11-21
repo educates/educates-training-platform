@@ -57,6 +57,36 @@ type SecretExporter struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec SecretExporterSpec `json:"spec"`
+
+	// +optional
+	Status SecretExporterStatus `json:"status,omitempty"`
+}
+
+// SecretExporterStatus says whether a SecretExporter is in sync, and why
+// not.
+type SecretExporterStatus struct {
+	// observedGeneration is the generation of the spec the status
+	// describes.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// conditions holds the Ready condition.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// sourceExists reports whether the exported Secret exists.
+	SourceExists bool `json:"sourceExists"`
+
+	// summary counts the targets of every rule.
+	// +optional
+	Summary *CopySummary `json:"summary,omitempty"`
+
+	// rules counts the targets of each rule, in the order of the spec's
+	// rules.
+	// +optional
+	Rules []TargetCounts `json:"rules,omitempty"`
 }
 
 // SecretExporterList is a list of SecretExporters.

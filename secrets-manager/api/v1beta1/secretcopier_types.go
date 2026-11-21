@@ -109,6 +109,43 @@ type SecretCopier struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec SecretCopierSpec `json:"spec,omitempty"`
+
+	// +optional
+	Status SecretCopierStatus `json:"status,omitempty"`
+}
+
+// SecretCopierStatus says whether a SecretCopier is in sync, and why not.
+type SecretCopierStatus struct {
+	// observedGeneration is the generation of the spec the status
+	// describes.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// conditions holds the Ready condition.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// summary counts the targets of every rule.
+	// +optional
+	Summary *CopySummary `json:"summary,omitempty"`
+
+	// rules counts the targets of each rule, in the order of the spec's
+	// rules.
+	// +optional
+	Rules []SecretCopierRuleStatus `json:"rules,omitempty"`
+}
+
+// SecretCopierRuleStatus counts the targets of one rule of a SecretCopier.
+type SecretCopierRuleStatus struct {
+	// sourceSecret is the Secret the rule copies.
+	SourceSecret SecretReference `json:"sourceSecret"`
+
+	// sourceExists reports whether the source Secret exists.
+	SourceExists bool `json:"sourceExists"`
+
+	TargetCounts `json:",inline"`
 }
 
 // SecretCopierList is a list of SecretCopiers.

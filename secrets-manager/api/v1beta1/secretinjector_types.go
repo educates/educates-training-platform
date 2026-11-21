@@ -4,6 +4,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// SecretInjectorKind is the kind of a SecretInjector.
+const SecretInjectorKind = "SecretInjector"
+
 // SourceSecrets selects the Secrets a SecretInjector rule injects. Every
 // selector present must pass, and the rule gives at least one.
 type SourceSecrets struct {
@@ -69,6 +72,62 @@ type SecretInjector struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec SecretInjectorSpec `json:"spec,omitempty"`
+
+	// +optional
+	Status SecretInjectorStatus `json:"status,omitempty"`
+}
+
+// SecretInjectorStatus says whether a SecretInjector is in sync, and why
+// not.
+type SecretInjectorStatus struct {
+	// observedGeneration is the generation of the spec the status
+	// describes.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// conditions holds the Ready condition.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// summary counts the injections of every rule.
+	// +optional
+	Summary *InjectionSummary `json:"summary,omitempty"`
+
+	// rules counts the injections of each rule, in the order of the spec's
+	// rules.
+	// +optional
+	Rules []InjectionCounts `json:"rules,omitempty"`
+}
+
+// InjectionCounts count what a SecretInjector, or one of its rules,
+// matches and injects. An injection is the Secrets a rule selects in a
+// namespace, added to one service account the rule selects there.
+type InjectionCounts struct {
+	// targetNamespaces counts the target namespaces matched.
+	TargetNamespaces int32 `json:"targetNamespaces"`
+
+	// serviceAccountsMatched counts the service accounts matched in them.
+	ServiceAccountsMatched int32 `json:"serviceAccountsMatched"`
+
+	// injectionsInSync counts the matched service accounts that hold every
+	// Secret the rule injects into them.
+	InjectionsInSync int32 `json:"injectionsInSync"`
+
+	// failures counts the injections that failed, and are retried, and the
+	// target namespaces that could not be read.
+	Failures int32 `json:"failures"`
+}
+
+// InjectionSummary counts what every rule of a SecretInjector matches and
+// injects.
+type InjectionSummary struct {
+	InjectionCounts `json:",inline"`
+
+	// inSyncRatio is injectionsInSync out of serviceAccountsMatched, as
+	// kubectl get shows it, such as 5/6.
+	InSyncRatio string `json:"inSyncRatio"`
 }
 
 // SecretInjectorList is a list of SecretInjectors.

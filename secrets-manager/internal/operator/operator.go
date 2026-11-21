@@ -1,7 +1,8 @@
 // Package operator composes the secrets-manager: one controller-runtime
 // manager, cluster wide, running the reconciler of each secrets.educates.dev
 // kind with the field indexes and map functions that turn events into its
-// reconciles, and the copy engine that writes copies.
+// reconciles, the copy engine that writes copies, and the feedback that
+// writes each resource's status and Events.
 package operator
 
 import (
@@ -29,6 +30,7 @@ import (
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/exportimport"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/secretcopier"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/secretinjector"
 )
@@ -56,16 +58,24 @@ type Options struct {
 	// before it is reconciled again. It defaults to DefaultBackoffCap.
 	BackoffCap time.Duration
 
+	// NotReadyGrace is how long a resource stays not Ready before the
+	// secrets-manager raises a Warning Event about it, so that a copier
+	// created just before its source, or an importer just before its
+	// exporter, raises none. It defaults to DefaultNotReadyGrace.
+	NotReadyGrace time.Duration
+
 	// NewCache, when set, creates the cache the secrets-manager reads and
 	// watches through, in place of controller-runtime's.
 	NewCache cache.NewCacheFunc
 }
 
-// DefaultBackstop and DefaultBackoffCap are the backstop interval and the
-// backoff cap of the secrets-manager when Options leave them unset.
+// DefaultBackstop, DefaultBackoffCap and DefaultNotReadyGrace are the
+// backstop interval, the backoff cap and the grace period of the
+// secrets-manager when Options leave them unset.
 const (
-	DefaultBackstop   = 5 * time.Minute
-	DefaultBackoffCap = 5 * time.Minute
+	DefaultBackstop      = 5 * time.Minute
+	DefaultBackoffCap    = 5 * time.Minute
+	DefaultNotReadyGrace = 60 * time.Second
 )
 
 // Operator is the composed secrets-manager.
@@ -142,19 +152,29 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 		policy.BackoffCap = DefaultBackoffCap
 	}
 
-	if err := secretcopier.New(mgr.GetClient(), secrets, policy).SetupWithManager(mgr); err != nil {
+	grace := opts.NotReadyGrace
+	if grace <= 0 {
+		grace = DefaultNotReadyGrace
+	}
+	reports := feedback.New(mgr.GetClient(), mgr.GetEventRecorder(FieldManager), scheme, grace)
+	if err := mgr.Add(reports); err != nil {
+		return nil, fmt.Errorf("adding the status and Events writer: %w", err)
+	}
+
+	if err := secretcopier.New(mgr.GetClient(), secrets, policy, reports).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretCopier reconciler: %w", err)
 	}
-	if err := exportimport.NewExporterReconciler(mgr.GetClient(), secrets, policy).SetupWithManager(mgr); err != nil {
+	exporters := exportimport.NewExporterReconciler(mgr.GetClient(), secrets, policy, reports)
+	if err := exporters.SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretExporter reconciler: %w", err)
 	}
 	// The SecretImporter reconciler reads the metadata of Secrets, which
 	// only the cache itself serves: the client reads Secrets from the API
 	// server.
-	if err := exportimport.NewImporterReconciler(mgr.GetCache(), policy).SetupWithManager(mgr); err != nil {
+	if err := exportimport.NewImporterReconciler(mgr.GetCache(), policy, reports).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretImporter reconciler: %w", err)
 	}
-	injectors := secretinjector.New(mgr.GetCache(), mgr.GetAPIReader(), mgr.GetClient(), policy)
+	injectors := secretinjector.New(mgr.GetCache(), mgr.GetAPIReader(), mgr.GetClient(), policy, reports)
 	if err := injectors.SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretInjector reconciler: %w", err)
 	}

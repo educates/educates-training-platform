@@ -28,6 +28,7 @@ import (
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
 
@@ -43,14 +44,19 @@ type Reconciler struct {
 	writer      client.Writer
 	types       *secretTypes
 	convergence convergence.Policy
+	feedback    *feedback.Feedback
 }
 
 // New returns a reconciler that reads SecretInjectors, namespaces, service
 // accounts and the metadata of Secrets from objects, the manager's cache,
 // reads the type of a Secret it has not seen from live, the API server,
-// writes service accounts with writer, and retries under policy.
-func New(objects cache.Cache, live client.Reader, writer client.Writer, policy convergence.Policy) *Reconciler {
-	return &Reconciler{cache: objects, live: live, writer: writer, types: newSecretTypes(), convergence: policy}
+// writes service accounts with writer, retries under policy, and reports
+// each SecretInjector's status and Events through reports.
+func New(objects cache.Cache, live client.Reader, writer client.Writer, policy convergence.Policy,
+	reports *feedback.Feedback) *Reconciler {
+	return &Reconciler{
+		cache: objects, live: live, writer: writer, types: newSecretTypes(), convergence: policy, feedback: reports,
+	}
 }
 
 // SetupWithManager registers the reconciler with mgr. It reconciles a
@@ -76,17 +82,19 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // Reconcile injects the Secrets of each rule of the SecretInjector req
-// names. A failure on one service account is reported in the returned
-// error and never stops the others.
+// names, and writes its status. A failure on one service account is
+// reported in the returned error and never stops the others.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	injector := &secretsv1beta1.SecretInjector{}
 	if err := r.cache.Get(ctx, req.NamespacedName, injector); err != nil {
 		if apierrors.IsNotFound(err) {
 			r.types.forget(req.Name)
+			r.feedback.Forget(secretsv1beta1.SecretInjectorKind, req.NamespacedName)
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if !injector.DeletionTimestamp.IsZero() {
+		r.feedback.Forget(secretsv1beta1.SecretInjectorKind, req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
@@ -94,13 +102,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := outcome.Err(); err != nil {
-		return ctrl.Result{}, err
-	}
-	if outcome.Conflicted {
-		return ctrl.Result{RequeueAfter: conflictRetryDelay}, nil
-	}
-	return ctrl.Result{}, nil
+	return r.publish(ctx, injector, &outcome)
 }
 
 // Inject adds the Secrets each rule of injector selects to the service

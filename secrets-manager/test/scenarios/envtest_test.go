@@ -30,24 +30,25 @@ const (
 	envtestBackoffCap = time.Second
 )
 
+// envtestNotReadyGrace shortens the grace period before a Warning Event on
+// envtest, leaving a scenario time to create a source well within it.
+const envtestNotReadyGrace = 6 * time.Second
+
 // envtestTiming allows for a secrets-manager that reacts to events within
 // moments, on an API server with nothing else running.
 var envtestTiming = Timing{
-	Converge:   30 * time.Second,
-	Hold:       3 * time.Second,
-	Poll:       200 * time.Millisecond,
-	Backstop:   envtestBackstop,
-	BackoffCap: envtestBackoffCap,
+	Converge:      30 * time.Second,
+	Hold:          3 * time.Second,
+	Poll:          200 * time.Millisecond,
+	NotReadyGrace: envtestNotReadyGrace,
+	Backstop:      envtestBackstop,
+	BackoffCap:    envtestBackoffCap,
 }
 
 // awaitingOnEnvtest names, under the behavior they wait for, the scenarios
 // the secrets-manager does not pass yet, by their full text or by the full
 // text of a container that holds them. They skip on envtest.
-var awaitingOnEnvtest = map[string][]string{
-	"status and Events": {
-		"Status, printer columns and Events",
-	},
-}
+var awaitingOnEnvtest = map[string][]string{}
 
 // newEnvtestTarget starts an envtest API server with the four kinds loaded
 // from the subchart's CRDs, and the secrets-manager's composition in this
@@ -77,11 +78,12 @@ func newEnvtestTarget() (*Target, error) {
 	calls.instrument(composedConfig)
 	missed := &MissedEvents{}
 	secretsManager := &inProcess{options: operator.Options{
-		RESTConfig: composedConfig,
-		Logger:     logf.Log.WithName("secrets-manager"),
-		Backstop:   envtestBackstop,
-		BackoffCap: envtestBackoffCap,
-		NewCache:   missed.newCache,
+		RESTConfig:    composedConfig,
+		Logger:        logf.Log.WithName("secrets-manager"),
+		Backstop:      envtestBackstop,
+		BackoffCap:    envtestBackoffCap,
+		NotReadyGrace: envtestNotReadyGrace,
+		NewCache:      missed.newCache,
 	}}
 	if err := secretsManager.start(); err != nil {
 		return nil, errors.Join(err, env.Stop())

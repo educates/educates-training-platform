@@ -1,8 +1,11 @@
 package exportimport
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,6 +21,7 @@ import (
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
 
@@ -30,9 +34,14 @@ const (
 	// accepts.
 	Imported ImportPhase = "Imported"
 
-	// AwaitingAuthorization means an exporter or copier offers the copy,
-	// and either the importer refuses every offer, or it accepts one whose
-	// copy is not there yet, such as one whose source does not exist.
+	// AwaitingCopy means the importer accepts an exporter's or copier's
+	// offer of the copy, and the copy is not there yet: it is about to be
+	// written, or cannot be, such as when its source does not exist or
+	// another Secret holds its name.
+	AwaitingCopy ImportPhase = "AwaitingCopy"
+
+	// AwaitingAuthorization means exporters or copiers offer the copy, and
+	// the importer refuses every offer.
 	AwaitingAuthorization ImportPhase = "AwaitingAuthorization"
 
 	// NoMatchingExporter means no exporter or copier rule offers the copy
@@ -78,12 +87,13 @@ type ImportState struct {
 	Phase ImportPhase
 
 	// BoundTo names the exporter or copier the copy comes from: the one
-	// that wrote it when Phase is Imported, or one whose offer the importer
-	// accepts while its copy is not there yet. It is nil otherwise.
+	// that wrote it when Phase is Imported, or the first whose offer the
+	// importer accepts when Phase is AwaitingCopy. It is nil otherwise.
 	BoundTo *Offerer
 
 	// Offers are the offers of the copy into the importer's namespace, one
-	// for each exporter or copier that makes one.
+	// for each exporter or copier rule that makes one, ordered by the
+	// resource making it.
 	Offers []ImportOffer
 }
 
@@ -93,13 +103,16 @@ type ImportState struct {
 type ImporterReconciler struct {
 	cache       client.Reader
 	convergence convergence.Policy
+	feedback    *feedback.Feedback
 }
 
 // NewImporterReconciler returns a reconciler that reads SecretImporters,
 // SecretExporters, SecretCopiers, namespaces and the metadata of Secrets
-// from cache, and retries under policy.
-func NewImporterReconciler(cache client.Reader, policy convergence.Policy) *ImporterReconciler {
-	return &ImporterReconciler{cache: cache, convergence: policy}
+// from cache, retries under policy, and reports each SecretImporter's
+// status and Events through reports.
+func NewImporterReconciler(cache client.Reader, policy convergence.Policy,
+	reports *feedback.Feedback) *ImporterReconciler {
+	return &ImporterReconciler{cache: cache, convergence: policy, feedback: reports}
 }
 
 // SetupWithManager registers the reconciler with mgr. It reconciles a
@@ -131,13 +144,18 @@ func (r *ImporterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		&secretsv1beta1.SecretImporter{}, r.cache, r)
 }
 
-// Reconcile works out where the SecretImporter req names stands.
+// Reconcile works out where the SecretImporter req names stands, and
+// writes its status.
 func (r *ImporterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	importer := &secretsv1beta1.SecretImporter{}
 	if err := r.cache.Get(ctx, req.NamespacedName, importer); err != nil {
+		if apierrors.IsNotFound(err) {
+			r.feedback.Forget(secretsv1beta1.SecretImporterKind, req.NamespacedName)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if !importer.DeletionTimestamp.IsZero() {
+		r.feedback.Forget(secretsv1beta1.SecretImporterKind, req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 	state, err := r.State(ctx, importer)
@@ -149,7 +167,7 @@ func (r *ImporterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log = log.WithValues("boundTo", state.BoundTo.String())
 	}
 	log.V(1).Info("Worked out where the SecretImporter stands")
-	return ctrl.Result{}, nil
+	return r.publish(ctx, importer, &state)
 }
 
 // State works out where importer stands, from the offers of the copy named
@@ -177,6 +195,9 @@ func (r *ImporterReconciler) State(ctx context.Context, importer *secretsv1beta1
 		state.Phase = NoMatchingExporter
 		return state, nil
 	}
+	slices.SortStableFunc(state.Offers, func(a, b ImportOffer) int {
+		return cmp.Or(strings.Compare(a.From.String(), b.From.String()), strings.Compare(a.Source, b.Source))
+	})
 
 	writer, copied, err := r.copyWriter(ctx, client.ObjectKeyFromObject(importer))
 	if err != nil {
@@ -193,7 +214,7 @@ func (r *ImporterReconciler) State(ctx context.Context, importer *secretsv1beta1
 			return state, nil
 		}
 		if state.BoundTo == nil {
-			state.BoundTo = &offer.From
+			state.Phase, state.BoundTo = AwaitingCopy, &offer.From
 		}
 	}
 	return state, nil

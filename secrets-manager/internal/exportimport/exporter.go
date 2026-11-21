@@ -21,6 +21,7 @@ import (
 	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
 
@@ -33,14 +34,16 @@ type ExporterReconciler struct {
 	cache       client.Reader
 	engine      *copyengine.Engine
 	convergence convergence.Policy
+	feedback    *feedback.Feedback
 }
 
 // NewExporterReconciler returns a reconciler that reads SecretExporters,
 // SecretImporters and namespaces from cache, converges copies with engine,
-// a Secret engine, and retries under policy.
+// a Secret engine, retries under policy, and reports each SecretExporter's
+// status and Events through reports.
 func NewExporterReconciler(cache client.Reader, engine *copyengine.Engine,
-	policy convergence.Policy) *ExporterReconciler {
-	return &ExporterReconciler{cache: cache, engine: engine, convergence: policy}
+	policy convergence.Policy, reports *feedback.Feedback) *ExporterReconciler {
+	return &ExporterReconciler{cache: cache, engine: engine, convergence: policy, feedback: reports}
 }
 
 // SetupWithManager registers the reconciler with mgr. It reconciles a
@@ -108,8 +111,9 @@ type ruleReport struct {
 	// when they are, in which case the rule selects no namespace.
 	invalidSelector error
 
-	// targets are the rule's copies, one in each namespace it selects, when
-	// the exported Secret is copied.
+	// targets are the rule's copies, one in each namespace it selects.
+	// Nothing is copied into them when the exported Secret does not exist or
+	// its namespace is being deleted.
 	targets []targetReport
 }
 
@@ -135,18 +139,23 @@ type targetReport struct {
 }
 
 // Reconcile copies the Secret the SecretExporter req names exports into
-// each namespace its rules select where a SecretImporter accepts the copy.
-// A failure on one target is reported in the returned error and never
-// stops the others; a write conflict requeues the SecretExporter.
+// each namespace its rules select where a SecretImporter accepts the copy,
+// and writes its status. A failure on one target is reported in the
+// returned error and never stops the others; a write conflict requeues the
+// SecretExporter.
 func (r *ExporterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	exporter := &secretsv1beta1.SecretExporter{}
 	if err := r.cache.Get(ctx, req.NamespacedName, exporter); err != nil {
+		if apierrors.IsNotFound(err) {
+			r.feedback.Forget(secretsv1beta1.SecretExporterKind, req.NamespacedName)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if !exporter.DeletionTimestamp.IsZero() {
+		r.feedback.Forget(secretsv1beta1.SecretExporterKind, req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
-	return exporterResult(r.export(ctx, exporter))
+	return r.publish(ctx, exporter, r.export(ctx, exporter))
 }
 
 // export copies the Secret exporter exports into each namespace its rules
@@ -160,22 +169,22 @@ func (r *ExporterReconciler) export(ctx context.Context, exporter *secretsv1beta
 	switch {
 	case apierrors.IsNotFound(err):
 		log.V(1).Info("The exported Secret does not exist: nothing to copy")
-		return report
 	case err != nil:
 		report.err = fmt.Errorf("reading the exported Secret %s: %w", report.source, err)
 		return report
+	default:
+		report.sourceExists = true
 	}
-	report.sourceExists = true
 
 	namespaces := &corev1.NamespaceList{}
 	if err := r.cache.List(ctx, namespaces); err != nil {
 		report.err = fmt.Errorf("listing namespaces: %w", err)
 		return report
 	}
-	if terminating(namespaces.Items, exporter.Namespace) {
+	if report.sourceExists && terminating(namespaces.Items, exporter.Namespace) {
 		log.V(1).Info("The exported Secret's namespace is being deleted: not copying it")
 		report.sourceTerminating = true
-		return report
+		src = nil
 	}
 
 	report.rules = make([]ruleReport, 0, len(exporter.Spec.Rules))
@@ -187,7 +196,8 @@ func (r *ExporterReconciler) export(ctx context.Context, exporter *secretsv1beta
 
 // exportRule copies src, the Secret exporter exports, into every namespace
 // of namespaces that rule selects where a SecretImporter accepts the copy,
-// and reports what it found.
+// and reports what it found. src is nil when the Secret is not copied, and
+// the rule's targets are then only counted.
 func (r *ExporterReconciler) exportRule(ctx context.Context, exporter *secretsv1beta1.SecretExporter,
 	rule *secretsv1beta1.SecretExporterRule, src *copyengine.Source, namespaces []corev1.Namespace) ruleReport {
 	report := ruleReport{copyName: rule.CopyName(exporter.Name)}
@@ -207,6 +217,10 @@ func (r *ExporterReconciler) exportRule(ctx context.Context, exporter *secretsv1
 			continue
 		}
 		target := targetReport{namespace: ns.Name}
+		if src == nil {
+			report.targets = append(report.targets, target)
+			continue
+		}
 		targetLog := log.WithValues("namespace", ns.Name)
 		importer, err := Importer(ctx, r.cache, types.NamespacedName{Namespace: ns.Name, Name: report.copyName})
 		if err != nil {

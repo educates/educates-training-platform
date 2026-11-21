@@ -25,6 +25,7 @@ import (
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/exportimport"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
 
@@ -37,13 +38,16 @@ type Reconciler struct {
 	cache       client.Reader
 	engine      *copyengine.Engine
 	convergence convergence.Policy
+	feedback    *feedback.Feedback
 }
 
 // New returns a reconciler that reads SecretCopiers and namespaces from
-// cache, converges copies with engine, a Secret engine, and retries under
-// policy.
-func New(cache client.Reader, engine *copyengine.Engine, policy convergence.Policy) *Reconciler {
-	return &Reconciler{cache: cache, engine: engine, convergence: policy}
+// cache, converges copies with engine, a Secret engine, retries under
+// policy, and reports each SecretCopier's status and Events through
+// reports.
+func New(cache client.Reader, engine *copyengine.Engine, policy convergence.Policy,
+	reports *feedback.Feedback) *Reconciler {
+	return &Reconciler{cache: cache, engine: engine, convergence: policy, feedback: reports}
 }
 
 // SetupWithManager registers the reconciler with mgr. It reconciles a
@@ -97,7 +101,8 @@ type ruleReport struct {
 	err error
 
 	// targets are the copies of the source, one in each namespace the rule
-	// selects, when the source is copied.
+	// selects. Nothing is copied into them when the source does not exist or
+	// its namespace is being deleted.
 	targets []targetReport
 }
 
@@ -121,14 +126,19 @@ type targetReport struct {
 }
 
 // Reconcile copies the source Secret of each rule of the SecretCopier
-// req names. A failure on one target is reported in the returned error and
-// never stops the others; a write conflict requeues the SecretCopier.
+// req names, and writes its status. A failure on one target is reported in
+// the returned error and never stops the others; a write conflict requeues
+// the SecretCopier.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	copier := &secretsv1beta1.SecretCopier{}
 	if err := r.cache.Get(ctx, req.NamespacedName, copier); err != nil {
+		if apierrors.IsNotFound(err) {
+			r.feedback.Forget(secretsv1beta1.SecretCopierKind, req.NamespacedName)
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if !copier.DeletionTimestamp.IsZero() {
+		r.feedback.Forget(secretsv1beta1.SecretCopierKind, req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
@@ -141,7 +151,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	for i := range copier.Spec.Rules {
 		reports = append(reports, r.reconcileRule(ctx, copier, &copier.Spec.Rules[i], namespaces.Items))
 	}
-	return reconcileResult(reports)
+	return r.publish(ctx, copier, reports)
 }
 
 // reconcileRule copies the source Secret of rule into every namespace of
@@ -157,12 +167,12 @@ func (r *Reconciler) reconcileRule(ctx context.Context, copier *secretsv1beta1.S
 	switch {
 	case apierrors.IsNotFound(err):
 		log.V(1).Info("The source Secret does not exist: nothing to copy")
-		return report
 	case err != nil:
 		report.err = fmt.Errorf("reading the source Secret %s: %w", report.source, err)
 		return report
+	default:
+		report.sourceExists = true
 	}
-	report.sourceExists = true
 
 	selector := selectors.Namespaces(rule.TargetNamespaces)
 	if err := selector.Err(); err != nil {
@@ -170,10 +180,9 @@ func (r *Reconciler) reconcileRule(ctx context.Context, copier *secretsv1beta1.S
 		report.invalidSelector = err
 		return report
 	}
-	if terminating(namespaces, report.source.Namespace) {
+	if report.sourceExists && terminating(namespaces, report.source.Namespace) {
 		log.V(1).Info("The source Secret's namespace is being deleted: not copying it")
 		report.sourceTerminating = true
-		return report
 	}
 
 	copyName := rule.CopyName()
@@ -181,6 +190,10 @@ func (r *Reconciler) reconcileRule(ctx context.Context, copier *secretsv1beta1.S
 	for i := range namespaces {
 		ns := &namespaces[i]
 		if ns.Name == report.source.Namespace || !selector.Match(ns) {
+			continue
+		}
+		if !report.sourceExists || report.sourceTerminating {
+			report.targets = append(report.targets, targetReport{namespace: ns.Name})
 			continue
 		}
 		targetLog := log.WithValues("namespace", ns.Name, "name", copyName)

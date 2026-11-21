@@ -13,9 +13,6 @@
 // secrets-manager's real composition running in this process against it;
 // KUBEBUILDER_ASSETS names the envtest binaries, as make test sets it.
 //
-// A target may name scenarios its secrets-manager does not pass yet; they
-// skip on it.
-//
 // Labels select scenarios in a run:
 //
 //   - expected-difference: a fix or an addition over the secrets-manager
@@ -57,12 +54,6 @@ var _ = BeforeSuite(func() {
 	target, err = selectTarget()
 	Expect(err).NotTo(HaveOccurred())
 	By("running the scenarios against the " + target.Name)
-})
-
-var _ = BeforeEach(func() {
-	if behavior := target.awaited(CurrentSpecReport()); behavior != "" {
-		Skip("awaiting " + behavior + " on the " + target.Name)
-	}
 })
 
 var _ = AfterSuite(func() {

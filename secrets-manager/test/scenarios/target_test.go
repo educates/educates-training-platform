@@ -4,11 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"slices"
-	"strings"
 	"time"
-
-	. "github.com/onsi/ginkgo/v2"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -66,12 +62,6 @@ type Target struct {
 	// Restart, when not nil, stops the target's secrets-manager and starts
 	// it again, with nothing kept in memory.
 	Restart func() error
-
-	// Awaiting names, under the behavior they wait for, the scenarios the
-	// target's secrets-manager does not pass yet, by their full text or by
-	// the full text of a container that holds them. They skip on the
-	// target.
-	Awaiting map[string][]string
 
 	// stop releases what the target started, when anything.
 	stop func() error
@@ -167,24 +157,6 @@ func newLiveTarget(kubeconfig, kubeContext string) (*Target, error) {
 		NamespaceController: true,
 		Timing:              liveTiming,
 	}, nil
-}
-
-// awaited returns the behavior the scenario report describes waits for on
-// the target, or "" when the target's secrets-manager passes it.
-func (t *Target) awaited(report SpecReport) string {
-	texts := make([]string, 0, 1+len(report.ContainerHierarchyTexts))
-	texts = append(texts, report.FullText())
-	for i := range report.ContainerHierarchyTexts {
-		texts = append(texts, strings.Join(report.ContainerHierarchyTexts[:i+1], " "))
-	}
-	for behavior, scenarios := range t.Awaiting {
-		for _, text := range texts {
-			if slices.Contains(scenarios, text) {
-				return behavior
-			}
-		}
-	}
-	return ""
 }
 
 // Stop releases what the target started.

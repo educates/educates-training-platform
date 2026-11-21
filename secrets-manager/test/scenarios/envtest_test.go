@@ -45,11 +45,6 @@ var envtestTiming = Timing{
 	BackoffCap:    envtestBackoffCap,
 }
 
-// awaitingOnEnvtest names, under the behavior they wait for, the scenarios
-// the secrets-manager does not pass yet, by their full text or by the full
-// text of a container that holds them. They skip on envtest.
-var awaitingOnEnvtest = map[string][]string{}
-
 // newEnvtestTarget starts an envtest API server with the four kinds loaded
 // from the subchart's CRDs, and the secrets-manager's composition in this
 // process against it. envtest runs no garbage collector and no namespace
@@ -94,7 +89,6 @@ func newEnvtestTarget() (*Target, error) {
 		Config:       config,
 		Client:       c,
 		Timing:       envtestTiming,
-		Awaiting:     awaitingOnEnvtest,
 		APICalls:     calls,
 		MissedEvents: missed,
 		Restart: func() error {

@@ -124,20 +124,21 @@ func Publish[T client.Object](ctx context.Context, f *Feedback, cached T, set fu
 	last, known := f.written[key]
 	f.mu.Unlock()
 
-	base, updated, after, inSync, err := withStatus(cached, set, last, known)
+	change, err := withStatus(cached, set, last, known)
 	if err != nil {
 		return err
 	}
-	if !inSync {
-		err = f.patch(ctx, base, updated)
+	if !change.inSync {
+		err = f.patch(ctx, change.base, change.updated)
 		if apierrors.IsConflict(err) {
-			if base, err = live(ctx, f, gvk, cached); err == nil {
+			var fresh T
+			if fresh, err = live(ctx, f, gvk, cached); err == nil {
 				// The API server's version is the latest: what this process
 				// wrote last no longer counts.
-				base, updated, after, inSync, err = withStatus(base, set, "", false)
+				change, err = withStatus(fresh, set, "", false)
 			}
-			if err == nil && !inSync {
-				err = f.patch(ctx, base, updated)
+			if err == nil && !change.inSync {
+				err = f.patch(ctx, change.base, change.updated)
 			}
 		}
 		switch {
@@ -150,32 +151,47 @@ func Publish[T client.Object](ctx context.Context, f *Feedback, cached T, set fu
 	}
 
 	f.mu.Lock()
-	f.written[key] = after
+	f.written[key] = change.status
 	f.mu.Unlock()
-	f.observe(key, gvk, updated, readyOf(base), readyOf(updated))
+	f.observe(key, gvk, change.updated, readyOf(change.base), readyOf(change.updated))
 	return nil
 }
 
-// withStatus returns base, a copy of it that set gave the computed status,
-// that status as JSON, and whether base holds it already. last is the
-// status last written, as JSON, when known: when it differs from the
-// computed status, base, as a cache holds it, may hold a status that is no
-// longer the API server's.
-func withStatus[T client.Object](base T, set func(T), last string, known bool) (T, T, string, bool, error) {
+// statusChange is what setting the status a reconcile computed changes on
+// a resource.
+type statusChange[T client.Object] struct {
+	// base is the resource as it was read, and updated a copy of it holding
+	// the computed status.
+	base, updated T
+
+	// status is the computed status, as JSON.
+	status string
+
+	// inSync reports whether base holds the computed status already.
+	inSync bool
+}
+
+// withStatus returns the change set, giving a copy of base the computed
+// status, makes to base. last is the status last written, as JSON, when
+// known: when it differs from the computed status, base, as a cache holds
+// it, may hold a status that is no longer the API server's.
+func withStatus[T client.Object](base T, set func(T), last string, known bool) (statusChange[T], error) {
+	change := statusChange[T]{base: base}
 	updated, ok := base.DeepCopyObject().(T)
 	if !ok {
-		return base, updated, "", false, fmt.Errorf("copying %s", base.GetName())
+		return change, fmt.Errorf("copying %s", base.GetName())
 	}
 	set(updated)
+	change.updated = updated
 	before, err := statusOf(base)
 	if err != nil {
-		return base, updated, "", false, err
+		return change, err
 	}
-	after, err := statusOf(updated)
-	if err != nil {
-		return base, updated, "", false, err
+	if change.status, err = statusOf(updated); err != nil {
+		return change, err
 	}
-	return base, updated, after, before == after && (!known || last == after), nil
+	change.inSync = before == change.status && (!known || last == change.status)
+	return change, nil
 }
 
 // patch writes the status of updated as a merge patch from base,

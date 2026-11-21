@@ -147,6 +147,25 @@ func (s *scenario) update(obj client.Object, mutate func()) {
 	})).To(Succeed())
 }
 
+// patchStatus applies mutate to the status of the latest version of u, a
+// secrets.educates.dev resource, and writes it through the status
+// subresource, as another writer would.
+func (s *scenario) patchStatus(u *unstructured.Unstructured, mutate func(status map[string]any)) {
+	GinkgoHelper()
+	latest := &unstructured.Unstructured{}
+	latest.SetGroupVersionKind(u.GroupVersionKind())
+	Expect(target.Client.Get(s.ctx, client.ObjectKeyFromObject(u), latest)).To(Succeed())
+	updated := latest.DeepCopy()
+	status, _, err := unstructured.NestedMap(updated.Object, "status")
+	Expect(err).NotTo(HaveOccurred())
+	if status == nil {
+		status = map[string]any{}
+	}
+	mutate(status)
+	Expect(unstructured.SetNestedMap(updated.Object, status, "status")).To(Succeed())
+	Expect(target.Client.Status().Patch(s.ctx, updated, client.MergeFrom(latest))).To(Succeed())
+}
+
 // data builds Secret data from alternating keys and values.
 func data(keysAndValues ...string) map[string][]byte {
 	result := map[string][]byte{}

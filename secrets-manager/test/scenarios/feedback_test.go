@@ -297,6 +297,38 @@ var _ = Describe("Status, printer columns and Events", Label(areaFeedback, expec
 			})
 	})
 
+	It("does not reconcile a resource again for a change of its status alone", func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS)))
+		eventually(func(g Gomega) {
+			g.Expect(summaryOf(g, copier)).To(HaveKeyWithValue("inSyncRatio", inSyncRatio(1, 1)))
+		})
+
+		// Another writer changes the status, and nothing else: a reconcile
+		// would write the status back.
+		s.patchStatus(copier, func(status map[string]any) {
+			Expect(unstructured.SetNestedField(status, "changed", "summary", "inSyncRatio")).To(Succeed())
+		})
+
+		consistently(func(g Gomega) {
+			g.Expect(summaryOf(g, copier)).To(HaveKeyWithValue("inSyncRatio", "changed"))
+		})
+
+		// A change of the spec reconciles the copier, which writes its status
+		// anew.
+		s.update(copier, func() {
+			setRules(copier, copierRule(src, inNamespaces(targetNS), shaped(copyShape{Labels: map[string]string{
+				tierLabel: "changed",
+			}})))
+		})
+		eventually(func(g Gomega) {
+			g.Expect(summaryOf(g, copier)).To(HaveKeyWithValue("inSyncRatio", inSyncRatio(1, 1)))
+		})
+	})
+
 	It("raises a Normal Imported Event when an importer imports", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)

@@ -573,7 +573,9 @@ New Features
   Grant these to users or automation that needs to manage or inspect Educates
   resources. They also carry the standard Kubernetes aggregation labels, so
   their rules automatically merge into the built-in ``admin`` and ``view``
-  cluster roles.
+  cluster roles. ``educates:rbac:view:secrets`` leaves out the
+  ``SecretExporter`` and ``SecretImporter`` resources, as described under
+  Features Changed.
 
 * The ``educates workshop render`` command accepts a ``--pathway`` option
   naming the pathway in ``workshop/config.yaml`` to render, in place of the
@@ -696,6 +698,66 @@ New Features
   over plain HTTP as well as HTTPS, without the browser asking for permission
   to use the clipboard. See [copying and pasting in
   terminals](copying-and-pasting-in-terminals).
+
+* ``SecretCopier`` and ``SecretExporter`` rules accept
+  ``targetSecret.annotations``, annotations to set on every copy, for example
+  to mark copies for a tool such as Argo CD, kapp or a backup tool. An
+  annotation removed from ``targetSecret.annotations`` is removed from the
+  copies, annotations which other tools add to a copy are left alone, and the
+  annotations of the source secret are never copied. A rule can give at most
+  32 annotations, and keys starting with ``secrets.educates.dev/`` are
+  rejected, as described under Features Changed.
+
+* ``SecretCopier`` and ``SecretExporter`` rules accept ``targetSecret.keys``,
+  the keys of the source secret to copy. A copy then holds only those of the
+  listed keys which the source secret has, and a key no longer listed is
+  removed from the copies. Without ``keys``, or with an empty list, every key
+  is copied, as before. Kubernetes requires a copy of a ``kubernetes.io/tls``
+  secret to keep ``tls.crt`` and ``tls.key``, so a rule whose ``keys`` leave
+  either out fails for each namespace it copies such a secret into, and its
+  resource reports the failure in its status.
+
+* ``SecretInjector`` rules select their source secrets and target namespaces
+  with the selectors ``SecretCopier`` rules use.
+  ``sourceSecrets.nameSelector.matchNames`` takes shell style glob expressions
+  and names with a leading ``!`` to exclude, so that one rule can inject every
+  ``*-pull-secret``, while an exact name keeps its meaning. ``sourceSecrets``
+  gains ``ownerSelector`` and ``uidSelector``, to inject the secrets a given
+  resource owns, or specific instances of secrets, and ``targetNamespaces``
+  gains ``ownerSelector``.
+
+* The ``SecretCopier``, ``SecretExporter``, ``SecretImporter`` and
+  ``SecretInjector`` resources now report their status. A ``Ready`` condition
+  says whether a resource is in sync, with a reason naming the problem when it
+  is not: ``InvalidSelector``, ``SourceMissing``, ``TargetErrors``,
+  ``Conflict`` or ``AwaitingAuthorization`` for a copier, exporter or
+  injector, and ``AwaitingCopy``, ``AwaitingAuthorization`` or
+  ``NoMatchingExporter`` for an importer which has not ``Imported`` its
+  secret. The message of the condition names up to five of the namespaces
+  affected. A copier or exporter counts, in total and for each rule, the
+  target namespaces selected and, of them, those holding a copy in sync, those
+  in conflict, those awaiting authorization and the failures, and says whether
+  its source secrets exist. An importer names the exporter or copier its copy
+  comes from. An injector counts, in total and for each rule, the namespaces
+  and service accounts selected, the service accounts holding every secret
+  injected into them, and the failures. ``kubectl get`` shows the ``Ready``
+  condition and its reason for each resource, and for copiers, exporters and
+  injectors how many of their targets are in sync, such as ``5/6``. The status
+  holds counts only, so its size depends on the number of rules, never on the
+  number of namespaces.
+
+* The secrets manager records Events for the ``SecretCopier``,
+  ``SecretExporter``, ``SecretImporter`` and ``SecretInjector`` resources
+  through the ``events.k8s.io`` API when they change state: a ``Warning`` with
+  reason ``NotReady`` once a resource has not been ``Ready`` for a minute, a
+  ``Normal`` Event with reason ``Recovered`` when a resource which got that
+  warning is ``Ready`` again, and a ``Normal`` Event with reason ``Imported``
+  when a ``SecretImporter`` imports its secret. A resource which is ``Ready``
+  again within the minute, such as a ``SecretCopier`` created moments before
+  its source secret, gets no warning, while its status shows the problem at
+  once. The Events of ``SecretCopier`` and ``SecretInjector`` resources, which
+  have no namespace, are recorded in the ``default`` namespace, and ``kubectl
+  describe`` shows them.
 
 Features Changed
 ----------------
@@ -873,8 +935,8 @@ Features Changed
   ``NODE_EXTRA_CA_CERTS`` environment variables are set in the container
   images to point at that bundle, so the CA is trusted by the application and
   also by tools such as ``curl`` when using ``kubectl exec`` to debug from
-  inside the container. The ``secrets-manager`` and ``tunnel-manager`` images
-  carry the same environment variables for consistency. The same mechanism
+  inside the container. The ``tunnel-manager`` image carries the same
+  environment variables for consistency. The same mechanism
   applies regardless of whether a CA is configured, in which case the bundle
   holds only the system roots. Workshop session containers are unaffected and
   continue to use an init container, as the many command line tools they
@@ -891,10 +953,10 @@ Features Changed
   as a single file, so a replaced CA certificate is picked up when the pod
   next restarts.
 
-* The container images for the ``secrets-manager``, ``session-manager``,
-  ``tunnel-manager`` and ``training-portal`` components are now based on
-  Debian (``debian:trixie-slim``) instead of Fedora, and the ``image-cache``
-  image is now based on a distroless base image. The Python
+* The container images for the ``session-manager``, ``tunnel-manager`` and
+  ``training-portal`` components are now based on Debian
+  (``debian:trixie-slim``) instead of Fedora, and the ``image-cache`` image
+  is now based on a distroless base image. The Python
   components run on a Python interpreter installed by ``uv`` rather than the
   distribution's Python, and are built in two stages so that the published
   images contain no compiler, package build tooling or ``uv`` binary. The
@@ -1677,6 +1739,112 @@ Features Changed
   password locks out whoever holds its tokens. Previously a password change
   left them valid.
 
+* The secrets manager is now written in Go, replacing its Python
+  implementation in place. It keeps the ``secrets-manager`` image name, its
+  subchart and values, the ``SecretsManager`` custom resource, the
+  ``SecretCopier``, ``SecretExporter``, ``SecretImporter`` and
+  ``SecretInjector`` resources at ``secrets.educates.dev/v1beta1``, and the
+  ``secrets.educates.dev/copier-rule`` and
+  ``secrets.educates.dev/secret-name`` annotations it puts on copies, so
+  workshop definitions, the session manager and the other Educates components
+  need no change, except where the entries below and the bugs fixed say
+  otherwise. Its image holds a single static binary on
+  ``gcr.io/distroless/static:nonroot``, which runs as a non-root user on a
+  read-only root file system, without privilege escalation or capabilities and
+  under the ``RuntimeDefault`` seccomp profile. It logs one JSON object per
+  line. It acts on events, so a change to a source secret, a copy deleted or
+  edited, a namespace created or relabelled, a service account or secret
+  created where a ``SecretInjector`` rule selects it, or a ``SecretImporter``
+  created, changed or deleted, takes effect within seconds, where the Python
+  implementation picked up most of them on a pass over every resource every
+  minute. It also checks each resource again 5 minutes after its last check,
+  and logs a message when that check has to repair anything, since it means a
+  change was missed. It watches secrets as metadata only, and reads the data
+  of a secret from the API server when it needs it, so it does not hold the
+  data of every secret in the cluster in memory. It makes no requests to the
+  API server for resources whose sources and copies have not changed, so its
+  load no longer grows with the number of resources times the number of
+  namespaces. A copy records the ``resourceVersion`` of the source secret it
+  was last written from in the new annotation
+  ``secrets.educates.dev/source-version``. The documentation of the four
+  resources has been corrected throughout to describe what the secrets manager
+  does.
+
+* The deployment of the secrets manager now has a readiness probe, so that
+  ``SecretsManager`` reports ready only once the secrets manager has loaded
+  the resources it watches, and the session manager and lookup service, which
+  wait for it, do not start before it can copy. Its liveness and readiness
+  probes are served on port ``8081``. Its replicas elect a leader with the
+  ``Lease`` named ``secrets-manager`` in its namespace, and the deployment is
+  updated with a rolling update instead of being recreated, so an upgrade
+  leaves no gap in which nothing is copied, and never two replicas writing at
+  once. A pod which is shut down hands over at once, and one which stops
+  without releasing the ``Lease`` is replaced as leader once the ``Lease``
+  expires, within 15 seconds. The chart of the secrets manager gains a
+  ``replicas`` value, which defaults to 1, and renders a
+  ``PodDisruptionBudget`` and preferred pod anti-affinity when it is above 1.
+  The operator does not set it, so an install through the ``SecretsManager``
+  resource runs one replica. The pod uses a projected, rotating service
+  account token instead of the long-lived ``secrets-manager-token`` secret,
+  which is no longer created. The ``educates:secrets-manager`` cluster role
+  grants only what the secrets manager uses: it no longer grants
+  ``deletecollection`` on secrets, nor ``patch`` and ``update`` on the four
+  ``secrets.educates.dev`` kinds, and it keeps ``delete`` on secrets, used
+  only to recreate a copy whose source secret changed type. It gains
+  ``update`` and ``patch`` on the status of the four kinds, ``update`` on the
+  finalizers of ``SecretCopier`` and ``SecretImporter`` resources, which
+  setting ``blockOwnerDeletion`` on the owner reference of a copy requires,
+  and ``create`` and ``patch`` on ``events.k8s.io`` events. The role
+  ``educates-secrets-manager-leader-election`` in the namespace of the secrets
+  manager grants access to its ``Lease``, and lets it record the Events of
+  leader election. ``spec.logLevel`` of the ``SecretsManager`` resource takes
+  ``debug``, ``info``, ``warn`` or ``error`` as before, and at ``warn`` only
+  errors are logged, as for the lookup service.
+
+* A secret which the secrets manager did not create is no longer taken over by
+  a ``SecretCopier`` or ``SecretExporter`` rule whose copy has its name.
+  Previously such a secret, one without the
+  ``secrets.educates.dev/copier-rule`` annotation, was merged into and
+  overwritten in every namespace the rule selected, so a broad rule could
+  destroy an unrelated secret. It is now left untouched, and the resource of
+  the rule reports ``Conflict`` in its status for that namespace. So does a
+  secret whose ``secrets.educates.dev/copier-rule`` annotation does not name a
+  ``SecretCopier`` or ``SecretExporter``. Delete such a secret to have the
+  rule create its copy in its place.
+
+* The ``educates:rbac:view:secrets`` cluster role, and so the built-in
+  ``view`` cluster role into which it is aggregated, no longer grants read
+  access to ``SecretExporter`` and ``SecretImporter`` resources, only to
+  ``SecretCopier`` and ``SecretInjector`` resources. The
+  ``copyAuthorization.sharedSecret`` of an exporter or importer is what
+  authorizes an import, so a user who could view the namespace of a
+  ``SecretExporter``, and create a ``SecretImporter`` in a namespace it
+  targets, could obtain the secret it exports. The
+  ``educates:rbac:admin:secrets`` cluster role, aggregated into the built-in
+  ``admin`` cluster role, still covers all four kinds, so the session manager,
+  which creates exporters, importers and injectors for workshops through it,
+  is unaffected.
+
+* The custom resource definitions of ``SecretCopier`` and ``SecretExporter``
+  now allow at most 100 rules in a resource and at most 32
+  ``targetSecret.annotations`` in a rule, and reject annotation keys starting
+  with ``secrets.educates.dev/``, which the secrets manager reserves for the
+  annotations tracking copies. The limits keep the check of the reserved
+  prefix within the cost Kubernetes allows for validating a resource. They and
+  the reserved prefix are the only changes to the custom resource definitions
+  which reject a resource that was accepted before. ``SecretInjector`` rules
+  are not limited.
+
+* The ``matchLabels`` and ``matchExpressions`` of the ``labelSelector`` of a
+  rule are now evaluated, and validated, as a Kubernetes label selector is. A
+  rule whose label selector Kubernetes would not accept, such as one with an
+  ``In`` or ``NotIn`` expression without values, an ``Exists`` or
+  ``DoesNotExist`` expression with values, or a label key or value which is
+  not valid, now selects nothing, and its resource reports ``InvalidSelector``
+  in its status. Previously an ``In`` or ``NotIn`` expression without values
+  matched every namespace the other selectors of the rule matched, and the
+  values of an ``Exists`` or ``DoesNotExist`` expression were ignored.
+
 Removed Features
 ----------------
 
@@ -2177,10 +2345,10 @@ Bugs Fixed
   reported against the previously bundled versions. The behavior of the
   workshop dashboard is unchanged.
 
-* The Python packages bundled with the session manager, secrets manager,
-  training portal and tunnel manager have been updated to releases which fix
-  vulnerabilities reported against the previously bundled versions, being
-  ``urllib3`` 2.8.0 and ``oauthlib`` 4.0.0 in all four components, and
+* The Python packages bundled with the session manager, training portal and
+  tunnel manager have been updated to releases which fix vulnerabilities
+  reported against the previously bundled versions, being ``urllib3`` 2.8.0
+  and ``oauthlib`` 4.0.0 in all three components, and
   ``Django`` 5.2.17 in the training portal. The behavior of these components
   is unchanged.
 
@@ -2397,8 +2565,8 @@ Bugs Fixed
   any message. Scripts under ``$HOME/workshop/setup.d`` are now made
   executable as well.
 
-* For about a minute after starting, the training portal, secrets manager,
-  session manager and tunnel manager each logged nine ``ERROR`` messages for
+* For about a minute after starting, the training portal, session manager
+  and tunnel manager each logged nine ``ERROR`` messages for
   failed requests to list ``customresourcedefinitions.apiextensions.k8s.io``,
   followed by the warning ``Not enough permissions to watch for resources``.
   The kopf operator framework they run on watches custom resource
@@ -2557,3 +2725,109 @@ Bugs Fixed
   up its parent process, and a process started by ``kubectl exec`` has no
   parent process in the container. The profile now skips that check when
   there is no parent process, so nothing is printed.
+
+* A key removed from a source secret never left its copies, and every copy of
+  it was then updated every minute, without end. The same held for a label
+  dropped from ``targetSecret.labels`` of a rule, and for a label someone else
+  added to a copy. The data of a copy now always equals what its rule selects
+  from the source secret, so a key which the source secret drops, or which
+  someone else adds to a copy, is removed. A label which the source secret or
+  ``targetSecret.labels`` drops is removed from the copies, labels and
+  annotations which other tools add to a copy are left alone, and a copy is
+  written only when what it should hold changes.
+
+* A copy was created with only the labels of the ``targetSecret.labels`` of
+  its rule, and got the labels of its source secret when it was first updated,
+  while the documentation said the labels of a source secret were never
+  copied. A copy now carries the labels of its source secret together with
+  ``targetSecret.labels`` from the moment it is created, the value from
+  ``targetSecret.labels`` winning where both give a label, and the
+  documentation says so.
+
+* When a source secret was replaced by one of another ``type``, its copies
+  were never updated again, since Kubernetes does not let the type of a secret
+  change, and updating them failed on every pass. The copies are now deleted
+  and created again with the new type. A copy which someone else has marked
+  ``immutable: true`` is never deleted, and is reported as a failure for its
+  namespace instead.
+
+* Any unexpected error from the Kubernetes API, such as a copy which could not
+  be updated, or a conflict when two updates of the same copy raced, stopped
+  the rest of a pass over the namespaces of a rule, so the namespaces which
+  sorted after a failing one got no updates for as long as it failed. A copier
+  failure on a secret change also kept that change from reaching the
+  ``SecretInjector`` rules. A failure in one namespace, or on one service
+  account, now never stops the others: it is reported in the status of the
+  resource and retried with an increasing delay, at most 5 minutes apart. A
+  write which conflicts with another is retried shortly, and is not reported
+  as a failure.
+
+* A copy kept after its ``SecretCopier`` was deleted, under the ``Retain``
+  reclaim policy, blocked every other ``SecretCopier`` from managing it,
+  without end. A copy whose ``SecretCopier`` or ``SecretExporter`` no longer
+  exists is now taken over within seconds by a rule which targets it, and
+  updated from the source secret of that rule.
+
+* Two rules which copied the same source secret under the same name into a
+  namespace, as the copiers of the session manager, lookup service and node CA
+  injector charts do with the ingress secrets in the ``educates`` namespace,
+  had all but the first warn every minute. They now agree: the resource whose
+  rule created the copy keeps it, the other rules count it as in sync, and
+  nothing is logged. When the resource which created the copy is deleted,
+  another rule recreates or takes over the copy within seconds.
+
+* The secrets manager put a finalizer on every ``SecretCopier``,
+  ``SecretExporter`` and ``SecretInjector``, so deleting one waited, without
+  end, whenever the secrets manager was not running, and after the secrets
+  manager was uninstalled a namespace holding a ``SecretExporter`` stayed
+  ``Terminating``. The secrets manager now adds no finalizer to any of the
+  four resources, and copies are removed only through their owner references,
+  which Kubernetes acts on by itself.
+
+* A watch of the Kubernetes API which stopped delivering events could go
+  unnoticed, leaving the secrets manager no longer reacting to the changes it
+  watched, and its liveness probe did not check its watches. Its watches now
+  come from the Kubernetes client's informers, which start a watch again
+  whenever it ends or fails, and each resource is checked again 5 minutes
+  after its last check, which repairs a change that was missed.
+
+* A ``SecretInjector`` added every secret but one of type
+  ``kubernetes.io/dockerconfigjson`` to the ``secrets`` of a service account,
+  a ``kubernetes.io/dockercfg`` secret included, so a secret of the legacy
+  image pull secret type did not serve image pulls. It could add a name a
+  second time, when the entry already there carried more fields than its name,
+  and a namespace relabelled so that a rule selected it was injected only on
+  the next pass, up to a minute later. A ``kubernetes.io/dockercfg`` secret
+  now goes into ``imagePullSecrets``. Entries are compared by name, so a name
+  is never added twice, a service account is updated at most once for each
+  change, with every name it lacks, and a namespace, service account or secret
+  which is created, or relabelled so that a rule selects it, is injected
+  within seconds. The injector still never removes a name.
+
+* An explicit empty ``matchNames`` in ``targetNamespaces.nameSelector``
+  targeted every namespace, ``kube-system`` included, while a rule without one
+  excluded the namespaces whose names start with ``kube-``. An empty list now
+  excludes them too. A ``SecretExporter`` rule which selected its target
+  namespaces only with an ``ownerSelector``, as the documentation showed, was
+  rejected when the ``SecretExporter`` was created, and is now accepted.
+
+* Changing the ``reclaimPolicy`` of a ``SecretCopier`` rule had no effect on
+  the copies it had already made. The owner reference which has Kubernetes
+  delete a copy with its ``SecretCopier`` is now added to the existing copies
+  of the rule, or removed from them, when the policy changes.
+
+* A source secret in a namespace which was being deleted went on being copied,
+  so the teardown of a namespace raced against copies being made from it. Such
+  a source secret is no longer copied, and no copy is created or updated from
+  it.
+
+* The documentation of the ``SecretCopier`` resource said that
+  ``reclaimPolicy`` defaults to ``Retain``, while it defaults to ``Delete``,
+  so the copies of a rule which sets no policy are deleted with their
+  ``SecretCopier``. The documentation of the ``SecretExporter`` and
+  ``SecretImporter`` resources named the UID of the ``SecretImporter`` as the
+  shared secret to use when a ``SecretExporter`` rule gives none, while it is
+  the UID of the ``SecretExporter``. Examples gave the entry excluding the
+  Kubernetes reserved namespaces unquoted, as ``- !kube-*``, which YAML reads
+  as a tag rather than a name, and an example of a ``SecretCopier`` lacked a
+  colon. The documentation of the four resources has been corrected.

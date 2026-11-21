@@ -76,6 +76,10 @@ type ruleReport struct {
 	// deleted, in which case the source is not copied.
 	sourceTerminating bool
 
+	// invalidSelector says why the rule's targetNamespaces are invalid,
+	// when they are, in which case the rule selects no namespace.
+	invalidSelector error
+
 	// err is the failure to read the source, when reading it failed.
 	err error
 
@@ -141,13 +145,19 @@ func (r *Reconciler) reconcileRule(ctx context.Context, copier *secretsv1beta1.S
 		return report
 	}
 	report.sourceExists = true
+
+	selector := selectors.Namespaces(rule.TargetNamespaces)
+	if err := selector.Err(); err != nil {
+		log.Info("The rule's targetNamespaces are invalid: the rule selects no namespace", "reason", err.Error())
+		report.invalidSelector = err
+		return report
+	}
 	if terminating(namespaces, report.source.Namespace) {
 		log.V(1).Info("The source Secret's namespace is being deleted: not copying it")
 		report.sourceTerminating = true
 		return report
 	}
 
-	selector := selectors.Namespaces(rule.TargetNamespaces)
 	copyName := rule.CopyName()
 	for i := range namespaces {
 		ns := &namespaces[i]

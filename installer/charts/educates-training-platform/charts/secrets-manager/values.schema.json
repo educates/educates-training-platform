@@ -52,6 +52,12 @@
       }
     },
 
+    "replicas": {
+      "description": "Number of secrets-manager pods. They elect a leader, so only one reconciles at a time; above 1 the chart renders a PodDisruptionBudget and preferred pod anti-affinity.",
+      "type": "integer",
+      "minimum": 1
+    },
+
     "resources": { "type": "object" },
 
     "clusterSecurity": {
@@ -65,7 +71,11 @@
       }
     },
 
-    "logLevel": { "type": "string" },
+    "logLevel": {
+      "description": "The secrets-manager's log level.",
+      "type": "string",
+      "enum": ["debug", "info", "warn", "error"]
+    },
 
     "enabled": { "type": "boolean" },
     "global":  { "type": "object" }

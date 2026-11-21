@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -215,6 +216,27 @@ var _ = Describe("SecretExporter and SecretImporter", Label(areaExportImport), f
 				expectOwnedBy(g, copied, copier)
 			})
 		})
+
+	It("restores an exported copy whose secret-name annotation was removed by hand", Label(expectedDifference), func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, s.name("exported"), data("token", "t0"))
+		exporter := s.secretExporter(sourceNS.Name, src.Name, exporterRule(inNamespaces(targetNS)))
+		s.secretImporter(targetNS.Name, src.Name, sharedSecret(uidOf(exporter)))
+		var copied *corev1.Secret
+		eventually(func(g Gomega) {
+			copied = expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+		})
+
+		s.update(copied, func() { delete(copied.Annotations, annotationSecretName) })
+		s.update(src, func() { src.Data = data("token", "t1") })
+
+		eventually(func(g Gomega) {
+			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(exporter))
+			expectReady(g, exporter, "True", "InSync")
+		})
+	})
 
 	It("accepts an exporter rule that selects namespaces only by owner", Label(expectedDifference), func() {
 		s := newScenario()

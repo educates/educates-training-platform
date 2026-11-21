@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -24,6 +25,9 @@ func lookupRules(reader client.Reader) copyengine.RuleLookup {
 	return func(ctx context.Context, writer, source string, key types.NamespacedName) (copyengine.RuleState, error) {
 		resource, ok := secretsv1beta1.RuleResourceOf(writer, source)
 		if !ok {
+			if exportedWithoutSource(writer, source) {
+				return copyengine.RuleDropped, nil
+			}
 			return copyengine.RuleUnknown, nil
 		}
 		copier, exporter := &secretsv1beta1.SecretCopier{}, &secretsv1beta1.SecretExporter{}
@@ -64,6 +68,20 @@ func lookupRules(reader client.Reader) copyengine.RuleLookup {
 			return copyengine.RuleDropped, nil
 		}
 	}
+}
+
+// exportedWithoutSource reports whether writer, a copy's copier-rule
+// annotation, names a SecretExporter while source, its secret-name
+// annotation, names no Secret. No SecretExporter exports such a copy, since
+// each exports the Secret of its own name in its own namespace, so the copy
+// is an orphan, as a SecretCopier's copy without its secret-name is.
+func exportedWithoutSource(writer, source string) bool {
+	kind, _, ok := secretsv1beta1.ParseCopierRule(writer)
+	if !ok || kind != strings.ToLower(secretsv1beta1.SecretExporterKind) {
+		return false
+	}
+	_, named := secretsv1beta1.ParseSecretName(source)
+	return !named
 }
 
 // copierTargets reports whether a rule of copier targets the copy name in

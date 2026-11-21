@@ -29,12 +29,24 @@
 //
 // Every scenario creates uniquely named namespaces and cluster-scoped
 // resources of its own and deletes them when it ends, so scenarios can run
-// in parallel against one cluster. A scenario that stops the
-// secrets-manager, or replaces its pods, runs alone, after the others, and
-// puts the secrets-manager back as it found it.
+// in parallel against one cluster. A scenario that depends on when the
+// secrets-manager reconciles a resource of its own, or that changes the
+// cluster for every other scenario, runs alone, after the others.
+//
+// Two live-only scenarios change the cluster itself: one scales the
+// Deployment of the cluster's secrets-manager to no replica, and the other
+// scales it to two replicas and marks every node unschedulable. Each puts
+// back what it changed when it ends, whether it passed or failed. Both
+// first record on the Deployment and on the nodes what they found, so that
+// a run that was killed before it could put it back is undone by the next
+// run against the cluster, as it starts. They are meant for a cluster of
+// their own; the label filter !live-only leaves the cluster's nodes and
+// secrets-manager alone.
 package scenarios
 
 import (
+	"context"
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -55,10 +67,17 @@ func TestScenarios(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
+	if os.Getenv(liveKubeconfigEnv) == "" && os.Getenv("KUBEBUILDER_ASSETS") == "" && firstEnvTestBinaryDir() == "" {
+		Skip("no target: " + liveKubeconfigEnv + " names no live cluster, and there are no envtest binaries, since " +
+			"KUBEBUILDER_ASSETS is not set and make setup-envtest has downloaded none; run the suite with make test")
+	}
 	var err error
 	target, err = selectTarget()
 	Expect(err).NotTo(HaveOccurred())
 	By("running the scenarios against the " + target.Name)
+	// A run that was killed may have left the cluster as its scenarios
+	// changed it.
+	Expect(restoreCluster(context.Background(), target)).To(Succeed())
 })
 
 var _ = AfterSuite(func() {

@@ -32,9 +32,13 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+# The scenario suite takes several minutes against envtest, close to the 10
+# minutes go test allows a package by default.
+TEST_TIMEOUT ?= 30m
+
 .PHONY: test
 test: setup-envtest ## Run the tests, the scenario suite against envtest included.
-	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" go test ./... -coverpkg=./... -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" go test ./... -timeout $(TEST_TIMEOUT) -coverpkg=./... -coverprofile cover.out
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter

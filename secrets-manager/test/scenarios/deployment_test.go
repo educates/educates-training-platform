@@ -2,6 +2,8 @@ package scenarios
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,6 +27,68 @@ const secretsManagerName = "secrets-manager"
 // scenariosFieldManager is the field manager the scenarios scale the
 // secrets-manager's Deployment as.
 const scenariosFieldManager = "secrets-manager-scenarios"
+
+const (
+	// replicasBeforeAnnotation records, on the Deployment of the
+	// secrets-manager, the replicas it had before a scenario scaled it,
+	// until the scenario has scaled it back.
+	replicasBeforeAnnotation = "scenarios.secrets.educates.dev/replicas-before"
+
+	// cordonedAnnotation marks a node a scenario made unschedulable, until
+	// the scenario has made it schedulable again.
+	cordonedAnnotation = "scenarios.secrets.educates.dev/cordoned"
+)
+
+// restoreCluster puts back what a scenario of an earlier run changed on the
+// cluster and did not put back, as the annotations it left say: the nodes
+// it made unschedulable are schedulable again, and the Deployment of the
+// secrets-manager in namespace has the replicas it had. It changes nothing
+// on a cluster no scenario left changed.
+func restoreCluster(ctx context.Context, t *Target) error {
+	nodes := &corev1.NodeList{}
+	if err := t.Client.List(ctx, nodes); err != nil {
+		return fmt.Errorf("listing nodes: %w", err)
+	}
+	for i := range nodes.Items {
+		node := &nodes.Items[i]
+		if _, cordoned := node.Annotations[cordonedAnnotation]; !cordoned {
+			continue
+		}
+		if err := t.Client.Patch(ctx, node, client.RawPatch(types.MergePatchType, []byte(uncordonPatch))); err != nil {
+			return fmt.Errorf("making node %s schedulable again: %w", node.Name, err)
+		}
+	}
+
+	if t.SecretsManagerNamespace == "" {
+		return nil
+	}
+	deployment := &appsv1.Deployment{}
+	key := types.NamespacedName{Namespace: t.SecretsManagerNamespace, Name: secretsManagerName}
+	if err := t.Client.Get(ctx, key, deployment); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	before, changed := deployment.Annotations[replicasBeforeAnnotation]
+	if !changed {
+		return nil
+	}
+	replicas, err := strconv.ParseInt(before, 10, 32)
+	if err != nil {
+		return fmt.Errorf("reading the replicas Deployment %s had: %w", key, err)
+	}
+	patch := fmt.Sprintf(`{"metadata":{"annotations":{%q:null}},"spec":{"replicas":%d}}`, replicasBeforeAnnotation, replicas)
+	if err := t.Client.Patch(ctx, deployment, client.RawPatch(types.MergePatchType, []byte(patch)),
+		client.FieldOwner(scenariosFieldManager)); err != nil {
+		return fmt.Errorf("scaling Deployment %s back to %d replicas: %w", key, replicas, err)
+	}
+	return nil
+}
+
+// The patches that make a node unschedulable, as kubectl cordon does, and
+// schedulable again, marking it for as long as it is unschedulable.
+var (
+	cordonPatch   = fmt.Sprintf(`{"metadata":{"annotations":{%q:"true"}},"spec":{"unschedulable":true}}`, cordonedAnnotation)
+	uncordonPatch = fmt.Sprintf(`{"metadata":{"annotations":{%q:null}},"spec":{"unschedulable":null}}`, cordonedAnnotation)
+)
 
 // requireDeployedSecretsManager skips the scenario on a target whose
 // secrets-manager does not run as a Deployment on the cluster.
@@ -112,7 +176,9 @@ func (s *scenario) scaleSecretsManager(replicas int32) {
 
 // scaleSecretsManagerFor scales the Deployment of the target's
 // secrets-manager to replicas for the rest of the scenario, and back to
-// the replicas it has now when the scenario ends.
+// the replicas it has now when the scenario ends, whether it passes or
+// fails. It first records those replicas on the Deployment, so that
+// restoreCluster scales it back after a run that was killed.
 func (s *scenario) scaleSecretsManagerFor(replicas int32) {
 	GinkgoHelper()
 	deployment := &appsv1.Deployment{}
@@ -121,13 +187,20 @@ func (s *scenario) scaleSecretsManagerFor(replicas int32) {
 	if deployment.Spec.Replicas != nil {
 		original = *deployment.Spec.Replicas
 	}
+	record := fmt.Sprintf(`{"metadata":{"annotations":{%q:"%d"}}}`, replicasBeforeAnnotation, original)
+	Expect(target.Client.Patch(s.ctx, deployment, client.RawPatch(types.MergePatchType, []byte(record)))).To(Succeed())
+	// The first cleanup scales the Deployment back whatever follows fails;
+	// the second, which runs before it, also waits for its pods.
+	DeferCleanup(func() { Expect(restoreCluster(context.Background(), target)).To(Succeed()) })
 	DeferCleanup(s.scaleSecretsManager, original)
 	s.scaleSecretsManager(replicas)
 }
 
 // cordonNodes marks every schedulable node of the target unschedulable, as
 // kubectl cordon does, so that no new pod starts, and marks them
-// schedulable again when the scenario ends.
+// schedulable again when the scenario ends, whether it passes or fails.
+// Each node is marked as cordoned by a scenario for as long, so that
+// restoreCluster makes it schedulable again after a run that was killed.
 func (s *scenario) cordonNodes() {
 	GinkgoHelper()
 	nodes := &corev1.NodeList{}
@@ -145,9 +218,9 @@ func (s *scenario) cordonNodes() {
 // setUnschedulable marks the node name unschedulable, or schedulable again.
 func (s *scenario) setUnschedulable(name string, unschedulable bool) {
 	GinkgoHelper()
-	patch := `{"spec":{"unschedulable":null}}`
+	patch := uncordonPatch
 	if unschedulable {
-		patch = `{"spec":{"unschedulable":true}}`
+		patch = cordonPatch
 	}
 	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: name}}
 	Expect(target.Client.Patch(s.ctx, node, client.RawPatch(types.MergePatchType, []byte(patch)))).To(Succeed())
@@ -215,5 +288,55 @@ var _ = Describe("The deployed secrets-manager", Label(liveOnly, expectedDiffere
 		eventually(func(g Gomega) {
 			expectCopy(g, targetNS.Name, src.Name, src, ruleOf(copier))
 		})
+	})
+})
+
+var _ = Describe("The scenario suite", func() {
+	It("puts back the nodes and the secrets-manager Deployment a killed run left changed", func() {
+		if target.SecretsManagerNamespace != "" {
+			Skip(target.Name + " has nodes and a secrets-manager of its own, which this scenario must not stand in for")
+		}
+		s := newScenario()
+		ns := s.namespace("deployed", nil)
+		cordoned := &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: s.name("cordoned"), Annotations: map[string]string{cordonedAnnotation: "true"}},
+			Spec:       corev1.NodeSpec{Unschedulable: true},
+		}
+		s.create(cordoned)
+		byHand := &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: s.name("cordoned-by-hand")},
+			Spec:       corev1.NodeSpec{Unschedulable: true},
+		}
+		s.create(byHand)
+		none := int32(0)
+		labels := map[string]string{"app": secretsManagerName}
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: ns.Name, Name: secretsManagerName,
+				Annotations: map[string]string{replicasBeforeAnnotation: "2"},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &none,
+				Selector: &metav1.LabelSelector{MatchLabels: labels},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: labels},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "main", Image: "example.com/image"}}},
+				},
+			},
+		}
+		s.create(deployment)
+		left := *target
+		left.SecretsManagerNamespace = ns.Name
+
+		Expect(restoreCluster(s.ctx, &left)).To(Succeed())
+
+		Expect(target.Client.Get(s.ctx, client.ObjectKeyFromObject(cordoned), cordoned)).To(Succeed())
+		Expect(cordoned.Spec.Unschedulable).To(BeFalse())
+		Expect(cordoned.Annotations).NotTo(HaveKey(cordonedAnnotation))
+		Expect(target.Client.Get(s.ctx, client.ObjectKeyFromObject(byHand), byHand)).To(Succeed())
+		Expect(byHand.Spec.Unschedulable).To(BeTrue())
+		Expect(target.Client.Get(s.ctx, client.ObjectKeyFromObject(deployment), deployment)).To(Succeed())
+		Expect(deployment.Spec.Replicas).To(HaveValue(BeEquivalentTo(2)))
+		Expect(deployment.Annotations).NotTo(HaveKey(replicasBeforeAnnotation))
 	})
 })

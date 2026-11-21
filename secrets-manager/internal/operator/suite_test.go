@@ -52,12 +52,18 @@ func TestComposition(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	testEnv = &envtest.Environment{CRDDirectoryPaths: []string{chartCRDs}, ErrorIfCRDPathMissing: true}
-	if dir := firstEnvTestBinaryDir(); dir != "" {
-		testEnv.BinaryAssetsDirectory = dir
+	binaries := firstEnvTestBinaryDir()
+	if os.Getenv("KUBEBUILDER_ASSETS") == "" && binaries == "" {
+		Skip("no envtest binaries: KUBEBUILDER_ASSETS is not set and make setup-envtest has downloaded none; " +
+			"run the suite with make test")
+	}
+	env := &envtest.Environment{CRDDirectoryPaths: []string{chartCRDs}, ErrorIfCRDPathMissing: true}
+	if binaries != "" {
+		env.BinaryAssetsDirectory = binaries
 	}
 	var err error
-	restConfig, err = testEnv.Start()
+	restConfig, err = env.Start()
+	testEnv = env
 	Expect(err).NotTo(HaveOccurred())
 
 	scheme := runtime.NewScheme()

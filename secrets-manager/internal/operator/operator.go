@@ -138,7 +138,8 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 	if err := secretcopier.New(mgr.GetClient(), secrets, policy).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretCopier reconciler: %w", err)
 	}
-	if err := secretinjector.New(mgr.GetCache(), mgr.GetAPIReader(), mgr.GetClient()).SetupWithManager(mgr); err != nil {
+	injectors := secretinjector.New(mgr.GetCache(), mgr.GetAPIReader(), mgr.GetClient(), policy)
+	if err := injectors.SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretInjector reconciler: %w", err)
 	}
 

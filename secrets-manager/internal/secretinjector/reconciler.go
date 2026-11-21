@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
 )
@@ -37,27 +38,30 @@ const conflictRetryDelay = time.Second
 
 // Reconciler reconciles one SecretInjector at a time.
 type Reconciler struct {
-	cache  cache.Cache
-	live   client.Reader
-	writer client.Writer
-	types  *secretTypes
+	cache       cache.Cache
+	live        client.Reader
+	writer      client.Writer
+	types       *secretTypes
+	convergence convergence.Policy
 }
 
 // New returns a reconciler that reads SecretInjectors, namespaces, service
 // accounts and the metadata of Secrets from objects, the manager's cache,
-// reads the type of a Secret it has not seen from live, the API server, and
-// writes service accounts with writer.
-func New(objects cache.Cache, live client.Reader, writer client.Writer) *Reconciler {
-	return &Reconciler{cache: objects, live: live, writer: writer, types: newSecretTypes()}
+// reads the type of a Secret it has not seen from live, the API server,
+// writes service accounts with writer, and retries under policy.
+func New(objects cache.Cache, live client.Reader, writer client.Writer, policy convergence.Policy) *Reconciler {
+	return &Reconciler{cache: objects, live: live, writer: writer, types: newSecretTypes(), convergence: policy}
 }
 
 // SetupWithManager registers the reconciler with mgr. It reconciles a
 // SecretInjector when its spec changes; when a Secret it may select is
 // created, relabelled or given other owners; when a service account it may
 // select is created, relabelled or loses a name; and when a namespace it
-// may select is created, relabelled or given other owners.
+// may select is created, relabelled or given other owners. Besides, the
+// reconciler's policy reconciles each SecretInjector again a backstop
+// interval after its last reconcile, and retries a failed one with backoff.
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	return r.convergence.Complete(ctrl.NewControllerManagedBy(mgr).
 		Named("secretinjector").
 		For(&secretsv1beta1.SecretInjector{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(eventmap.SecretInjectorsForSecret(r.cache)),
@@ -67,8 +71,8 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			eventmap.ServiceAccountInjectionChanged())).
 		WatchesRawSource(source.Kind(r.cache, &corev1.Namespace{},
 			handler.TypedEnqueueRequestsFromMapFunc(eventmap.SecretInjectorsForNamespace(r.cache)),
-			eventmap.NamespaceSelectionChanged())).
-		Complete(r)
+			eventmap.NamespaceSelectionChanged())),
+		&secretsv1beta1.SecretInjector{}, r.cache, r)
 }
 
 // Reconcile injects the Secrets of each rule of the SecretInjector req
@@ -399,6 +403,7 @@ func (a *pendingAccount) write(ctx context.Context, writer client.Writer) {
 	switch {
 	case err == nil:
 		a.written = true
+		convergence.Repaired(ctx)
 		log.Info("Injected Secrets into the service account",
 			"imagePullSecrets", a.imagePullSecrets, "secrets", a.secrets)
 	case apierrors.IsNotFound(err):

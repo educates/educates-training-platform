@@ -34,7 +34,8 @@ type OwnerReference struct {
 }
 
 // TargetNamespaces selects the namespaces a SecretCopier or SecretExporter
-// rule copies into. Every selector present must pass.
+// rule copies into, or a SecretInjector rule injects in. Every selector
+// present must pass.
 type TargetNamespaces struct {
 	// nameSelector selects namespaces by name.
 	// +optional

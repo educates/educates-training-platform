@@ -58,6 +58,17 @@ func (o Outcome) Converged() bool {
 	}
 }
 
+// Wrote reports whether the outcome wrote the copy, which was not as it
+// should be.
+func (o Outcome) Wrote() bool {
+	switch o {
+	case Created, Updated, Recreated, Adopted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Result is what converging one copy found.
 type Result struct {
 	// Outcome says what converging the copy did, or why it wrote nothing.

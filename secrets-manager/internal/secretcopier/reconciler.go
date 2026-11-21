@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/selectors"
@@ -32,14 +33,16 @@ const conflictRetryDelay = time.Second
 
 // Reconciler reconciles one SecretCopier at a time.
 type Reconciler struct {
-	cache  client.Reader
-	engine *copyengine.Engine
+	cache       client.Reader
+	engine      *copyengine.Engine
+	convergence convergence.Policy
 }
 
 // New returns a reconciler that reads SecretCopiers and namespaces from
-// cache, and converges copies with engine, a Secret engine.
-func New(cache client.Reader, engine *copyengine.Engine) *Reconciler {
-	return &Reconciler{cache: cache, engine: engine}
+// cache, converges copies with engine, a Secret engine, and retries under
+// policy.
+func New(cache client.Reader, engine *copyengine.Engine, policy convergence.Policy) *Reconciler {
+	return &Reconciler{cache: cache, engine: engine, convergence: policy}
 }
 
 // SetupWithManager registers the reconciler with mgr. It reconciles a
@@ -47,10 +50,12 @@ func New(cache client.Reader, engine *copyengine.Engine) *Reconciler {
 // a name it gives its copies, changes, when a namespace it may select is
 // created, relabelled or given other owners, and when another SecretCopier
 // that names copies as it does is deleted, leaving those copies for it to
-// take over. The cache must hold the indexes eventmap.IndexSecretCopiers
-// registers.
+// take over. Besides, the reconciler's policy reconciles each SecretCopier
+// again a backstop interval after its last reconcile, and retries a failed
+// one with backoff. The cache must hold the indexes
+// eventmap.IndexSecretCopiers registers.
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	return r.convergence.Complete(ctrl.NewControllerManagedBy(mgr).
 		Named("secretcopier").
 		For(&secretsv1beta1.SecretCopier{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(eventmap.SecretCopiersForSecret(mgr.GetClient())),
@@ -60,8 +65,8 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			eventmap.NamespaceSelectionChanged())).
 		WatchesRawSource(source.Kind(mgr.GetCache(), &secretsv1beta1.SecretCopier{},
 			handler.TypedEnqueueRequestsFromMapFunc(eventmap.SecretCopiersSharingCopies(mgr.GetClient())),
-			eventmap.Deletions[*secretsv1beta1.SecretCopier]())).
-		Complete(r)
+			eventmap.Deletions[*secretsv1beta1.SecretCopier]())),
+		&secretsv1beta1.SecretCopier{}, mgr.GetClient(), r)
 }
 
 // ruleReport is what reconciling one rule of a SecretCopier found.
@@ -174,6 +179,9 @@ func (r *Reconciler) reconcileRule(ctx context.Context, copier *secretsv1beta1.S
 		})
 		report.targets = append(report.targets, targetReport{namespace: ns.Name, result: result, err: err})
 		logTarget(log.WithValues("namespace", ns.Name, "name", copyName), result, err)
+		if err == nil && result.Outcome.Wrote() {
+			convergence.Repaired(ctx)
+		}
 	}
 	return report
 }

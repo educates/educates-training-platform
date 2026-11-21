@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -24,6 +25,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/copyengine"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/eventmap"
 	"github.com/educates/educates-training-platform/secrets-manager/internal/secretcopier"
@@ -41,7 +43,28 @@ type Options struct {
 
 	// Logger receives the secrets-manager's logs.
 	Logger logr.Logger
+
+	// Backstop is how long after its last reconcile each resource is
+	// reconciled again, though no event asks for it, so that a change whose
+	// event was missed or mapped to the wrong resource still converges. It
+	// defaults to DefaultBackstop.
+	Backstop time.Duration
+
+	// BackoffCap caps how long a resource whose reconcile failed waits
+	// before it is reconciled again. It defaults to DefaultBackoffCap.
+	BackoffCap time.Duration
+
+	// NewCache, when set, creates the cache the secrets-manager reads and
+	// watches through, in place of controller-runtime's.
+	NewCache cache.NewCacheFunc
 }
+
+// DefaultBackstop and DefaultBackoffCap are the backstop interval and the
+// backoff cap of the secrets-manager when Options leave them unset.
+const (
+	DefaultBackstop   = 5 * time.Minute
+	DefaultBackoffCap = 5 * time.Minute
+)
 
 // Operator is the composed secrets-manager.
 type Operator struct {
@@ -79,6 +102,7 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 		// data of every Secret in the cluster; a Secret's data is read from
 		// the API server.
 		Client:                 client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}}}},
+		NewCache:               opts.NewCache,
 		Metrics:                metricsserver.Options{BindAddress: "0"},
 		HealthProbeBindAddress: "0",
 	})
@@ -102,7 +126,15 @@ func New(ctx context.Context, opts Options) (*Operator, error) {
 	if err := forgetDeletedCopies(ctx, mgr.GetCache(), secrets); err != nil {
 		return nil, err
 	}
-	if err := secretcopier.New(mgr.GetClient(), secrets).SetupWithManager(mgr); err != nil {
+	policy := convergence.Policy{Backstop: opts.Backstop, BackoffCap: opts.BackoffCap}
+	if policy.Backstop <= 0 {
+		policy.Backstop = DefaultBackstop
+	}
+	if policy.BackoffCap <= 0 {
+		policy.BackoffCap = DefaultBackoffCap
+	}
+
+	if err := secretcopier.New(mgr.GetClient(), secrets, policy).SetupWithManager(mgr); err != nil {
 		return nil, fmt.Errorf("setting up the SecretCopier reconciler: %w", err)
 	}
 

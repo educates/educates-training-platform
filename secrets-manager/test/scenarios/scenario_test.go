@@ -54,6 +54,7 @@ const (
 	areaTargetFields = "target-fields"
 	areaFeedback     = "feedback"
 	areaAdmission    = "admission"
+	areaConvergence  = "convergence"
 )
 
 // scenario creates the resources of one scenario under names unique to it,

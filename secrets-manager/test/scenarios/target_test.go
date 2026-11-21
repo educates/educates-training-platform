@@ -55,6 +55,14 @@ type Target struct {
 	// Timing bounds how long scenarios wait on the target.
 	Timing Timing
 
+	// APICalls, when not nil, counts the requests the target's
+	// secrets-manager makes to the API server.
+	APICalls *APICalls
+
+	// Restart, when not nil, stops the target's secrets-manager and starts
+	// it again, with nothing kept in memory.
+	Restart func() error
+
 	// Awaiting names, under the behavior they wait for, the scenarios the
 	// target's secrets-manager does not pass yet, by their full text or by
 	// the full text of a container that holds them. They skip on the

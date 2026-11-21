@@ -24,8 +24,8 @@
 //   - live-only: the scenario needs Kubernetes garbage collection or the
 //     namespace controller, and is skipped on a target without them.
 //   - copying, selection, ownership, export-import, injection,
-//     target-fields, feedback and admission: the area of behavior the
-//     scenario covers.
+//     target-fields, feedback, admission and convergence: the area of
+//     behavior the scenario covers.
 //
 // Every scenario creates uniquely named namespaces and cluster-scoped
 // resources of its own and deletes them when it ends, so scenarios can run

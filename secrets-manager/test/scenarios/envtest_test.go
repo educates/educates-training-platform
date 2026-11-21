@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -66,7 +67,8 @@ var awaitingOnEnvtest = map[string][]string{
 // newEnvtestTarget starts an envtest API server with the four kinds loaded
 // from the subchart's CRDs, and the secrets-manager's composition in this
 // process against it. envtest runs no garbage collector and no namespace
-// controller: a deleted namespace stays Terminating.
+// controller: a deleted namespace stays Terminating. The requests of the
+// secrets-manager are counted, and it can be restarted.
 func newEnvtestTarget() (*Target, error) {
 	env := &envtest.Environment{CRDDirectoryPaths: []string{chartCRDs}, ErrorIfCRDPathMissing: true}
 	if dir := firstEnvTestBinaryDir(); dir != "" {
@@ -84,17 +86,16 @@ func newEnvtestTarget() (*Target, error) {
 		return nil, errors.Join(fmt.Errorf("creating a client for envtest: %w", err), env.Stop())
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	secretsManager, err := operator.New(ctx, operator.Options{
-		RESTConfig: config,
+	calls := &APICalls{}
+	composedConfig := rest.CopyConfig(config)
+	calls.instrument(composedConfig)
+	secretsManager := &inProcess{options: operator.Options{
+		RESTConfig: composedConfig,
 		Logger:     logf.Log.WithName("secrets-manager"),
-	})
-	if err != nil {
-		cancel()
-		return nil, errors.Join(fmt.Errorf("composing the secrets-manager: %w", err), env.Stop())
+	}}
+	if err := secretsManager.start(); err != nil {
+		return nil, errors.Join(err, env.Stop())
 	}
-	stopped := make(chan error, 1)
-	go func() { stopped <- secretsManager.Run(ctx) }()
 
 	return &Target{
 		Name:     "envtest API server, with the secrets-manager in process",
@@ -102,12 +103,48 @@ func newEnvtestTarget() (*Target, error) {
 		Client:   c,
 		Timing:   envtestTiming,
 		Awaiting: awaitingOnEnvtest,
+		APICalls: calls,
+		Restart: func() error {
+			if err := secretsManager.stop(); err != nil {
+				return err
+			}
+			return secretsManager.start()
+		},
 		stop: func() error {
-			cancel()
-			runErr := <-stopped
-			return errors.Join(runErr, env.Stop())
+			return errors.Join(secretsManager.stop(), env.Stop())
 		},
 	}, nil
+}
+
+// inProcess runs the secrets-manager's composition in this process.
+type inProcess struct {
+	options operator.Options
+	cancel  context.CancelFunc
+	stopped chan error
+}
+
+// start composes the secrets-manager anew and runs it.
+func (p *inProcess) start() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	secretsManager, err := operator.New(ctx, p.options)
+	if err != nil {
+		cancel()
+		return fmt.Errorf("composing the secrets-manager: %w", err)
+	}
+	p.cancel, p.stopped = cancel, make(chan error, 1)
+	go func() { p.stopped <- secretsManager.Run(ctx) }()
+	return nil
+}
+
+// stop stops the secrets-manager, when it runs, and waits until it has
+// stopped.
+func (p *inProcess) stop() error {
+	if p.cancel == nil {
+		return nil
+	}
+	p.cancel()
+	p.cancel = nil
+	return <-p.stopped
 }
 
 // firstEnvTestBinaryDir finds the envtest binaries make downloads, for a run

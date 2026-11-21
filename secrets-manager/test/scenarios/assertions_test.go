@@ -28,6 +28,10 @@ const (
 	annotationCopierRule = "secrets.educates.dev/copier-rule"
 	annotationSecretName = "secrets.educates.dev/secret-name"
 
+	// annotationSourceVersion marks a copy with the resourceVersion of the
+	// Secret it was last written from.
+	annotationSourceVersion = "secrets.educates.dev/source-version"
+
 	// eventsNamespace holds the Events of the cluster-scoped kinds.
 	eventsNamespace = "default"
 )

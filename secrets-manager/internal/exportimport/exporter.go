@@ -215,11 +215,13 @@ func (r *ExporterReconciler) exportRule(ctx context.Context, exporter *secretsv1
 			continue
 		}
 		target.result, target.err = r.engine.Converge(ctx, copyengine.Copy{
-			Source:    src,
-			Namespace: ns.Name,
-			Name:      report.copyName,
-			Rule:      secretsv1beta1.CopierRule(secretsv1beta1.SecretExporterKind, exporter.Name),
-			Labels:    rule.TargetSecret.Labels,
+			Source:      src,
+			Namespace:   ns.Name,
+			Name:        report.copyName,
+			Rule:        secretsv1beta1.CopierRule(secretsv1beta1.SecretExporterKind, exporter.Name),
+			Labels:      rule.TargetSecret.Labels,
+			Annotations: rule.TargetSecret.Annotations,
+			Keys:        rule.TargetSecret.Keys,
 			Owner: &copyengine.Owner{
 				APIVersion: secretsv1beta1.GroupVersion.String(),
 				Kind:       secretsv1beta1.SecretImporterKind,

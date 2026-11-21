@@ -28,10 +28,6 @@ var envtestTiming = Timing{
 	Poll:     200 * time.Millisecond,
 }
 
-// targetFieldScenarios is the container of the targetSecret.annotations and
-// targetSecret.keys scenarios.
-const targetFieldScenarios = "targetSecret.annotations and targetSecret.keys "
-
 // noFinalizerScenario checks every kind for finalizers, so it waits for
 // injecting.
 const noFinalizerScenario = "Copy ownership and reclaim adds no finalizer to any of the four kinds"
@@ -43,9 +39,6 @@ var awaitingOnEnvtest = map[string][]string{
 	"secret injection": {
 		"SecretInjector",
 		noFinalizerScenario,
-	},
-	"target-secret-exporter": {
-		targetFieldScenarios + "applies targetSecret.annotations and targetSecret.keys on SecretExporter rules",
 	},
 	"status and Events": {
 		"Status, printer columns and Events",

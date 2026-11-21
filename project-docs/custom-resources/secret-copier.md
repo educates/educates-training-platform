@@ -330,7 +330,7 @@ The ``rules`` property is a list, so rules related to more than one secret or se
 Overlapping rules for target secret
 -----------------------------------
 
-A copy is managed by the rule which created it, which records itself in the copy's tracking annotations, described below. When rules of several ``SecretCopier`` or ``SecretExporter`` resources, or several rules of the same one, target the same secret name in a namespace:
+A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. When rules of several ``SecretCopier`` or ``SecretExporter`` resources, or several rules of the same one, target the same secret name in a namespace:
 
 * Rules which copy the same source secret agree. The resource whose rule created the copy keeps it, and the ``targetSecret`` labels, annotations and keys of that rule decide what the copy holds, even where those of the other rules differ. Where several rules of that resource copy the source secret under the name, the first of them in ``spec.rules`` decides. The other rules count the copy as in sync and write nothing.
 
@@ -338,7 +338,7 @@ A copy is managed by the rule which created it, which records itself in the copy
 
 A secret which the secrets manager did not create, being one without the ``secrets.educates.dev/copier-rule`` annotation, is never changed, even when it has the name a rule gives its copies. The rule leaves the secret untouched and reports a ``Conflict`` for that namespace. So does a secret whose ``secrets.educates.dev/copier-rule`` annotation does not name a ``SecretCopier`` or ``SecretExporter``. If you meant the rule to manage that secret, delete the secret, and the rule creates its copy in its place.
 
-A copy stays with the resource which created it for as long as that resource exists, even once none of its rules copies to it any more. The copy is then no longer updated, while the rules of other resources which target it go on agreeing with it, or reporting a ``Conflict``, as above. Delete the copy to have one of them create it again. When the resource which created a copy is deleted, the copy is deleted or left in place as the reclaim policy of its rule says, described below, and a rule which targets a copy left in place takes it over within seconds and updates it from its own source secret.
+A copy stays with the resource whose rule created it or took it over for as long as that resource exists, even once none of its rules copies to it any more. The copy is then no longer updated, while the rules of other resources which target it go on agreeing with it, or reporting a ``Conflict``, as above. Delete the copy to have one of them create it again. When that resource is deleted, the copy is deleted or left in place as the reclaim policy of its rule says, described below, and within seconds another rule which targets the copy creates it again, or takes over the copy left in place and updates it from its own source secret.
 
 Deletion of the secret copier
 -----------------------------

@@ -379,9 +379,9 @@ The ``rules`` property is a list, so rules for more than one set of target names
 Overlapping rules for target secret
 -----------------------------------
 
-A copy is managed by the rule which created it, which records itself in the copy's tracking annotations, described below. A ``SecretExporter`` and a ``SecretCopier`` which copy the same secret under the same name into a namespace agree: the one which created the copy keeps it and decides what it holds, and the other counts the copy as in sync. A rule which would copy another secret under the name of the copy leaves the copy untouched and reports a ``Conflict``, as a rule does for a secret the secrets manager did not create.
+A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. A ``SecretExporter`` and a ``SecretCopier`` which copy the same secret under the same name into a namespace agree: the one which created the copy keeps it and decides what it holds, and the other counts the copy as in sync. A rule which would copy another secret under the name of the copy leaves the copy untouched and reports a ``Conflict``, as a rule does for a secret the secrets manager did not create.
 
-The rules for overlapping ``SecretCopier`` and ``SecretExporter`` rules are described in full on the page for the ``SecretCopier`` custom resource.
+The page for the ``SecretCopier`` custom resource describes overlapping rules in full.
 
 Deletion of the target secret
 -----------------------------

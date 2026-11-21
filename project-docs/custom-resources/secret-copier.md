@@ -120,7 +120,7 @@ spec:
       - password
 ```
 
-A listed key which the source secret does not hold is not copied. An empty list copies every key, as when ``keys`` is not set.
+A listed key which the source secret does not hold is not copied. When ``keys`` is set it must list at least one key, and a ``SecretCopier`` with an empty ``keys`` list is rejected when it is created or updated. To copy every key, leave ``keys`` out.
 
 The data of a copy always equals what the rule selects from its source secret. A key which the source secret drops, or which is no longer listed, is removed from the copies, and so is a key which anything else adds to a copy.
 
@@ -338,12 +338,12 @@ A copy is managed by the rule which created it, or took it over, which records i
 
 A secret which the secrets manager did not create, being one without the ``secrets.educates.dev/copier-rule`` annotation, is never changed, even when it has the name a rule gives its copies. The rule leaves the secret untouched and reports a ``Conflict`` for that namespace. So does a secret whose ``secrets.educates.dev/copier-rule`` annotation does not name a ``SecretCopier`` or ``SecretExporter``. If you meant the rule to manage that secret, delete the secret, and the rule creates its copy in its place.
 
-A copy stays with the resource whose rule created it or took it over for as long as that resource exists, even once none of its rules copies to it any more. The copy is then no longer updated, while the rules of other resources which target it go on agreeing with it, or reporting a ``Conflict``, as above. Delete the copy to have one of them create it again. When that resource is deleted, the copy is deleted or left in place as the reclaim policy of its rule says, described below, and within seconds another rule which targets the copy creates it again, or takes over the copy left in place and updates it from its own source secret.
+A copy stays with the resource whose rule created it or took it over for as long as one of that resource's rules still targets the copy: a rule which selects the namespace of the copy, gives its copies the name of the copy, and copies the source secret its ``secrets.educates.dev/secret-name`` annotation names. Once none does, because the rule no longer selects the namespace, copies another source secret, gives its copies another name, or was removed, the copy is left in place, and within seconds another rule which targets the copy takes it over and updates it from its own source secret, clearing the ``Conflict`` it reported if its source secret differs. When that resource is deleted, the copy is deleted or left in place as the reclaim policy of its rule says, described below, and within seconds another rule which targets the copy creates it again, or takes over the copy left in place in the same way.
 
 Deletion of the secret copier
 -----------------------------
 
-The secrets manager never deletes a copy because its source secret is deleted, or because the rules change such that it would no longer be copied, such as a rule which is removed or which no longer selects the namespace. Such a copy stays as it is, and is no longer updated.
+The secrets manager never deletes a copy because its source secret is deleted, or because the rules change such that it would no longer be copied, such as a rule which is removed or which no longer selects the namespace. Such a copy stays as it is, and is no longer updated, unless another rule which targets it takes it over, as described above.
 
 What happens to the copies when the ``SecretCopier`` is deleted is set by each rule's ``reclaimPolicy``. With ``Delete``, the default, each copy has an owner reference to the ``SecretCopier``, and Kubernetes deletes the copies when the ``SecretCopier`` is deleted. With ``Retain``, copies have no owner reference to the ``SecretCopier``, and stay when the ``SecretCopier`` is deleted.
 
@@ -373,7 +373,7 @@ A copy which is deleted is created again within seconds. A copy whose data, or w
 
 When the source secret is replaced by one of a different ``type``, its copies are deleted and created again with the new type, since Kubernetes does not let the type of a secret change.
 
-A copy which someone else has marked with ``immutable: true`` is never deleted. When its data or type must change to follow its source secret, the rule reports a failure for that namespace, retried until someone deletes the copy, as Kubernetes never lets the data of an immutable secret change, and the rule then creates it again.
+A copy which someone else has marked with ``immutable: true`` is never deleted. When its data or type must change to follow its source secret, the rule reports a failure for that namespace, retried until someone deletes the copy, as Kubernetes never lets the data of an immutable secret change, and the rule then creates it again. The message of the ``Ready`` condition says that the copy is immutable and was not updated, and the secrets manager records a ``Warning`` Event with reason ``CopyNotUpdated``, described below.
 
 Tracking the source of a secret
 -------------------------------
@@ -462,6 +462,8 @@ Events of the secret copier
 ---------------------------
 
 When a ``SecretCopier`` has not been ``Ready`` for a minute, the secrets manager records a ``Warning`` Event with reason ``NotReady``, giving the reason and message of the ``Ready`` condition. When a ``SecretCopier`` which got that Event is ``Ready`` again, it records a ``Normal`` Event with reason ``Recovered``. No Event is recorded for a ``SecretCopier`` which is ``Ready`` again within a minute, such as one created moments before its source secret, while its status shows the problem at once.
+
+When a copy which someone else has marked with ``immutable: true`` cannot follow a change of its source secret, the secrets manager records a ``Warning`` Event with reason ``CopyNotUpdated``, naming the copy, as ``namespace/name``, its source secret, and whether the data or the type of the source secret changed. The Event is recorded once for each change of the source secret the copy cannot follow, not each time the copy is retried.
 
 As a ``SecretCopier`` has no namespace, its Events are recorded in the ``default`` namespace. Run ``kubectl describe secretcopier <name>`` to see them.
 

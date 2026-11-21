@@ -711,11 +711,12 @@ New Features
 * ``SecretCopier`` and ``SecretExporter`` rules accept ``targetSecret.keys``,
   the keys of the source secret to copy. A copy then holds only those of the
   listed keys which the source secret has, and a key no longer listed is
-  removed from the copies. Without ``keys``, or with an empty list, every key
-  is copied, as before. Kubernetes requires a copy of a ``kubernetes.io/tls``
-  secret to keep ``tls.crt`` and ``tls.key``, so a rule whose ``keys`` leave
-  either out fails for each namespace it copies such a secret into, and its
-  resource reports the failure in its status.
+  removed from the copies. When ``keys`` is set it must list at least one key,
+  and a resource with an empty ``keys`` list is rejected. Without ``keys``,
+  every key is copied, as before. Kubernetes requires a copy of a
+  ``kubernetes.io/tls`` secret to keep ``tls.crt`` and ``tls.key``, so a rule
+  whose ``keys`` leave either out fails for each namespace it copies such a
+  secret into, and its resource reports the failure in its status.
 
 * ``SecretInjector`` rules select their source secrets and target namespaces
   with the selectors ``SecretCopier`` rules use.
@@ -755,9 +756,14 @@ New Features
   when a ``SecretImporter`` imports its secret. A resource which is ``Ready``
   again within the minute, such as a ``SecretCopier`` created moments before
   its source secret, gets no warning, while its status shows the problem at
-  once. The Events of ``SecretCopier`` and ``SecretInjector`` resources, which
-  have no namespace, are recorded in the ``default`` namespace, and ``kubectl
-  describe`` shows them.
+  once. A ``SecretCopier`` or ``SecretExporter`` also gets a ``Warning`` with
+  reason ``CopyNotUpdated`` when a copy which someone else marked
+  ``immutable: true`` cannot follow a change of its source secret, naming the
+  copy, its source secret and whether the data or the type of the source
+  secret changed, once for each change the copy cannot follow rather than on
+  every retry. The Events of ``SecretCopier`` and ``SecretInjector``
+  resources, which have no namespace, are recorded in the ``default``
+  namespace, and ``kubectl describe`` shows them.
 
 Features Changed
 ----------------
@@ -1845,6 +1851,15 @@ Features Changed
   matched every namespace the other selectors of the rule matched, and the
   values of an ``Exists`` or ``DoesNotExist`` expression were ignored.
 
+* An empty ``matchNames`` in the ``sourceSecrets.nameSelector`` of a
+  ``SecretInjector`` rule now counts as no ``nameSelector`` at all, so the
+  other selectors of ``sourceSecrets`` decide which secrets are injected. A
+  rule whose only source selector is an empty ``matchNames`` now selects no
+  secret, and its ``SecretInjector`` reports ``InvalidSelector`` in its
+  status. Previously such a rule injected every secret in the namespaces it
+  targeted into the service accounts it selected. No Educates chart renders
+  such a rule.
+
 Removed Features
 ----------------
 
@@ -2749,7 +2764,8 @@ Bugs Fixed
   change, and updating them failed on every pass. The copies are now deleted
   and created again with the new type. A copy which someone else has marked
   ``immutable: true`` is never deleted, and is reported as a failure for its
-  namespace instead.
+  namespace instead, with a ``CopyNotUpdated`` Warning Event for each change
+  of its source secret it cannot follow.
 
 * Any unexpected error from the Kubernetes API, such as a copy which could not
   be updated, or a conflict when two updates of the same copy raced, stopped
@@ -2764,17 +2780,20 @@ Bugs Fixed
 
 * A copy kept after its ``SecretCopier`` was deleted, under the ``Retain``
   reclaim policy, blocked every other ``SecretCopier`` from managing it,
-  without end. A copy whose ``SecretCopier`` or ``SecretExporter`` no longer
-  exists is now taken over within seconds by a rule which targets it, and
-  updated from the source secret of that rule.
+  without end, and so did a copy whose ``SecretCopier`` no longer copied to
+  it, such as one in a namespace its rule no longer selected. A copy whose
+  ``SecretCopier`` or ``SecretExporter`` no longer exists, or none of whose
+  rules targets the copy any more, is now taken over within seconds by a rule
+  which targets it, and updated from the source secret of that rule.
 
 * Two rules which copied the same source secret under the same name into a
   namespace, as the copiers of the session manager, lookup service and node CA
   injector charts do with the ingress secrets in the ``educates`` namespace,
   had all but the first warn every minute. They now agree: the resource whose
   rule created the copy keeps it, the other rules count it as in sync, and
-  nothing is logged. When the resource which created the copy is deleted,
-  another rule recreates or takes over the copy within seconds.
+  nothing is logged. When the resource which created the copy is deleted, or
+  none of its rules targets the copy any more, another rule recreates or takes
+  over the copy within seconds.
 
 * The secrets manager put a finalizer on every ``SecretCopier``,
   ``SecretExporter`` and ``SecretInjector``, so deleting one waited, without

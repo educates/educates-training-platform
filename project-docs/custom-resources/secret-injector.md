@@ -45,7 +45,7 @@ spec:
         - "!legacy-pull-secret"
 ```
 
-A rule must select its source secrets with at least one of ``nameSelector``, ``labelSelector``, ``uidSelector`` and ``ownerSelector`` under ``sourceSecrets``, so that a rule cannot inject every secret by accident. Note that a ``nameSelector`` whose ``matchNames`` is an empty list passes that check and selects every secret in the namespaces the rule targets.
+A rule must select its source secrets with at least one of ``nameSelector``, ``labelSelector``, ``uidSelector`` and ``ownerSelector`` under ``sourceSecrets``, so that a rule cannot inject every secret by accident. A ``nameSelector`` whose ``matchNames`` is an empty list counts as no ``nameSelector`` at all: the other selectors of ``sourceSecrets`` decide which secrets are injected. A rule left with no other selector selects no secret, and the ``SecretInjector`` reports ``InvalidSelector`` in its status.
 
 Selecting source secrets by owner or UID
 ----------------------------------------
@@ -329,7 +329,7 @@ registry-credentials   True    InSync   12/12     5m
 
 The ``Ready`` condition is ``True``, with reason ``InSync``, when every service account each rule selects holds every secret the rule injects into it. Otherwise it is ``False``, with the reason of the first of these problems which applies:
 
-* ``InvalidSelector``: a selector of a rule is not valid, so the rule selects nothing.
+* ``InvalidSelector``: a selector of a rule is not valid, or the only selector of its ``sourceSecrets`` is an empty ``matchNames``, so the rule selects nothing.
 
 * ``TargetErrors``: some service accounts could not be updated, or the contents of some namespaces could not be read, and they are retried.
 

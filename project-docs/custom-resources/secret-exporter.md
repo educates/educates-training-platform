@@ -161,7 +161,7 @@ spec:
       - password
 ```
 
-A listed key which the secret exported does not hold is not copied. An empty list copies every key, as when ``keys`` is not set.
+A listed key which the secret exported does not hold is not copied. When ``keys`` is set it must list at least one key, and a ``SecretExporter`` with an empty ``keys`` list is rejected when it is created or updated. To copy every key, leave ``keys`` out.
 
 The data of a copy always equals what the rule selects from the secret exported. A key which the secret exported drops, or which is no longer listed, is removed from the copies, and so is a key which anything else adds to a copy.
 
@@ -379,14 +379,14 @@ The ``rules`` property is a list, so rules for more than one set of target names
 Overlapping rules for target secret
 -----------------------------------
 
-A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. A ``SecretExporter`` and a ``SecretCopier`` which copy the same secret under the same name into a namespace agree: the one which created the copy keeps it and decides what it holds, and the other counts the copy as in sync. A rule which would copy another secret under the name of the copy leaves the copy untouched and reports a ``Conflict``, as a rule does for a secret the secrets manager did not create.
+A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. A ``SecretExporter`` and a ``SecretCopier`` which copy the same secret under the same name into a namespace agree: the one which created the copy keeps it and decides what it holds, and the other counts the copy as in sync. A rule which would copy another secret under the name of the copy leaves the copy untouched and reports a ``Conflict``, as a rule does for a secret the secrets manager did not create. A copy stays with the resource whose rule created it only while one of that resource's rules still targets the copy. Once none does, such as when the rule no longer selects the namespace of the copy or was removed, another rule which targets the copy takes it over within seconds.
 
 The page for the ``SecretCopier`` custom resource describes overlapping rules in full.
 
 Deletion of the target secret
 -----------------------------
 
-The secrets manager never deletes a copy because the secret exported is deleted, or because the rules defined in the ``SecretExporter`` change such that it wouldn't have been copied in the first place. Such a copy stays as it is, and is no longer updated.
+The secrets manager never deletes a copy because the secret exported is deleted, or because the rules defined in the ``SecretExporter`` change such that it wouldn't have been copied in the first place. Such a copy stays as it is, and is no longer updated, unless another rule which targets it takes it over, as described above.
 
 When a secret is copied into a namespace due to use of paired ``SecretExporter`` and ``SecretImporter``, the target secret is owned by the ``SecretImporter`` custom resource instance, through an owner reference which marks it as the controller of the copy. If the ``SecretImporter`` custom resource instance is deleted, then the target secret will also be deleted.
 
@@ -399,7 +399,7 @@ Changes to a copy
 
 A copy which is deleted is created again within seconds. A copy whose data, or whose labels or annotations set by its rule, are changed by someone else, is restored within seconds.
 
-When the secret exported is replaced by one of a different ``type``, its copies are deleted and created again with the new type, since Kubernetes does not let the type of a secret change. A copy which someone else has marked with ``immutable: true`` is never deleted: when its data or type must change, the rule reports a failure for that namespace, retried until someone deletes the copy, as Kubernetes never lets the data of an immutable secret change, and the rule then creates it again.
+When the secret exported is replaced by one of a different ``type``, its copies are deleted and created again with the new type, since Kubernetes does not let the type of a secret change. A copy which someone else has marked with ``immutable: true`` is never deleted: when its data or type must change, the rule reports a failure for that namespace, retried until someone deletes the copy, as Kubernetes never lets the data of an immutable secret change, and the rule then creates it again. The message of the ``Ready`` condition says that the copy is immutable and was not updated, and the secrets manager records a ``Warning`` Event with reason ``CopyNotUpdated``, described below.
 
 Tracking the source of a secret
 -------------------------------
@@ -457,7 +457,11 @@ A copy which cannot be written in one namespace never stops copies into the othe
 Events of the secret exporter
 -----------------------------
 
-When a ``SecretExporter`` has not been ``Ready`` for a minute, the secrets manager records a ``Warning`` Event with reason ``NotReady`` in its namespace, giving the reason and message of the ``Ready`` condition. When a ``SecretExporter`` which got that Event is ``Ready`` again, it records a ``Normal`` Event with reason ``Recovered``. No Event is recorded for a ``SecretExporter`` which is ``Ready`` again within a minute, while its status shows the problem at once. Run ``kubectl describe secretexporter <name> -n <namespace>`` to see them.
+When a ``SecretExporter`` has not been ``Ready`` for a minute, the secrets manager records a ``Warning`` Event with reason ``NotReady`` in its namespace, giving the reason and message of the ``Ready`` condition. When a ``SecretExporter`` which got that Event is ``Ready`` again, it records a ``Normal`` Event with reason ``Recovered``. No Event is recorded for a ``SecretExporter`` which is ``Ready`` again within a minute, while its status shows the problem at once.
+
+When a copy which someone else has marked with ``immutable: true`` cannot follow a change of the secret exported, the secrets manager records a ``Warning`` Event with reason ``CopyNotUpdated``, naming the copy, as ``namespace/name``, the secret exported, and whether its data or its type changed. The Event is recorded once for each change of the secret exported the copy cannot follow, not each time the copy is retried.
+
+Run ``kubectl describe secretexporter <name> -n <namespace>`` to see the Events.
 
 Access to secret exporters
 --------------------------

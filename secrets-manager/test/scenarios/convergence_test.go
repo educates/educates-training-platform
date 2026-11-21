@@ -98,6 +98,30 @@ var _ = Describe("Convergence", Label(areaConvergence), func() {
 			})
 		})
 
+	It("makes no API calls reconciling an exporter whose source, copies, importers and spec have not changed",
+		Label(expectedDifference), func() {
+			requireAPICalls()
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			accepting := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, "exported", data("token", "t0"))
+			exporter := s.secretExporter(sourceNS.Name, src.Name, exporterRule(inNamespaces(accepting)))
+			s.secretImporter(accepting.Name, src.Name, sharedSecret(uidOf(exporter)))
+			eventually(func(g Gomega) {
+				expectCopy(g, accepting.Name, src.Name, src, ruleOf(exporter))
+			})
+			calls := settledAPICalls(s.id)
+
+			// An event that reconciles the exporter, changing none of its
+			// source, copies, importers or spec: the target namespace
+			// relabelled, still selected.
+			s.update(accepting, func() { setMapEntry(&accepting.Labels, unrelatedLabel, "yes") })
+
+			consistently(func(g Gomega) {
+				g.Expect(target.APICalls.About(s.id)).To(Equal(calls))
+			})
+		})
+
 	It("makes no API calls reconciling an injector whose Secrets, service accounts and spec have not changed",
 		Label(expectedDifference), func() {
 			requireAPICalls()

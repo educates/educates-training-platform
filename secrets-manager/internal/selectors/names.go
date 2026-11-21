@@ -1,7 +1,10 @@
 // Package selectors decides whether a namespace, a Secret or a service
 // account matches the selectors of a secrets.educates.dev rule. Its
 // functions are pure: they look only at the object and the rule, and are
-// shared by all four kinds.
+// shared by all four kinds. A rule's selectors for one kind of object go
+// through New, and its target namespaces through Namespaces or
+// NamespacesOf; a selector that is invalid matches nothing, and its Err
+// says why.
 package selectors
 
 import (

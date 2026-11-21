@@ -94,6 +94,10 @@ func (r *Reconciler) reconcileRule(ctx context.Context, copier *secretsv1beta1.S
 	}
 
 	selector := selectors.Namespaces(rule.TargetNamespaces)
+	if err := selector.Err(); err != nil {
+		log.Info("The rule's targetNamespaces are invalid: the rule selects no namespace", "reason", err.Error())
+		return nil
+	}
 	copyName := rule.CopyName()
 	annotations := map[string]string{
 		secretsv1beta1.CopierRuleAnnotation: secretsv1beta1.CopierRule(secretsv1beta1.SecretCopierKind, copier.Name),

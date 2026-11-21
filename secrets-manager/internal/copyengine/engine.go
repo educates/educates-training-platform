@@ -9,12 +9,12 @@
 // whose a target is:
 //
 //   - A target without copier-rule was not written by a rule. It is left
-//     untouched, as a conflict.
+//     untouched, as an ownership conflict.
 //   - A target whose copier-rule names the resource asking for the copy is
 //     that resource's own.
 //   - A target whose copier-rule names another resource that exists stays
 //     that resource's. It agrees with the asking rule when secret-name
-//     names the same source, and is a conflict otherwise.
+//     names the same source, and is an ownership conflict otherwise.
 //   - A target whose copier-rule names a resource that no longer exists is
 //     an orphan, which the asking rule adopts.
 //

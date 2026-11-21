@@ -109,7 +109,7 @@ func (r *Reconciler) Inject(ctx context.Context, injector *secretsv1beta1.Secret
 		return Outcome{}, fmt.Errorf("listing namespaces: %w", err)
 	}
 
-	p := &pass{
+	s := &reconcileState{
 		reconciler: r,
 		known:      r.types.remembered(injector.Name),
 		seen:       map[types.UID]corev1.SecretType{},
@@ -119,20 +119,21 @@ func (r *Reconciler) Inject(ctx context.Context, injector *secretsv1beta1.Secret
 	}
 	plans := make([]rulePlan, len(injector.Spec.Rules))
 	for i := range injector.Spec.Rules {
-		plans[i] = p.planRule(ctx, &injector.Spec.Rules[i], namespaces.Items)
+		plans[i] = s.planRule(ctx, &injector.Spec.Rules[i], namespaces.Items)
 	}
-	p.write(ctx)
-	r.types.remember(injector.Name, p.seen)
+	s.write(ctx)
+	r.types.remember(injector.Name, s.seen)
 
 	outcome := Outcome{Rules: make([]RuleOutcome, len(plans))}
 	for i := range plans {
-		outcome.Rules[i] = p.tally(&plans[i], &outcome.Conflicted)
+		outcome.Rules[i] = s.tally(&plans[i], &outcome.Conflicted)
 	}
 	return outcome, nil
 }
 
-// pass is the state of one reconcile of a SecretInjector.
-type pass struct {
+// reconcileState is what one reconcile of a SecretInjector reads and
+// plans to write.
+type reconcileState struct {
 	reconciler *Reconciler
 
 	// known are the types of Secrets an earlier reconcile read, by UID, and
@@ -142,7 +143,7 @@ type pass struct {
 	unreadable map[types.UID]error
 
 	// contents are the Secrets and service accounts of the namespaces the
-	// pass looked in, by namespace.
+	// reconcile looked in, by namespace.
 	contents map[string]*namespaceContents
 	// accounts are the service accounts the rules select, with the names
 	// they lack.
@@ -165,12 +166,34 @@ type pendingAccount struct {
 	// imagePullSecrets and secrets are the names to add to those lists, in
 	// the order the rules add them.
 	imagePullSecrets, secrets []string
-	// written reports a successful write, gone that the service account no
-	// longer exists, conflicted that it changed while it was written, and
-	// err why it could not be written otherwise.
-	written, gone, conflicted bool
-	err                       error
+	// outcome says what writing the service account did, and err why it
+	// failed, when it did.
+	outcome writeOutcome
+	err     error
 }
+
+// writeOutcome says what writing a pending service account did.
+type writeOutcome int
+
+const (
+	// notWritten means the service account was not written: it lacked no
+	// name.
+	notWritten writeOutcome = iota
+
+	// written means the service account was written with every name it
+	// lacked.
+	written
+
+	// accountGone means the service account no longer exists.
+	accountGone
+
+	// writeConflicted means the service account changed while it was
+	// written.
+	writeConflicted
+
+	// writeFailed means writing the service account failed otherwise.
+	writeFailed
+)
 
 // rulePlan is what a rule selects: its namespaces and, in each, the service
 // accounts it injects into.
@@ -192,8 +215,8 @@ type ruleTarget struct {
 }
 
 // planRule finds the service accounts rule injects into among namespaces,
-// and adds the names they lack to the pass's pending accounts.
-func (p *pass) planRule(ctx context.Context, rule *secretsv1beta1.SecretInjectorRule,
+// and adds the names they lack to the reconcile's pending accounts.
+func (s *reconcileState) planRule(ctx context.Context, rule *secretsv1beta1.SecretInjectorRule,
 	namespaces []corev1.Namespace) rulePlan {
 	namespaceSelector := selectors.Namespaces(rule.TargetNamespaces)
 	secretSelector := selectors.SourceSecrets(rule.SourceSecrets)
@@ -212,7 +235,7 @@ func (p *pass) planRule(ctx context.Context, rule *secretsv1beta1.SecretInjector
 			continue
 		}
 		plan.targetNamespaces++
-		contents := p.namespaceContents(ctx, ns.Name)
+		contents := s.namespaceContents(ctx, ns.Name)
 		if contents.err != nil {
 			plan.failures = append(plan.failures, Failure{Namespace: ns.Name, Err: contents.err})
 			continue
@@ -228,9 +251,9 @@ func (p *pass) planRule(ctx context.Context, rule *secretsv1beta1.SecretInjector
 		if len(accounts) == 0 {
 			continue
 		}
-		injections, err := p.injections(ctx, contents, secretSelector)
+		injections, err := s.injections(ctx, contents, secretSelector)
 		for _, account := range accounts {
-			plan.targets = append(plan.targets, p.target(account, injections, err))
+			plan.targets = append(plan.targets, s.target(account, injections, err))
 		}
 	}
 	return plan
@@ -245,7 +268,7 @@ type injection struct {
 
 // injections lists the Secrets of a namespace that selector selects, as the
 // names to inject, and joins the errors reading their types gave.
-func (p *pass) injections(ctx context.Context, contents *namespaceContents,
+func (s *reconcileState) injections(ctx context.Context, contents *namespaceContents,
 	selector selectors.Selector) ([]injection, error) {
 	var result []injection
 	var errs []error
@@ -254,7 +277,7 @@ func (p *pass) injections(ctx context.Context, contents *namespaceContents,
 		if !selector.Match(secret) {
 			continue
 		}
-		secretType, found, err := p.secretType(ctx, secret)
+		secretType, found, err := s.secretType(ctx, secret)
 		switch {
 		case err != nil:
 			errs = append(errs, err)
@@ -268,12 +291,12 @@ func (p *pass) injections(ctx context.Context, contents *namespaceContents,
 // target adds the names of injections that account lacks to its pending
 // account, and returns the account as a target of the rule. err is why the
 // rule cannot inject some of its Secrets.
-func (p *pass) target(account *corev1.ServiceAccount, injections []injection, err error) ruleTarget {
+func (s *reconcileState) target(account *corev1.ServiceAccount, injections []injection, err error) ruleTarget {
 	key := client.ObjectKeyFromObject(account)
-	pending, ok := p.accounts[key]
+	pending, ok := s.accounts[key]
 	if !ok {
 		pending = &pendingAccount{account: account}
-		p.accounts[key] = pending
+		s.accounts[key] = pending
 	}
 	target := ruleTarget{account: key, err: err}
 	for _, inj := range injections {
@@ -310,22 +333,22 @@ func (a *pendingAccount) add(inj injection) {
 }
 
 // namespaceContents lists the Secrets and service accounts of namespace ns
-// from the cache, once per pass.
-func (p *pass) namespaceContents(ctx context.Context, ns string) *namespaceContents {
-	if contents, ok := p.contents[ns]; ok {
+// from the cache, once per reconcile.
+func (s *reconcileState) namespaceContents(ctx context.Context, ns string) *namespaceContents {
+	if contents, ok := s.contents[ns]; ok {
 		return contents
 	}
 	contents := &namespaceContents{}
-	p.contents[ns] = contents
+	s.contents[ns] = contents
 
 	secrets := &metav1.PartialObjectMetadataList{}
 	secrets.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("SecretList"))
-	if err := p.reconciler.cache.List(ctx, secrets, client.InNamespace(ns)); err != nil {
+	if err := s.reconciler.cache.List(ctx, secrets, client.InNamespace(ns)); err != nil {
 		contents.err = fmt.Errorf("listing the Secrets of namespace %s: %w", ns, err)
 		return contents
 	}
 	accounts := &corev1.ServiceAccountList{}
-	if err := p.reconciler.cache.List(ctx, accounts, client.InNamespace(ns)); err != nil {
+	if err := s.reconciler.cache.List(ctx, accounts, client.InNamespace(ns)); err != nil {
 		contents.err = fmt.Errorf("listing the service accounts of namespace %s: %w", ns, err)
 		return contents
 	}
@@ -339,48 +362,48 @@ func (p *pass) namespaceContents(ctx context.Context, ns string) *namespaceConte
 // secretType returns the type of secret, read from the API server unless a
 // reconcile has read it before, and whether the Secret the cache holds
 // still exists.
-func (p *pass) secretType(ctx context.Context, secret *metav1.PartialObjectMetadata) (corev1.SecretType, bool, error) {
-	if secretType, ok := p.seen[secret.UID]; ok {
+func (s *reconcileState) secretType(ctx context.Context, secret *metav1.PartialObjectMetadata) (corev1.SecretType, bool, error) {
+	if secretType, ok := s.seen[secret.UID]; ok {
 		return secretType, true, nil
 	}
-	if err, ok := p.unreadable[secret.UID]; ok {
+	if err, ok := s.unreadable[secret.UID]; ok {
 		return "", false, err
 	}
-	if secretType, ok := p.known[secret.UID]; ok {
-		p.seen[secret.UID] = secretType
+	if secretType, ok := s.known[secret.UID]; ok {
+		s.seen[secret.UID] = secretType
 		return secretType, true, nil
 	}
 
 	live := &corev1.Secret{}
-	err := p.reconciler.live.Get(ctx, client.ObjectKeyFromObject(secret), live)
+	err := s.reconciler.live.Get(ctx, client.ObjectKeyFromObject(secret), live)
 	switch {
 	case apierrors.IsNotFound(err):
 		return "", false, nil
 	case err != nil:
 		err = fmt.Errorf("reading the type of Secret %s/%s: %w", secret.Namespace, secret.Name, err)
-		p.unreadable[secret.UID] = err
+		s.unreadable[secret.UID] = err
 		return "", false, err
 	case live.UID != secret.UID:
 		// The Secret was recreated since the cache saw it: its creation
 		// brings the injector back once the cache holds it.
 		return "", false, nil
 	}
-	p.seen[secret.UID] = live.Type
+	s.seen[secret.UID] = live.Type
 	return live.Type, true, nil
 }
 
 // write adds to each pending service account the names it lacks, in one
 // write with optimistic concurrency.
-func (p *pass) write(ctx context.Context) {
-	keys := make([]types.NamespacedName, 0, len(p.accounts))
-	for key, pending := range p.accounts {
+func (s *reconcileState) write(ctx context.Context) {
+	keys := make([]types.NamespacedName, 0, len(s.accounts))
+	for key, pending := range s.accounts {
 		if len(pending.imagePullSecrets) > 0 || len(pending.secrets) > 0 {
 			keys = append(keys, key)
 		}
 	}
 	slices.SortFunc(keys, func(a, b types.NamespacedName) int { return strings.Compare(a.String(), b.String()) })
 	for _, key := range keys {
-		p.accounts[key].write(ctx, p.reconciler.writer)
+		s.accounts[key].write(ctx, s.reconciler.writer)
 	}
 }
 
@@ -398,16 +421,17 @@ func (a *pendingAccount) write(ctx context.Context, writer client.Writer) {
 	err := writer.Patch(ctx, updated, client.MergeFromWithOptions(a.account, client.MergeFromWithOptimisticLock{}))
 	switch {
 	case err == nil:
-		a.written = true
+		a.outcome = written
 		convergence.Repaired(ctx)
 		log.Info("Injected Secrets into the service account",
 			"imagePullSecrets", a.imagePullSecrets, "secrets", a.secrets)
 	case apierrors.IsNotFound(err):
-		a.gone = true
+		a.outcome = accountGone
 	case apierrors.IsConflict(err):
-		a.conflicted = true
+		a.outcome = writeConflicted
 		log.V(1).Info("The service account changed while it was written: retrying")
 	default:
+		a.outcome = writeFailed
 		a.err = fmt.Errorf("injecting Secrets into service account %s/%s: %w", a.account.Namespace, a.account.Name, err)
 	}
 }
@@ -415,19 +439,19 @@ func (a *pendingAccount) write(ctx context.Context, writer client.Writer) {
 // tally counts what plan found and did once the pending accounts are
 // written, and sets conflicted when one of its service accounts changed
 // while it was written.
-func (p *pass) tally(plan *rulePlan, conflicted *bool) RuleOutcome {
+func (s *reconcileState) tally(plan *rulePlan, conflicted *bool) RuleOutcome {
 	outcome := RuleOutcome{
 		InvalidSelector:  plan.invalid,
 		TargetNamespaces: plan.targetNamespaces,
 		Failures:         slices.Clone(plan.failures),
 	}
 	for _, target := range plan.targets {
-		pending := p.accounts[target.account]
-		if pending.gone {
+		pending := s.accounts[target.account]
+		if pending.outcome == accountGone {
 			continue
 		}
 		outcome.ServiceAccountsMatched++
-		inSync := target.missing == 0 || pending.written
+		inSync := target.missing == 0 || pending.outcome == written
 		if inSync {
 			outcome.InjectionsInSync += target.present + target.missing
 		} else {
@@ -445,7 +469,7 @@ func (p *pass) tally(plan *rulePlan, conflicted *bool) RuleOutcome {
 			})
 		case inSync:
 			outcome.ServiceAccountsInSync++
-		case pending.conflicted:
+		case pending.outcome == writeConflicted:
 			*conflicted = true
 		}
 	}

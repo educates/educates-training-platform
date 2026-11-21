@@ -256,7 +256,7 @@ func logTarget(log logr.Logger, result copyengine.Result, err error) {
 		log.V(1).Info("Writing the copy conflicted with another writer: retrying")
 	case err != nil:
 		// The failure is returned, and logged, with the reconcile's error.
-	case result.Outcome == copyengine.Conflict:
+	case result.Outcome == copyengine.OwnershipConflict:
 		log.V(1).Info("Leaving a Secret the rule does not manage untouched", "managedBy", result.ManagedBy)
 	case result.Outcome == copyengine.Agreed:
 		log.V(1).Info("Another rule copying the same source manages the copy", "managedBy", result.ManagedBy)

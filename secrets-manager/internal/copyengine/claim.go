@@ -36,10 +36,10 @@ const (
 	// and decides its shape.
 	Agreed Outcome = "Agreed"
 
-	// Conflict means the target is not the asking rule's to write: no rule
-	// wrote it, or another existing resource's rule wrote it from another
-	// source. Nothing was written.
-	Conflict Outcome = "Conflict"
+	// OwnershipConflict means the target is not the asking rule's to write:
+	// no rule wrote it, or another existing resource's rule wrote it from
+	// another source. Nothing was written.
+	OwnershipConflict Outcome = "OwnershipConflict"
 
 	// TargetDeleting means the target is being deleted, and nothing was
 	// written: its deletion brings the next attempt.
@@ -75,9 +75,9 @@ type Result struct {
 	Outcome Outcome
 
 	// ManagedBy names the other resource whose rule manages the target, as
-	// its copier-rule annotation does, when Outcome is Agreed or a
-	// Conflict with that rule. It is empty for a Conflict with a target no
-	// rule wrote.
+	// its copier-rule annotation does, when Outcome is Agreed or an
+	// OwnershipConflict with that rule. It is empty for an
+	// OwnershipConflict with a target no rule wrote.
 	ManagedBy string
 }
 
@@ -112,7 +112,7 @@ func (e *Engine) claim(ctx context.Context, c Copy, target metav1.Object) (Resul
 	writer, tracked := annotations[secretsv1beta1.CopierRuleAnnotation]
 	switch {
 	case !tracked:
-		return Result{Outcome: Conflict}, false, nil
+		return Result{Outcome: OwnershipConflict}, false, nil
 	case writer == c.Rule:
 		return Result{}, true, nil
 	}
@@ -127,6 +127,6 @@ func (e *Engine) claim(ctx context.Context, c Copy, target metav1.Object) (Resul
 	case state == RuleExists && source == sourceName(c.Source):
 		return Result{Outcome: Agreed, ManagedBy: writer}, false, nil
 	default:
-		return Result{Outcome: Conflict, ManagedBy: writer}, false, nil
+		return Result{Outcome: OwnershipConflict, ManagedBy: writer}, false, nil
 	}
 }

@@ -109,7 +109,7 @@ func ruleStatus(findings *feedback.Findings, index int, report *ruleReport) secr
 			findings.Add(secretsv1beta1.ReasonTargetErrors, target.namespace, target.err.Error())
 		case target.result.Outcome.Converged():
 			rule.InSync++
-		case target.result.Outcome == copyengine.Conflict:
+		case target.result.Outcome == copyengine.OwnershipConflict:
 			rule.Conflicts++
 			findings.Add(secretsv1beta1.ReasonConflict, target.namespace, "")
 		default:

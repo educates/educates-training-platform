@@ -111,7 +111,7 @@ func exporterRuleCounts(findings *feedback.Findings, index int, rule *ruleReport
 			findings.Add(secretsv1beta1.ReasonTargetErrors, target.namespace, target.err.Error())
 		case target.result.Outcome.Converged():
 			counts.InSync++
-		case target.result.Outcome == copyengine.Conflict:
+		case target.result.Outcome == copyengine.OwnershipConflict:
 			counts.Conflicts++
 			findings.Add(secretsv1beta1.ReasonConflict, target.namespace, "")
 		default:

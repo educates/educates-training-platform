@@ -281,8 +281,9 @@ ci-secrets-manager: ## CI parity for the secrets-manager (secrets-manager-ci.yam
 	cd secrets-manager && go vet ./...
 	cd secrets-manager && go build ./...
 	$(MAKE) -C secrets-manager generate
-	@git diff --exit-code -- secrets-manager/api \
-		|| { echo "ERROR: generated DeepCopy drifted. Run 'make -C secrets-manager generate' and commit."; exit 1; }
+	@drift="$$(git status --porcelain -- secrets-manager/api)"; [ -z "$$drift" ] \
+		|| { git diff -- secrets-manager/api; echo "$$drift"; \
+			echo "ERROR: generated DeepCopy drifted. Run 'make -C secrets-manager generate' and commit."; exit 1; }
 	$(MAKE) -C secrets-manager test
 	$(MAKE) -C secrets-manager lint
 

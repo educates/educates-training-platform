@@ -250,7 +250,7 @@ func (r *ImporterReconciler) exporterOffers(ctx context.Context, importer *secre
 			}
 			offers = append(offers, ImportOffer{
 				From:    Offerer{Kind: secretsv1beta1.SecretExporterKind, Namespace: exporter.Namespace, Name: exporter.Name},
-				Source:  exporter.Namespace + "/" + exporter.Name,
+				Source:  secretsv1beta1.SecretName(exporter.Namespace, exporter.Name),
 				Refusal: Authorize(importer, ExporterOffer(exporter, rule)),
 			})
 			break
@@ -284,7 +284,7 @@ func (r *ImporterReconciler) copierOffers(ctx context.Context, importer *secrets
 			}
 			offers = append(offers, ImportOffer{
 				From:    Offerer{Kind: secretsv1beta1.SecretCopierKind, Name: copier.Name},
-				Source:  rule.SourceSecret.Namespace + "/" + rule.SourceSecret.Name,
+				Source:  secretsv1beta1.SecretName(rule.SourceSecret.Namespace, rule.SourceSecret.Name),
 				Refusal: Authorize(importer, CopierOffer(rule)),
 			})
 		}

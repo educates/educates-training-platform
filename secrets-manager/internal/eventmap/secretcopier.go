@@ -4,7 +4,6 @@ import (
 	"context"
 	"maps"
 	"slices"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -27,17 +26,13 @@ const (
 	SecretCopierTargetNameIndex = "secretcopier.targetSecretName"
 )
 
-// secretCopierRuleKind is the kind a copier-rule annotation names a
-// SecretCopier by.
-var secretCopierRuleKind = strings.ToLower(secretsv1beta1.SecretCopierKind)
-
 // IndexSecretCopiers registers the field indexes the SecretCopier map
 // functions look up.
 func IndexSecretCopiers(ctx context.Context, indexer client.FieldIndexer) error {
 	if err := indexer.IndexField(ctx, &secretsv1beta1.SecretCopier{}, SecretCopierSourceIndex,
 		func(obj client.Object) []string {
 			return ruleValues(obj, func(rule *secretsv1beta1.SecretCopierRule) string {
-				return rule.SourceSecret.Namespace + "/" + rule.SourceSecret.Name
+				return secretsv1beta1.SecretName(rule.SourceSecret.Namespace, rule.SourceSecret.Name)
 			})
 		}); err != nil {
 		return err
@@ -70,12 +65,11 @@ func ruleValues(obj client.Object, value func(*secretsv1beta1.SecretCopierRule) 
 func SecretCopiersForSecret(reader client.Reader) handler.MapFunc {
 	return func(ctx context.Context, secret client.Object) []reconcile.Request {
 		names := map[string]struct{}{}
-		if kind, name, ok := secretsv1beta1.ParseCopierRule(
-			secret.GetAnnotations()[secretsv1beta1.CopierRuleAnnotation]); ok && kind == secretCopierRuleKind {
-			names[name] = struct{}{}
+		if writer, ok := ruleResourceOf(secret); ok && writer.Kind == secretsv1beta1.SecretCopierKind {
+			names[writer.Key.Name] = struct{}{}
 		}
 		lookups := map[string]string{
-			SecretCopierSourceIndex:     secret.GetNamespace() + "/" + secret.GetName(),
+			SecretCopierSourceIndex:     secretsv1beta1.SecretName(secret.GetNamespace(), secret.GetName()),
 			SecretCopierTargetNameIndex: secret.GetName(),
 		}
 		for index, value := range lookups {
@@ -141,6 +135,14 @@ func SecretCopiersForNamespace(reader client.Reader) handler.TypedMapFunc[*corev
 		}
 		return requests(names)
 	}
+}
+
+// ruleResourceOf resolves the tracking annotations of secret to the
+// resource whose rule wrote it, and reports whether they name one.
+func ruleResourceOf(secret client.Object) (secretsv1beta1.RuleResource, bool) {
+	annotations := secret.GetAnnotations()
+	return secretsv1beta1.RuleResourceOf(annotations[secretsv1beta1.CopierRuleAnnotation],
+		annotations[secretsv1beta1.SecretNameAnnotation])
 }
 
 // requests returns a reconcile request for each name of a cluster-scoped

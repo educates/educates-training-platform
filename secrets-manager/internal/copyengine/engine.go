@@ -415,10 +415,9 @@ func (e *Engine) object(key types.NamespacedName) *unstructured.Unstructured {
 	return obj
 }
 
-// sourceName names source as the secret-name annotation does:
-// <namespace>/<name>.
+// sourceName names source as the secret-name annotation does.
 func sourceName(source metav1.Object) string {
-	return source.GetNamespace() + "/" + source.GetName()
+	return secretsv1beta1.SecretName(source.GetNamespace(), source.GetName())
 }
 
 // withoutSourceVersion returns content, an object's unstructured content,

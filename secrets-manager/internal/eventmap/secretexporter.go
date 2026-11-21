@@ -21,10 +21,6 @@ import (
 // their rules' copies.
 const SecretExporterTargetNameIndex = "secretexporter.targetSecretName"
 
-// secretExporterRuleKind is the kind a copier-rule annotation names a
-// SecretExporter by.
-var secretExporterRuleKind = strings.ToLower(secretsv1beta1.SecretExporterKind)
-
 // IndexSecretExporters registers the field index the SecretExporter map
 // functions look up.
 func IndexSecretExporters(ctx context.Context, indexer client.FieldIndexer) error {
@@ -61,13 +57,8 @@ func SecretExportersForSecret(reader client.Reader) handler.MapFunc {
 		if err := reader.Get(ctx, source, &secretsv1beta1.SecretExporter{}); err == nil {
 			keys[source] = struct{}{}
 		}
-		annotations := secret.GetAnnotations()
-		if kind, name, ok := secretsv1beta1.ParseCopierRule(
-			annotations[secretsv1beta1.CopierRuleAnnotation]); ok && kind == secretExporterRuleKind {
-			if namespace, _, ok := strings.Cut(annotations[secretsv1beta1.SecretNameAnnotation], "/"); ok &&
-				namespace != "" {
-				keys[types.NamespacedName{Namespace: namespace, Name: name}] = struct{}{}
-			}
+		if writer, ok := ruleResourceOf(secret); ok && writer.Kind == secretsv1beta1.SecretExporterKind {
+			keys[writer.Key] = struct{}{}
 		}
 		exporters := &secretsv1beta1.SecretExporterList{}
 		if err := reader.List(ctx, exporters,

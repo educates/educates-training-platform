@@ -45,7 +45,7 @@ var envtestTiming = Timing{
 const targetFieldScenarios = "targetSecret.annotations and targetSecret.keys "
 
 // noFinalizerScenario checks every kind for finalizers, so it waits for
-// both exporting and injecting.
+// exporting too.
 const noFinalizerScenario = "Copy ownership and reclaim adds no finalizer to any of the four kinds"
 
 // awaitingOnEnvtest names, under the behavior they wait for, the scenarios
@@ -57,18 +57,8 @@ var awaitingOnEnvtest = map[string][]string{
 		"SecretImporter gating SecretCopier rules",
 		noFinalizerScenario,
 	},
-	"secret injection": {
-		"SecretInjector",
-		noFinalizerScenario,
-	},
-	"targetSecret.annotations and targetSecret.keys": {
-		targetFieldScenarios + "sets targetSecret.annotations on every copy",
-		targetFieldScenarios + "removes an annotation dropped from targetSecret.annotations from the copies",
-		targetFieldScenarios + "copies only the keys targetSecret.keys lists that the source has",
-		targetFieldScenarios + "removes keys outside targetSecret.keys from existing copies",
+	"target-secret-exporter": {
 		targetFieldScenarios + "applies targetSecret.annotations and targetSecret.keys on SecretExporter rules",
-		targetFieldScenarios + "fails only the target whose copy the API server rejects",
-		"Admission rejects at admission",
 	},
 	"status and Events": {
 		"Status, printer columns and Events",

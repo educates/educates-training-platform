@@ -9,6 +9,7 @@ import { parseArgs } from "node:util";
 import { defaultChrome, launchBrowser } from "./browser.mjs";
 import { LocalCluster, mustRun } from "./cluster.mjs";
 import { runFixture } from "./fixture.mjs";
+import { onInterrupt, once } from "./interrupt.mjs";
 import { AuthenticatedMirror } from "./mirror.mjs";
 import { deployPortal, loadFixtures, removePortal, robotCredentials } from "./portal.mjs";
 import { markdownReport, summaryTable } from "./report.mjs";
@@ -184,6 +185,21 @@ async function main() {
   let results = [];
   let browser = null;
   let exitCode = 0;
+  // restore puts the cluster back as the run found it. The run's end and a
+  // signal that interrupts the run both ask for it, and it runs once.
+  const restore = once(async () => {
+    if (browser) await browser.close().catch(() => {});
+    fs.rmSync(path.join(outDir, "chrome-profile"), { recursive: true, force: true });
+    if (values.keep) {
+      say(`Keeping the test portal ${values.portal}, its website theme and any mirror; remove them with 'run.sh --clean' and the same --local-cluster and --portal`);
+    } else {
+      await removeAll().catch((e) => {
+        say(`Removing the test portal, its website theme or the mirror failed: ${e.message}`);
+        exitCode = 1;
+      });
+    }
+  });
+  const interruption = onInterrupt(restore, { log: say });
   try {
     // Remove what an earlier run left: the portal, or namespaces of it that
     // are still terminating, and a mirror, which this run may not use. The
@@ -241,17 +257,11 @@ async function main() {
     results.sort((a, b) => a.fixture.localeCompare(b.fixture));
     exitCode = results.every((r) => r.passed) ? 0 : 1;
   } finally {
-    if (browser) await browser.close().catch(() => {});
-    fs.rmSync(path.join(outDir, "chrome-profile"), { recursive: true, force: true });
-    if (values.keep) {
-      say(`Keeping the test portal ${values.portal}, its website theme and any mirror; remove them with 'run.sh --clean' and the same --local-cluster and --portal`);
-    } else {
-      await removeAll().catch((e) => {
-        say(`Removing the test portal, its website theme or the mirror failed: ${e.message}`);
-        exitCode = 1;
-      });
-    }
+    await restore();
   }
+  // An interrupted run ends with its signal's status once the restore is
+  // done, and writes no report.
+  if (interruption.signal) await interruption.exiting;
 
   run.finished = new Date().toISOString();
   fs.writeFileSync(path.join(outDir, "report.json"), JSON.stringify({ ...run, cluster: { ...cluster }, results }, null, 2));

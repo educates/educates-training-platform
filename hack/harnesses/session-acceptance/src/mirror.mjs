@@ -15,7 +15,7 @@
 // host or in the nodes' containerd configuration.
 
 import { randomBytes } from "node:crypto";
-import { mustRun } from "./cluster.mjs";
+import { run } from "./cluster.mjs";
 import { removeNamedEntry, setNamedEntry } from "./patches.mjs";
 import { operatorNamespace, patchResource, waitForReady, waitForSessionManagerConfig } from "./platform.mjs";
 
@@ -84,9 +84,7 @@ export class AuthenticatedMirror {
 
     this.log(`Starting the authenticated registry mirror in namespace ${this.namespace}`);
     const password = randomBytes(18).toString("base64url");
-    const htpasswd = (await mustRun("htpasswd", ["-nbB", USERNAME, password]).catch((e) => {
-      throw new Error(`creating the mirror's htpasswd file needs htpasswd: ${e.message}`);
-    })).stdout.trim();
+    const htpasswd = (await htpasswdEntry(USERNAME, password)).trim();
 
     await this.apply([
       { apiVersion: "v1", kind: "Namespace", metadata: { name: this.namespace, labels: { "training.educates.dev/harness": "session-acceptance" } } },
@@ -280,6 +278,18 @@ export class AuthenticatedMirror {
 // points the registry Service of the default namespace at it.
 const LOCAL_REGISTRY = "localhost:5001";
 const LOCAL_REGISTRY_IN_CLUSTER = "http://registry.default.svc.cluster.local";
+
+// htpasswdEntry returns the htpasswd file line for a user, hashed with
+// bcrypt. htpasswd reads the password from its standard input, and a failure
+// reports its exit status alone, so that the password is neither on a
+// command line nor in an error.
+export async function htpasswdEntry(username, password, { command = "htpasswd" } = {}) {
+  const result = await run(command, ["-niB", username], { input: `${password}\n` });
+  if (result.code !== 0) {
+    throw new Error(`creating the mirror's htpasswd file needs htpasswd, which failed (exit ${result.code})`);
+  }
+  return result.stdout;
+}
 
 // pullSecret returns the image pull Secret holding the credentials for the
 // mirror at host.

@@ -172,17 +172,14 @@ type pendingAccount struct {
 	err     error
 }
 
-// writeOutcome says what writing a pending service account did.
+// writeOutcome says what writing a pending service account did. Its zero
+// value means the service account was not written: it lacked no name.
 type writeOutcome int
 
 const (
-	// notWritten means the service account was not written: it lacked no
-	// name.
-	notWritten writeOutcome = iota
-
 	// written means the service account was written with every name it
 	// lacked.
-	written
+	written writeOutcome = iota + 1
 
 	// accountGone means the service account no longer exists.
 	accountGone

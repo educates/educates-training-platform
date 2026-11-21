@@ -112,7 +112,7 @@ func (c *Converger) Converge(ctx context.Context, rule *Rule, namespaces []corev
 		}
 		target := Target{Namespace: ns.Name}
 		if rule.Source != nil {
-			target = c.converge(ctx, log.WithValues("namespace", ns.Name), rule, ns.Name)
+			target = c.converge(ctrl.LoggerInto(ctx, log.WithValues("namespace", ns.Name)), rule, ns.Name)
 		}
 		targets = append(targets, target)
 	}
@@ -121,7 +121,8 @@ func (c *Converger) Converge(ctx context.Context, rule *Rule, namespaces []corev
 
 // converge converges the copy rule offers into namespace, when the target
 // accepts it.
-func (c *Converger) converge(ctx context.Context, log logr.Logger, rule *Rule, namespace string) Target {
+func (c *Converger) converge(ctx context.Context, rule *Rule, namespace string) Target {
+	log := ctrl.LoggerFrom(ctx)
 	target := Target{Namespace: namespace}
 	importer, err := Importer(ctx, c.cache, types.NamespacedName{Namespace: namespace, Name: rule.Copy.Name})
 	if err != nil {

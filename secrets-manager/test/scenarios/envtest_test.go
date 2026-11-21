@@ -28,18 +28,10 @@ var envtestTiming = Timing{
 	Poll:     200 * time.Millisecond,
 }
 
-// noFinalizerScenario checks every kind for finalizers, so it waits for
-// injecting.
-const noFinalizerScenario = "Copy ownership and reclaim adds no finalizer to any of the four kinds"
-
 // awaitingOnEnvtest names, under the behavior they wait for, the scenarios
 // the secrets-manager does not pass yet, by their full text or by the full
 // text of a container that holds them. They skip on envtest.
 var awaitingOnEnvtest = map[string][]string{
-	"secret injection": {
-		"SecretInjector",
-		noFinalizerScenario,
-	},
 	"status and Events": {
 		"Status, printer columns and Events",
 	},

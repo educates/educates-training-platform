@@ -4,28 +4,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// SecretInjectorTargetNamespaces selects the namespaces a SecretInjector
-// rule injects in. Every selector present must pass.
-type SecretInjectorTargetNamespaces struct {
-	// nameSelector selects namespaces by name.
-	// +optional
-	NameSelector *NameSelector `json:"nameSelector,omitempty"`
-
-	// uidSelector selects namespaces by UID.
-	// +optional
-	UIDSelector *UIDSelector `json:"uidSelector,omitempty"`
-
-	// labelSelector selects namespaces by label.
-	// +optional
-	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
-}
-
 // SourceSecrets selects the Secrets a SecretInjector rule injects. Every
-// selector present must pass.
+// selector present must pass, and the rule gives at least one.
 type SourceSecrets struct {
 	// nameSelector selects Secrets by name.
 	// +optional
 	NameSelector *NameSelector `json:"nameSelector,omitempty"`
+
+	// uidSelector selects Secrets by UID.
+	// +optional
+	UIDSelector *UIDSelector `json:"uidSelector,omitempty"`
+
+	// ownerSelector selects Secrets by owner.
+	// +optional
+	OwnerSelector *OwnerSelector `json:"ownerSelector,omitempty"`
 
 	// labelSelector selects Secrets by label.
 	// +optional
@@ -35,7 +27,8 @@ type SourceSecrets struct {
 // ServiceAccounts selects the service accounts a SecretInjector rule
 // injects into. Every selector present must pass.
 type ServiceAccounts struct {
-	// nameSelector selects service accounts by name.
+	// nameSelector selects service accounts by their exact names: unlike
+	// the other name selectors, its names are not globs.
 	// +optional
 	NameSelector *NameSelector `json:"nameSelector,omitempty"`
 
@@ -49,7 +42,7 @@ type ServiceAccounts struct {
 type SecretInjectorRule struct {
 	// targetNamespaces selects the namespaces the rule injects in.
 	// +optional
-	TargetNamespaces SecretInjectorTargetNamespaces `json:"targetNamespaces,omitempty"`
+	TargetNamespaces TargetNamespaces `json:"targetNamespaces,omitempty"`
 
 	// sourceSecrets selects the Secrets injected.
 	SourceSecrets SourceSecrets `json:"sourceSecrets"`

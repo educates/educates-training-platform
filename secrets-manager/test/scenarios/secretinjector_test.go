@@ -1,11 +1,15 @@
 package scenarios
 
 import (
+	"sync/atomic"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -161,6 +165,30 @@ var _ = Describe("SecretInjector", Label(areaInjection), func() {
 		})
 	})
 
+	It("keeps a name its rule no longer selects", func() {
+		s := newScenario()
+		ns := s.namespace("a", nil)
+		dropped := s.pullSecret(ns.Name, "dropped")
+		kept := s.pullSecret(ns.Name, "kept")
+		s.serviceAccount(ns.Name, builder, nil)
+		injector := s.secretInjector(s.name("injector"),
+			injectorRule(inNamespaces(ns), byName(dropped.Name), accounts(builder)))
+		eventually(func(g Gomega) {
+			g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).To(ContainElement(dropped.Name))
+		})
+
+		s.update(injector, func() {
+			setRules(injector, injectorRule(inNamespaces(ns), byName(kept.Name), accounts(builder)))
+		})
+
+		eventually(func(g Gomega) {
+			g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).To(ContainElement(kept.Name))
+		})
+		consistently(func(g Gomega) {
+			g.Expect(pullSecretNames(serviceAccountIn(g, ns.Name, builder))).To(ContainElement(dropped.Name))
+		})
+	})
+
 	It("matches service account names exactly", func() {
 		s := newScenario()
 		ns := s.namespace("a", nil)
@@ -216,6 +244,39 @@ var _ = Describe("SecretInjector", Label(areaInjection), func() {
 				g.Expect(names).To(HaveExactElements(listed.Name, fresh.Name))
 			})
 		})
+
+	It("writes a service account once, however many Secrets it gains", Label(expectedDifference), func() {
+		s := newScenario()
+		ns := s.namespace("a", nil)
+		names := []string{"first-pull-secret", "second-pull-secret", "third-pull-secret"}
+		for _, name := range names {
+			s.pullSecret(ns.Name, name)
+		}
+		opaque := s.secret(ns.Name, "api-token", data("token", "t0"))
+		s.serviceAccount(ns.Name, runner, nil)
+		s.secretInjector(s.name("injector"), injectorRule(inNamespaces(ns),
+			byName(append([]string{opaque.Name}, names...)...), accounts(builder, runner)))
+		// Once a first service account holds every name, the
+		// secrets-manager knows every Secret, so that a service account
+		// created now gains them all at once.
+		eventually(func(g Gomega) {
+			account := serviceAccountIn(g, ns.Name, runner)
+			g.Expect(pullSecretNames(account)).To(ContainElements(names))
+			g.Expect(secretNames(account)).To(ContainElement(opaque.Name))
+		})
+
+		writes := s.countServiceAccountUpdates(ns.Name, builder)
+		s.serviceAccount(ns.Name, builder, nil)
+
+		eventually(func(g Gomega) {
+			account := serviceAccountIn(g, ns.Name, builder)
+			g.Expect(pullSecretNames(account)).To(ContainElements(names))
+			g.Expect(secretNames(account)).To(ContainElement(opaque.Name))
+		})
+		consistently(func(g Gomega) {
+			g.Expect(writes()).To(Equal(int64(1)))
+		})
+	})
 
 	It("selects source Secrets by name globs, excluding names under !", Label(expectedDifference), func() {
 		s := newScenario()
@@ -300,3 +361,26 @@ var _ = Describe("SecretInjector", Label(areaInjection), func() {
 		})
 	})
 })
+
+// countServiceAccountUpdates watches the service account name in namespace
+// ns, which need not exist yet, until the scenario ends, and returns a
+// function counting the updates made to it since.
+func (s *scenario) countServiceAccountUpdates(ns, name string) func() int64 {
+	GinkgoHelper()
+	watcher, err := client.NewWithWatch(target.Config, client.Options{Scheme: target.Client.Scheme()})
+	Expect(err).NotTo(HaveOccurred())
+	w, err := watcher.Watch(s.ctx, &corev1.ServiceAccountList{}, client.InNamespace(ns),
+		client.MatchingFields{"metadata.name": name})
+	Expect(err).NotTo(HaveOccurred())
+	DeferCleanup(w.Stop)
+
+	var updates atomic.Int64
+	go func() {
+		for e := range w.ResultChan() {
+			if e.Type == watch.Modified {
+				updates.Add(1)
+			}
+		}
+	}()
+	return updates.Load
+}

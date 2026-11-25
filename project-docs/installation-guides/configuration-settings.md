@@ -217,6 +217,25 @@ educatesClusterConfig:
 
 See [secure HTTP connections](secure-http-connections) for how the operator checks and serves the certificate.
 
+When a load balancer or proxy in front of the cluster terminates TLS and forwards plain HTTP inward, the `None` certificates provider with `ingress.protocol: https` describes it, as the configuration kinds' `externalTLSTermination` does. When the certificate it presents was issued by a CA that is not publicly trusted, name a CA trust Secret holding that CA's certificate under `ca.crt` in `none.caCertificateSecretRef`, which the other configuration kinds do not offer, so Educates components and the cluster nodes trust it. The `none` block is accepted only with the `None` provider.
+
+```yaml
+educatesClusterConfig:
+  mode: Managed
+  ingress:
+    domain: workshops.example.com
+    ingressClassName: contour
+    protocol: https
+    controller:
+      provider: BundledContour
+    certificates:
+      provider: None
+      none:
+        caCertificateSecretRef:     # optional, ca.crt of the CA that issued the proxy's certificate
+          name: proxy-ca
+          namespace: educates-secrets
+```
+
 In `Managed` mode, `educatesClusterConfig.policyEnforcement` is required. Workshop security is enforced by Kyverno, and both the `clusterPolicy` and the `workshopPolicy` engines default to `Kyverno`, so whenever either engine is `Kyverno` the `kyverno` block must say how Kyverno is provided: `Bundled` has the operator install it, and `External` uses a Kyverno already installed in the cluster. Setting both engines to `None` runs Educates without workshop security, which is only acceptable for trusted users (see [cluster requirements](cluster-requirements)). A spec that leaves out either block fails validation before any cluster service is installed, with the `ValidationSucceeded` condition of the `EducatesClusterConfig` naming the missing field.
 
 ```yaml
@@ -299,7 +318,7 @@ Runtime behavior settings live on the `SessionManager` custom resource spec, rea
   every node ahead of time. It is off unless ``enabled`` is ``true``. See
   [pre-pulling workshop images](pre-pulling-workshop-images).
 * `imagePullSecretPropagation.sessionNamespaces`: whether workshop session namespaces get copies of the cluster configuration's image pull secrets, `true` unless set. Workshop users can read the secrets there, so `false` keeps the credentials from them; the namespace of a session's vcluster gets them either way. See [air-gapped installation](airgapped-installation) for what then pulls images there.
-* `nodeCATrust`, `remoteAccess`: node-level CA trust injection and cross-cluster CLI access. With `nodeCATrust.mode` at its default, `Auto`, the node CA injector is installed whenever the cluster publishes a CA, which includes every Managed mode install with a custom CA, every `StaticCertificate` install that names a CA trust Secret, and every Inline mode install that names a CA Secret, and also whenever `ingressOverrides.caCertificateSecretRef` is set. Nodes trust the CA the session manager uses: the override's `educates-session-manager-ingress-ca` when one is set, otherwise the cluster's `educates-ingress-ca`. With `Enabled`, the `SessionManager` reports `Ready` as `False` only when neither the cluster nor an override provides a CA. Set it to `Disabled` to keep the privileged node CA injector DaemonSet off. With `remoteAccess.mode` at its default, `Auto`, remote access is installed whenever a `LookupService` exists. The lookup service monitors the cluster it runs on through remote access, so with `Disabled` it still starts but does not monitor that cluster, as [Cluster Monitoring](../lookup-service/cluster-monitoring) describes.
+* `nodeCATrust`, `remoteAccess`: node-level CA trust injection and cross-cluster CLI access. With `nodeCATrust.mode` at its default, `Auto`, the node CA injector is installed whenever the cluster publishes a CA, which includes every Managed mode install with a custom CA, every `StaticCertificate` or `None` provider install that names a CA trust Secret, and every Inline mode install that names a CA Secret, and also whenever `ingressOverrides.caCertificateSecretRef` is set. Nodes trust the CA the session manager uses: the override's `educates-session-manager-ingress-ca` when one is set, otherwise the cluster's `educates-ingress-ca`. With `Enabled`, the `SessionManager` reports `Ready` as `False` only when neither the cluster nor an override provides a CA. Set it to `Disabled` to keep the privileged node CA injector DaemonSet off. With `remoteAccess.mode` at its default, `Auto`, remote access is installed whenever a `LookupService` exists. The lookup service monitors the cluster it runs on through remote access, so with `Disabled` it still starts but does not monitor that cluster, as [Cluster Monitoring](../lookup-service/cluster-monitoring) describes.
 
 Use `kubectl explain sessionmanager.spec` for the full schema. A few spec blocks (`defaultAccessCredentials`, `registryMirrors`, and ConfigMap/URL-sourced themes) are reserved in the CRD but rejected as not yet supported in this release.
 

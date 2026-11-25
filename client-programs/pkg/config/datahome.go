@@ -21,6 +21,11 @@ const DefaultLocalConfigModeline = `# yaml-language-server: $schema=` + v1alpha1
 // mirrors file for completion and validation.
 const LocalMirrorsModeline = `# yaml-language-server: $schema=` + v1alpha1.SchemaBaseURL + v1alpha1.KindEducatesLocalMirrors + `.json`
 
+// LocalRouterModeline is the yaml-language-server modeline that points
+// editors at the published EducatesLocalRouter schema of the router file
+// for completion and validation.
+const LocalRouterModeline = `# yaml-language-server: $schema=` + v1alpha1.SchemaBaseURL + v1alpha1.KindEducatesLocalRouter + `.json`
+
 // hostIPListenAddressComment is the comment above a cluster.listenAddress
 // the CLI wrote from the host's detected IP address.
 const hostIPListenAddressComment = `  # This host's IP address when this file was written. An alias such as
@@ -119,6 +124,16 @@ func DnsmasqIncludeDir(dataHome string) string {
 // the rest of the file as the user wrote it.
 func LocalMirrorsPath(dataHome string) string {
 	return filepath.Join(dataHome, "mirrors.yaml")
+}
+
+// LocalRouterPath is the path of the router file in the data home
+// dataHome: <data-home>/router.yaml. It declares, as an
+// EducatesLocalRouter, the router address, the one host address every
+// local cluster is served on. LoadLocalRouter loads it, and
+// CreateLocalRouter and SetLocalRouterAddress write it, keeping the rest
+// of the file as the user wrote it.
+func LocalRouterPath(dataHome string) string {
+	return filepath.Join(dataHome, "router.yaml")
 }
 
 // LoadLocalConfigIfPresent loads the local config of the data home

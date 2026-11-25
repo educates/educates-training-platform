@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.educates.dev/cli/v1alpha1/EducatesLocalRouter.json",
+  "title": "EducatesLocalRouter",
+  "description": "The router address, declared once in router.yaml in the CLI data home: the one host address every local cluster is served on. 'educates local config init' and 'educates local cluster create' write the file when it is missing, with this host's IP address, and never change an existing one. The file can also be edited by hand.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "address"],
+  "properties": {
+    "apiVersion": { "const": "cli.educates.dev/v1alpha1", "description": "API version of the configuration kind. Always cli.educates.dev/v1alpha1." },
+    "kind":       { "const": "EducatesLocalRouter", "description": "Configuration kind. Always EducatesLocalRouter." },
+
+    "address": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The router address: an IP address of a network interface of this host, neither a loopback address nor the unspecified address 0.0.0.0. Pods and kind nodes resolve every local cluster's names to it, so a loopback address would reach themselves, and an address on no interface reaches nothing. An alias such as 10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not."
+    }
+  }
+}

@@ -4,8 +4,6 @@ import (
 	"archive/tar"
 	"context"
 	"io"
-	"net"
-	"net/netip"
 	"strconv"
 	"strings"
 
@@ -13,6 +11,7 @@ import (
 	"github.com/moby/moby/client"
 	"github.com/pkg/errors"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
@@ -86,19 +85,9 @@ func ObserveLocalClusters(ctx context.Context) (localclusters.Observed, error) {
 		}
 	}
 
-	addrs, err := net.InterfaceAddrs()
+	interfaces, err := hostinfo.InterfaceAddresses()
 	if err != nil {
-		return localclusters.Observed{}, errors.Wrap(err, "unable to list the addresses of the host's network interfaces")
-	}
-	interfaces := make([]netip.Addr, 0, len(addrs))
-	for _, a := range addrs {
-		ipNet, ok := a.(*net.IPNet)
-		if !ok {
-			continue
-		}
-		if addr, ok := netip.AddrFromSlice(ipNet.IP); ok {
-			interfaces = append(interfaces, addr.Unmap())
-		}
+		return localclusters.Observed{}, err
 	}
 
 	mirrors, err := registry.ObserveMirrorContainers(ctx)

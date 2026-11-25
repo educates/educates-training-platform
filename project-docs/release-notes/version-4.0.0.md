@@ -478,13 +478,15 @@ New Features
   local clusters at once, from a terminal for each. When it serves a local
   cluster, the one selected, or with none selected, the one whose kube
   context it reaches its cluster through, ``kind-educates`` or
-  ``kind-educates-<name>``, its proxy listens on the cluster's listen
-  address instead of on ``0.0.0.0``, keeping port 10081, and its Hugo
-  server listens on a free port instead of on 1313. Every serve binds the
-  address of the cluster it serves, so two serves share port 10081 on macOS
-  and Linux alike. ``--local-host``, ``--local-port`` and ``--hugo-port``
-  still take precedence, and for any other cluster the command listens as
-  before.
+  ``kind-educates-<name>``, its proxy listens on the router address, where
+  the cluster's ``localhost.<domain>`` resolves, instead of on
+  ``0.0.0.0``, on a port free there that is chosen for each run instead of
+  on 10081, and ``--patch-workshop`` patches the workshop with that port.
+  Its Hugo server listens on a free port instead of on 1313.
+  ``--local-host``, ``--local-port``, ``--proxy-port`` and ``--hugo-port``
+  still take precedence, so a workshop definition you configured yourself
+  to reach port 10081 needs ``--local-port 10081``, and for any other
+  cluster the command listens as before.
 
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to
@@ -1275,7 +1277,12 @@ Features Changed
 * Every local cluster is now served through one router, the Docker
   container ``educates-router``, which publishes ports 80 and 443 once, on
   the router address, and sends each request to the local cluster that owns
-  the name it asks for, plain HTTP by its ``Host`` header. Version 3
+  the name it asks for, plain HTTP by its ``Host`` header and HTTPS by the
+  server name in its TLS handshake, passed through untouched, so that each
+  cluster presents its own certificate and the router holds no keys. An
+  HTTPS connection for a name no local cluster serves, with no server name,
+  or for a stopped cluster is closed, as the router has no certificate to
+  answer with. Version 3
   published a cluster's ports from its Kind node, on every host address
   unless ``localKindCluster.listenAddress`` named one, and Kind nodes now
   publish no ports at all. The router runs HAProxy, from the long-term

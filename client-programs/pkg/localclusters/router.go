@@ -73,8 +73,13 @@ type RouterFile struct {
 // plain-text 503 naming the cluster and the command that starts it. The
 // router never redirects port 80 to https.
 //
-// Port 443 is published, but no route serves it: every connection is
-// closed.
+// Port 443 routes each connection by the server name of its TLS handshake,
+// lowercased, through the same host map, and passes it through untouched
+// to the node's port 443, where the cluster's ingress presents the
+// certificate its own domain CA issued: the router holds no certificate
+// and no key. A connection that is not TLS, names no server, or names one
+// no route matches is closed, and so is one for a route whose node does
+// not answer. A connection passed through may stay idle for an hour.
 //
 // Each node is found by its container name through Docker's embedded DNS,
 // and its address resolved again every second, so a stopped cluster never
@@ -134,8 +139,8 @@ defaults
     timeout http-request 10s
     timeout http-keep-alive 1m
     timeout client-fin 30s
-    # Upgraded HTTP connections, such as a terminal's websocket, may stay
-    # idle for an hour.
+    # Upgraded HTTP connections, such as a terminal's websocket, and TLS
+    # connections passed through on port 443 may stay idle for an hour.
     timeout tunnel 1h
     # Each node is found by its container name through Docker's embedded
     # DNS, starting with no address, so a stopped cluster never stops the
@@ -172,13 +177,24 @@ frontend http
     http-request set-var(txn.cluster) str(.),concat(,txn.host,),map_end(%s)
     http-request return status 404 content-type "text/plain; charset=utf-8" file %s unless { var(txn.cluster) -m found }
     use_backend http_%%[var(txn.cluster)]
+`, routerConfigPath(routerHostMapFile), routerConfigPath(routerNotFoundFile))
 
-# Port 443: no route serves it, so every connection is closed.
+	fmt.Fprintf(&b, `
+# Port 443: each connection goes to the tls_ backend of the local cluster
+# whose domain is the most specific to match the server name of its TLS
+# handshake. A connection that is not TLS, names no server, or names one no
+# domain matches is closed, since the router has no certificate to answer
+# with.
 frontend https
     mode tcp
     bind :443
-    tcp-request connection reject
-`, routerConfigPath(routerHostMapFile), routerConfigPath(routerNotFoundFile))
+    tcp-request inspect-delay 5s
+    tcp-request content reject unless { req.ssl_hello_type 1 }
+    tcp-request content set-var(sess.sni) req.ssl_sni,lower
+    tcp-request content set-var(sess.cluster) str(.),concat(,sess.sni,),map_end(%s)
+    tcp-request content reject unless { var(sess.cluster) -m found }
+    use_backend tls_%%[var(sess.cluster)]
+`, routerConfigPath(routerHostMapFile))
 
 	for _, r := range routes {
 		key := routeKey(r.Cluster)
@@ -189,8 +205,22 @@ backend http_%s
     http-error status 503 content-type "text/plain; charset=utf-8" file %s
     server node %s:80
 `, routeDescription(r.Cluster), key, routerConfigPath(unavailableFile(r.Cluster)), r.Node)
+		b.WriteString(renderTLSBackend(r))
 	}
 	return b.String()
+}
+
+// renderTLSBackend renders the backend port 443 sends the connections of
+// route r to, by the server name of their TLS handshake: the connection
+// passes through untouched to the node's port 443, where the cluster's
+// ingress presents the certificate its own domain CA issued. A node with
+// no address, such as a stopped cluster's, closes the connection.
+func renderTLSBackend(r RouterRoute) string {
+	return fmt.Sprintf(`
+backend tls_%s
+    mode tcp
+    server node %s:443
+`, routeKey(r.Cluster), r.Node)
 }
 
 // routeDescription names the local cluster id in the router's files.

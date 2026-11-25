@@ -202,14 +202,51 @@ func TestRenderRouterLeavesOutARouteWithNoNames(t *testing.T) {
 	}
 }
 
-// Port 443 is published, but serves no route yet: every connection is
-// closed.
-func TestRenderRouterClosesEveryConnectionOnPort443(t *testing.T) {
+// Port 443 routes each connection by the server name of its TLS handshake,
+// lowercased and looked up with a leading dot in the same host map as port
+// 80, and refuses a connection that is not TLS, that names no server, or
+// whose server name no route matches, since the router has no certificate
+// to answer with.
+func TestRenderRouterRoutesPort443ByTheTLSServerName(t *testing.T) {
 	files := RenderRouter([]RouterRoute{{Cluster: Default(t.TempDir()), Names: []string{"educates.test"}, Node: "educates-control-plane"}})
 
-	want := "frontend https\n    mode tcp\n    bind :443\n    tcp-request connection reject\n"
+	want := `frontend https
+    mode tcp
+    bind :443
+    tcp-request inspect-delay 5s
+    tcp-request content reject unless { req.ssl_hello_type 1 }
+    tcp-request content set-var(sess.sni) req.ssl_sni,lower
+    tcp-request content set-var(sess.cluster) str(.),concat(,sess.sni,),map_end(/usr/local/etc/haproxy/hosts.map)
+    tcp-request content reject unless { var(sess.cluster) -m found }
+    use_backend tls_%[var(sess.cluster)]
+`
 	if got := configSection(t, files, "frontend https"); got != want {
 		t.Errorf("443 frontend:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// A cluster's TLS passes through the router untouched to its control-plane
+// node's port 443, where its own ingress presents the certificate its
+// domain CA issued: the backend is TCP, with no certificate of the
+// router's.
+func TestRenderRouterPassesEachClusterTLSThroughToItsControlPlaneNodeOnPort443(t *testing.T) {
+	dataHome := t.TempDir()
+
+	files := RenderRouter([]RouterRoute{
+		{Cluster: Default(dataHome), Names: []string{"educates.test"}, Node: "educates-control-plane", State: Running},
+		{Cluster: namedID(t, "test2", dataHome), Names: []string{"test2.educates.test"}, Node: "educates-test2-control-plane", State: Stopped},
+	})
+
+	for header, want := range map[string]string{
+		"backend tls_educates":       "backend tls_educates\n    mode tcp\n    server node educates-control-plane:443\n",
+		"backend tls_educates-test2": "backend tls_educates-test2\n    mode tcp\n    server node educates-test2-control-plane:443\n",
+	} {
+		if got := configSection(t, files, header); got != want {
+			t.Errorf("backend:\n%s\nwant:\n%s", got, want)
+		}
+	}
+	if cfg := renderedFile(t, files, "haproxy.cfg"); strings.Contains(cfg, " ssl") || strings.Contains(cfg, " crt ") {
+		t.Errorf("haproxy.cfg ends TLS for a cluster whose TLS passes through:\n%s", cfg)
 	}
 }
 

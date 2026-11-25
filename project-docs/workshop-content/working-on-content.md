@@ -312,6 +312,8 @@ Rather than relying on the `--patch-workshop` option, you could instead add this
 educates serve-workshop
 ```
 
+When the command serves a local cluster, its proxy listens on a free port chosen for each run, as described in [Running several local clusters](multiple-local-clusters), so with a workshop definition you configured yourself, give the port it names, as in `educates serve-workshop --local-port 10081`.
+
 Note that when the `--patch-workshop` is used, in addition to the above configuration, it is also automatically configuring a shared secret token so that access from the workshop session is trusted. This will not be present if you inject this specific configuration yourself and anyone could access the local workshop instructions.
 
 If you want to secure access via a shared access token you should instead use:

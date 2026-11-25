@@ -1,0 +1,52 @@
+# An exporter offering its Secret to both target namespaces under one shared
+# secret, and three importers: one with the right shared secret, one with
+# the wrong one, and one that no exporter offers a Secret to.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: export
+  namespace: kit-secrets-manager-source
+stringData:
+  db-password: exported-value
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretExporter
+metadata:
+  name: export
+  namespace: kit-secrets-manager-source
+spec:
+  rules:
+  - targetNamespaces:
+      nameSelector:
+        matchNames:
+        - kit-secrets-manager-target-a
+        - kit-secrets-manager-target-b
+    copyAuthorization:
+      sharedSecret: kit-secrets-manager-export-shared
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretImporter
+metadata:
+  name: export
+  namespace: kit-secrets-manager-target-a
+spec:
+  copyAuthorization:
+    sharedSecret: kit-secrets-manager-export-shared
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretImporter
+metadata:
+  name: export
+  namespace: kit-secrets-manager-target-b
+spec:
+  copyAuthorization:
+    sharedSecret: not-the-right-one
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretImporter
+metadata:
+  name: nobody-exports
+  namespace: kit-secrets-manager-target-b
+spec:
+  copyAuthorization:
+    sharedSecret: anything

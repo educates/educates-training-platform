@@ -1,0 +1,17 @@
+# An injector in sync, and one whose source selector selects nothing, until fix names a Secret.
+[applied]
+secretinjector/kit-secrets-manager-injector  ready   = True
+secretinjector/kit-secrets-manager-injector  reason  = InSync
+secretinjector/kit-secrets-manager-injector  insync  = 1/1
+kit-secrets-manager-target-a/serviceaccount/default  {.imagePullSecrets[*].name}  ~ pull
+secretinjector/kit-secrets-manager-injector-empty  ready    = False
+secretinjector/kit-secrets-manager-injector-empty  reason   = InvalidSelector
+secretinjector/kit-secrets-manager-injector-empty  message  ~ sourceSecrets select no Secrets
+event secretinjector/kit-secrets-manager-injector-empty  Warning NotReady
+
+[fixed]
+secretinjector/kit-secrets-manager-injector  reason  = InSync
+secretinjector/kit-secrets-manager-injector-empty  ready   = True
+secretinjector/kit-secrets-manager-injector-empty  reason  = InSync
+secretinjector/kit-secrets-manager-injector-empty  insync  = 1/1
+event secretinjector/kit-secrets-manager-injector-empty  Normal Recovered

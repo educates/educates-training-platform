@@ -1,0 +1,6 @@
+# Two copiers admission refuses, tried with a server-side dry run, so nothing is created.
+[applied]
+reject keys-empty.yaml  ~ should have at least 1 items
+reject reserved-annotation.yaml  ~ annotation keys under secrets.educates.dev/ are reserved for the secrets-manager
+secretcopier/kit-secrets-manager-rejected-keys-empty  absent
+secretcopier/kit-secrets-manager-rejected-annotation  absent

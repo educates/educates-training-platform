@@ -1,0 +1,15 @@
+# A copier whose source Secret does not exist, until fix creates it.
+[applied]
+secretcopier/kit-secrets-manager-source-missing  ready   = False
+secretcopier/kit-secrets-manager-source-missing  reason  = SourceMissing
+secretcopier/kit-secrets-manager-source-missing  insync  = 0/1
+secretcopier/kit-secrets-manager-source-missing  message ~ source Secret kit-secrets-manager-source/not-there-yet does not exist
+kit-secrets-manager-target-a/secret/not-there-yet  absent
+event secretcopier/kit-secrets-manager-source-missing  Warning NotReady
+
+[fixed]
+secretcopier/kit-secrets-manager-source-missing  ready   = True
+secretcopier/kit-secrets-manager-source-missing  reason  = InSync
+secretcopier/kit-secrets-manager-source-missing  insync  = 1/1
+kit-secrets-manager-target-a/secret/not-there-yet  {{index .data "value" | base64decode}}  = arrived
+event secretcopier/kit-secrets-manager-source-missing  Normal Recovered

@@ -1,0 +1,4 @@
+# The kit's states are those of the Go secrets-manager: its CRDs carry
+# status.summary, which the Python secrets-manager's lack.
+customresourcedefinition/secretcopiers.secrets.educates.dev  {.spec.versions[?(@.name=="v1beta1")].schema.openAPIV3Schema.properties.status.properties.summary.type}  = object
+educates/deployment/secrets-manager  {.status.conditions[?(@.type=="Available")].status}  = True

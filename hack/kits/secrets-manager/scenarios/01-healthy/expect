@@ -1,0 +1,9 @@
+# A copier in sync: the copy carries its source's labels and the copier's own.
+[applied]
+secretcopier/kit-secrets-manager-healthy  ready   = True
+secretcopier/kit-secrets-manager-healthy  reason  = InSync
+secretcopier/kit-secrets-manager-healthy  insync  = 1/1
+kit-secrets-manager-target-a/secret/healthy  {{index .data "username" | base64decode}}  = demo
+kit-secrets-manager-target-a/secret/healthy  {.metadata.labels.team}  = platform
+kit-secrets-manager-target-a/secret/healthy  {.metadata.labels.copied-by}  = kit-secrets-manager
+kit-secrets-manager-target-a/secret/healthy  {{index .metadata.annotations "example.com/backup"}}  = skip

@@ -1,0 +1,14 @@
+# A copier whose source Secret does not exist.
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretCopier
+metadata:
+  name: kit-secrets-manager-source-missing
+spec:
+  rules:
+  - sourceSecret:
+      name: not-there-yet
+      namespace: kit-secrets-manager-source
+    targetNamespaces:
+      nameSelector:
+        matchNames:
+        - kit-secrets-manager-target-a

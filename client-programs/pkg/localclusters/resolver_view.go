@@ -31,8 +31,8 @@ type ResolverClusterRow struct {
 	// cluster.
 	Cluster string
 
-	// Address is the address the cluster's names resolve to, its listen
-	// address.
+	// Address is the address the cluster's names resolve to, the router
+	// address, which every local cluster shares.
 	Address string
 
 	// Config names the cluster's config, as the heading of its entries in

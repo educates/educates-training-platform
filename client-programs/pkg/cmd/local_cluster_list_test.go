@@ -27,13 +27,13 @@ func listControlPlane(kindName, hostIP string, running bool) localclusters.NodeC
 	}
 }
 
-func TestLocalClusterListShowsEveryEducatesClusterWithTheDefaultMarked(t *testing.T) {
+func TestLocalClusterListShowsTheRouterAddressAndEveryEducatesClusterWithTheDefaultMarked(t *testing.T) {
 	dataHome := t.TempDir()
 	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
-		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.2\n")
+		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: test2.educates.test\n")
 	defaultNode := listControlPlane("educates", "10.10.10.1", true)
 	defaultNode.KubernetesVersion = "v1.36.4"
 	inventory := localclusters.NewInventory(localclusters.Observed{Nodes: []localclusters.NodeContainer{
@@ -45,16 +45,17 @@ func TestLocalClusterListShowsEveryEducatesClusterWithTheDefaultMarked(t *testin
 	}}, dataHome)
 	var out, errOut bytes.Buffer
 
-	printLocalClusterList(&out, &errOut, inventory.List())
+	printLocalClusterList(&out, &errOut, inventory)
 
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("got %d lines, want a header and 2 rows:\n%s", len(lines), out.String())
+	if len(lines) != 5 || lines[0] != "Router address: 10.10.10.1" || lines[1] != "" {
+		t.Fatalf("got\n%s\nwant the router address, an empty line, a header and 2 rows", out.String())
 	}
+	lines = lines[2:]
 	wantRows := [][]string{
-		{"NAME", "STATE", "NODES", "KUBERNETES", "LISTEN", "IP", "DOMAIN", "CONTEXT"},
-		{"(default)", "running", "1", "v1.36.4", "10.10.10.1", "educates.test", "kind-educates"},
-		{"test2", "stopped", "3", "-", "10.10.10.2", "test2.10-10-10-1.nip.io", "kind-educates-test2"},
+		{"NAME", "STATE", "NODES", "KUBERNETES", "DOMAIN", "CONTEXT"},
+		{"(default)", "running", "1", "v1.36.4", "educates.test", "kind-educates"},
+		{"test2", "stopped", "3", "-", "test2.educates.test", "kind-educates-test2"},
 	}
 	for i, want := range wantRows {
 		if got := strings.Fields(lines[i]); strings.Join(got, " ") != strings.Join(want, " ") {
@@ -68,20 +69,42 @@ func TestLocalClusterListShowsEveryEducatesClusterWithTheDefaultMarked(t *testin
 
 func TestLocalClusterListWarnsAboutAConfigThatDoesNotLoad(t *testing.T) {
 	dataHome := t.TempDir()
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
-		twoControlPlanesConfig)
+		"apiVersion: cli.educates.dev/v1alpha9\nkind: EducatesLocalConfig\n")
 	inventory := localclusters.NewInventory(localclusters.Observed{Nodes: []localclusters.NodeContainer{
 		listControlPlane("educates-test2", "10.10.10.2", true),
 	}}, dataHome)
 	var out, errOut bytes.Buffer
 
-	printLocalClusterList(&out, &errOut, inventory.List())
+	printLocalClusterList(&out, &errOut, inventory)
 
-	if got := strings.Fields(strings.Split(strings.TrimSpace(out.String()), "\n")[1]); strings.Join(got, " ") !=
-		"test2 running 1 - 10.10.10.2 - kind-educates-test2" {
+	if got := strings.Fields(strings.Split(strings.TrimSpace(out.String()), "\n")[3]); strings.Join(got, " ") !=
+		"test2 running 1 - - kind-educates-test2" {
 		t.Errorf("row = %q, want the unread version and the domain shown as -", got)
 	}
-	for _, part := range []string{`local cluster "test2"`, `2 nodes have role "control-plane"`} {
+	for _, part := range []string{`local cluster "test2"`, "unsupported apiVersion"} {
+		if !strings.Contains(errOut.String(), part) {
+			t.Errorf("warnings %q do not mention %q", errOut.String(), part)
+		}
+	}
+}
+
+func TestLocalClusterListWarnsWithoutARouterAddress(t *testing.T) {
+	dataHome := t.TempDir()
+	writeLocalClusterListFile(t, filepath.Join(dataHome, "config.yaml"),
+		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
+	inventory := localclusters.NewInventory(localclusters.Observed{Nodes: []localclusters.NodeContainer{
+		listControlPlane("educates", "10.10.10.1", true),
+	}}, dataHome)
+	var out, errOut bytes.Buffer
+
+	printLocalClusterList(&out, &errOut, inventory)
+
+	if first := strings.Split(out.String(), "\n")[0]; first != "Router address: -" {
+		t.Errorf("first line = %q, want the router address shown as -", first)
+	}
+	for _, part := range []string{"router.yaml", "educates local router update --address <ip>"} {
 		if !strings.Contains(errOut.String(), part) {
 			t.Errorf("warnings %q do not mention %q", errOut.String(), part)
 		}
@@ -91,10 +114,13 @@ func TestLocalClusterListWarnsAboutAConfigThatDoesNotLoad(t *testing.T) {
 func TestLocalClusterListWithNoCluster(t *testing.T) {
 	var out, errOut bytes.Buffer
 
-	printLocalClusterList(&out, &errOut, localclusters.NewInventory(localclusters.Observed{}, t.TempDir()).List())
+	printLocalClusterList(&out, &errOut, localclusters.NewInventory(localclusters.Observed{}, t.TempDir()))
 
 	if !strings.Contains(out.String(), "No local clusters") {
 		t.Errorf("output %q does not say there are no local clusters", out.String())
+	}
+	if errOut.Len() != 0 {
+		t.Errorf("got warnings %q, want none with no local cluster to reach", errOut.String())
 	}
 }
 

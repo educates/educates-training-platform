@@ -121,15 +121,15 @@ func TestListRows(t *testing.T) {
 	rows := NewInventory(observed, dataHome).List()
 
 	want := []struct {
-		name, state             string
-		nodes                   int
-		version                 string
-		listen, domain, context string
-		isDefault               bool
+		name, state     string
+		nodes           int
+		version         string
+		domain, context string
+		isDefault       bool
 	}{
-		{"", "running", 1, "v1.36.4", "10.10.10.1", "educates.test", "kind-educates", true},
-		{"test2", "stopped", 2, "v1.35.8", "10.10.10.2", "test2.10-10-10-1.nip.io", "kind-educates-test2", false},
-		{"test3", "partly running", 2, "", "10.10.10.3", "test3.educates.test", "kind-educates-test3", false},
+		{"", "running", 1, "v1.36.4", "educates.test", "kind-educates", true},
+		{"test2", "stopped", 2, "v1.35.8", "test2.10-10-10-1.nip.io", "kind-educates-test2", false},
+		{"test3", "partly running", 2, "", "test3.educates.test", "kind-educates-test3", false},
 	}
 	if len(rows) != len(want) {
 		t.Fatalf("List() returned %d rows, want %d: %+v", len(rows), len(want), rows)
@@ -137,10 +137,10 @@ func TestListRows(t *testing.T) {
 	for i, w := range want {
 		r := rows[i]
 		if r.Identity.Name != w.name || r.Identity.IsDefault() != w.isDefault || string(r.State) != w.state ||
-			r.Nodes != w.nodes || r.KubernetesVersion != w.version || r.ListenAddress != w.listen ||
+			r.Nodes != w.nodes || r.KubernetesVersion != w.version ||
 			r.Domain != w.domain || r.Identity.Context != w.context {
-			t.Errorf("row %d = {name %q, default %t, state %q, nodes %d, version %q, listen %q, domain %q, context %q}, want %+v",
-				i, r.Identity.Name, r.Identity.IsDefault(), r.State, r.Nodes, r.KubernetesVersion, r.ListenAddress,
+			t.Errorf("row %d = {name %q, default %t, state %q, nodes %d, version %q, domain %q, context %q}, want %+v",
+				i, r.Identity.Name, r.Identity.IsDefault(), r.State, r.Nodes, r.KubernetesVersion,
 				r.Domain, r.Identity.Context, w)
 		}
 		if r.ConfigError != nil {
@@ -210,9 +210,6 @@ func TestListRowsOfClustersWithoutAConfig(t *testing.T) {
 			t.Errorf("row of %s: domain %q, config error %v; want no domain and no error", r.Identity.KindName, r.Domain, r.ConfigError)
 		}
 	}
-	if rows[0].ListenAddress != "0.0.0.0" {
-		t.Errorf("listen address of the default cluster = %q, want 0.0.0.0", rows[0].ListenAddress)
-	}
 }
 
 func TestListRowsReportAConfigThatDoesNotLoad(t *testing.T) {
@@ -264,19 +261,6 @@ func TestListRowsTakeTheKubernetesVersionOfTheFirstControlPlane(t *testing.T) {
 
 	if len(rows) != 1 || rows[0].KubernetesVersion != "v1.36.4" {
 		t.Errorf("List() = %+v, want one row with the version of educates-control-plane, v1.36.4", rows)
-	}
-}
-
-func TestListRowsLeaveTheListenAddressEmptyWithNoIngressBinding(t *testing.T) {
-	dataHome := t.TempDir()
-	observed := Observed{Nodes: []NodeContainer{
-		{Name: "educates-control-plane", KindCluster: "educates", Role: "control-plane"},
-	}}
-
-	rows := NewInventory(observed, dataHome).List()
-
-	if len(rows) != 1 || rows[0].ListenAddress != "" {
-		t.Errorf("List() = %+v, want one row with no listen address", rows)
 	}
 }
 

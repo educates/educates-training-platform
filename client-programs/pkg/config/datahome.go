@@ -136,6 +136,16 @@ func LocalRouterPath(dataHome string) string {
 	return filepath.Join(dataHome, "router.yaml")
 }
 
+// LocalRouterDir is the path of the router folder in the data home
+// dataHome: <data-home>/router. It holds the router's configuration, which
+// the CLI renders from every local cluster's config, and the router
+// container mounts it read-only. It is the CLI's alone: the CLI rewrites
+// it as local clusters are created, started and deleted, and removes it
+// with the router, keeping router.yaml.
+func LocalRouterDir(dataHome string) string {
+	return filepath.Join(dataHome, "router")
+}
+
 // LoadLocalConfigIfPresent loads the local config of the data home
 // dataHome as it is. It returns nil when the file does not exist or holds
 // another kind than EducatesLocalConfig, and neither migrates nor writes

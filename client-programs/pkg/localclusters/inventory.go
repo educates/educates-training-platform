@@ -26,6 +26,10 @@ type Observed struct {
 	// Mirrors is every registry mirror container on the Docker host,
 	// running or stopped, which every local cluster shares.
 	Mirrors []MirrorContainer
+
+	// Router is the router container, running or stopped, which every
+	// local cluster shares, or nil when there is none.
+	Router *RouterContainer
 }
 
 // Inventory is what the CLI knows about the Educates clusters of one data
@@ -69,8 +73,9 @@ func (inv Inventory) Clusters() []Identity {
 
 // SharedInfrastructureUsers returns the Educates clusters, other than
 // deleted, that still use the host infrastructure every local cluster
-// shares: the local registry, the DNS resolver and the registry mirrors.
-// With none, deleting the local cluster deleted may remove them.
+// shares: the local registry, the DNS resolver, the registry mirrors and
+// the router. With none, deleting the local cluster deleted may remove
+// them, the router with its folder.
 func (inv Inventory) SharedInfrastructureUsers(deleted Identity) []Identity {
 	var users []Identity
 	for _, id := range inv.clusters {

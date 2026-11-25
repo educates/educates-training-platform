@@ -71,7 +71,8 @@ type VolumeMount struct {
 
 // LocalResolverConfig is a local cluster's entries in the local DNS
 // resolver every local cluster shares. Its names, the cluster's ingress
-// domain and ExtraDomains, resolve to the cluster's listen address.
+// domain and ExtraDomains, resolve to the router address, where the
+// router sends them to the cluster.
 type LocalResolverConfig struct {
 	ExtraDomains []string `yaml:"extraDomains,omitempty"`
 }
@@ -182,8 +183,8 @@ type OperatorImage struct {
 //   - The local cluster rules (localclusters.LoadConfigFile) fill
 //     ingress.domain with a nip.io name when it is empty, for the config
 //     of a local cluster: the router address's for the default local
-//     cluster, and cluster.listenAddress's for a named one. Render and deploy
-//     with `--config`, the GitOps mode, don't apply them.
+//     cluster, and a named one's name under it. Render and deploy with
+//     `--config`, the GitOps mode, don't apply them.
 func (c *EducatesLocalConfig) WithDefaults() *EducatesLocalConfig {
 	if c.ClusterAdmin == nil {
 		t := true

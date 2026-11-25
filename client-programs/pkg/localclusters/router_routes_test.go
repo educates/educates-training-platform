@@ -115,6 +115,43 @@ func TestRouterRoutesServeTheDefaultClusterAtTheNipDomainOfTheRouterAddress(t *t
 		Node: "educates-control-plane", State: Running})
 }
 
+// A named cluster declaring no domain is served at its name under the
+// nip.io name of the router address, nested under the default cluster's,
+// and the router's host map takes the most specific domain first, of
+// every cluster's domain and extra domains alike, so that each name
+// reaches the cluster the resolver sends it for.
+func TestRouterRoutesServeNamedClustersByNameMostSpecificDomainFirst(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
+		"resolver:\n  extraDomains:\n  - educates.test\n")
+	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader)
+	writeDataHomeConfig(t, dataHome, "clusters/pr1341/config.yaml", localConfigHeader+
+		"ingress:\n  domain: pr1341.educates.test\nresolver:\n  extraDomains:\n  - apps.example.test\n")
+
+	routes := routerRoutes(t, dataHome, []NodeContainer{
+		kindControlPlane("educates", true),
+		kindControlPlane("educates-test2", true),
+		kindControlPlane("educates-pr1341", false),
+	})
+
+	wantRoutes(t, routes,
+		routeSummary{KindName: "educates", Names: []string{"10-10-10-1.nip.io", "educates.test"},
+			Node: "educates-control-plane", State: Running},
+		routeSummary{KindName: "educates-pr1341", Names: []string{"pr1341.educates.test", "apps.example.test"},
+			Node: "educates-pr1341-control-plane", State: Stopped},
+		routeSummary{KindName: "educates-test2", Names: []string{"test2.10-10-10-1.nip.io"},
+			Node: "educates-test2-control-plane", State: Running},
+	)
+	wantEntries(t, mapEntries(t, RenderRouter(routes)),
+		".test2.10-10-10-1.nip.io educates-test2",
+		".10-10-10-1.nip.io educates",
+		".apps.example.test educates-pr1341",
+		".pr1341.educates.test educates-pr1341",
+		".educates.test educates",
+	)
+}
+
 // A config given is that of a cluster being created, which replaces the
 // one in the data home, and is routed whether or not its nodes exist yet.
 func TestRouterRoutesServeAClusterBeingCreatedFromItsGivenConfig(t *testing.T) {
@@ -137,7 +174,7 @@ func TestRouterRoutesLeaveOutAClusterWhoseConfigTheyCannotUse(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
-	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
+	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", twoControlPlanesConfig)
 	addClusterFolder(t, dataHome, "test3")
 
 	routes, leftOut, err := NewInventory(Observed{Nodes: []NodeContainer{
@@ -155,7 +192,7 @@ func TestRouterRoutesLeaveOutAClusterWhoseConfigTheyCannotUse(t *testing.T) {
 		t.Fatalf("left out %v, want test2's and test3's configs", leftOut)
 	}
 	wantErrorMentioning(t, leftOut[0], "router", `local cluster "test2"`,
-		filepath.Join(dataHome, "clusters", "test2", "config.yaml"), "loopback")
+		filepath.Join(dataHome, "clusters", "test2", "config.yaml"), twoControlPlanes)
 	wantErrorMentioning(t, leftOut[1], "router", `local cluster "test3"`, "no config")
 }
 

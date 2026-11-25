@@ -31,9 +31,12 @@ var localClusterCreateExample = `
   # Create only the kind cluster + registry, skipping the platform install:
   educates local cluster create --cluster-only
 
-  # Create the named local cluster test2 beside the default one, on a host
-  # IP of its own, writing its config when it has none:
-  educates local cluster create --local-cluster test2 --listen-address 10.10.10.2
+  # Create the named local cluster test2 beside the default one, writing
+  # its config when it has none, served at test2.<router address>.nip.io:
+  educates local cluster create --local-cluster test2
+
+  # Create it on a domain of its own, under the default cluster's:
+  educates local cluster create --local-cluster test2 --domain test2.educates.test
 `
 
 type LocalClusterCreateOptions struct {
@@ -47,10 +50,12 @@ type LocalClusterCreateOptions struct {
 	Timeout           time.Duration
 	Verbose           bool
 
-	// ListenAddress and Domain write a named local cluster's missing
-	// config.
+	// Domain writes the local cluster's missing config.
+	Domain string
+
+	// ListenAddress is the value of --listen-address, which is ignored,
+	// with a warning: a local cluster has no address of its own.
 	ListenAddress string
-	Domain        string
 }
 
 func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
@@ -80,19 +85,17 @@ cluster before the deploy can become ready.
 Every local cluster is served through the router, the container
 educates-router, which publishes ports 80 and 443 on the router address,
 the one host address every local cluster shares, and sends each request
-to the cluster that owns its name. Kind nodes publish no ports. Once the
-config loads, create writes <data-home>/router.yaml when it is missing,
-before any check, with the host's IP address as the router address. An
-existing router.yaml is left as it is. With no ingress.domain the default
-local cluster takes the nip.io name of the router address, and a named
-one the nip.io name of its listen address, and is served over plain
-HTTP.
+to the cluster that owns its name. Kind nodes publish no ports, and a
+cluster has no host address of its own. Before the config loads, create
+writes <data-home>/router.yaml when it is missing, with the host's IP
+address as the router address. An existing router.yaml is left as it is.
+With no ingress.domain the default local cluster takes the nip.io name of
+the router address, such as 10-10-10-1.nip.io, and a named one its name
+under it, such as test2.10-10-10-1.nip.io, and is served over plain HTTP.
 
-Every local cluster's cluster.listenAddress must still be a specific IP
-address of the host, neither 0.0.0.0 nor a loopback address. When the
-local cluster's config is missing, create writes it from --listen-address
-and the optional --domain, and without --listen-address the default local
-cluster takes the host's IP address.
+When the local cluster's config is missing, create writes it, declaring
+the optional --domain and nothing else. --listen-address is ignored, with
+a warning: every local cluster is served on the router address.
 
 Before kind is touched, create creates the router when it is missing, and
 re-creates it when it runs another image than the one this CLI pins,
@@ -155,8 +158,8 @@ deploy against a hand-prepared cluster.`,
 	c.Flags().StringVarP(&o.Config, "config", "c", "", "path to a CLI config file (any kind)")
 	c.Flags().BoolVar(&o.LocalConfig, "local-config", false, "use the local cluster's config in the data home (default when --config is not given)")
 	addLocalClusterFlag(c)
-	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP written to the local cluster's config as cluster.listenAddress when it has none (default: this host's IP address for the default local cluster; required for a named one)")
-	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to the local cluster's config when it has none (default: the nip.io name of the router address for the default local cluster, and of the listen address for a named one)")
+	addIgnoredListenAddressFlag(c, &o.ListenAddress)
+	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to the local cluster's config when it has none (default: the nip.io name of the router address for the default local cluster, and the cluster's name under it for a named one)")
 	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file kind writes the cluster's context into, and the platform deploy uses (defaults to ~/.kube/config)")
 	c.Flags().StringVar(&o.ClusterImage, "kind-cluster-image", "", "docker image to use when booting the kind cluster (overrides --kubernetes-version)")
 	c.Flags().StringVar(&o.KubernetesVersion, "kubernetes-version", constants.DefaultKubernetesVersion, fmt.Sprintf("Kubernetes version for the kind cluster (supported: %v)", constants.SupportedKubernetesVersions()))
@@ -170,7 +173,8 @@ deploy against a hand-prepared cluster.`,
 }
 
 func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o *LocalClusterCreateOptions, id localclusters.Identity) error {
-	cfg, configPath, createdConfig, err := loadLocalConfig(o, id)
+	warnIgnoredListenAddress(w, o.ListenAddress)
+	cfg, configPath, createdConfig, err := loadLocalConfig(w, o, id)
 	if err != nil {
 		return err
 	}
@@ -179,20 +183,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		fmt.Fprintf(w, "No local config found — wrote a default EducatesLocalConfig to %s\n", configPath)
 		fmt.Fprintf(w, "Continuing with defaults; view or edit it with 'educates local config view' / 'educates local config edit'.\n\n")
 	case createdConfig:
-		fmt.Fprintf(w, "Local cluster %q had no config; wrote one from --%s to %s\n\n", id.Name, localclusters.ListenAddressFlagName, configPath)
-	}
-	// The router file, router.yaml in the data home, holds the router
-	// address, the one host address every local cluster is served on. A
-	// missing one is written with the host's IP address before any check,
-	// and before anything touches Docker. The default local cluster's
-	// nip.io domain is the router address's, so its config is loaded again
-	// once the file is written.
-	if written, err := ensureRouterFile(w); err != nil {
-		return err
-	} else if written {
-		if cfg, _, _, err = loadLocalConfig(o, id); err != nil {
-			return err
-		}
+		fmt.Fprintf(w, "Local cluster %q had no config; wrote one to %s\n\n", id.Name, configPath)
 	}
 
 	// 0. Preflight: fail fast (before any docker / kind / k8s mutation)
@@ -364,21 +355,25 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 // target.provider=kind; everything else errors.
 //
 // The config comes from --config when given, and otherwise from the
-// cluster's config in the data home, written from --listen-address and
-// --domain when missing, as localclusters.EnsureConfig writes it: the
-// default local cluster's takes the host's IP address without
-// --listen-address. A v3 install of the default local cluster is
+// cluster's config in the data home, written from --domain when missing,
+// as localclusters.EnsureConfig writes it, for the default local cluster
+// and a named one alike. A v3 install of the default local cluster is
 // migrated first. Either way the config follows the rules of
 // localclusters.LoadConfigFile, and a named cluster's folder exists once
 // it loads: --config makes it, without copying the file into it.
-func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v1alpha1.Config, string, bool, error) {
-	flags := localclusters.ConfigFlags{ListenAddress: o.ListenAddress, Domain: o.Domain}
+//
+// A config that declares no ingress domain takes it from the router
+// address, so the router file, router.yaml in the data home, is written
+// first when it is missing, as ensureRouterFile writes it, telling w,
+// after the v3 migration, which carries the router address over.
+func loadLocalConfig(w io.Writer, o *LocalClusterCreateOptions, id localclusters.Identity) (v1alpha1.Config, string, bool, error) {
+	flags := localclusters.ConfigFlags{Domain: o.Domain}
 	path, created := id.ConfigPath, false
 	if o.Config != "" {
 		path = o.Config
 		if !flags.IsZero() {
-			return nil, path, false, fmt.Errorf("--%s and --%s write a missing config in the data home, so they can't be combined with --config",
-				localclusters.ListenAddressFlagName, localclusters.DomainFlagName)
+			return nil, path, false, fmt.Errorf("--%s writes a missing config in the data home, so it can't be combined with --config",
+				localclusters.DomainFlagName)
 		}
 		// The config stays in the file, but a named cluster's folder in
 		// the data home is what makes its kind cluster an Educates
@@ -386,16 +381,19 @@ func loadLocalConfig(o *LocalClusterCreateOptions, id localclusters.Identity) (v
 		if err := localclusters.MakeClusterFolder(id); err != nil {
 			return nil, path, false, err
 		}
-	} else {
+	} else if id.IsDefault() {
 		// Unlike render/deploy, a first-time laptop create shouldn't
 		// dead-end on "run config init first", so a missing config is
-		// written in place. Migration of an existing v3 install still
-		// takes priority, and an unmigratable one refuses.
-		if id.IsDefault() {
-			if err := config.MaybeMigrateV3(utils.GetEducatesHomeDir(), os.Stderr); err != nil {
-				return nil, path, false, err
-			}
+		// written in place, below. Migration of an existing v3 install
+		// still takes priority, and an unmigratable one refuses.
+		if err := config.MaybeMigrateV3(utils.GetEducatesHomeDir(), os.Stderr); err != nil {
+			return nil, path, false, err
 		}
+	}
+	if _, err := ensureRouterFile(w); err != nil {
+		return nil, path, false, err
+	}
+	if o.Config == "" {
 		var err error
 		if created, err = localclusters.EnsureConfig(id, flags); err != nil {
 			return nil, path, false, err

@@ -47,8 +47,11 @@ canonical file. A failing validation reopens the editor with the error
 shown inline (kubectl-edit style), preserving your in-progress changes,
 until the configuration is valid or you abort. On save it is also
 validated against the rules of a local cluster's config, such as a
-cluster.listenAddress that is a specific IP address of the host, and a
-cluster.nodes list, when declared, with exactly one control-plane node.
+cluster.nodes list, when declared, with exactly one control-plane node,
+and, without an ingress.domain, a router address in
+<data-home>/router.yaml that has a nip.io name. Editing a missing
+<data-home>/config.yaml writes router.yaml first when it is missing, as
+'educates local config init' does.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, edits the config of a
 named local cluster instead, <data-home>/clusters/<name>/config.yaml,
@@ -68,7 +71,7 @@ which 'educates local config init --local-cluster <name>' writes first.`,
 
 // runLocalConfigEdit edits the config of the local cluster id in the
 // user's editor. A named local cluster's config must exist already: it is
-// written with 'local config init', which takes its listen address.
+// written with 'local config init'.
 func runLocalConfigEdit(id localclusters.Identity) error {
 	if err := checkNamedConfigExists(id); err != nil {
 		return err
@@ -94,9 +97,14 @@ func runLocalConfigEdit(id localclusters.Identity) error {
 
 	// Seed with current contents, or the minimal init stub when no canonical
 	// file exists yet — so 'edit' on a pristine data home is a working flow.
+	// A config without a domain takes it from the router address, so the
+	// router file is written first when it is missing, as init writes it.
 	seed, err := config.ReadConfigFile(canonical)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		if _, err := ensureRouterFile(os.Stdout); err != nil {
 			return err
 		}
 		if seed, err = localclusters.ConfigYAML(id, localclusters.ConfigFlags{}); err != nil {

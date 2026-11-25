@@ -104,6 +104,7 @@ func writeClusterConfig(t *testing.T, dataHome, name, body string) {
 
 func TestListRows(t *testing.T) {
 	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
 	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.2\n")
 	writeClusterConfig(t, dataHome, "test3", localConfigHeader+
@@ -127,7 +128,7 @@ func TestListRows(t *testing.T) {
 		isDefault               bool
 	}{
 		{"", "running", 1, "v1.36.4", "10.10.10.1", "educates.test", "kind-educates", true},
-		{"test2", "stopped", 2, "v1.35.8", "10.10.10.2", "10-10-10-2.nip.io", "kind-educates-test2", false},
+		{"test2", "stopped", 2, "v1.35.8", "10.10.10.2", "test2.10-10-10-1.nip.io", "kind-educates-test2", false},
 		{"test3", "partly running", 2, "", "10.10.10.3", "test3.educates.test", "kind-educates-test3", false},
 	}
 	if len(rows) != len(want) {
@@ -163,7 +164,7 @@ func TestListRowsShowTheDomainTheResolverServes(t *testing.T) {
 
 	rows := inv.List()
 
-	for i, want := range []string{"10-10-10-1.nip.io", "10-10-10-2.nip.io"} {
+	for i, want := range []string{"10-10-10-1.nip.io", "test2.10-10-10-1.nip.io"} {
 		if got := rows[i].Domain; got != want {
 			t.Errorf("%s's domain = %q, want %q", rows[i].Identity.Description(), got, want)
 		}
@@ -179,18 +180,16 @@ func TestListRowsShowTheDomainTheResolverServes(t *testing.T) {
 	}
 }
 
-func TestListRowsReportADefaultConfigWithoutASpecificListenAddress(t *testing.T) {
-	stubHostIP(t, "192.168.50.151")
+func TestListRowsReportAConfigWithoutADomainOrARouterFile(t *testing.T) {
 	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader)
 
-	rows := NewInventory(Observed{Nodes: []NodeContainer{controlPlane("educates", "127.0.0.1", true)}}, dataHome).List()
+	rows := NewInventory(Observed{Nodes: []NodeContainer{kindControlPlane("educates", true)}}, dataHome).List()
 
 	if rows[0].Domain != "" {
 		t.Errorf("domain = %q, want none for a config that does not load", rows[0].Domain)
 	}
-	wantErrorMentioning(t, rows[0].ConfigError, "cluster.listenAddress", "must be set",
-		"educates local config set cluster.listenAddress 192.168.50.151")
+	wantErrorMentioning(t, rows[0].ConfigError, "router.yaml", "educates local router update --address <ip>")
 }
 
 func TestListRowsOfClustersWithoutAConfig(t *testing.T) {
@@ -218,7 +217,7 @@ func TestListRowsOfClustersWithoutAConfig(t *testing.T) {
 
 func TestListRowsReportAConfigThatDoesNotLoad(t *testing.T) {
 	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
+	writeClusterConfig(t, dataHome, "test2", twoControlPlanesConfig)
 	observed := Observed{Nodes: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)}}
 
 	rows := NewInventory(observed, dataHome).List()
@@ -229,7 +228,7 @@ func TestListRowsReportAConfigThatDoesNotLoad(t *testing.T) {
 	if rows[0].Domain != "" {
 		t.Errorf("domain = %q, want none", rows[0].Domain)
 	}
-	wantErrorMentioning(t, rows[0].ConfigError, "loopback")
+	wantErrorMentioning(t, rows[0].ConfigError, twoControlPlanes)
 }
 
 func TestListRowsCountTheKubernetesNodesAlone(t *testing.T) {

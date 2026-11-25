@@ -14,14 +14,15 @@ import (
 // TestLocalConfigView_Effective asserts the default view prints only the
 // effective configuration with the CLI defaults materialised, carries the
 // yaml-language-server modeline, and points at --raw for the file as
-// written. A config with no domain falls back to the nip.io name of its
-// listen address, which defaults to an insecure plain-HTTP install, so
+// written. A config with no domain falls back to the nip.io name of the
+// router address, which defaults to an insecure plain-HTTP install, so
 // those defaults must show up.
 func TestLocalConfigView_Effective(t *testing.T) {
 	dataHome := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(localWithListenAddress), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(emptyLocal), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
@@ -80,10 +81,10 @@ func TestLocalConfigView_Raw(t *testing.T) {
 func TestLocalConfigView_FullyDefaulted_SkipsComment(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
 	cfg := &v1alpha1.EducatesLocalConfig{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.APIVersion, Kind: v1alpha1.KindEducatesLocalConfig},
-		Cluster:  v1alpha1.LocalClusterConfig{ListenAddress: "10.10.10.1"},
 	}
 	if err := p.applyLocalConfigDefaults(defaultLocalCluster(), cfg); err != nil {
 		t.Fatalf("applyLocalConfigDefaults: %v", err)

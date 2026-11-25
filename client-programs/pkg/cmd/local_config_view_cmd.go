@@ -39,11 +39,11 @@ func (p *ProjectInfo) NewLocalConfigViewCmd() *cobra.Command {
 EducatesLocalConfig schema, and by default prints the effective
 configuration with all CLI defaults filled in: the static defaults, the
 CLI's image registry and version, and (when no ingress.domain is set) the
-nip.io name of the router address, or of a named local cluster's
-cluster.listenAddress, with ingress.insecure defaulted to true. This makes the values the CLI supplies on your behalf explicit,
+nip.io name of the router address, or a named local cluster's name under
+it, with ingress.insecure defaulted to true. This makes the values the CLI supplies on your behalf explicit,
 rather than leaving them implicit in a sparse file. A config that breaks
-a rule of a local cluster's config, such as one without a specific
-cluster.listenAddress, is printed with a comment saying how to fix it.
+a rule of a local cluster's config, such as one with two control-plane
+nodes, is printed with a comment saying how to fix it.
 
 With --raw it instead prints the configuration file exactly as written,
 comments included.
@@ -95,8 +95,8 @@ func (p *ProjectInfo) runLocalConfigView(o *LocalConfigViewOptions, id localclus
 		return fmt.Errorf("marshal configuration: %w", err)
 	}
 	// A config that breaks a rule of a local cluster's config, such as
-	// one without a specific listen address, is shown all the same, with
-	// why, so that it can be fixed.
+	// one with two control-plane nodes, is shown all the same, with why,
+	// so that it can be fixed.
 	ruleErr := localclusters.CheckConfig(id, body, cfgPath)
 	// ruleErr says why when the domain can't be derived.
 	_ = p.applyLocalConfigDefaults(id, declared)
@@ -117,9 +117,9 @@ func (p *ProjectInfo) runLocalConfigView(o *LocalConfigViewOptions, id localclus
 			"# Effective EducatesLocalConfig with all CLI defaults applied. Values\n" +
 			"# absent from the configuration file are filled in by the CLI: static\n" +
 			"# defaults, the image registry and version compiled into this CLI, and\n" +
-			"# (when no ingress.domain is set) a nip.io name, the router address's for\n" +
-			"# the default local cluster and cluster.listenAddress's for a named one,\n" +
-			"# with ingress.insecure defaulted to true.\n" +
+			"# (when no ingress.domain is set) a nip.io name of the router address,\n" +
+			"# with a named local cluster's name under it, and ingress.insecure\n" +
+			"# defaulted to true.\n" +
 			"#\n" +
 			"# To see the configuration file as written, run:\n" +
 			"#   educates local config view" + localClusterFlagArg(id) + " --raw\n" +

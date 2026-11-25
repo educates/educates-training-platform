@@ -29,6 +29,7 @@ func listControlPlane(kindName, hostIP string, running bool) localclusters.NodeC
 
 func TestLocalClusterListShowsEveryEducatesClusterWithTheDefaultMarked(t *testing.T) {
 	dataHome := t.TempDir()
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
@@ -53,7 +54,7 @@ func TestLocalClusterListShowsEveryEducatesClusterWithTheDefaultMarked(t *testin
 	wantRows := [][]string{
 		{"NAME", "STATE", "NODES", "KUBERNETES", "LISTEN", "IP", "DOMAIN", "CONTEXT"},
 		{"(default)", "running", "1", "v1.36.4", "10.10.10.1", "educates.test", "kind-educates"},
-		{"test2", "stopped", "3", "-", "10.10.10.2", "10-10-10-2.nip.io", "kind-educates-test2"},
+		{"test2", "stopped", "3", "-", "10.10.10.2", "test2.10-10-10-1.nip.io", "kind-educates-test2"},
 	}
 	for i, want := range wantRows {
 		if got := strings.Fields(lines[i]); strings.Join(got, " ") != strings.Join(want, " ") {
@@ -68,7 +69,7 @@ func TestLocalClusterListShowsEveryEducatesClusterWithTheDefaultMarked(t *testin
 func TestLocalClusterListWarnsAboutAConfigThatDoesNotLoad(t *testing.T) {
 	dataHome := t.TempDir()
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
-		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 127.0.0.1\n")
+		twoControlPlanesConfig)
 	inventory := localclusters.NewInventory(localclusters.Observed{Nodes: []localclusters.NodeContainer{
 		listControlPlane("educates-test2", "10.10.10.2", true),
 	}}, dataHome)
@@ -80,7 +81,7 @@ func TestLocalClusterListWarnsAboutAConfigThatDoesNotLoad(t *testing.T) {
 		"test2 running 1 - 10.10.10.2 - kind-educates-test2" {
 		t.Errorf("row = %q, want the unread version and the domain shown as -", got)
 	}
-	for _, part := range []string{`local cluster "test2"`, "loopback"} {
+	for _, part := range []string{`local cluster "test2"`, `2 nodes have role "control-plane"`} {
 		if !strings.Contains(errOut.String(), part) {
 			t.Errorf("warnings %q do not mention %q", errOut.String(), part)
 		}

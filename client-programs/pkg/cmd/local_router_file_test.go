@@ -69,7 +69,7 @@ func TestLocalConfigInit_NamedCluster_WritesTheRouterFile(t *testing.T) {
 	dataHome, id := namedClusterForTest(t)
 	stubHostIP(t, "192.168.50.151")
 
-	if err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{ListenAddress: "10.10.10.2"}, id, io.Discard); err != nil {
+	if err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{}, id, io.Discard); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 
@@ -80,10 +80,10 @@ func TestLocalConfigInit_NamedCluster_WritesTheRouterFile(t *testing.T) {
 // else init writes.
 func TestLocalConfigInit_LeavesAnExistingRouterFile(t *testing.T) {
 	for name, o := range map[string]*LocalConfigInitOptions{
-		"a minimal config":         {},
-		"the defaulted config":     {Defaults: true},
-		"an overwritten config":    {Force: true},
-		"the given listen address": {ListenAddress: "10.10.10.1"},
+		"a minimal config":      {},
+		"the defaulted config":  {Defaults: true},
+		"an overwritten config": {Force: true},
+		"the given domain":      {Domain: "educates.test"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			stubHostIP(t, "192.168.50.151")
@@ -125,7 +125,6 @@ func TestLocalConfigInit_WithNoRouterFileOrHostIP_FailsSayingTheRouterAddressMus
 // its own, served over https, which a data home without a certificate
 // source can't create.
 const secureLocalConfig = minimalLocalConfigYAML +
-	"cluster:\n  listenAddress: 10.10.10.1\n" +
 	"ingress:\n  domain: educates.test\n"
 
 // runCreateUntilTheCertificatePreflight runs local cluster create of the

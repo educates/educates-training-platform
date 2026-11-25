@@ -320,14 +320,11 @@ func ingressDomainFrom(given ResolverInput, fields clusterFields, domain, router
 	if !fields.derivesDomain {
 		return fields.domainField
 	}
-	// LoadConfigFile writes the nip.io name it derives into an
-	// EducatesLocalConfig's ingress.domain: the default local cluster's
-	// from the router address, and a named one's from its listen address.
-	if nip, ok := nipDomain(routerAddress); ok && given.Identity.IsDefault() && domainKey(domain) == nip {
+	// LoadConfigFile writes the nip.io name it derives from the router
+	// address into an EducatesLocalConfig's ingress.domain: the default
+	// local cluster's, and a named one's under it.
+	if nip, ok := derivedDomain(given.Identity, routerAddress); ok && domainKey(domain) == nip {
 		return "nip.io name of the router address"
-	}
-	if nip, ok := nipDomain(fields.listenAddress); ok && domainKey(domain) == nip {
-		return "nip.io name of the listen address"
 	}
 	return fields.domainField
 }

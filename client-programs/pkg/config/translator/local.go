@@ -33,7 +33,7 @@ import (
 //
 // Environment-dependent defaults are NOT applied here:
 //   - ingress.domain stays empty unless the caller set it (the nip.io
-//     name of cluster.listenAddress belongs upstream of the translator).
+//     name of the router address belongs upstream of the translator).
 //   - operator.image.tag stays as-is (CLI-binary-version defaulting
 //     belongs in command code that has access to the build info).
 func TranslateLocal(cfg *v1alpha1.EducatesLocalConfig, opts Options) (*Output, error) {

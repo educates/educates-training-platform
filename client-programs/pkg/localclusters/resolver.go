@@ -95,7 +95,11 @@ func (inv Inventory) resolverClusters(given []ResolverInput) ([]resolverCluster,
 		}
 		clusters = append(clusters, rc)
 	}
-	if err := checkDomainsClaimedOnce(clusters); err != nil {
+	claims := make([]claimedNames, 0, len(clusters))
+	for _, c := range clusters {
+		claims = append(claims, claimedNames{id: c.id, names: c.domains()})
+	}
+	if err := checkDomainsClaimedOnce(claims); err != nil {
 		return nil, nil, err
 	}
 	return clusters, leftOut, nil
@@ -126,28 +130,44 @@ func (inv Inventory) servedClusters(given []ResolverInput) []Identity {
 // config of the local cluster id in the data home, which it can't serve
 // because of err. err names the config's file.
 func leftOutConfig(id Identity, err error) error {
-	return fmt.Errorf("the local DNS resolver leaves out %s, whose config it can't use: %w", id.Description(), err)
+	return leftOutBy("the local DNS resolver", id, err)
 }
 
-// checkDomainsClaimedOnce checks that no two of clusters serve the same
-// domain. dnsmasq can point a domain at one address only, but resolves
-// the most specific domain it serves, so a subdomain of another cluster's
+// leftOutBy is the error for server, what serves the local clusters'
+// names, leaving out the local cluster id, whose config it can't use
+// because of err. err names the config's file.
+func leftOutBy(server string, id Identity, err error) error {
+	return fmt.Errorf("%s leaves out %s, whose config it can't use: %w", server, id.Description(), err)
+}
+
+// claimedNames is the names one local cluster claims: its ingress domain,
+// declared or derived, and its extra domains.
+type claimedNames struct {
+	id    Identity
+	names []string
+}
+
+// checkDomainsClaimedOnce checks that no two local clusters of claims
+// claim the same domain. A name leads to one local cluster only, through
+// the local DNS resolver and the router alike, but each of them takes the
+// most specific domain that matches, so a subdomain of another cluster's
 // domain is fine.
-func checkDomainsClaimedOnce(clusters []resolverCluster) error {
+func checkDomainsClaimedOnce(claims []claimedNames) error {
 	type claim struct {
 		id     Identity
 		domain string
 	}
-	claims := map[string]claim{}
-	for _, c := range clusters {
-		for _, name := range c.names {
-			key := domainKey(name.domain)
-			if first, ok := claims[key]; ok {
-				return fmt.Errorf("%s and %s both claim the domain %q, which the local DNS resolver can point at one "+
-					"local cluster only: change the ingress.domain or resolver.extraDomains of one of them",
+	claimed := map[string]claim{}
+	for _, c := range claims {
+		for _, domain := range c.names {
+			key := domainKey(domain)
+			if first, ok := claimed[key]; ok {
+				return fmt.Errorf("%s and %s both claim the domain %q, which can lead to one local cluster only, "+
+					"through the local DNS resolver and the router alike: change the ingress.domain or "+
+					"resolver.extraDomains of one of them",
 					first.id.Description(), c.id.Description(), first.domain)
 			}
-			claims[key] = claim{id: c.id, domain: name.domain}
+			claimed[key] = claim{id: c.id, domain: domain}
 		}
 	}
 	return nil
@@ -176,12 +196,9 @@ type resolverCluster struct {
 // its domain is the one its custom resources declare, if any.
 func newResolverCluster(given ResolverInput, dataHome string) (resolverCluster, error) {
 	id, source := given.Identity, given.Source
-	fields, ok := clusterFieldsOf(given.Config)
-	if !ok {
-		if _, isEducatesConfig := given.Config.(*v1alpha1.EducatesConfig); isEducatesConfig {
-			return resolverCluster{}, fmt.Errorf("%s: EducatesConfig has no target block, which the local DNS resolver takes target.resolver from", source)
-		}
-		return resolverCluster{}, fmt.Errorf("%s: unsupported kind %q for the local DNS resolver", source, given.Config.GetKind())
+	fields, err := servedClusterFields(given.LoadedConfig, "the local DNS resolver")
+	if err != nil {
+		return resolverCluster{}, err
 	}
 
 	domain := cmp.Or(given.ResolverDomainOverride, given.Domain())
@@ -192,6 +209,33 @@ func newResolverCluster(given ResolverInput, dataHome string) (resolverCluster, 
 		address: fields.listenAddress,
 		config:  configName(id, source, dataHome),
 	}, nil
+}
+
+// servedClusterFields returns what the config given declares about its
+// local cluster, for server, what serves the cluster's names: the local
+// DNS resolver or the router. Both take the cluster's names from an
+// EducatesLocalConfig, or an EducatesConfig with a target block, and any
+// other config is an error naming its file.
+func servedClusterFields(given LoadedConfig, server string) (clusterFields, error) {
+	fields, ok := clusterFieldsOf(given.Config)
+	if ok {
+		return fields, nil
+	}
+	if _, isEducatesConfig := given.Config.(*v1alpha1.EducatesConfig); isEducatesConfig {
+		return clusterFields{}, fmt.Errorf("%s: EducatesConfig has no target block, which %s takes target.resolver from",
+			given.Source, server)
+	}
+	return clusterFields{}, fmt.Errorf("%s: unsupported kind %q for %s", given.Source, given.Config.GetKind(), server)
+}
+
+// domains returns the domains the resolver serves for the cluster, in
+// order.
+func (c resolverCluster) domains() []string {
+	domains := make([]string, 0, len(c.names))
+	for _, name := range c.names {
+		domains = append(domains, name.domain)
+	}
+	return domains
 }
 
 // configName names the config of the local cluster id, loaded from

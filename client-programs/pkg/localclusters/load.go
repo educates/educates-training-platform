@@ -90,8 +90,8 @@ func (c LoadedConfig) ListenAddress() string {
 
 // Domain returns the cluster's ingress domain, declared or derived: the
 // ingress domain the config declares, which for an EducatesLocalConfig
-// that declares none LoadConfigFile sets to the nip.io name of its listen
-// address. An EducatesConfig gets no CLI defaults, so its domain is the
+// that declares none LoadConfigFile sets to a nip.io name, as DeriveDomain
+// gives it. An EducatesConfig gets no CLI defaults, so its domain is the
 // one its custom resources declare, and empty when they declare none.
 func (c LoadedConfig) Domain() string {
 	fields, _ := clusterFieldsOf(c.Config)

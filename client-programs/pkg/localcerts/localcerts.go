@@ -150,7 +150,7 @@ ingress domain. Remove the root CAs you do not use with:
 // config is cfg, nil when the cluster has none. For a config that has an
 // ingress.domain, it is the plan Resolve makes for that config. Without
 // a config, or for a config with no ingress.domain, whose install takes
-// the nip.io name of its listen address and so serves plain HTTP, no CA
+// a nip.io name and so serves plain HTTP, no CA
 // key pair is selected and none is pushed. When Resolve cannot decide the certificates of the config,
 // such as a secure domain with nothing usable cached, the sync still
 // pushes every Secret that holds no CA key, and the plan warns why no CA

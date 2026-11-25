@@ -58,20 +58,21 @@ func (p *ProjectInfo) NewLocalConfigInitCmd() *cobra.Command {
 EducatesLocalConfig: apiVersion, kind and cluster.listenAddress, leaving
 every other field to take its default at deploy time. With --defaults it
 instead writes the fully-defaulted configuration, with the static
-defaults, the CLI image registry and version, and the nip.io name of
-cluster.listenAddress as the domain (and the insecure default it
-implies) materialised into the file. Errors if the file already exists
+defaults, the CLI image registry and version, and the nip.io name of the
+router address as the domain (and the insecure default it implies)
+materialised into the file. Errors if the file already exists
 unless --force.
 
-Every local cluster publishes its ports 80 and 443 on its
-cluster.listenAddress, which must be a specific IP address of the host,
-neither 0.0.0.0 nor a loopback address. --listen-address sets it, and
-without it the default local cluster takes the host's IP address, with a
-comment saying so: an alias such as 10.10.10.1, added to a network
-interface, survives network changes, where the host's IP address may not.
-With no IP address of the host detected, the config is written without
-one, and says what to set. --domain sets ingress.domain, and without it
-the cluster takes the nip.io name of its listen address.
+Every local cluster's cluster.listenAddress must be a specific IP
+address of the host, neither 0.0.0.0 nor a loopback address.
+--listen-address sets it, and without it the default local cluster
+takes the host's IP address, with a comment saying so: an alias such as
+10.10.10.1, added to a network interface, survives network changes, where
+the host's IP address may not. With no IP address of the host detected,
+the config is written without one, and says what to set. --domain sets
+ingress.domain, and without it the default local cluster takes the
+nip.io name of the router address, and a named one the nip.io name of
+its listen address.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, writes the config of
 a named local cluster instead, to <data-home>/clusters/<name>/config.yaml,
@@ -100,8 +101,8 @@ $XDG_DATA_HOME/educates.`,
 	c.Flags().BoolVar(&o.Force, "force", false, "overwrite existing config.yaml")
 	c.Flags().BoolVar(&o.Defaults, "defaults", false, "write the fully-defaulted configuration instead of a minimal file")
 	addLocalClusterFlag(c)
-	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP the local cluster publishes ports 80 and 443 on (default: this host's IP address for the default local cluster; required for a named one)")
-	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain of the local cluster (default: the nip.io name of the listen address)")
+	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP written to the local cluster's config as cluster.listenAddress (default: this host's IP address for the default local cluster; required for a named one)")
+	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain of the local cluster (default: the nip.io name of the router address for the default local cluster, and of the listen address for a named one)")
 	return c
 }
 

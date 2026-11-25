@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://schemas.educates.dev/cli/v1alpha1/EducatesLocalRouter.json",
   "title": "EducatesLocalRouter",
-  "description": "The router address, declared once in router.yaml in the CLI data home: the one host address every local cluster is served on. 'educates local config init' and 'educates local cluster create' write the file when it is missing, with this host's IP address, and never change an existing one. The file can also be edited by hand.",
+  "description": "The router address, declared once in router.yaml in the CLI data home: the one host address every local cluster is served on, where the router, the container educates-router, publishes ports 80 and 443 and sends each name on to its cluster. 'educates local config init', 'educates local cluster create' and 'educates local cluster start' write the file when it is missing, with this host's IP address, and never change an existing one. The file can also be edited by hand.",
   "type": "object",
   "additionalProperties": false,
   "required": ["apiVersion", "kind", "address"],
@@ -13,7 +13,7 @@
     "address": {
       "type": "string",
       "minLength": 1,
-      "description": "The router address: an IP address of a network interface of this host, neither a loopback address nor the unspecified address 0.0.0.0. Pods and kind nodes resolve every local cluster's names to it, so a loopback address would reach themselves, and an address on no interface reaches nothing. An alias such as 10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not."
+      "description": "The router address: an IP address of a network interface of this host, neither a loopback address nor the unspecified address 0.0.0.0. Pods and kind nodes resolve every local cluster's names to it, so a loopback address would reach themselves, and an address on no interface reaches nothing. An alias such as 10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not. On Docker Desktop 4.97 or later, ports 80 and 443 on it need \"Allow privileged port forwarding to external machines\" on, in Settings > Advanced."
     }
   }
 }

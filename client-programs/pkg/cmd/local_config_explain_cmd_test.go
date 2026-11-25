@@ -67,8 +67,8 @@ func TestLocalConfigExplain_Resolver_ExplainsTheSharedResolver(t *testing.T) {
 		path string
 		want []string
 	}{
-		{"resolver", []string{"every local cluster shares", "cluster.listenAddress", "dnsmasq.d"}},
-		{"cluster.listenAddress", []string{"specific IP address", "0.0.0.0", "loopback", "educates local config init", "10.10.10.1", "Allow privileged port forwarding to external machines"}},
+		{"resolver", []string{"every local cluster shares", "router address", "dnsmasq.d"}},
+		{"cluster.listenAddress", []string{"specific IP address", "0.0.0.0", "loopback", "educates local config init", "router address"}},
 		{"resolver.extraDomains", []string{"subdomains", "another local cluster", "error"}},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
@@ -120,7 +120,7 @@ func TestLocalConfigExplain_RouterKind_ExplainsTheRouterAddress(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	for _, want := range []string{"FIELD:    address <string>", "loopback", "10.10.10.1"} {
+	for _, want := range []string{"FIELD:    address <string>", "loopback", "10.10.10.1", "Allow privileged port forwarding to external machines"} {
 		if !bytes.Contains(buf.Bytes(), []byte(want)) {
 			t.Errorf("explain address --kind router does not mention %q:\n%s", want, buf.String())
 		}

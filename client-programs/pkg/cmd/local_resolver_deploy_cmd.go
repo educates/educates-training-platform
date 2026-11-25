@@ -25,9 +25,11 @@ var localResolverDeployExample = `
 const localResolverLong = `The local DNS resolver is one dnsmasq container, listening on
 127.0.0.1:53, that serves the domains of every local cluster. It has no
 settings of its own: each cluster contributes its names, its ingress
-domain and resolver.extraDomains, which resolve to that cluster's
-cluster.listenAddress. A cluster with no ingress.domain is served the
-nip.io name of its listen address.
+domain and resolver.extraDomains, which resolve to the router address in
+<data-home>/router.yaml, where the router sends each request on to its
+cluster. A default local cluster with no ingress.domain is served the
+nip.io name of the router address, and a named one the nip.io name of
+its listen address.
 
 The default local cluster is served from <data-home>/config.yaml, or
 from the file --config names. A named local cluster is served from

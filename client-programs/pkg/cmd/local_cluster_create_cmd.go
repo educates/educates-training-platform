@@ -77,20 +77,35 @@ domain, and no certificates or Secrets taken from the local secrets
 cache. Any Secret the custom resources reference has to be created in the
 cluster before the deploy can become ready.
 
-Every local cluster's cluster.listenAddress must be a specific IP address
-of the host, neither 0.0.0.0 nor a loopback address, and with no
-ingress.domain the cluster takes the nip.io name of that address and is
-served over plain HTTP. When the local cluster's config is missing,
-create writes it from --listen-address and the optional --domain, and
-without --listen-address the default local cluster takes the host's IP
-address.
-Once the config loads, create writes <data-home>/router.yaml when it is
-missing, before any check: the router address, the one host address
-every local cluster shares, set to the host's IP address. An existing
-router.yaml is left as it is.
-On Docker Desktop 4.97 or later, create refuses to run while "Allow
-privileged port forwarding to external machines" is off, in Settings >
-Advanced, since ports 80 and 443 on a non-loopback address need it.
+Every local cluster is served through the router, the container
+educates-router, which publishes ports 80 and 443 on the router address,
+the one host address every local cluster shares, and sends each request
+to the cluster that owns its name. Kind nodes publish no ports. Once the
+config loads, create writes <data-home>/router.yaml when it is missing,
+before any check, with the host's IP address as the router address. An
+existing router.yaml is left as it is. With no ingress.domain the default
+local cluster takes the nip.io name of the router address, and a named
+one the nip.io name of its listen address, and is served over plain
+HTTP.
+
+Every local cluster's cluster.listenAddress must still be a specific IP
+address of the host, neither 0.0.0.0 nor a loopback address. When the
+local cluster's config is missing, create writes it from --listen-address
+and the optional --domain, and without --listen-address the default local
+cluster takes the host's IP address.
+
+Before kind is touched, create creates the router when it is missing, and
+re-creates it when it runs another image than the one this CLI pins,
+publishes on another address than router.yaml's, or has stopped, which
+drops every connection through it. The router's start is the check that
+ports 80 and 443 are free on the router address: it fails naming any
+local cluster created by an earlier release, which publishes them from
+its node, to delete and create again. On Docker Desktop 4.97 or later,
+creating the router refuses to run while "Allow privileged port
+forwarding to external machines" is off, in Settings > Advanced, since
+ports 80 and 443 on a non-loopback address need it. Once the cluster
+exists, the router's configuration is rendered again and reloaded, which
+keeps every other cluster's open connections.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, creates a named local
 cluster beside the default one. Its config lives in
@@ -140,8 +155,8 @@ deploy against a hand-prepared cluster.`,
 	c.Flags().StringVarP(&o.Config, "config", "c", "", "path to a CLI config file (any kind)")
 	c.Flags().BoolVar(&o.LocalConfig, "local-config", false, "use the local cluster's config in the data home (default when --config is not given)")
 	addLocalClusterFlag(c)
-	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP the local cluster publishes ports 80 and 443 on, written to its config when it has none (default: this host's IP address for the default local cluster; required for a named one)")
-	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to the local cluster's config when it has none (default: the nip.io name of the listen address)")
+	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP written to the local cluster's config as cluster.listenAddress when it has none (default: this host's IP address for the default local cluster; required for a named one)")
+	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to the local cluster's config when it has none (default: the nip.io name of the router address for the default local cluster, and of the listen address for a named one)")
 	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file kind writes the cluster's context into, and the platform deploy uses (defaults to ~/.kube/config)")
 	c.Flags().StringVar(&o.ClusterImage, "kind-cluster-image", "", "docker image to use when booting the kind cluster (overrides --kubernetes-version)")
 	c.Flags().StringVar(&o.KubernetesVersion, "kubernetes-version", constants.DefaultKubernetesVersion, fmt.Sprintf("Kubernetes version for the kind cluster (supported: %v)", constants.SupportedKubernetesVersions()))
@@ -447,8 +462,8 @@ func (p *ProjectInfo) prepareLocalCreate(cfg v1alpha1.Config, deploy bool) (*loc
 		// A secure install (the default; ingress.insecure not set)
 		// serves HTTPS from a cached wildcard TLS certificate or a cached
 		// root CA. The local cluster rules have already run, so an empty
-		// domain has become the insecure install on the nip.io name of the
-		// listen address, which needs neither;
+		// domain has become the insecure install on a nip.io name, which
+		// needs neither;
 		// only a domain with insecure left false requires one. Resolving
 		// the local certificates is a pure local-cache read, so a missing
 		// certificate source is reported, naming the generated root and

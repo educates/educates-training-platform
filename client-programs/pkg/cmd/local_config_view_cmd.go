@@ -39,8 +39,8 @@ func (p *ProjectInfo) NewLocalConfigViewCmd() *cobra.Command {
 EducatesLocalConfig schema, and by default prints the effective
 configuration with all CLI defaults filled in: the static defaults, the
 CLI's image registry and version, and (when no ingress.domain is set) the
-nip.io name of cluster.listenAddress with ingress.insecure defaulted to
-true. This makes the values the CLI supplies on your behalf explicit,
+nip.io name of the router address, or of a named local cluster's
+cluster.listenAddress, with ingress.insecure defaulted to true. This makes the values the CLI supplies on your behalf explicit,
 rather than leaving them implicit in a sparse file. A config that breaks
 a rule of a local cluster's config, such as one without a specific
 cluster.listenAddress, is printed with a comment saying how to fix it.
@@ -117,7 +117,8 @@ func (p *ProjectInfo) runLocalConfigView(o *LocalConfigViewOptions, id localclus
 			"# Effective EducatesLocalConfig with all CLI defaults applied. Values\n" +
 			"# absent from the configuration file are filled in by the CLI: static\n" +
 			"# defaults, the image registry and version compiled into this CLI, and\n" +
-			"# (when no ingress.domain is set) the nip.io name of cluster.listenAddress,\n" +
+			"# (when no ingress.domain is set) a nip.io name, the router address's for\n" +
+			"# the default local cluster and cluster.listenAddress's for a named one,\n" +
 			"# with ingress.insecure defaulted to true.\n" +
 			"#\n" +
 			"# To see the configuration file as written, run:\n" +

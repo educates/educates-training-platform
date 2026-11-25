@@ -240,7 +240,7 @@ func TestLocalConfigView_NamedCluster_PrintsItsEffectiveConfig(t *testing.T) {
 		"lookupService: true",
 		"(file: " + id.ConfigPath,
 		"educates local config view --local-cluster test2 --raw",
-		"the nip.io name of cluster.listenAddress",
+		"cluster.listenAddress's for a named one",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("view output does not contain %q:\n%s", want, s)

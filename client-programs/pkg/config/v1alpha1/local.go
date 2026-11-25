@@ -180,8 +180,9 @@ type OperatorImage struct {
 //     to fill operator.image.{repository,tag} when empty. Deterministic
 //     per CLI binary, so safe for GitOps.
 //   - The local cluster rules (localclusters.LoadConfigFile) fill
-//     ingress.domain with the nip.io name of cluster.listenAddress when
-//     it is empty, for the config of a local cluster. Render and deploy
+//     ingress.domain with a nip.io name when it is empty, for the config
+//     of a local cluster: the router address's for the default local
+//     cluster, and cluster.listenAddress's for a named one. Render and deploy
 //     with `--config`, the GitOps mode, don't apply them.
 func (c *EducatesLocalConfig) WithDefaults() *EducatesLocalConfig {
 	if c.ClusterAdmin == nil {

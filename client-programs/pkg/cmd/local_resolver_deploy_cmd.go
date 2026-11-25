@@ -28,8 +28,7 @@ settings of its own: each cluster contributes its names, its ingress
 domain and resolver.extraDomains, which resolve to the router address in
 <data-home>/router.yaml, where the router sends each request on to its
 cluster. A default local cluster with no ingress.domain is served the
-nip.io name of the router address, and a named one the nip.io name of
-its listen address.
+nip.io name of the router address, and a named one its name under it.
 
 The default local cluster is served from <data-home>/config.yaml, or
 from the file --config names. A named local cluster is served from

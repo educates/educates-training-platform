@@ -59,9 +59,10 @@ Defaulting is flag-driven:
                     config. Render is deterministic for a given (input,
                     CLI version) pair.
   --local-config    Laptop convenience mode. Same defaults, plus the
-                    rules of a local cluster's config: a specific
-                    cluster.listenAddress, and its nip.io name as the
-                    ingress.domain fallback when empty.
+                    rules of a local cluster's config: the nip.io name
+                    of the router address, with a named local cluster's
+                    name under it, as the ingress.domain fallback when
+                    empty.
 
 --local-config reads the config of the local cluster that --local-cluster
 or EDUCATES_LOCAL_CLUSTER selects: <data-home>/config.yaml for the default

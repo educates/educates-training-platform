@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"io"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -34,12 +35,14 @@ secretsManager: {}
 sessionManager: {}
 `
 
-// prepareForTest loads the config at path as local cluster create does
-// and prepares it, with a developer-built CLI's project info so that any
-// CLI defaulting would show in the result.
+// prepareForTest loads the config at path as local cluster create does,
+// in a temporary data home, and prepares it, with a developer-built CLI's
+// project info so that any CLI defaulting would show in the result.
 func prepareForTest(t *testing.T, path string) *localCreateInputs {
 	t.Helper()
-	cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
+	stubHostIP(t, "192.168.50.151")
+	t.Setenv("EDUCATES_CLI_DATA_HOME", t.TempDir())
+	cfg, _, _, err := loadLocalConfig(io.Discard, &LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
 	if err != nil {
 		t.Fatalf("loadLocalConfig: %v", err)
 	}
@@ -141,8 +144,10 @@ func TestLoadLocalConfig_EscapeTargetProvider(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			stubHostIP(t, "192.168.50.151")
+			t.Setenv("EDUCATES_CLI_DATA_HOME", t.TempDir())
 			path := writeFixture(t, escapeMinimal+tc.target)
-			cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
+			cfg, _, _, err := loadLocalConfig(io.Discard, &LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("err = %v, want an error containing %q", err, tc.wantErr)
@@ -236,12 +241,13 @@ ingress:
 // secrets cache has no certificate for, while a create with
 // --cluster-only, which deploys nothing, takes it.
 func TestPrepareLocalCreate_ClusterOnlyNeedsNoCertificate(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	t.Setenv("EDUCATES_CLI_DATA_HOME", t.TempDir())
 	path := writeFixture(t, localSecureDomain)
 	p := &ProjectInfo{Version: "latest", ImageRepository: "localhost:5001"}
 
 	prepare := func(deploy bool) (*localCreateInputs, error) {
-		cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
+		cfg, _, _, err := loadLocalConfig(io.Discard, &LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
 		if err != nil {
 			t.Fatalf("loadLocalConfig: %v", err)
 		}

@@ -220,15 +220,14 @@ func TestResolverConfigPointsEveryClusterNamesAtTheRouterAddress(t *testing.T) {
 
 func TestResolverConfigServesANamedClusterNipDomainWhenItDeclaresNone(t *testing.T) {
 	dataHome := t.TempDir()
-	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.2\n")
+	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader)
 
 	got := renderAddresses(t, resolverInputs{
 		DataHome: dataHome,
-		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
+		Observed: []NodeContainer{kindControlPlane("educates-test2", true)},
 	})
 
-	wantAddresses(t, got, "address=/10-10-10-2.nip.io/10.10.10.1")
+	wantAddresses(t, got, "address=/test2.10-10-10-1.nip.io/10.10.10.1")
 }
 
 func TestResolverConfigLeavesOutNamedClustersThatDoNotExist(t *testing.T) {
@@ -267,10 +266,10 @@ func TestResolverConfigRefusesADomainTwoClustersClaim(t *testing.T) {
 		},
 		{
 			name:          "a named cluster's derived domain and the default cluster's extra domain",
-			defaultConfig: "cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\nresolver:\n  extraDomains:\n  - 10-10-10-2.nip.io\n",
-			test2Config:   "cluster:\n  listenAddress: 10.10.10.2\n",
+			defaultConfig: "ingress:\n  domain: educates.test\nresolver:\n  extraDomains:\n  - test2.10-10-10-1.nip.io\n",
+			test2Config:   "# No ingress domain.\n",
 			claimants:     []string{"the default local cluster", `local cluster "test2"`},
-			domain:        "10-10-10-2.nip.io",
+			domain:        "test2.10-10-10-1.nip.io",
 		},
 		{
 			name:        "two named clusters' domains, differing in case",
@@ -442,9 +441,12 @@ func TestResolverConfigLeavesOutADataHomeDefaultConfigItCannotServe(t *testing.T
 
 func TestResolverConfigLeavesOutAnotherClustersConfigThatDoesNotLoad(t *testing.T) {
 	dataHome := t.TempDir()
-	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
-	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
-	writeDataHomeConfig(t, dataHome, "clusters/test3/config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.3\n")
+	if err := writeRouterFileUnlessPresent(dataHome, "10.10.10.1"); err != nil {
+		t.Fatal(err)
+	}
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", twoControlPlanesConfig)
+	writeDataHomeConfig(t, dataHome, "clusters/test3/config.yaml", localConfigHeader)
 	observed := []NodeContainer{
 		controlPlane("educates-test2", "10.10.10.2", true),
 		controlPlane("educates-test3", "10.10.10.3", true),
@@ -455,7 +457,7 @@ func TestResolverConfigLeavesOutAnotherClustersConfigThatDoesNotLoad(t *testing.
 	}{
 		{name: "refreshing the resolver"},
 		{name: "creating another cluster", given: []ResolverInput{givenConfig(t, namedID(t, "test4", dataHome),
-			localConfigHeader+"cluster:\n  listenAddress: 10.10.10.4\n")}},
+			localConfigHeader)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			content, leftOut, err := renderResolverLeavingOut(resolverInputs{
@@ -465,7 +467,7 @@ func TestResolverConfigLeavesOutAnotherClustersConfigThatDoesNotLoad(t *testing.
 				t.Fatalf("ResolverConfig: %v", err)
 			}
 
-			for _, line := range []string{"address=/educates.test/10.10.10.1\n", "address=/10-10-10-3.nip.io/10.10.10.1\n"} {
+			for _, line := range []string{"address=/educates.test/10.10.10.1\n", "address=/test3.10-10-10-1.nip.io/10.10.10.1\n"} {
 				if !strings.Contains(string(content), line) {
 					t.Errorf("rendered config has no line %q:\n%s", line, content)
 				}
@@ -477,14 +479,14 @@ func TestResolverConfigLeavesOutAnotherClustersConfigThatDoesNotLoad(t *testing.
 				t.Fatalf("left out %v, want test2's config only", leftOut)
 			}
 			wantErrorMentioning(t, leftOut[0], `local cluster "test2"`,
-				filepath.Join(dataHome, "clusters", "test2", "config.yaml"), "loopback")
+				filepath.Join(dataHome, "clusters", "test2", "config.yaml"), twoControlPlanes)
 		})
 	}
 }
 
 func TestResolverConfigStillRefusesADomainTwoClustersClaimWhenItLeavesOutAConfig(t *testing.T) {
 	dataHome := t.TempDir()
-	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
+	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", twoControlPlanesConfig)
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 
 	_, _, err := renderResolverLeavingOut(resolverInputs{

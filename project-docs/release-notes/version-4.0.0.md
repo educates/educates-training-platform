@@ -109,9 +109,9 @@ New Features
   insecure default it implies) are explicit rather than hidden behind a
   sparse file; pass ``--raw`` to print the configuration file exactly as
   written instead. The ``init`` command writes a minimal file by default,
-  holding the host's IP address as ``cluster.listenAddress``, or with
-  ``--defaults`` writes the fully-defaulted configuration with those same
-  values materialised into the file.
+  holding only ``apiVersion`` and ``kind``, or with ``--defaults`` writes
+  the fully-defaulted configuration with those same values materialised
+  into the file.
 
 * A new ``educates local config explain`` command describes configuration
   fields from the embedded JSON schema, in the style of ``kubectl explain``,
@@ -358,27 +358,28 @@ New Features
   tell a working install from a partial or broken one.
 
 * Several local clusters can now run at the same time. Next to the default
-  local cluster, ``educates local cluster create --local-cluster test2
-  --listen-address 10.10.10.2`` creates the named local cluster ``test2``:
-  the Kind cluster ``educates-test2``, with the kube context
-  ``kind-educates-test2``, publishing ports 80 and 443 on the host IP
-  address ``10.10.10.2``, with Educates installed and reachable at
-  ``10-10-10-2.nip.io``. A named cluster keeps its configuration in
+  local cluster, ``educates local cluster create --local-cluster test2``
+  creates the named local cluster ``test2``: the Kind cluster
+  ``educates-test2``, with the kube context ``kind-educates-test2``, with
+  Educates installed and reachable at its name under the ``nip.io`` name of
+  the router address, such as ``test2.10-10-10-1.nip.io``. A named cluster
+  needs no host address of its own, no alias and no ``sudo``: the router
+  serves every local cluster on the one router address, each at its own
+  domain. A named cluster keeps its configuration in
   ``clusters/<name>/config.yaml`` in the data home, which ``create`` writes
-  from ``--listen-address`` and the optional ``--domain`` when it is
-  missing. Its ``cluster.listenAddress`` must be a specific IP address of
-  the host, neither ``0.0.0.0`` nor a loopback address, as every local
-  cluster's must, and without an ``ingress.domain`` the cluster uses the
-  ``nip.io`` name of that address and is served over plain HTTP. The ``create``, ``delete``, ``start``,
-  ``stop`` and ``status`` commands of ``educates local cluster`` select a
-  cluster with ``--local-cluster``, or for a whole terminal with the
+  when it is missing, declaring nothing but the optional ``--domain``, such
+  as ``test2.educates.test`` under the default cluster's
+  ``educates.test``. Without an ``ingress.domain`` the cluster is served
+  over plain HTTP. The ``create``, ``delete``, ``start``, ``stop`` and
+  ``status`` commands of ``educates local cluster`` select a cluster with
+  ``--local-cluster``, or for a whole terminal with the
   ``EDUCATES_LOCAL_CLUSTER`` environment variable, and act on the default
   cluster without either. The ``init``, ``get``, ``set``, ``view`` and
   ``edit`` commands of ``educates local config`` select a cluster the same
-  way, so ``educates local config init --local-cluster test2
-  --listen-address 10.10.10.2`` writes the configuration of ``test2``
-  without creating the cluster. The new ``educates local config delete``
-  removes a named cluster's configuration, and refuses while the cluster
+  way, so ``educates local config init --local-cluster test2`` writes the
+  configuration of ``test2`` without creating the cluster. The new
+  ``educates local config delete`` removes a named cluster's
+  configuration, and refuses while the cluster
   exists and for the default cluster. Deleting a named cluster keeps its
   configuration, and every cluster pulls from the one local image registry
   on ``localhost:5001``. The platform install of ``educates local cluster
@@ -393,12 +394,14 @@ New Features
   ``clusters/<name>/`` exists in the data home, so Kind clusters made by
   hand are left out of the list and of every check, and ``delete``,
   ``start``, ``stop`` and ``status`` refuse a ``--local-cluster`` name
-  whose folder the data home does not hold, with an error saying why. Before ``create`` creates a cluster, and before
-  ``start`` starts one, its listen address is checked against every other
-  local cluster, running or stopped: an address another cluster also uses,
-  a cluster on ``0.0.0.0`` beside any other, and an address on no network
-  interface of the host are refused with an error naming the other
-  cluster. ``educates local cluster delete --all`` now deletes the local
+  whose folder the data home does not hold, with an error saying why. A
+  domain is the only thing two local clusters can clash on: before
+  ``create`` creates a cluster, and before ``start`` starts one, its
+  ingress domain and ``resolver.extraDomains`` are checked against every
+  other local cluster, running or stopped, and a domain another cluster
+  claims is refused with an error naming that cluster, while a subdomain of
+  another cluster's domain is allowed, the most specific domain winning.
+  ``educates local cluster delete --all`` now deletes the local
   image registry, the DNS resolver and the registry mirrors only when no
   other local cluster remains, and otherwise keeps them and names the
   clusters still using them.
@@ -1306,11 +1309,11 @@ Features Changed
   listens on another address, and otherwise, as ``educates local cluster
   delete`` does, reload it, which keeps open terminals.
   ``educates local cluster delete --all`` removes it, with the last local
-  cluster, keeping ``router.yaml``. A cluster's configuration still declares
-  ``cluster.listenAddress``, a specific IP address of the host, which
-  ``educates local config init`` and the CLI's first-run migration of a
-  version 3 ``values.yaml`` write as before, but nothing is published on
-  it. Clusters created by an earlier release of the CLI publish ports 80 and
+  cluster, keeping ``router.yaml``. A cluster has no host address of its
+  own, so its configuration no longer needs ``cluster.listenAddress``,
+  which is ignored where a configuration still declares it, and the
+  ``--listen-address`` option of ``educates local config init`` and
+  ``educates local cluster create`` is ignored with a warning. Clusters created by an earlier release of the CLI publish ports 80 and
   443 from their node and can't run beside the router: creating the router
   fails while one exists, naming it, so delete such a cluster and create it
   again. On Docker Desktop 4.97 or later, creating the router refuses to run

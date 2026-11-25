@@ -57,7 +57,7 @@ func TestResolverViewShowsEachClusterNameAndWhereItComesFrom(t *testing.T) {
 				{Name: "educates.test", Cluster: "(default)", From: "ingress.domain"},
 				{Name: "example.test", Cluster: "(default)", From: "resolver.extraDomains"},
 				{Name: "other.test", Cluster: "(default)", From: "resolver.extraDomains"},
-				{Name: "10-10-10-2.nip.io", Cluster: "test2", From: "nip.io name of the listen address"},
+				{Name: "test2.10-10-10-1.nip.io", Cluster: "test2", From: "nip.io name of the router address"},
 				{Name: "test3.example.test", Cluster: "test3", From: "educatesClusterConfig.ingress.domain"},
 				{Name: "extra3.example.test", Cluster: "test3", From: "target.resolver.extraDomains"},
 			},
@@ -67,7 +67,7 @@ func TestResolverViewShowsEachClusterNameAndWhereItComesFrom(t *testing.T) {
 			defaultConfig: localConfigHeader + "cluster:\n  listenAddress: 10.10.10.1\n",
 			want: []ResolverNameRow{
 				{Name: "10-10-10-1.nip.io", Cluster: "(default)", From: "nip.io name of the router address"},
-				{Name: "10-10-10-2.nip.io", Cluster: "test2", From: "nip.io name of the listen address"},
+				{Name: "test2.10-10-10-1.nip.io", Cluster: "test2", From: "nip.io name of the router address"},
 				{Name: "test3.example.test", Cluster: "test3", From: "educatesClusterConfig.ingress.domain"},
 				{Name: "extra3.example.test", Cluster: "test3", From: "target.resolver.extraDomains"},
 			},
@@ -208,7 +208,7 @@ func TestResolverViewNotesNamesNoResolverFileForwards(t *testing.T) {
 func TestResolverViewListsTheConfigsTheResolverLeavesOut(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
-	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
+	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", twoControlPlanesConfig)
 
 	view := resolverView(t, viewInputs{
 		DataHome: dataHome,
@@ -221,7 +221,7 @@ func TestResolverViewListsTheConfigsTheResolverLeavesOut(t *testing.T) {
 	if len(view.LeftOut) != 1 {
 		t.Fatalf("left out %v, want test2's config only", view.LeftOut)
 	}
-	wantErrorMentioning(t, view.LeftOut[0], `local cluster "test2"`, "loopback")
+	wantErrorMentioning(t, view.LeftOut[0], `local cluster "test2"`, twoControlPlanes)
 }
 
 func TestResolverViewRefusesADomainTwoClustersClaim(t *testing.T) {

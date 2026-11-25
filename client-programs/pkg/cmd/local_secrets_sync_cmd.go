@@ -65,9 +65,9 @@ func (o *LocalSecretsSyncOptions) Run(w io.Writer, id localclusters.Identity) er
 // resolveLocalSecretsSync resolves what local secrets sync pushes for the
 // local cluster id, from its config in the data home. The default local
 // cluster may have no config. A named local cluster's config follows the
-// rules of localclusters.LoadNamedConfig, so one with no ingress.domain
-// takes the nip.io name of its listen address and is served over plain
-// HTTP, and a missing one is an error that says how to write it.
+// rules of localclusters.LoadConfig, so one with no ingress.domain takes
+// its name under the nip.io name of the router address and is served over
+// plain HTTP, and a missing one is an error that says how to write it.
 func resolveLocalSecretsSync(id localclusters.Identity) (*localcerts.Plan, error) {
 	loaded, err := localclusters.LoadConfig(id)
 	if err != nil && !(id.IsDefault() && errors.Is(err, fs.ErrNotExist)) {
@@ -107,8 +107,9 @@ copies every secret that holds no CA key.
 The local config is the config of the local cluster that --local-cluster
 or EDUCATES_LOCAL_CLUSTER selects: <data-home>/config.yaml for the default
 local cluster, <data-home>/clusters/<name>/config.yaml for a named one. A
-named cluster with no ingress.domain is served over plain HTTP on the
-nip.io name of its listen address, so no CA key pair is copied for it.
+named cluster with no ingress.domain is served over plain HTTP on its
+name under the nip.io name of the router address, so no CA key pair is
+copied for it.
 
 With a local cluster selected, the secrets are copied into its kube
 context, kind-educates or kind-educates-<name>, unless --context names

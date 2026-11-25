@@ -78,16 +78,6 @@ func (e *missingConfigError) Unwrap() error {
 	return fs.ErrNotExist
 }
 
-// ListenAddress returns the host address the config declares the
-// cluster publishes its ports 80 and 443 on: cluster.listenAddress of an
-// EducatesLocalConfig, or target.cluster.listenAddress of an
-// EducatesConfig. It is empty when the config declares none, or is of
-// neither kind.
-func (c LoadedConfig) ListenAddress() string {
-	fields, _ := clusterFieldsOf(c.Config)
-	return fields.listenAddress
-}
-
 // Domain returns the cluster's ingress domain, declared or derived: the
 // ingress domain the config declares, which for an EducatesLocalConfig
 // that declares none LoadConfigFile sets to a nip.io name, as DeriveDomain
@@ -102,13 +92,6 @@ func (c LoadedConfig) Domain() string {
 // cluster on the host, which the two kinds a local cluster takes declare
 // in different fields.
 type clusterFields struct {
-	// listenAddressField is the path of the field that declares the
-	// listen address.
-	listenAddressField string
-
-	// listenAddress is the declared listen address, empty when none is.
-	listenAddress string
-
 	// nodesField is the path of the field that declares the cluster's
 	// nodes.
 	nodesField string
@@ -132,7 +115,7 @@ type clusterFields struct {
 	extraDomainsField string
 
 	// derivesDomain reports whether a cluster whose config declares no
-	// ingress domain takes the nip.io name of its address: an
+	// ingress domain takes a nip.io name of the router address: an
 	// EducatesLocalConfig does, and an EducatesConfig, which gets no CLI
 	// defaults, does not.
 	derivesDomain bool
@@ -147,15 +130,13 @@ func clusterFieldsOf(cfg v1alpha1.Config) (clusterFields, bool) {
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
 		return clusterFields{
-			listenAddressField: "cluster.listenAddress",
-			listenAddress:      c.Cluster.ListenAddress,
-			nodesField:         "cluster.nodes",
-			nodes:              c.Cluster.Nodes,
-			domain:             c.Ingress.Domain,
-			domainField:        "ingress.domain",
-			resolver:           c.Resolver,
-			extraDomainsField:  "resolver.extraDomains",
-			derivesDomain:      true,
+			nodesField:        "cluster.nodes",
+			nodes:             c.Cluster.Nodes,
+			domain:            c.Ingress.Domain,
+			domainField:       "ingress.domain",
+			resolver:          c.Resolver,
+			extraDomainsField: "resolver.extraDomains",
+			derivesDomain:     true,
 		}, true
 	case *v1alpha1.EducatesConfig:
 		fields := clusterFields{domain: c.IngressDomain(), domainField: "educatesClusterConfig.ingress.domain"}
@@ -165,8 +146,6 @@ func clusterFieldsOf(cfg v1alpha1.Config) (clusterFields, bool) {
 		if c.Target == nil {
 			return fields, false
 		}
-		fields.listenAddressField = "target.cluster.listenAddress"
-		fields.listenAddress = c.Target.Cluster.ListenAddress
 		fields.nodesField = "target.cluster.nodes"
 		fields.nodes = c.Target.Cluster.Nodes
 		fields.resolver = c.Target.Resolver

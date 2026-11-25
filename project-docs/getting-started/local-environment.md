@@ -47,7 +47,7 @@ educates local router update --address 10.10.10.1
 
 This sets `address` in `router.yaml`, keeping the file's comments, points the local DNS resolver at the new address, and re-creates the router on it, as described in [checking and updating the router](local-router-commands). A cluster whose domain is the `nip.io` name of the router address takes the new name, and needs deploying again, with `educates admin platform deploy --local-config`. You can also set `address` in `router.yaml` by hand. The router then moves at the next `educates local router update`, `educates local cluster create` or `start`, and the resolver at the next `educates local resolver update`.
 
-With no `ingress.domain` in its configuration, the default local cluster is served at the `nip.io` name of the router address, with dashes, such as `192-168-1-10.nip.io` for `192.168.1.10`. As `nip.io` names only IPv4 addresses, a router address that is an IPv6 address needs an `ingress.domain` of your own. A cluster's configuration still declares `cluster.listenAddress`, but nothing is published on it.
+With no `ingress.domain` in its configuration, the default local cluster is served at the `nip.io` name of the router address, with dashes, such as `192-168-1-10.nip.io` for `192.168.1.10`. A named cluster takes its name under it, such as `test2.192-168-1-10.nip.io`, as described in [running several local clusters](multiple-local-clusters). As `nip.io` names only IPv4 addresses, a router address that is an IPv6 address needs an `ingress.domain` of your own. A cluster has no host address of its own, so its configuration needs no `cluster.listenAddress`, and one it still declares is ignored.
 
 The router sends plain HTTP on port 80 by the request's `Host` header, without its port, to the cluster whose domain, or one of whose `resolver.extraDomains`, matches it. A domain matches itself and every name under it, so `workshop.educates.test` reaches the cluster on `educates.test`. Websocket connections, such as a workshop terminal's, pass through and may stay idle for an hour. The router never redirects plain HTTP to HTTPS. Asking for a name no local cluster serves gets a plain-text `404` response listing the domains the router serves, and asking for the name of a stopped cluster gets a plain-text `503` response naming the cluster and the `educates local cluster start` command that starts it. A cluster you start again is reached with nothing more to do, even when its node comes back on another address.
 
@@ -158,7 +158,7 @@ You can view the configuration (validating it against the schema) by running:
 educates local config view
 ```
 
-This prints the effective configuration with the CLI defaults filled in, so the values supplied on your behalf are explicit. This includes the `nip.io` name of the [router address](local-router-address) as the ingress domain of the default cluster, and the `ingress.insecure` default it implies, when you have not set a domain of your own. A configuration the local cluster can't use, such as one without a specific `cluster.listenAddress`, is still shown, with a comment saying how to fix it. To see the configuration file exactly as you wrote it instead, add `--raw`.
+This prints the effective configuration with the CLI defaults filled in, so the values supplied on your behalf are explicit. This includes the `nip.io` name of the [router address](local-router-address) as the ingress domain of the default cluster, and the `ingress.insecure` default it implies, when you have not set a domain of your own. A configuration the local cluster can't use, such as one declaring two control-plane nodes, is still shown, with a comment saying how to fix it. To see the configuration file exactly as you wrote it instead, add `--raw`.
 
 If you would rather have those defaults written into the file from the start, initialise it with `educates local config init --defaults`, which materialises the fully-defaulted configuration rather than the minimal file `educates local config init` writes by default.
 
@@ -283,7 +283,7 @@ Local DNS resolver
 
 The alternative to setting up a global DNS registry to map the wildcard domain to the IP address of your local host machine, is to run a local DNS resolver for the ingress domain. This requires being able to run `dnsmasq` or equivalent locally and configuring the local DNS resolution to forward lookups for the ingress domain to the local DNS resolver.
 
-The Educates command line tool runs one local DNS resolver, a `dnsmasq` container listening on `127.0.0.1:53`, which every local cluster shares. The resolver has no settings of its own. Each local cluster contributes its names to it, its ingress domain and any domains listed under `resolver.extraDomains` in its configuration, and they resolve to that cluster's `cluster.listenAddress`, the specific IP address of your host it listens on. Each name also covers its subdomains. Names that resolve to anything other than a local cluster, such as a virtual machine, go in configuration files of your own, as described in [names of your own](local-dns-resolver-own-names). To see every name the resolver answers for, which cluster or file each comes from and the address it resolves to, run:
+The Educates command line tool runs one local DNS resolver, a `dnsmasq` container listening on `127.0.0.1:53`, which every local cluster shares. The resolver has no settings of its own. Each local cluster contributes its names to it, its ingress domain and any domains listed under `resolver.extraDomains` in its configuration, and they resolve to the [router address](local-router-address), where the router sends them to that cluster. Each name also covers its subdomains. Names that resolve to anything other than a local cluster, such as a virtual machine, go in configuration files of your own, as described in [names of your own](local-dns-resolver-own-names). To see every name the resolver answers for, which cluster or file each comes from and the address it resolves to, run:
 
 ```
 educates local resolver view
@@ -358,7 +358,7 @@ resolver:
   - example.com
 ```
 
-When you run several local clusters, as described in [Running several local clusters](multiple-local-clusters), the one local DNS resolver serves the names of all of them, each resolving to its own cluster's address. Creating or deleting a local cluster refreshes a running resolver. After changing the `cluster.listenAddress`, `ingress` or `resolver` configuration of a cluster in any other way, or the files of your own described in [names of your own](local-dns-resolver-own-names), run `educates local resolver update` to have the resolver serve it.
+When you run several local clusters, as described in [Running several local clusters](multiple-local-clusters), the one local DNS resolver serves the names of all of them, each resolving to the router address, which sends it to its own cluster. Creating or deleting a local cluster refreshes a running resolver. After changing the `ingress` or `resolver` configuration of a cluster in any other way, or the files of your own described in [names of your own](local-dns-resolver-own-names), run `educates local resolver update` to have the resolver serve it.
 
 Linux systems may already provide a local DNS resolver in which case you can configure it, however how that is done will depend on the Linux distributions.
 
@@ -399,12 +399,12 @@ nameserver 127.0.0.1
 EOF"
 ```
 
-`educates local resolver view` lists the names of your files with the cluster column set to `-`, and its notes warn when one of your files names a domain a local cluster also serves, in which case the resolver answers the name with both addresses. On macOS they also say when no file in `/etc/resolver` forwards a name to the resolver. For the default cluster on `educates.test` and `10.10.10.1`, a named cluster `test2` on `10.10.10.2` and the file above, it shows:
+`educates local resolver view` lists the names of your files with the cluster column set to `-`, and its notes warn when one of your files names a domain a local cluster also serves, in which case the resolver answers the name with both addresses. On macOS they also say when no file in `/etc/resolver` forwards a name to the resolver. For the default cluster on `educates.test`, a named cluster `test2` on `test2.educates.test`, both on the router address `10.10.10.1`, and the file above, it shows:
 
 ```
 CLUSTER     ADDRESS      CONFIG
 (default)   10.10.10.1   config.yaml
-test2       10.10.10.2   clusters/test2/config.yaml
+test2       10.10.10.1   clusters/test2/config.yaml
 
 NAME                  CLUSTER     FROM                   NOTE
 educates.test         (default)   ingress.domain         -
@@ -639,15 +639,15 @@ A declared mirror whose container is missing, such as `ghcr.io` here, shows the 
 Running several local clusters
 ------------------------------
 
-The cluster `educates local cluster create` makes is the default local cluster. Next to it you can run any number of named local clusters, for example to test two builds of Educates side by side, or one workshop against both. Each named cluster is a Kind cluster of its own, `educates-<name>`, with the kube context `kind-educates-<name>`, its own configuration, and a host IP address of its own on which it publishes ports 80 and 443. Every cluster shares the local image registry on `localhost:5001`, so an image you push there once can be pulled by any of them, and every registry mirror is linked into every cluster, since `mirrors.yaml` in the data home declares the mirrors once for all of them.
+The cluster `educates local cluster create` makes is the default local cluster. Next to it you can run any number of named local clusters, for example to test two builds of Educates side by side, or one workshop against both. Each named cluster is a Kind cluster of its own, `educates-<name>`, with the kube context `kind-educates-<name>` and its own configuration. It needs no host address of its own: the router serves every cluster on the one [router address](local-router-address), each at its own domain, so a named cluster takes a name, and optionally a domain, and nothing else. Every cluster shares the local image registry on `localhost:5001`, so an image you push there once can be pulled by any of them, and every registry mirror is linked into every cluster, since `mirrors.yaml` in the data home declares the mirrors once for all of them.
 
-To create a named cluster called `test2` on the host IP address `10.10.10.2`, run:
+To create a named cluster called `test2`, run:
 
 ```
-educates local cluster create --local-cluster test2 --listen-address 10.10.10.2
+educates local cluster create --local-cluster test2
 ```
 
-When the named cluster has no configuration yet, this writes one to `clusters/test2/config.yaml` in the data home, declaring `cluster.listenAddress` and, when you add `--domain`, `ingress.domain`. It then creates the Kind cluster `educates-test2` and installs Educates into it, while the default cluster keeps running. The install always targets the cluster just created, through its own kube context, whatever `KUBECONFIG` or the current kube context say. Creating a named cluster with neither a configuration nor `--listen-address` fails, and so does a `--listen-address` or `--domain` that disagrees with an existing configuration: the options only write a missing configuration, and never change one. You can also supply the configuration with `--config`, in which case the file supplies the configuration and `--local-cluster` the name of the cluster. The command then makes the cluster's folder `clusters/test2/` in the data home, so the cluster counts as a local cluster, without copying the file into it.
+When the named cluster has no configuration yet, this writes one to `clusters/test2/config.yaml` in the data home, which declares nothing but, when you add `--domain`, `ingress.domain`. It then creates the Kind cluster `educates-test2` and installs Educates into it, while the default cluster keeps running, and the router serves it at `test2.<router address with dashes>.nip.io`, as described in [the ingress domain](multiple-local-clusters-ingress-domain) below. The install always targets the cluster just created, through its own kube context, whatever `KUBECONFIG` or the current kube context say. A `--domain` that disagrees with an existing configuration fails: the option only writes a missing configuration, and never changes one. The `--listen-address` option of earlier releases is still accepted, and ignored with a warning. You can also supply the configuration with `--config`, in which case the file supplies the configuration and `--local-cluster` the name of the cluster. The command then makes the cluster's folder `clusters/test2/` in the data home, so the cluster counts as a local cluster, without copying the file into it.
 
 The `educates local cluster create`, `delete`, `start`, `stop` and `status` commands act on the cluster `--local-cluster` names. To act on one cluster for every command in a terminal, set the `EDUCATES_LOCAL_CLUSTER` environment variable instead:
 
@@ -658,49 +658,39 @@ educates local cluster status
 
 The `--local-cluster` option takes precedence over the environment variable, and an empty value, as in `--local-cluster=`, selects the default cluster even when the variable is set. With neither, the commands act on the default cluster, as they always have. A cluster name is a lowercase DNS label of at most 31 characters.
 
-Deleting a named cluster with `educates local cluster delete --local-cluster test2` deletes its Kind cluster and keeps its configuration, so you can create it again with just `--local-cluster test2`. It also removes the CA key pair of the cluster's ingress domain from the local secrets cache, unless another local cluster, running or stopped, uses it. The `--all` option also deletes the local image registry, the DNS resolver and the registry mirrors that every cluster shares, but only once no other local cluster remains, running or stopped. While another one does, `--all` deletes the selected cluster, keeps the shared containers and names the clusters still using them, so the containers go with the last cluster you delete with `--all`.
+Deleting a named cluster with `educates local cluster delete --local-cluster test2` deletes its Kind cluster and keeps its configuration, so you can create it again with just `--local-cluster test2`. It also removes the CA key pair of the cluster's ingress domain from the local secrets cache, unless another local cluster, running or stopped, uses it. The `--all` option also deletes the local image registry, the DNS resolver, the registry mirrors and the router that every cluster shares, but only once no other local cluster remains, running or stopped. While another one does, `--all` deletes the selected cluster, keeps the shared containers and names the clusters still using them, so the containers go with the last cluster you delete with `--all`.
 
 Selecting a cluster also decides which cluster the `educates cluster` and `educates admin` commands act on, as [commands that follow the selected cluster](local-cluster-kube-context) describes.
 
-### The listen address
-
-A named cluster's `cluster.listenAddress` must be a specific IP address of your host, neither `0.0.0.0`, `::` nor a loopback address. The default cluster takes the IP address of your host, so give a named cluster an address added for it.
-
-The address has to exist on your host before you create the cluster, and you add it once:
-
-* On macOS, add it as an alias on a network interface, such as the interface which already holds the address of your default cluster, or your primary interface `en0`:
-
-  ```
-  sudo ifconfig en0 alias 10.10.10.2 netmask 255.255.255.255
-  ```
-
-* On Linux, add it to a network interface:
-
-  ```
-  sudo ip address add 10.10.10.2/32 dev eth0
-  ```
-
-Neither command persists the address across a restart of your host, so add it again after one, or configure it permanently through your operating system's network settings.
-
-Docker Desktop 4.97 and later serves published ports below 1024 on loopback addresses only, unless the setting "Allow privileged port forwarding to external machines", under **Settings > Advanced**, is turned on. Every local cluster publishes ports 80 and 443 on a non-loopback address, so `educates local cluster create` and `start` refuse to run while the setting is off.
-
-### Listen addresses that clash
-
-Local clusters don't clash on addresses: every cluster is served through the router, on the [router address](local-router-address), and Kind nodes publish no ports on your host. A cluster created by an earlier release of the command line tool still publishes ports 80 and 443 from its node, and creating the router fails while one exists, naming it, so delete such a cluster and create it again.
-
+(multiple-local-clusters-ingress-domain)=
 ### The ingress domain
 
-With no `ingress.domain` in its configuration, a named cluster, like the default cluster, uses the `nip.io` name of its listen address, with dashes, such as `10-10-10-2.nip.io` for `10.10.10.2`, and `ingress.insecure` defaults to true, so the cluster is served over plain HTTP with no certificate authority to manage. As `nip.io` names only IPv4 addresses, a cluster listening on an IPv6 address needs an `ingress.domain` of its own.
+With no `ingress.domain` in its configuration, a named cluster takes its name under the `nip.io` name of the [router address](local-router-address), with dashes, such as `test2.10-10-10-1.nip.io` for the cluster `test2` and the router address `10.10.10.1`, under the default cluster's `10-10-10-1.nip.io`. `ingress.insecure` defaults to true, so the cluster is served over plain HTTP with no certificate authority to manage. As `nip.io` names only IPv4 addresses, a router address that is an IPv6 address leaves every cluster needing an `ingress.domain` of its own.
 
-To use a domain of your own, pass `--domain` when you create the cluster, or set `ingress.domain` in its configuration. As for the default cluster, a domain of your own is served over HTTPS and needs a CA in the local secrets cache, as described in [custom ingress domain](custom-ingress-domain).
+To use a domain of your own, pass `--domain` when you create the cluster, or set `ingress.domain` in its configuration. A named cluster can use a subdomain of the default cluster's domain:
 
-An `EducatesConfig` with `target.provider: kind` can also serve as a named cluster's configuration. Its `target.cluster.listenAddress` must be a specific IP address of your host, by the same rules, and it gets no `nip.io` fallback: its domain is the one its custom resources declare.
+```
+educates local cluster create --local-cluster test2 --domain test2.educates.test
+```
+
+As for the default cluster, a domain of your own is served over HTTPS and needs a CA in the local secrets cache, as described in [custom ingress domain](custom-ingress-domain).
+
+The router sends every name under a cluster's domain, and under each of its `resolver.extraDomains`, to that cluster, and when several domains match a name, the most specific one wins, as it does for the DNS resolver. With the default cluster on `educates.test` and `test2` on `test2.educates.test`, `workshop.test2.educates.test` reaches `test2`, and `workshop.educates.test` the default cluster.
+
+An `EducatesConfig` with `target.provider: kind` can also serve as a named cluster's configuration. It gets no `nip.io` fallback: its domain is the one its custom resources declare.
+
+(multiple-local-clusters-domain-clash)=
+### Domains that clash
+
+Local clusters don't clash on addresses: every cluster is served through the router, on the router address, and Kind nodes publish no ports on your host. The only thing two clusters can clash on is a domain, since a name leads to one cluster only. `educates local cluster create` and `educates local cluster start` refuse, before they touch the Kind cluster, to create or start a cluster whose ingress domain, or one of whose `resolver.extraDomains`, another local cluster, running or stopped, already claims, and name that cluster. A subdomain of another cluster's domain is no clash.
+
+A cluster created by an earlier release of the command line tool still publishes ports 80 and 443 from its node, and creating the router fails while one exists, naming it, so delete such a cluster and create it again.
 
 ### The DNS resolver
 
-One local DNS resolver serves every local cluster, and it has no settings of its own. Each cluster contributes its names, its ingress domain and its `resolver.extraDomains`, which resolve to that cluster's listen address, as described in [Local DNS resolver](local-dns-resolver). Names that resolve to anything other than a local cluster, such as a virtual machine, go in files of your own in the data home's `dnsmasq.d` folder, as described in [names of your own](local-dns-resolver-own-names). The `educates local resolver deploy`, `update` and `view` commands always cover every cluster, and take no `--local-cluster` option. The `--domain` option of `educates local resolver deploy` overrides the domain of the default cluster only.
+One local DNS resolver serves every local cluster, and it has no settings of its own. Each cluster contributes its names, its ingress domain and its `resolver.extraDomains`, which resolve to the router address, as described in [Local DNS resolver](local-dns-resolver). Names that resolve to anything other than a local cluster, such as a virtual machine, go in files of your own in the data home's `dnsmasq.d` folder, as described in [names of your own](local-dns-resolver-own-names). The `educates local resolver deploy`, `update` and `view` commands always cover every cluster, and take no `--local-cluster` option. The `--domain` option of `educates local resolver deploy` overrides the domain of the default cluster only.
 
-To see what the resolver serves, run `educates local resolver view`. Its first table has a row for each cluster, with the address its names resolve to, the router address, and the cluster's configuration file. Its second table has a row for each name, with its cluster and where it comes from: `ingress.domain`, the `nip.io` name of the router address or of a named cluster's listen address, `resolver.extraDomains`, or one of your files. Its notes say when a name is covered by a broader name of the same cluster, and when it wins over another cluster's broader name, as `test2.educates.test` does over `educates.test`. In the resolver's configuration file, `dnsmasq.conf` in the data home, each cluster's entries start with a comment naming the cluster, its configuration file and the router address its names resolve to:
+To see what the resolver serves, run `educates local resolver view`. Its first table has a row for each cluster, with the address its names resolve to, the router address, and the cluster's configuration file. Its second table has a row for each name, with its cluster and where it comes from: `ingress.domain`, the `nip.io` name of the router address, a named cluster's name under it included, `resolver.extraDomains`, or one of your files. Its notes say when a name is covered by a broader name of the same cluster, and when it wins over another cluster's broader name, as `test2.educates.test` does over `educates.test`. In the resolver's configuration file, `dnsmasq.conf` in the data home, each cluster's entries start with a comment naming the cluster, its configuration file and the router address its names resolve to:
 
 ```
 # Default local cluster (config.yaml): 10.10.10.1, the router address
@@ -715,9 +705,9 @@ conf-dir=/etc/dnsmasq.d/,*.conf
 
 A named cluster is served while its Kind cluster exists. Creating or deleting a cluster refreshes a resolver that is already running, adding or removing that cluster's domains, so you don't need to run `educates local resolver update` yourself. When the resolver can't be refreshed, the command warns and still succeeds, since the cluster has been created or deleted by then: fix the cause the warning names and run `educates local resolver update`.
 
-Another cluster's configuration that does not load, such as a named cluster's configuration you edited to a loopback listen address, or that the resolver can't use, is left out with a warning naming its file. It does not stop `educates local cluster create` from creating a different cluster, nor the resolver commands and the refreshes from serving every other cluster. The configuration of the cluster being created, and the default cluster's configuration given to the resolver commands, still fail the command as before.
+Another cluster's configuration that does not load, such as a named cluster's configuration you edited to declare two control-plane nodes, or that the resolver can't use, is left out with a warning naming its file. It does not stop `educates local cluster create` from creating a different cluster, nor the resolver commands and the refreshes from serving every other cluster. The configuration of the cluster being created, and the default cluster's configuration given to the resolver commands, still fail the command as before.
 
-The resolver answers a name from the most specific domain it serves, so a named cluster can use a subdomain of the default cluster's domain. With the default cluster on `educates.test` and the named cluster `test2` created with `--domain test2.educates.test`, names under `test2.educates.test` resolve to `10.10.10.2`, and every other name under `educates.test` still resolves to the default cluster. Two clusters claiming the same domain is an error that names both. The resolver commands report it, and so does `educates local cluster create`, before it creates anything.
+The resolver answers a name from the most specific domain it serves, so a named cluster can use a subdomain of the default cluster's domain. With the default cluster on `educates.test` and the named cluster `test2` created with `--domain test2.educates.test`, names under `test2.educates.test` reach `test2`, and every other name under `educates.test` still reaches the default cluster, through the resolver and the router alike. Two clusters claiming the same domain is an error that names both. The resolver commands report it, and `educates local cluster create` and `start` refuse it before they touch the Kind cluster, as described in [domains that clash](multiple-local-clusters-domain-clash) above.
 
 On macOS, the file `/etc/resolver/educates.test` you created for the default cluster's domain also covers its subdomains, so a named cluster on `test2.educates.test` needs no new file. A named cluster on a domain outside the ones you already resolve, such as `workshops.example.test`, needs a file of its own, `/etc/resolver/workshops.example.test`, with the same `nameserver 127.0.0.1` entry. A cluster on its `nip.io` domain needs neither, since `nip.io` names resolve through public DNS.
 
@@ -739,7 +729,7 @@ To see every local cluster, run:
 educates local cluster list
 ```
 
-It lists the default cluster, shown as `(default)`, and every named cluster, whatever `--local-cluster` or `EDUCATES_LOCAL_CLUSTER` select. The [router address](local-router-address), where every local cluster is reached, comes first, once, above the table. Each row has the cluster's state, its number of nodes, its Kubernetes version, its ingress domain and its kube context. The state is `running`, `stopped`, or `partly running` when only some nodes of a multi-node cluster run. The number of nodes counts the cluster's control-plane and worker nodes, running or not, the nodes `kubectl get nodes` lists, and `educates local cluster status --local-cluster <name>` shows each one with its labels and taints. The Kubernetes version, such as `v1.36.4`, is the one the cluster's node image holds, chosen with `--kubernetes-version` or `--kind-cluster-image` when the cluster was created. Like the other columns, it is shown for a stopped cluster too, and it shows as `-` when it can't be read from the cluster's control-plane node. The domain is the one the DNS resolver serves for the cluster: the domain its configuration declares, or else the `nip.io` name of its listen address. It shows as `-` when the cluster has none, as for an `EducatesConfig` whose custom resources declare no domain. A configuration that does not load, such as one without a specific listen address, leaves the domain as `-` and is reported in a warning after the list.
+It lists the default cluster, shown as `(default)`, and every named cluster, whatever `--local-cluster` or `EDUCATES_LOCAL_CLUSTER` select. The [router address](local-router-address), where every local cluster is reached, comes first, once, above the table. Each row has the cluster's state, its number of nodes, its Kubernetes version, its ingress domain and its kube context. The state is `running`, `stopped`, or `partly running` when only some nodes of a multi-node cluster run. The number of nodes counts the cluster's control-plane and worker nodes, running or not, the nodes `kubectl get nodes` lists, and `educates local cluster status --local-cluster <name>` shows each one with its labels and taints. The Kubernetes version, such as `v1.36.4`, is the one the cluster's node image holds, chosen with `--kubernetes-version` or `--kind-cluster-image` when the cluster was created. Like the other columns, it is shown for a stopped cluster too, and it shows as `-` when it can't be read from the cluster's control-plane node. The domain is the one the DNS resolver serves for the cluster: the domain its configuration declares, or else its `nip.io` name of the router address. It shows as `-` when the cluster has none, as for an `EducatesConfig` whose custom resources declare no domain. A configuration that does not load, such as one declaring two control-plane nodes, leaves the domain as `-` and is reported in a warning after the list.
 
 Only the Kind clusters the command line tool manages are local clusters: the Kind cluster `educates`, and a Kind cluster `educates-<name>` whose folder `clusters/<name>/` exists in the data home. A Kind cluster you created yourself is left out of the list and ignored by every check, even when its name starts with `educates-`. The `educates local cluster delete`, `start`, `stop` and `status` commands also leave it alone: given the name of a cluster whose folder the data home does not hold, such as `--local-cluster foo` beside a Kind cluster `educates-foo` you created, they refuse with an error saying so.
 
@@ -748,10 +738,10 @@ Only the Kind clusters the command line tool manages are local clusters: the Kin
 To write a named cluster's configuration without creating the cluster, for example to change it before you first create the cluster, run `educates local config init` with the same options:
 
 ```
-educates local config init --local-cluster test2 --listen-address 10.10.10.2
+educates local config init --local-cluster test2
 ```
 
-A named cluster needs `--listen-address`, and `--domain` is optional. As for the default cluster, `educates local config init` refuses to replace an existing configuration unless you add `--force`. The `--defaults` option writes only the default cluster's configuration, while `educates local config view --local-cluster test2` shows the defaults a named cluster takes.
+A named cluster needs nothing more, and `--domain` is optional. As for the default cluster, `educates local config init` refuses to replace an existing configuration unless you add `--force`. The `--defaults` option writes only the default cluster's configuration, while `educates local config view --local-cluster test2` shows the defaults a named cluster takes.
 
 The `educates local config get`, `set`, `view` and `edit` commands also select a cluster with `--local-cluster` or the `EDUCATES_LOCAL_CLUSTER` environment variable, and act on that cluster's configuration, or on the default cluster's with neither. For example, to give the named cluster `test2` a domain of its own:
 
@@ -759,7 +749,7 @@ The `educates local config get`, `set`, `view` and `edit` commands also select a
 educates local config set --local-cluster test2 ingress.domain test2.educates.test
 ```
 
-As for the default cluster, `educates local config set` and `edit` refuse a change that breaks the rules for a named cluster's listen address, such as a loopback address, and `educates local config view` shows the `nip.io` name of the listen address as the domain when the configuration sets none.
+As for the default cluster, `educates local config set` and `edit` refuse a change that breaks the rules of a local cluster's configuration, such as a second control-plane node, and `educates local config view` shows the cluster's name under the `nip.io` name of the router address as the domain when the configuration sets none.
 
 To remove a named cluster's configuration once you no longer need the cluster, delete the cluster first and then its configuration:
 
@@ -802,7 +792,7 @@ educates admin platform deploy --local-config --local-cluster test2
 
 With `--config`, `educates admin platform deploy` installs the file you name into the selected cluster. `educates admin platform render` talks to no cluster, so `--local-cluster` only selects the configuration it renders, and cannot be combined with `--config`. `educates admin platform delete` reads no configuration, so for it `--local-cluster` only selects the cluster to remove Educates from.
 
-`educates local secrets sync` copies into the selected cluster the cached secrets its configuration needs: the CA key pair for its ingress domain when the cluster is served over HTTPS, and no CA key pair for a named cluster on the `nip.io` name of its listen address, which is served over plain HTTP. Without a cluster selected, it reads the default cluster's configuration and copies into the current context, as before.
+`educates local secrets sync` copies into the selected cluster the cached secrets its configuration needs: the CA key pair for its ingress domain when the cluster is served over HTTPS, and no CA key pair for a named cluster on its name under the `nip.io` name of the router address, which is served over plain HTTP. Without a cluster selected, it reads the default cluster's configuration and copies into the current context, as before.
 
 ### Serving a workshop to several clusters
 

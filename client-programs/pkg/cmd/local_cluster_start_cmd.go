@@ -41,6 +41,10 @@ On Docker Desktop 4.97 or later, creating the router refuses to run while
 "Allow privileged port forwarding to external machines" is off, in
 Settings > Advanced.
 
+Before the nodes start, start refuses a domain of the cluster's config,
+its ingress domain or one of its resolver.extraDomains, that another local
+cluster, running or stopped, claims, naming that cluster.
+
 Once its nodes run, every registry mirror container that exists is linked
 into each of them, whichever command created it, so a mirror deployed
 while the cluster was stopped reaches it too. A mirror the registry
@@ -84,6 +88,14 @@ func runLocalClusterStart(ctx context.Context, w, errW io.Writer, id localcluste
 		return err
 	}
 	if err := inventory.CheckMirrors(declared); err != nil {
+		return err
+	}
+	// A name leads to one local cluster only, through the router and the
+	// local DNS resolver alike, so a domain of the cluster's config that
+	// another local cluster, running or stopped, claims, as an edit made
+	// while the cluster was stopped can give it, is refused before the
+	// nodes start.
+	if err := inventory.CheckStartDomains(id); err != nil {
 		return err
 	}
 	// The router serves the cluster's names: it is created, or re-created

@@ -56,20 +56,17 @@ func TestLocalConfigCommandsSelectTheLocalCluster(t *testing.T) {
 	}
 }
 
-func TestLocalConfigInit_NamedCluster_WritesItsConfigFromTheListenAddress(t *testing.T) {
+// A named cluster's config needs nothing but its name.
+func TestLocalConfigInit_NamedCluster_WritesItsConfigWithNothingButItsName(t *testing.T) {
 	dataHome, id := namedClusterForTest(t)
 
 	var out bytes.Buffer
-	if err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{ListenAddress: "10.10.10.2"}, id, &out); err != nil {
+	if err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{}, id, &out); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 
-	written := declaredConfig(t, id.ConfigPath)
-	if got, want := written.Cluster.ListenAddress, "10.10.10.2"; got != want {
-		t.Errorf("written cluster.listenAddress = %q, want %q", got, want)
-	}
-	if written.Ingress.Domain != "" {
-		t.Errorf("written ingress.domain = %q, want none", written.Ingress.Domain)
+	if body, _ := os.ReadFile(id.ConfigPath); string(body) != minimalLocalConfigYAML {
+		t.Errorf("init wrote:\n%s\nwant:\n%s", body, minimalLocalConfigYAML)
 	}
 	if !bytes.Contains(out.Bytes(), []byte(id.ConfigPath)) {
 		t.Errorf("output %q does not name %s", out.String(), id.ConfigPath)
@@ -79,27 +76,28 @@ func TestLocalConfigInit_NamedCluster_WritesItsConfigFromTheListenAddress(t *tes
 	}
 }
 
-func TestLocalConfigInit_NamedCluster_WithoutAListenAddressFailsNamingTheFlag(t *testing.T) {
+func TestLocalConfigInit_NamedCluster_WritesTheDomainGiven(t *testing.T) {
 	_, id := namedClusterForTest(t)
 
-	err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{Domain: "test2.educates.test"}, id, io.Discard)
+	if err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{Domain: "test2.educates.test"}, id, io.Discard); err != nil {
+		t.Fatalf("init: %v", err)
+	}
 
-	wantError(t, err, "--listen-address")
-	if _, err := os.Stat(id.ConfigPath); !os.IsNotExist(err) {
-		t.Errorf("a config was written: stat err = %v", err)
+	if got, want := declaredConfig(t, id.ConfigPath).Ingress.Domain, "test2.educates.test"; got != want {
+		t.Errorf("written ingress.domain = %q, want %q", got, want)
 	}
 }
 
-// namedConfigForTest is a named local cluster's config listening on
-// 10.10.10.2.
-const namedConfigForTest = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
-	"cluster:\n  listenAddress: 10.10.10.2\n"
+// namedConfigForTest is a named local cluster's config that declares
+// nothing, so it takes its name under the nip.io name of the router
+// address.
+const namedConfigForTest = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"
 
 func TestLocalConfigInit_NamedCluster_ExistingConfig_ErrorsWithoutForce(t *testing.T) {
 	_, id := namedClusterForTest(t)
 	writeNamedConfig(t, id, namedConfigForTest)
 
-	err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{ListenAddress: "10.10.10.3"}, id, io.Discard)
+	err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{Domain: "test2.educates.test"}, id, io.Discard)
 
 	wantError(t, err, id.ConfigPath, "already exists", "--force")
 	if body, _ := os.ReadFile(id.ConfigPath); string(body) != namedConfigForTest {
@@ -109,57 +107,39 @@ func TestLocalConfigInit_NamedCluster_ExistingConfig_ErrorsWithoutForce(t *testi
 
 func TestLocalConfigInit_NamedCluster_Force_Overwrites(t *testing.T) {
 	_, id := namedClusterForTest(t)
-	writeNamedConfig(t, id, namedConfigForTest)
+	writeNamedConfig(t, id, namedConfigForTest+"cluster:\n  listenAddress: 10.10.10.2\n")
 
-	o := &LocalConfigInitOptions{Force: true, ListenAddress: "10.10.10.3", Domain: "test2.educates.test"}
+	o := &LocalConfigInitOptions{Force: true, Domain: "test2.educates.test"}
 	if err := (&ProjectInfo{}).runLocalConfigInit(o, id, io.Discard); err != nil {
 		t.Fatalf("init --force: %v", err)
 	}
 
 	written := declaredConfig(t, id.ConfigPath)
-	if written.Cluster.ListenAddress != "10.10.10.3" || written.Ingress.Domain != "test2.educates.test" {
-		t.Errorf("written cluster.listenAddress, ingress.domain = %q, %q, want 10.10.10.3, test2.educates.test",
+	if written.Cluster.ListenAddress != "" || written.Ingress.Domain != "test2.educates.test" {
+		t.Errorf("written cluster.listenAddress, ingress.domain = %q, %q, want none, test2.educates.test",
 			written.Cluster.ListenAddress, written.Ingress.Domain)
 	}
 }
 
-func TestLocalConfigInit_DefaultCluster_WritesTheListenAddressAndDomainGiven(t *testing.T) {
-	stubHostIP(t, "192.168.50.151")
+func TestLocalConfigInit_DefaultCluster_WritesTheDomainGiven(t *testing.T) {
 	dataHome, _ := namedClusterForTest(t)
 
-	err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{ListenAddress: "10.10.10.1", Domain: "educates.test"},
+	err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{Domain: "educates.test"},
 		localclusters.Default(dataHome), io.Discard)
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
 
-	written := declaredConfig(t, config.LocalConfigPath(dataHome))
-	if written.Cluster.ListenAddress != "10.10.10.1" || written.Ingress.Domain != "educates.test" {
-		t.Errorf("written cluster.listenAddress, ingress.domain = %q, %q, want 10.10.10.1, educates.test",
-			written.Cluster.ListenAddress, written.Ingress.Domain)
-	}
-	if body, _ := os.ReadFile(config.LocalConfigPath(dataHome)); strings.Contains(string(body), "This host's IP address") {
-		t.Errorf("a listen address given is commented as the host's IP address:\n%s", body)
-	}
-}
-
-func TestLocalConfigInit_DefaultCluster_RefusesAListenAddressTheRulesReject(t *testing.T) {
-	for _, address := range []string{"0.0.0.0", "127.0.0.1"} {
-		dataHome, _ := namedClusterForTest(t)
-
-		err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{ListenAddress: address}, localclusters.Default(dataHome), io.Discard)
-
-		wantError(t, err, "--listen-address", address)
-		if _, err := os.Stat(config.LocalConfigPath(dataHome)); !os.IsNotExist(err) {
-			t.Errorf("the default cluster's config was written: stat err = %v", err)
-		}
+	want := minimalLocalConfigYAML + "ingress:\n  domain: educates.test\n"
+	if body, _ := os.ReadFile(config.LocalConfigPath(dataHome)); string(body) != want {
+		t.Errorf("init wrote:\n%s\nwant:\n%s", body, want)
 	}
 }
 
 func TestLocalConfigInit_NamedCluster_RefusesDefaults(t *testing.T) {
 	_, id := namedClusterForTest(t)
 
-	err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{Defaults: true, ListenAddress: "10.10.10.2"}, id, io.Discard)
+	err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{Defaults: true}, id, io.Discard)
 
 	wantError(t, err, "--defaults", "named local cluster")
 	if _, err := os.Stat(id.ConfigPath); !os.IsNotExist(err) {
@@ -202,7 +182,7 @@ func TestLocalConfigGetAndSet_NamedClusterWithoutConfig_NameTheInitCommand(t *te
 
 	for command, err := range errs {
 		t.Run(command, func(t *testing.T) {
-			wantError(t, err, id.ConfigPath, "educates local config init --local-cluster test2 --listen-address")
+			wantError(t, err, id.ConfigPath, "educates local config init --local-cluster test2\n")
 		})
 	}
 	if _, err := os.Stat(id.ConfigPath); !os.IsNotExist(err) {
@@ -210,20 +190,26 @@ func TestLocalConfigGetAndSet_NamedClusterWithoutConfig_NameTheInitCommand(t *te
 	}
 }
 
-func TestLocalConfigSet_NamedCluster_RefusesAValueTheNamedClusterRulesReject(t *testing.T) {
+// twoControlPlanesConfig is a local cluster's config that breaks a rule of
+// a local cluster's config, declaring two control-plane nodes.
+const twoControlPlanesConfig = namedConfigForTest +
+	"cluster:\n  nodes:\n  - role: control-plane\n  - role: control-plane\n"
+
+func TestLocalConfigSet_NamedCluster_RefusesAChangeToAConfigTheRulesReject(t *testing.T) {
 	_, id := namedClusterForTest(t)
-	writeNamedConfig(t, id, namedConfigForTest)
+	writeNamedConfig(t, id, twoControlPlanesConfig)
 
-	err := runLocalConfigSet(io.Discard, id, "cluster.listenAddress", "127.0.0.2")
+	err := runLocalConfigSet(io.Discard, id, "ingress.domain", "test2.educates.test")
 
-	wantError(t, err, "cluster.listenAddress", "127.0.0.2", "loopback")
-	if body, _ := os.ReadFile(id.ConfigPath); string(body) != namedConfigForTest {
+	wantError(t, err, "cluster.nodes", `2 nodes have role "control-plane"`)
+	if body, _ := os.ReadFile(id.ConfigPath); string(body) != twoControlPlanesConfig {
 		t.Errorf("the config was changed to:\n%s", body)
 	}
 }
 
 func TestLocalConfigView_NamedCluster_PrintsItsEffectiveConfig(t *testing.T) {
-	_, id := namedClusterForTest(t)
+	dataHome, id := namedClusterForTest(t)
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	writeNamedConfig(t, id, namedConfigForTest)
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
@@ -234,13 +220,12 @@ func TestLocalConfigView_NamedCluster_PrintsItsEffectiveConfig(t *testing.T) {
 
 	s := out.String()
 	for _, want := range []string{
-		"listenAddress: 10.10.10.2",
-		"domain: 10-10-10-2.nip.io",
+		"domain: test2.10-10-10-1.nip.io",
 		"insecure: true",
 		"lookupService: true",
 		"(file: " + id.ConfigPath,
 		"educates local config view --local-cluster test2 --raw",
-		"cluster.listenAddress's for a named one",
+		"with a named local cluster's name under it",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("view output does not contain %q:\n%s", want, s)
@@ -266,19 +251,34 @@ func TestLocalConfigView_NamedCluster_Raw(t *testing.T) {
 }
 
 func TestLocalConfigView_NamedCluster_ShowsAConfigTheRulesRejectWithWhy(t *testing.T) {
-	_, id := namedClusterForTest(t)
-	writeNamedConfig(t, id, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n")
-
-	var out bytes.Buffer
-	if err := (&ProjectInfo{}).runLocalConfigView(&LocalConfigViewOptions{}, id, &out); err != nil {
-		t.Fatalf("view: %v", err)
+	cases := map[string]struct {
+		config, routerFile string
+		want               []string
+	}{
+		"two control-plane nodes": {config: twoControlPlanesConfig, routerFile: handWrittenRouterFile,
+			want: []string{"cluster.nodes", `2 nodes have role "control-plane"`}},
+		"no domain and no router file": {config: namedConfigForTest,
+			want: []string{"router.yaml", "educates local router update --address <ip>"}},
 	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dataHome, id := namedClusterForTest(t)
+			if tc.routerFile != "" {
+				writeRouterFile(t, dataHome, tc.routerFile)
+			}
+			writeNamedConfig(t, id, tc.config)
 
-	for _, want := range []string{"# The local cluster can't use this config until it is fixed:",
-		"cluster.listenAddress: must be set", "educates local config set --local-cluster test2 cluster.listenAddress <ip>"} {
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("view output does not contain %q:\n%s", want, out.String())
-		}
+			var out bytes.Buffer
+			if err := (&ProjectInfo{}).runLocalConfigView(&LocalConfigViewOptions{}, id, &out); err != nil {
+				t.Fatalf("view: %v", err)
+			}
+
+			for _, want := range append([]string{"# The local cluster can't use this config until it is fixed:"}, tc.want...) {
+				if !strings.Contains(out.String(), want) {
+					t.Errorf("view output does not contain %q:\n%s", want, out.String())
+				}
+			}
+		})
 	}
 }
 
@@ -287,7 +287,7 @@ func TestLocalConfigView_NamedClusterWithoutConfig_NamesTheInitCommand(t *testin
 
 	err := (&ProjectInfo{}).runLocalConfigView(&LocalConfigViewOptions{}, id, io.Discard)
 
-	wantError(t, err, id.ConfigPath, "educates local config init --local-cluster test2 --listen-address")
+	wantError(t, err, id.ConfigPath, "educates local config init --local-cluster test2\n")
 }
 
 func TestRunLocalConfigEdit_NamedCluster_EditsItsConfig(t *testing.T) {
@@ -317,19 +317,18 @@ func TestRunLocalConfigEdit_NamedCluster_EditsItsConfig(t *testing.T) {
 }
 
 func TestRunLocalConfigEdit_NamedCluster_ReopensOnAConfigTheNamedClusterRulesReject(t *testing.T) {
-	_, id := namedClusterForTest(t)
+	dataHome, id := namedClusterForTest(t)
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	writeNamedConfig(t, id, namedConfigForTest)
-	loopback := "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
-		"cluster:\n  listenAddress: 127.0.0.2\n"
 	valid := namedConfigForTest + "# edited-marker\n"
-	stateDir := stageFakeEditor(t, loopback, valid)
+	stateDir := stageFakeEditor(t, twoControlPlanesConfig, valid)
 
 	if err := runLocalConfigEdit(id); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
 
 	if n := editorInvocations(t, stateDir); n != 2 {
-		t.Errorf("editor invoked %d times, want 2 (one reopen on the loopback listen address)", n)
+		t.Errorf("editor invoked %d times, want 2 (one reopen on the two control-plane nodes)", n)
 	}
 	if body, _ := os.ReadFile(id.ConfigPath); !strings.Contains(string(body), "# edited-marker") {
 		t.Errorf("the second, valid edit was not saved:\n%s", body)
@@ -342,7 +341,7 @@ func TestRunLocalConfigEdit_NamedClusterWithoutConfig_NamesTheInitCommand(t *tes
 
 	err := runLocalConfigEdit(id)
 
-	wantError(t, err, id.ConfigPath, "educates local config init --local-cluster test2 --listen-address")
+	wantError(t, err, id.ConfigPath, "educates local config init --local-cluster test2\n")
 	if n := editorInvocations(t, stateDir); n != 0 {
 		t.Errorf("editor invoked %d times, want 0", n)
 	}
@@ -351,13 +350,16 @@ func TestRunLocalConfigEdit_NamedClusterWithoutConfig_NamesTheInitCommand(t *tes
 	}
 }
 
-func TestLocalConfigInit_NamedCluster_Force_KeepsTheConfigWhenTheFlagsAreRefused(t *testing.T) {
-	_, id := namedClusterForTest(t)
+// A config init can't write, here one without a domain on a router
+// address with no nip.io name, leaves the existing config as it is.
+func TestLocalConfigInit_NamedCluster_Force_KeepsTheConfigWhenTheNewOneIsRefused(t *testing.T) {
+	dataHome, id := namedClusterForTest(t)
+	writeRouterFile(t, dataHome, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalRouter\naddress: 'fd00::1'\n")
 	writeNamedConfig(t, id, namedConfigForTest)
 
-	err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{Force: true, ListenAddress: "0.0.0.0"}, id, io.Discard)
+	err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{Force: true}, id, io.Discard)
 
-	wantError(t, err, "--listen-address", "0.0.0.0")
+	wantError(t, err, "router address fd00::1", "nip.io")
 	if body, _ := os.ReadFile(id.ConfigPath); string(body) != namedConfigForTest {
 		t.Errorf("the config was changed to:\n%s", body)
 	}

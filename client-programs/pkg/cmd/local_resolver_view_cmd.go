@@ -33,8 +33,8 @@ of every named local cluster whose kind cluster exists.
 The first table has a row for each local cluster, with the address its
 names resolve to, the router address, and its config. The second has a
 row for each name, with its cluster and where it comes from: the ingress
-domain, the nip.io name of the router address or of a named cluster's
-listen address, resolver.extraDomains, or
+domain, the nip.io name of the router address, a named cluster's name
+under it included, resolver.extraDomains, or
 an address= line of a *.conf file of your own in <data-home>/dnsmasq.d.
 Its notes say when a name is covered by a broader name of the same
 cluster, when it wins over another cluster's broader name, when one of

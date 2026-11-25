@@ -68,7 +68,7 @@ func TestLocalConfigExplain_Resolver_ExplainsTheSharedResolver(t *testing.T) {
 		want []string
 	}{
 		{"resolver", []string{"every local cluster shares", "router address", "dnsmasq.d"}},
-		{"cluster.listenAddress", []string{"specific IP address", "0.0.0.0", "loopback", "educates local config init", "router address"}},
+		{"cluster.listenAddress", []string{"Ignored", "no address of its own", "router address", "educates local router update --address"}},
 		{"resolver.extraDomains", []string{"subdomains", "another local cluster", "error"}},
 	} {
 		t.Run(tc.path, func(t *testing.T) {

@@ -111,8 +111,7 @@ conf-dir=/etc/dnsmasq.d/,*.conf
 
 func TestLocalResolverViewWarnsAboutTheConfigsItLeavesOutAfterTheTables(t *testing.T) {
 	dataHome, inventory := twoClusterDataHome(t)
-	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
-		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 127.0.0.1\n")
+	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"), twoControlPlanesConfig)
 	view, err := inventory.ResolverView(nil, nil)
 	if err != nil {
 		t.Fatalf("ResolverView: %v", err)
@@ -124,7 +123,7 @@ func TestLocalResolverViewWarnsAboutTheConfigsItLeavesOutAfterTheTables(t *testi
 	if strings.Contains(out.String(), "test2") {
 		t.Errorf("view shows test2, whose config the resolver leaves out:\n%s", out.String())
 	}
-	for _, part := range []string{"Warning:", `local cluster "test2"`, "loopback"} {
+	for _, part := range []string{"Warning:", `local cluster "test2"`, `2 nodes have role "control-plane"`} {
 		if !strings.Contains(errOut.String(), part) {
 			t.Errorf("warnings %q do not mention %q", errOut.String(), part)
 		}

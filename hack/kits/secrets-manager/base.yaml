@@ -1,0 +1,23 @@
+# The namespaces the scenarios share. Sources live in the source namespace,
+# and copies land in the two target namespaces. A label selector picks them
+# by the label kit-secrets-manager, which no other kit's namespaces carry.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kit-secrets-manager-source
+  labels:
+    kit-secrets-manager: source
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kit-secrets-manager-target-a
+  labels:
+    kit-secrets-manager: target
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kit-secrets-manager-target-b
+  labels:
+    kit-secrets-manager: target

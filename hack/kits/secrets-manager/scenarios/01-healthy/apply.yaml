@@ -1,0 +1,31 @@
+# A copier whose source exists, copying into one namespace, with labels and
+# an annotation of its own on the copy.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: healthy
+  namespace: kit-secrets-manager-source
+  labels:
+    team: platform
+stringData:
+  username: demo
+  password: not-a-real-password
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretCopier
+metadata:
+  name: kit-secrets-manager-healthy
+spec:
+  rules:
+  - sourceSecret:
+      name: healthy
+      namespace: kit-secrets-manager-source
+    targetNamespaces:
+      nameSelector:
+        matchNames:
+        - kit-secrets-manager-target-a
+    targetSecret:
+      labels:
+        copied-by: kit-secrets-manager
+      annotations:
+        example.com/backup: skip

@@ -1,0 +1,23 @@
+# Starts in sync: a copier copying into the second target namespace. Its
+# break.sh then makes the copy immutable and changes the source's data.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: immutable
+  namespace: kit-secrets-manager-source
+stringData:
+  value: v1
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretCopier
+metadata:
+  name: kit-secrets-manager-immutable
+spec:
+  rules:
+  - sourceSecret:
+      name: immutable
+      namespace: kit-secrets-manager-source
+    targetNamespaces:
+      nameSelector:
+        matchNames:
+        - kit-secrets-manager-target-b

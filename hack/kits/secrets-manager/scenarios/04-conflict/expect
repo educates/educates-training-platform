@@ -1,0 +1,15 @@
+# A copy's name taken by a hand-made Secret, which is left untouched, until fix deletes it.
+[applied]
+secretcopier/kit-secrets-manager-conflict  ready   = False
+secretcopier/kit-secrets-manager-conflict  reason  = Conflict
+secretcopier/kit-secrets-manager-conflict  insync  = 0/1
+secretcopier/kit-secrets-manager-conflict  message ~ hold the copy's name in namespaces kit-secrets-manager-target-a
+kit-secrets-manager-target-a/secret/conflict  {{index .data "token" | base64decode}}  = hand-made
+event secretcopier/kit-secrets-manager-conflict  Warning NotReady
+
+[fixed]
+secretcopier/kit-secrets-manager-conflict  ready   = True
+secretcopier/kit-secrets-manager-conflict  reason  = InSync
+secretcopier/kit-secrets-manager-conflict  insync  = 1/1
+kit-secrets-manager-target-a/secret/conflict  {{index .data "token" | base64decode}}  = from-the-source
+event secretcopier/kit-secrets-manager-conflict  Normal Recovered

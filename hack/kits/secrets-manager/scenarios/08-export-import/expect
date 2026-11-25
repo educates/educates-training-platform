@@ -1,0 +1,37 @@
+# An exporter and three importers: imported, awaiting authorization, and no matching exporter.
+[applied]
+kit-secrets-manager-source/secretexporter/export  ready   = False
+kit-secrets-manager-source/secretexporter/export  reason  = AwaitingAuthorization
+kit-secrets-manager-source/secretexporter/export  insync  = 1/2
+kit-secrets-manager-source/secretexporter/export  message ~ No SecretImporter accepts the copy in namespaces kit-secrets-manager-target-b
+event kit-secrets-manager-source/secretexporter/export  Warning NotReady
+kit-secrets-manager-target-a/secretimporter/export  ready   = True
+kit-secrets-manager-target-a/secretimporter/export  reason  = Imported
+kit-secrets-manager-target-a/secretimporter/export  {.status.boundTo.kind}  = SecretExporter
+kit-secrets-manager-target-a/secretimporter/export  {.status.boundTo.name}  = export
+kit-secrets-manager-target-a/secret/export  {{index .data "db-password" | base64decode}}  = exported-value
+kit-secrets-manager-target-a/secret/export  {.metadata.ownerReferences[0].kind}  = SecretImporter
+event kit-secrets-manager-target-a/secretimporter/export  Normal Imported
+kit-secrets-manager-target-b/secretimporter/export  ready   = False
+kit-secrets-manager-target-b/secretimporter/export  reason  = AwaitingAuthorization
+kit-secrets-manager-target-b/secretimporter/export  message ~ (SharedSecretMismatch)
+kit-secrets-manager-target-b/secret/export  absent
+event kit-secrets-manager-target-b/secretimporter/export  Warning NotReady
+kit-secrets-manager-target-b/secretimporter/nobody-exports  ready   = False
+kit-secrets-manager-target-b/secretimporter/nobody-exports  reason  = NoMatchingExporter
+kit-secrets-manager-target-b/secretimporter/nobody-exports  message ~ No SecretExporter or SecretCopier rule offers Secret nobody-exports
+event kit-secrets-manager-target-b/secretimporter/nobody-exports  Warning NotReady
+
+# The importer no exporter offers a Secret to stays as it is, on purpose.
+[fixed]
+kit-secrets-manager-source/secretexporter/export  ready   = True
+kit-secrets-manager-source/secretexporter/export  reason  = InSync
+kit-secrets-manager-source/secretexporter/export  insync  = 2/2
+event kit-secrets-manager-source/secretexporter/export  Normal Recovered
+kit-secrets-manager-target-b/secretimporter/export  ready   = True
+kit-secrets-manager-target-b/secretimporter/export  reason  = Imported
+kit-secrets-manager-target-b/secretimporter/export  {.status.boundTo.name}  = export
+kit-secrets-manager-target-b/secret/export  {{index .data "db-password" | base64decode}}  = exported-value
+event kit-secrets-manager-target-b/secretimporter/export  Normal Imported
+event kit-secrets-manager-target-b/secretimporter/export  Normal Recovered
+kit-secrets-manager-target-b/secretimporter/nobody-exports  reason  = NoMatchingExporter

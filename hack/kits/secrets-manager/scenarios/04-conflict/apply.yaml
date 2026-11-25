@@ -1,0 +1,30 @@
+# A Secret the secrets-manager did not create already holds the copy's name.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: conflict
+  namespace: kit-secrets-manager-source
+stringData:
+  token: from-the-source
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: conflict
+  namespace: kit-secrets-manager-target-a
+stringData:
+  token: hand-made
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretCopier
+metadata:
+  name: kit-secrets-manager-conflict
+spec:
+  rules:
+  - sourceSecret:
+      name: conflict
+      namespace: kit-secrets-manager-source
+    targetNamespaces:
+      nameSelector:
+        matchNames:
+        - kit-secrets-manager-target-a

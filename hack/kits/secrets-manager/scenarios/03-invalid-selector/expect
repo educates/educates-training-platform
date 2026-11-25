@@ -1,0 +1,21 @@
+# A copier whose label selector is invalid (Exists with values), until fix drops the values.
+[applied]
+secretcopier/kit-secrets-manager-invalid-selector  ready    = False
+secretcopier/kit-secrets-manager-invalid-selector  reason   = InvalidSelector
+secretcopier/kit-secrets-manager-invalid-selector  insync   = 0/0
+secretcopier/kit-secrets-manager-invalid-selector  message  ~ rules[0]: invalid labelSelector
+secretcopier/kit-secrets-manager-invalid-selector  message  ~ values set must be empty for exists
+kit-secrets-manager-target-a/secret/invalid-selector-copy  absent
+event secretcopier/kit-secrets-manager-invalid-selector  Warning NotReady
+
+# The selector now picks every namespace with the label kit-secrets-manager,
+# which the source namespace has too, but a rule never copies into its
+# source's namespace.
+[fixed]
+secretcopier/kit-secrets-manager-invalid-selector  ready   = True
+secretcopier/kit-secrets-manager-invalid-selector  reason  = InSync
+secretcopier/kit-secrets-manager-invalid-selector  insync  = 2/2
+kit-secrets-manager-target-a/secret/invalid-selector-copy  {{index .data "value" | base64decode}}  = selected
+kit-secrets-manager-target-b/secret/invalid-selector-copy  {{index .data "value" | base64decode}}  = selected
+kit-secrets-manager-source/secret/invalid-selector-copy  absent
+event secretcopier/kit-secrets-manager-invalid-selector  Normal Recovered

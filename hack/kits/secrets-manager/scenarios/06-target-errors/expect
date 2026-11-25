@@ -1,0 +1,16 @@
+# A copy the API server rejects (a TLS Secret without tls.crt and tls.key), until fix lists those keys.
+[applied]
+secretcopier/kit-secrets-manager-target-errors  ready    = False
+secretcopier/kit-secrets-manager-target-errors  reason   = TargetErrors
+secretcopier/kit-secrets-manager-target-errors  insync   = 0/1
+secretcopier/kit-secrets-manager-target-errors  message  ~ kit-secrets-manager-target-a
+secretcopier/kit-secrets-manager-target-errors  message  ~ Required value
+kit-secrets-manager-target-a/secret/tls  absent
+event secretcopier/kit-secrets-manager-target-errors  Warning NotReady
+
+[fixed]
+secretcopier/kit-secrets-manager-target-errors  ready   = True
+secretcopier/kit-secrets-manager-target-errors  reason  = InSync
+secretcopier/kit-secrets-manager-target-errors  insync  = 1/1
+kit-secrets-manager-target-a/secret/tls  {.type}  = kubernetes.io/tls
+event secretcopier/kit-secrets-manager-target-errors  Normal Recovered

@@ -1,0 +1,40 @@
+# Two injectors into the first target namespace: one injecting the pull
+# secret named by a glob into every service account there, and one whose
+# only source selector is an empty list of names.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pull
+  namespace: kit-secrets-manager-target-a
+type: kubernetes.io/dockerconfigjson
+stringData:
+  .dockerconfigjson: '{"auths":{"registry.example.com":{"auth":"ZGVtbzpkZW1v"}}}'
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretInjector
+metadata:
+  name: kit-secrets-manager-injector
+spec:
+  rules:
+  - targetNamespaces:
+      nameSelector:
+        matchNames:
+        - kit-secrets-manager-target-a
+    sourceSecrets:
+      nameSelector:
+        matchNames:
+        - "pull*"
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretInjector
+metadata:
+  name: kit-secrets-manager-injector-empty
+spec:
+  rules:
+  - targetNamespaces:
+      nameSelector:
+        matchNames:
+        - kit-secrets-manager-target-a
+    sourceSecrets:
+      nameSelector:
+        matchNames: []

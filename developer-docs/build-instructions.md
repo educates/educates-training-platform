@@ -317,3 +317,8 @@ Checking a change in real sessions
 ----------------------------------
 
 The harnesses under [hack/harnesses](../hack/harnesses/README.md) check a build by hand in real workshop sessions on a local cluster. The `local-cluster.sh` helper there creates a named local cluster from a `make local-build PACKAGE_VERSION=<tag>` build, beside any cluster you already run, and deletes it again. The session acceptance harness requests sessions of a set of fixture workshops, several of them built from the samples above, walks their instructions in Chrome, runs kubectl inside the workshop container, holds the console open and connects over the SSH tunnel, then reports what it saw.
+
+Looking at a component's states by hand
+---------------------------------------
+
+The validation kits under [hack/kits](../hack/kits/README.md) leave a known set of states, healthy and failing, in an existing cluster, for you to inspect with `kubectl get`, `kubectl describe` and the Events: the secrets-manager kit, for example, puts its four resource kinds into every failing state they report. `hack/kits/kit.sh verify` checks that the cluster shows each state as the kit describes it, `break` and `fix` move a scenario between its states, and `delete` removes everything the kit made. A kit needs only Bash and kubectl, and runs on a named local cluster of its own made with `local-cluster.sh`, as a harness does, or on any cluster you name by its kube context.

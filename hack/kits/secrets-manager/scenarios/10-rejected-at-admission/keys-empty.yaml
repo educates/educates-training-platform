@@ -1,0 +1,16 @@
+# Refused at admission: targetSecret.keys must list at least one key.
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretCopier
+metadata:
+  name: kit-secrets-manager-rejected-keys-empty
+spec:
+  rules:
+  - sourceSecret:
+      name: healthy
+      namespace: kit-secrets-manager-source
+    targetNamespaces:
+      nameSelector:
+        matchNames:
+        - kit-secrets-manager-target-a
+    targetSecret:
+      keys: []

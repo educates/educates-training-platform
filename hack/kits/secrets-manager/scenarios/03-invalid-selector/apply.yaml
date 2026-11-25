@@ -1,0 +1,28 @@
+# A copier whose label selector Kubernetes would not accept: Exists with
+# values. Admission accepts it; the secrets-manager reports it.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: invalid-selector
+  namespace: kit-secrets-manager-source
+stringData:
+  value: selected
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretCopier
+metadata:
+  name: kit-secrets-manager-invalid-selector
+spec:
+  rules:
+  - sourceSecret:
+      name: invalid-selector
+      namespace: kit-secrets-manager-source
+    targetNamespaces:
+      labelSelector:
+        matchExpressions:
+        - key: kit-secrets-manager
+          operator: Exists
+          values:
+          - target
+    targetSecret:
+      name: invalid-selector-copy

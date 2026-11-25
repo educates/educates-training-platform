@@ -166,28 +166,26 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	case createdConfig:
 		fmt.Fprintf(w, "Local cluster %q had no config; wrote one from --%s to %s\n\n", id.Name, localclusters.ListenAddressFlagName, configPath)
 	}
-	// The router file, router.yaml in the data home, holds the one host
-	// address every local cluster shares. A missing one is written with
-	// the host's IP address before any check, and before anything touches
-	// Docker.
-	if err := ensureRouterFile(w); err != nil {
+	// The router file, router.yaml in the data home, holds the router
+	// address, the one host address every local cluster is served on. A
+	// missing one is written with the host's IP address before any check,
+	// and before anything touches Docker. The default local cluster's
+	// nip.io domain is the router address's, so its config is loaded again
+	// once the file is written.
+	if written, err := ensureRouterFile(w); err != nil {
 		return err
+	} else if written {
+		if cfg, _, _, err = loadLocalConfig(o, id); err != nil {
+			return err
+		}
 	}
 
 	// 0. Preflight: fail fast (before any docker / kind / k8s mutation)
-	//    when the cluster already exists, its listen address clashes with
-	//    another Educates cluster or is on no host interface, the registry
-	//    mirrors file does not load or a mirror it declares has a
-	//    container with other values, Docker
-	//    Desktop's privileged port setting is off, host 80/443 are bound,
-	//    or a secure install, unless --cluster-only skips it, has no
-	//    certificate source. The clash check
-	//    reads every Educates cluster's configured bindings, so a stopped
-	//    cluster counts too. The host-port case comes last, for holders
-	//    that are not Educates clusters: a probe container tries to
-	//    publish ports 80 and 443 on the listen address, since kind would
-	//    otherwise fail later with a much less actionable error when Envoy
-	//    can't publish them. The certificate case is the one the deploy
+	//    when the cluster already exists, the registry mirrors file does
+	//    not load or a mirror it declares has a container with other
+	//    values, another local cluster claims one of its domains, or a
+	//    secure install, unless --cluster-only skips it, has no
+	//    certificate source. The certificate case is the one the deploy
 	//    resolves later: without this check it would only fail after the
 	//    kind cluster and registry already exist.
 	in, err := p.prepareLocalCreate(cfg, !o.ClusterOnly)
@@ -202,9 +200,6 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	}
 	inventory, err := localClusterInventory(ctx)
 	if err != nil {
-		return err
-	}
-	if err := inventory.CheckCreate(id, in.Cluster.ListenAddress); err != nil {
 		return err
 	}
 	// Every local cluster needs the registry mirrors the registry mirrors
@@ -233,27 +228,27 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		return err
 	}
 	warnLeftOutConfigs(w, leftOut)
-	// Docker Desktop 4.97 and later publishes ports 80 and 443 on the
-	// listen address, a non-loopback address, only with its privileged
-	// port setting on.
-	if err := checkDockerDesktopPrivilegedPorts(ctx, w); err != nil {
-		return err
-	}
-	// Another create running at the same time may take the listen address
-	// after the clash check above read Docker: the probe, or kind as it
-	// creates the nodes, then fails on the ports, and the error names that
-	// cluster.
-	if err := checkHostPortsAvailable(ctx, id.PortCheckContainer(), in.Cluster.ListenAddress, o.Verbose, w); err != nil {
-		return listenAddressTakenError(ctx, id, in.Cluster.ListenAddress, err)
-	}
 
-	// The kind, registry, loopback and mirror phases all report through
-	// one progress reporter so the create flow reads as a single sequence
-	// of `→ … ✓` steps (the platform deploy tail-call builds its own
-	// reporter against the same writer). Verbose turns off in-place
+	// The router, kind, registry, loopback and mirror phases all report
+	// through one progress reporter so the create flow reads as a single
+	// sequence of `→ … ✓` steps (the platform deploy tail-call builds its
+	// own reporter against the same writer). Verbose turns off in-place
 	// morphing so kind's full spinner and the per-step detail lines are
 	// all preserved rather than overwritten.
 	rep := progress.New(w, 0, isStdoutTTY(w) && !o.Verbose)
+
+	// The router publishes ports 80 and 443 on the router address for
+	// every local cluster, so it is created, or re-created on a new image
+	// or address, before kind touches anything: its start is the check
+	// that the ports are free, and its error names a cluster made by an
+	// earlier release of the CLI that still publishes them from its node.
+	// Creating it checks the router address and Docker Desktop's
+	// privileged port setting first. A router that needs neither is
+	// refreshed once the cluster exists.
+	routerChange := dockerRouterChange(utils.GetEducatesHomeDir(), w)
+	if _, err := routerChange.ensureRouter(ctx, rep, inventory); err != nil {
+		return err
+	}
 
 	// 1. kind bootstrap. kindBootstrapFromConfig builds the focused
 	//    KindBootstrapInput from EducatesLocalConfig.Cluster fields the
@@ -270,7 +265,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		}
 		return clusterConfig.CreateCluster(bootstrap, o.ClusterImage, onPhase, o.Verbose)
 	}); err != nil {
-		return listenAddressTakenError(ctx, id, in.Cluster.ListenAddress, err)
+		return err
 	}
 	// The cluster exists now, so a resolver that can't be refreshed is
 	// only a warning. Its configuration is rendered again rather than
@@ -282,6 +277,11 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		content, _, err := observedResolverConfig(ctx, resolverInput)
 		return content, nil, err
 	})
+	// The router routes the new cluster's names to its node from now on,
+	// over the kind network kind has just made, which it joins. As for
+	// the resolver, it renders every local cluster again, and a router it
+	// can't refresh is only a warning.
+	routerChange.refreshRouter(ctx, rep, localClusterInventory, resolverInput.LoadedConfig)
 	// The registry, loopback and mirror steps talk to the cluster just
 	// created, through its own context in the kubeconfig kind wrote it in.
 	client, err := clusterConfig.Config.GetClient()
@@ -507,7 +507,6 @@ func kindBootstrapFromConfig(clusterCfg v1alpha1.LocalClusterConfig) *cluster.Ki
 	}
 
 	return &cluster.KindBootstrapInput{
-		ListenAddress: clusterCfg.ListenAddress,
 		ApiServer: cluster.KindApiServer{
 			Address: clusterCfg.ApiServer.Address,
 			Port:    clusterCfg.ApiServer.Port,

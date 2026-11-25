@@ -22,6 +22,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 	"github.com/educates/educates-training-platform/client-programs/pkg/resolver"
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 var localClusterDeleteExample = `
@@ -31,8 +32,8 @@ var localClusterDeleteExample = `
   # Delete the named local cluster test2, keeping its config:
   educates local cluster delete --local-cluster test2
 
-  # Delete the local cluster along with the registry, resolver, and mirrors,
-  # which are kept while another local cluster still uses them:
+  # Delete the local cluster along with the registry, resolver, mirrors and
+  # router, which are kept while another local cluster still uses them:
   educates local cluster delete --all
 `
 
@@ -50,16 +51,16 @@ type LocalClusterDeleteOptions struct {
 // later deploy of the kept config mints a new one from the root CA.
 //
 // With AllComponents it then deletes the host infrastructure every local
-// cluster shares, the local registry, the DNS resolver and the registry
-// mirrors, but only when no other Educates cluster remains to use them;
-// otherwise it keeps them and names the clusters still using them. It
-// does so even when the kind cluster was already gone, and still reports
-// that.
+// cluster shares, the local registry, the DNS resolver, the registry
+// mirrors and the router, with the router folder of the data home but not
+// the router file, router.yaml, which holds the router address. It does so
+// only when no other Educates cluster remains to use them; otherwise it
+// keeps them and names the clusters still using them. It does so even
+// when the kind cluster was already gone, and still reports that.
 //
-// A DNS resolver that keeps running is refreshed once the kind cluster is
-// gone, so it stops serving a named cluster's domains. A resolver that
-// can't be refreshed is only a warning, since the cluster is gone by
-// then.
+// A DNS resolver and a router that keep running are refreshed once the
+// kind cluster is gone, so they stop serving its domains. One that can't
+// be refreshed is only a warning, since the cluster is gone by then.
 func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Identity) error {
 	c := cluster.NewKindClusterConfig("", id)
 
@@ -74,6 +75,7 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 		}
 		removeUnusedCAKeyPairs(ctx, os.Stdout, id, keyPairs)
 		refreshResolverAfterDelete(ctx)
+		refreshRouterAfterDelete(ctx)
 		return nil
 	}
 	if err != nil && !cluster.IsNotFound(err) {
@@ -87,9 +89,10 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 		return inventoryErr
 	}
 	if users := inventory.SharedInfrastructureUsers(id); len(users) > 0 {
-		fmt.Printf("Skipped deleting the local registry, DNS resolver and registry mirrors: still in use by %s.\n",
+		fmt.Printf("Skipped deleting the local registry, DNS resolver, registry mirrors and router: still in use by %s.\n",
 			localclusters.DescribeClusters(users))
 		refreshResolverAfterDelete(ctx)
+		refreshRouterAfterDelete(ctx)
 		return err
 	}
 
@@ -101,6 +104,9 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 	resolver.DeleteResolver()
 	_ = stepOnStdout(false, "delete registry mirrors", "deleted", func(s progress.Step) error {
 		return registry.DeleteRegistryMirrors(s)
+	})
+	_ = stepOnStdout(false, "delete router", "deleted", func(progress.Step) error {
+		return dockerRouterChange(utils.GetEducatesHomeDir(), os.Stderr).removeRouter(ctx)
 	})
 
 	return err
@@ -230,6 +236,14 @@ func removeUnusedCAKeyPairs(ctx context.Context, w io.Writer, id localclusters.I
 	}
 }
 
+// refreshRouterAfterDelete refreshes the router once a local cluster's
+// kind cluster is gone, so it stops serving the cluster's domains, warning
+// when it can't. The reload keeps the other clusters' open connections.
+func refreshRouterAfterDelete(ctx context.Context) {
+	rep := progress.New(os.Stdout, 0, isStdoutTTY(os.Stdout))
+	dockerRouterChange(utils.GetEducatesHomeDir(), os.Stderr).refreshRouter(ctx, rep, localClusterInventory)
+}
+
 // refreshResolverAfterDelete refreshes a running local DNS resolver once a
 // local cluster's kind cluster is gone, so it stops serving the domains
 // of a named cluster, warning when it can't.
@@ -256,8 +270,14 @@ running or stopped, uses it. The root CA and any TLS certificate you
 cached are never removed, and creating the cluster again mints a new CA
 key pair from the root CA.
 
-With --all it also deletes the local image registry, the DNS resolver and
-the registry mirrors, unless another local cluster still uses them.`,
+The router, which serves every local cluster, is refreshed so it no
+longer routes the cluster's names, keeping the other clusters' open
+connections.
+
+With --all it also deletes the local image registry, the DNS resolver, the
+registry mirrors and the router, with the router folder of the data home,
+unless another local cluster still uses them. The router file,
+<data-home>/router.yaml, which holds the router address, is kept.`,
 		Example: localClusterDeleteExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			id, err := selectedEducatesCluster(cmd)
@@ -272,7 +292,7 @@ the registry mirrors, unless another local cluster still uses them.`,
 		&o.AllComponents,
 		"all",
 		false,
-		"also delete the image registry, resolver and registry mirrors, unless another local cluster still uses them",
+		"also delete the image registry, resolver, registry mirrors and router, unless another local cluster still uses them",
 	)
 	addLocalClusterFlag(c)
 

@@ -21,6 +21,15 @@ type RouterContainer struct {
 	PortBindings []PortBinding
 }
 
+// Router returns the router container observed, and reports whether there
+// is one.
+func (inv Inventory) Router() (RouterContainer, bool) {
+	if inv.observed.Router == nil {
+		return RouterContainer{}, false
+	}
+	return *inv.observed.Router, true
+}
+
 // publishedAddress returns the host address the router container is
 // configured to publish port 80 or 443 on, the unspecified IPv4 address
 // for every host address, and false when it publishes neither.
@@ -175,6 +184,24 @@ func (inv Inventory) RouterStartError(address string, err error) error {
 	}
 	return fmt.Errorf("%w. Every local cluster is now served through the router, but %s: %s. "+
 		"Delete each and create it again:\n%s\n", failed, which, joinDescriptions(described), commands.String())
+}
+
+// describeAddress names the host address addr in a message, saying when
+// it means every host address.
+func describeAddress(addr netip.Addr) string {
+	if addr.IsUnspecified() {
+		return addr.String() + ", every host address"
+	}
+	return addr.String()
+}
+
+// capitalize returns s with its first letter in upper case, to start a
+// sentence.
+func capitalize(s string) string {
+	if s == "" || s[0] < 'a' || s[0] > 'z' {
+		return s
+	}
+	return string(s[0]-'a'+'A') + s[1:]
 }
 
 // joinDescriptions joins descriptions in a sentence, as "a, b and c".

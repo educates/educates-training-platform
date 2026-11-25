@@ -10,11 +10,13 @@ import (
 // CLI config kind: 'local cluster create' builds one from
 // EducatesLocalConfig; future scenario kinds (GKE/EKS — though they
 // would not use kind) or test fixtures build it directly.
+//
+// No node publishes a port on the host: the router reaches each cluster's
+// ingress on its control-plane node over the kind network.
 type KindBootstrapInput struct {
-	ListenAddress string
-	ApiServer     KindApiServer
-	Networking    KindNetworking
-	VolumeMounts  []KindVolumeMount
+	ApiServer    KindApiServer
+	Networking   KindNetworking
+	VolumeMounts []KindVolumeMount
 	// Nodes, when non-empty, fully describes the cluster's nodes (the
 	// template renders a node per entry). Empty keeps the default single
 	// control-plane node.
@@ -24,7 +26,7 @@ type KindBootstrapInput struct {
 // KindNode is one node in a multi-node kind cluster. Labels become
 // Kubernetes node labels; Taints are registered on worker nodes at join
 // time. The control-plane node additionally carries the ingress-ready
-// label and the host port mappings / volume mounts.
+// label and the volume mounts.
 type KindNode struct {
 	Role   string
 	Labels map[string]string

@@ -179,9 +179,6 @@ func TestKindBootstrapFromConfig_CarriesTemplateFields(t *testing.T) {
 	}
 	in := kindBootstrapFromConfig(cfg.Cluster)
 
-	if got, want := in.ListenAddress, "192.168.50.50"; got != want {
-		t.Errorf("ListenAddress = %q, want %q", got, want)
-	}
 	if got, want := in.ApiServer.Port, 6443; got != want {
 		t.Errorf("ApiServer.Port = %d, want %d", got, want)
 	}

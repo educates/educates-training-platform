@@ -124,7 +124,7 @@ func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclus
 	}
 	// The router file comes first, so that no config is written without
 	// it, and init can be run again once the router address is set.
-	if err := ensureRouterFile(w); err != nil {
+	if _, err := ensureRouterFile(w); err != nil {
 		return err
 	}
 	flags := localclusters.ConfigFlags{ListenAddress: o.ListenAddress, Domain: o.Domain}
@@ -147,19 +147,20 @@ func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclus
 
 // ensureRouterFile writes the router file of the data home, router.yaml,
 // when it is missing, with the host's IP address as the router address,
-// as localclusters.EnsureRouterFile writes it, and tells w when it does.
-// An existing router file is left as it is.
-func ensureRouterFile(w io.Writer) error {
+// as localclusters.EnsureRouterFile writes it, and tells w when it does,
+// reporting whether it did. An existing router file is left as it is.
+func ensureRouterFile(w io.Writer) (written bool, err error) {
 	dataHome := utils.GetEducatesHomeDir()
 	address, err := localclusters.EnsureRouterFile(dataHome)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if address != "" {
-		fmt.Fprintf(w, "wrote %s, with this host's IP address %s as the router address\n",
-			config.LocalRouterPath(dataHome), address)
+	if address == "" {
+		return false, nil
 	}
-	return nil
+	fmt.Fprintf(w, "wrote %s, with this host's IP address %s as the router address\n",
+		config.LocalRouterPath(dataHome), address)
+	return true, nil
 }
 
 // refuseExistingConfig returns an error when a config already exists at

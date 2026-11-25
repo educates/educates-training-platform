@@ -17,9 +17,9 @@ import (
 
 // checkDockerDesktopPrivilegedPorts refuses, as
 // localclusters.CheckPrivilegedPortForwarding decides, a Docker engine
-// that can't serve a local cluster's ports 80 and 443 on its listen
-// address: Docker Desktop 4.97 or later with "Allow privileged port
-// forwarding to external machines" off. It writes to w the warning for a
+// that can't serve the router's ports 80 and 443 on the router address:
+// Docker Desktop 4.97 or later with "Allow privileged port forwarding to
+// external machines" off. It writes to w the warning for a
 // setting it can't read.
 func checkDockerDesktopPrivilegedPorts(ctx context.Context, w io.Writer) error {
 	cli, err := docker.NewDockerClient()

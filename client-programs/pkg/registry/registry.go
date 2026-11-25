@@ -198,7 +198,7 @@ func prepareRegistryContainer(ctx context.Context, cli *client.Client, p Progres
 	// under --verbose is a follow-up.
 	io.Copy(io.Discard, reader)
 
-	return ensureEducatesNetwork(ctx, cli)
+	return EnsureEducatesNetwork(ctx, cli)
 }
 
 // newRegistryContainer creates the registry container, bound to bindIP,
@@ -321,7 +321,7 @@ func createMirrorContainer(mirrorConfig *MirrorConfig, p Progress) error {
 			return containerState(ctx, cli, mirrorContainerName)
 		},
 		prepare: func(ctx context.Context) error {
-			return ensureEducatesNetwork(ctx, cli)
+			return EnsureEducatesNetwork(ctx, cli)
 		},
 		create: func(ctx context.Context) error {
 			return newMirrorContainer(ctx, cli, mirrorConfig, mirrorContainerName)

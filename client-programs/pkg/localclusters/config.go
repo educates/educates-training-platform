@@ -42,8 +42,8 @@ func ValidateListenAddress(address string) error {
 // validateClusterNodes checks a declared node list: when set, it must
 // contain exactly one control-plane node and use only the roles kind
 // understands. kind cannot bootstrap without a control-plane node, and the
-// control-plane node publishes ports 80 and 443 on the listen address,
-// which a second one could not also bind. An empty list keeps the default
+// router sends the cluster's names to its one control-plane node, by its
+// container name. An empty list keeps the default
 // single control-plane cluster and needs no validation. The error gives
 // the reason, without naming the field the list came from.
 func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
@@ -66,7 +66,7 @@ func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
 	case controlPlanes == 0:
 		return fmt.Errorf("one node must have role \"control-plane\"")
 	case controlPlanes > 1:
-		return fmt.Errorf("%d nodes have role \"control-plane\", but a local cluster has exactly one, as only one node can publish ports 80 and 443 on the listen address; give the other nodes role \"worker\"", controlPlanes)
+		return fmt.Errorf("%d nodes have role \"control-plane\", but a local cluster has exactly one, the node the router sends the cluster's names to; give the other nodes role \"worker\"", controlPlanes)
 	}
 
 	return nil
@@ -83,8 +83,8 @@ func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
 // A config that declares a local cluster declares a listen address that
 // passes ValidateListenAddress, and a node list, when it declares one,
 // that passes validateClusterNodes. An EducatesLocalConfig that declares no
-// ingress.domain gets the nip.io name of its listen address, with dashes,
-// and ingress.insecure set to true, so it is served over plain HTTP with
+// ingress.domain gets a nip.io name, as DeriveDomain gives it, with
+// ingress.insecure set to true, so it is served over plain HTTP with
 // no CA to manage. It then gets the static defaults config.Load gives it.
 // An EducatesConfig gets no fallback and no defaults: its domain is the
 // one its custom resources declare.

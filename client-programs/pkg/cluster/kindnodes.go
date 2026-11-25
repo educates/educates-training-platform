@@ -16,6 +16,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
+	"github.com/educates/educates-training-platform/client-programs/pkg/router"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -39,9 +40,9 @@ const maxKindVersionSize = 256
 // local clusters answers from: every kind node container on the Docker
 // host, as ObserveNodeContainers returns them, with the host ports each
 // control-plane node is configured to publish and the Kubernetes version
-// of its node image, the addresses of the host's network interfaces, and
-// the registry mirror containers, as registry.ObserveMirrorContainers
-// returns them.
+// of its node image, the addresses of the host's network interfaces, the
+// registry mirror containers, as registry.ObserveMirrorContainers returns
+// them, and the router container, as router.Observe returns it.
 //
 // The port bindings come from each container's configured host config,
 // not from the ports it publishes now, and the Kubernetes version from
@@ -105,7 +106,17 @@ func ObserveLocalClusters(ctx context.Context) (localclusters.Observed, error) {
 		return localclusters.Observed{}, err
 	}
 
-	return localclusters.Observed{Nodes: nodes, InterfaceAddresses: interfaces, Mirrors: mirrors}, nil
+	routerContainer, err := router.Observe(ctx)
+	if err != nil {
+		return localclusters.Observed{}, err
+	}
+
+	return localclusters.Observed{
+		Nodes:              nodes,
+		InterfaceAddresses: interfaces,
+		Mirrors:            mirrors,
+		Router:             routerContainer,
+	}, nil
 }
 
 // nodeKubernetesVersion returns the Kubernetes version of the node image

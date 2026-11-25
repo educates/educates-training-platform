@@ -1,0 +1,199 @@
+package cmd
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
+	"github.com/educates/educates-training-platform/client-programs/pkg/router"
+)
+
+// routerContainer is how the local cluster commands reach the router
+// container.
+type routerContainer struct {
+	// image is the router image the CLI pins.
+	image string
+
+	// create creates the router container publishing ports 80 and 443 on
+	// an address and serving the router folder dir, and starts it, as
+	// router.Create does.
+	create func(ctx context.Context, address, dir string) (adopted bool, err error)
+
+	// remove removes the router container, when there is one.
+	remove func(ctx context.Context) error
+
+	// reload makes the running router serve its folder's configuration.
+	reload func(ctx context.Context) error
+
+	// join connects the router to the kind network, once it exists.
+	join func(ctx context.Context) error
+}
+
+// dockerRouterContainer is the router container on the Docker host.
+var dockerRouterContainer = routerContainer{
+	image:  router.Image,
+	create: router.Create,
+	remove: router.Remove,
+	reload: router.Reload,
+	join:   router.JoinClusterNetwork,
+}
+
+// routerChange is what a local cluster command needs to create, re-create
+// or refresh the router: the router container, the data home whose router
+// folder it serves, and the check of Docker Desktop's privileged port
+// setting, which applies wherever the router is created or re-created.
+type routerChange struct {
+	container routerContainer
+	dataHome  string
+
+	// checkPrivilegedPorts refuses a Docker engine that can't serve the
+	// router's ports 80 and 443 on a non-loopback address, as
+	// checkDockerDesktopPrivilegedPorts does.
+	checkPrivilegedPorts func(ctx context.Context) error
+}
+
+// ensureRouter creates the router container when it is missing, and
+// re-creates it when it runs another image than the pinned one, publishes
+// on another address than the router address, or has stopped, as
+// localclusters.Inventory.PlanRouter decides from inventory, as a step of
+// rep. It reports whether it did either: a router it leaves as it is
+// still has to be refreshed, with refreshRouter.
+//
+// Creating or re-creating the router checks the router address rules and
+// Docker Desktop's privileged port setting first, and writes the router
+// folder from the local clusters inventory holds. The router container's
+// start is the check that ports 80 and 443 are free on the router address:
+// when it fails, the error names any local cluster made by an earlier
+// release of the CLI that still publishes them from its node.
+func (rc routerChange) ensureRouter(ctx context.Context, rep progress.Reporter, inventory localclusters.Inventory) (bool, error) {
+	plan, err := inventory.PlanRouter(rc.container.image)
+	if err != nil {
+		return false, err
+	}
+	if plan.Action == localclusters.RouterReload {
+		return false, nil
+	}
+	if err := rc.checkPrivilegedPorts(ctx); err != nil {
+		return false, err
+	}
+
+	label := fmt.Sprintf("creating router %s on %s", router.ContainerName, plan.Address)
+	if plan.Action == localclusters.RouterRecreate {
+		label = fmt.Sprintf("re-creating router %s on %s", router.ContainerName, plan.Address)
+	}
+	err = runStep(rep, label, "running", func(s progress.Step) error {
+		if plan.Why != "" {
+			s.Update(plan.Why + ", which drops every connection through it")
+		}
+		routes, leftOut, err := inventory.RouterRoutes()
+		if err != nil {
+			return err
+		}
+		for _, e := range leftOut {
+			s.Warn(e.Error())
+		}
+		if err := localclusters.WriteRouterFolder(rc.dataHome, localclusters.RenderRouter(routes)); err != nil {
+			return err
+		}
+		if plan.Action == localclusters.RouterRecreate {
+			if err := rc.container.remove(ctx); err != nil {
+				return err
+			}
+		}
+		adopted, err := rc.container.create(ctx, plan.Address, config.LocalRouterDir(rc.dataHome))
+		var startErr *router.StartError
+		if errors.As(err, &startErr) {
+			return inventory.RouterStartError(plan.Address, startErr.Err)
+		}
+		if err != nil || !adopted {
+			return err
+		}
+		// Another command created the router at the same time: serve the
+		// folder just written from it.
+		return rc.container.reload(ctx)
+	})
+	return err == nil, err
+}
+
+// refreshRouter renders the router's configuration again, from the local
+// clusters observe returns, with the local clusters of given served from
+// the configs given for them, writes it to the router folder, joins the
+// router to the kind network, and reloads the router, as a step of rep,
+// printing nothing else. The reload keeps open connections, such as
+// terminals. When the router container does not exist it does nothing.
+//
+// It never fails. Local cluster create, start and delete refresh the
+// router once the cluster exists, or is gone, so the step warns about each
+// config the router leaves out, and a router it can't render, write or
+// reload is a warning that says to run 'educates local router update'. A
+// router that is not running only has its folder written, which it serves
+// once it starts.
+func (rc routerChange) refreshRouter(ctx context.Context, rep progress.Reporter,
+	observe func(context.Context) (localclusters.Inventory, error), given ...localclusters.LoadedConfig) {
+	inventory, err := observe(ctx)
+	running := false
+	if err == nil {
+		var exists bool
+		var observed localclusters.RouterContainer
+		if observed, exists = inventory.Router(); !exists {
+			return
+		}
+		running = observed.Running
+	}
+	step := rep.Start("refreshing router")
+	if err == nil {
+		var routes []localclusters.RouterRoute
+		var leftOut []error
+		routes, leftOut, err = inventory.RouterRoutes(given...)
+		for _, e := range leftOut {
+			step.Warn(e.Error())
+		}
+		if err == nil {
+			err = localclusters.WriteRouterFolder(rc.dataHome, localclusters.RenderRouter(routes))
+		}
+		if err == nil {
+			err = rc.container.join(ctx)
+		}
+		if err == nil && running {
+			err = rc.container.reload(ctx)
+		}
+	}
+	if err != nil {
+		step.Warn(fmt.Sprintf("not refreshed: %v. Run 'educates local router update' once that is fixed", err))
+		step.Done("skipped")
+		return
+	}
+	if !running {
+		step.Warn(fmt.Sprintf("the router container %s is not running: it serves the configuration written to %s once it starts",
+			router.ContainerName, config.LocalRouterDir(rc.dataHome)))
+	}
+	step.Done("updated")
+}
+
+// removeRouter removes the router container and the router folder of the
+// data home, keeping the router file, router.yaml, which holds the router
+// address.
+func (rc routerChange) removeRouter(ctx context.Context) error {
+	if err := rc.container.remove(ctx); err != nil {
+		return err
+	}
+	return localclusters.RemoveRouterFolder(rc.dataHome)
+}
+
+// dockerRouterChange is the router change of the router container on the
+// Docker host, serving the router folder of the data home dataHome. The
+// check of Docker Desktop's privileged port setting writes to w the
+// warning for a setting it can't read.
+func dockerRouterChange(dataHome string, w io.Writer) routerChange {
+	return routerChange{
+		container: dockerRouterContainer,
+		dataHome:  dataHome,
+		checkPrivilegedPorts: func(ctx context.Context) error {
+			return checkDockerDesktopPrivilegedPorts(ctx, w)
+		},
+	}
+}

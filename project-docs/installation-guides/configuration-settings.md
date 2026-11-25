@@ -24,15 +24,13 @@ The argument is a dotted field path; with no argument the top-level fields are l
 EducatesLocalConfig
 -------------------
 
-The laptop scenario: a local kind cluster with operator-managed cluster services and a self-signed CA. This is the only kind that lives at a fixed location (`<data-home>/config.yaml` for the default local cluster, and `<data-home>/clusters/<name>/config.yaml` for a named local cluster, where `<data-home>` is `$XDG_DATA_HOME/educates`, overridable via `EDUCATES_CLI_DATA_HOME`) and is managed with the `educates local config` commands rather than edited as a project file. Every local cluster's `cluster.listenAddress`, the default cluster's included, must be a specific IP address of the host. Every local cluster is served through one router on the router address, kept in `router.yaml` in the data home, as described in [router address](local-router-address). See [local environment](local-environment).
+The laptop scenario: a local kind cluster with operator-managed cluster services and a self-signed CA. This is the only kind that lives at a fixed location (`<data-home>/config.yaml` for the default local cluster, and `<data-home>/clusters/<name>/config.yaml` for a named local cluster, where `<data-home>` is `$XDG_DATA_HOME/educates`, overridable via `EDUCATES_CLI_DATA_HOME`) and is managed with the `educates local config` commands rather than edited as a project file. A local cluster has no host address of its own: every local cluster is served through one router on the router address, kept in `router.yaml` in the data home, as described in [router address](local-router-address). See [local environment](local-environment).
 
 ```yaml
 apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
 ingress:
   domain: workshops.educates.test    # empty = nip.io name of the router address
-cluster:
-  listenAddress: 10.10.10.1          # required: a specific IP address of the host
 lookupService: true                  # default true
 clusterAdmin: true                   # default true
 imagePrePuller:
@@ -41,10 +39,10 @@ operator:
   logLevel: info
 ```
 
-Key fields (all optional but `cluster.listenAddress`: an `apiVersion` + `kind` stub validates against the schema, but a local cluster can't use it until `cluster.listenAddress` is set, which `educates local config init` writes):
+Key fields (all optional: an `apiVersion` + `kind` stub, which `educates local config init` writes, is a configuration a local cluster can use):
 
-* `ingress.domain`: wildcard ingress domain. When empty, for a local cluster's configuration, the CLI falls back to the `nip.io` name of the router address for the default local cluster, such as `10-10-10-1.nip.io`, and of `cluster.listenAddress` for a named one.
-* `cluster.listenAddress`: a specific IP address of the host: neither `0.0.0.0` nor a loopback address. Nothing is published on it, since the router publishes ports 80 and 443 for every local cluster on the router address. `educates local config init` writes the IP address of the host.
+* `ingress.domain`: wildcard ingress domain. When empty, for a local cluster's configuration, the CLI falls back to the `nip.io` name of the router address for the default local cluster, such as `10-10-10-1.nip.io`, and to the cluster's name under it for a named one, such as `test2.10-10-10-1.nip.io`.
+* `cluster.listenAddress`: ignored. A local cluster has no host address of its own, since the router publishes ports 80 and 443 for every local cluster on the router address.
 * `cluster.*`: kind cluster shape: API server overrides, pod/service subnets, host volume mounts. Registry pull-through mirrors are not declared here but once for every local cluster, in `mirrors.yaml` in the CLI data home, as [declaring mirrors for every cluster](local-mirrors-file) describes. `educates local mirror deploy` records a mirror there and `educates local mirror delete` removes it. A configuration in the data home that still has `cluster.registryMirrors` has its mirrors moved there the first time a command reads it, keeping the previous configuration as a backup beside it, and a configuration elsewhere with it fails to load, showing the `educates local mirror deploy` commands that record its mirrors, as [mirrors in a cluster's configuration](local-mirrors-move) describes.
 * `resolver.*` — local DNS resolver settings (macOS `*.educates.test` style resolution).
 * `clusterAdmin`, `lookupService` — component toggles (both default `true`).
@@ -190,7 +188,7 @@ lookupService:              # omit the block entirely to not deploy the componen
 sessionManager: {}
 ```
 
-The `target` block only drives side effects of the CLI, and `kind` is its only `provider`. With `provider: kind`, `educates local cluster create --config <file>` creates the local kind cluster from `target.cluster`, which takes the same fields as the `cluster` block of `EducatesLocalConfig`, so `target.cluster.listenAddress` must be a specific IP address of the host, and then deploys the custom resources as the file declares them. None of the defaults of `EducatesLocalConfig` apply to the custom resources: the ingress domain is not derived from the listen address, no certificate is chosen from the local secrets cache, and the lookup service is deployed only when the `lookupService` block is present, which must then set `ingress.prefix`, as the other kinds do with `lookup`. The loopback service that `educates serve-workshop` relies on resolves under the ingress domain of the `educatesClusterConfig` block. `target.resolver` takes the same fields as the `resolver` block of `EducatesLocalConfig`, and `educates local resolver deploy --config <file>` sets up the local DNS resolver for that same ingress domain. The cluster gets the registry mirrors `mirrors.yaml` in the CLI data home declares, as every local cluster does, so `target.cluster` takes no `registryMirrors`.
+The `target` block only drives side effects of the CLI, and `kind` is its only `provider`. With `provider: kind`, `educates local cluster create --config <file>` creates the local kind cluster from `target.cluster`, which takes the same fields as the `cluster` block of `EducatesLocalConfig`, and then deploys the custom resources as the file declares them. None of the defaults of `EducatesLocalConfig` apply to the custom resources: the ingress domain is not derived from the router address, no certificate is chosen from the local secrets cache, and the lookup service is deployed only when the `lookupService` block is present, which must then set `ingress.prefix`, as the other kinds do with `lookup`. The loopback service that `educates serve-workshop` relies on resolves under the ingress domain of the `educatesClusterConfig` block. `target.resolver` takes the same fields as the `resolver` block of `EducatesLocalConfig`, and `educates local resolver deploy --config <file>` sets up the local DNS resolver for that same ingress domain. The cluster gets the registry mirrors `mirrors.yaml` in the CLI data home declares, as every local cluster does, so `target.cluster` takes no `registryMirrors`.
 
 The CLI copies no Secrets from its local secrets cache into the cluster for an `EducatesConfig`, so you create any Secret the custom resources reference, such as a CA key pair or a wildcard certificate, in the cluster yourself. To create them before Educates is deployed, run `educates local cluster create --cluster-only --config <file>`, create the Secrets, and then run `educates admin platform deploy --config <file>`.
 

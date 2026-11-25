@@ -1,9 +1,10 @@
 // Package localcerts is the CLI's local certificate resolution step. From
-// the local secrets cache and an EducatesLocalConfig's ingress.domain and
-// ingress.insecure, it decides how a local install gets its ingress
-// certificates and returns that decision as a Plan. Every command that
-// renders, deploys or syncs a local install takes its certificate
-// decisions from here and nowhere else.
+// the local secrets cache and an EducatesLocalConfig's ingress.domain,
+// ingress.insecure and ingress.externalTLSTermination, it decides how a
+// local install gets its ingress certificates and returns that decision as
+// a Plan. Every command that renders, deploys or syncs a local install
+// takes its certificate decisions from here and nowhere else, and so does
+// the router for the certificate it ends TLS with.
 //
 // A secure install serves the one unexpired wildcard TLS certificate in
 // the cache that covers the ingress domain, with the StaticCertificate
@@ -13,6 +14,11 @@
 // intermediate CA limited to the ingress domain, minted from the one root
 // CA in the cache. The root's key never leaves this machine, and the
 // cluster trusts the root through its CA trust Secret.
+//
+// A cluster whose TLS ends at the router issues no certificate: the router
+// serves the same cached wildcard TLS certificate, or else a certificate
+// the CLI issues from the domain's CA key pair, and the cluster trusts the
+// CA that verifies it.
 package localcerts
 
 import (
@@ -69,9 +75,15 @@ type Reporter interface {
 }
 
 // Resolve decides the certificates of a local install from cfg's
-// ingress.domain and ingress.insecure and the local secrets cache. It
-// only reads the cache: a CA key pair it mints is held in the plan until
-// Commit. The nip.io defaulting of ingress.domain must already have run.
+// ingress.domain, ingress.insecure and ingress.externalTLSTermination and
+// the local secrets cache. It only reads the cache: a CA key pair it mints
+// is held in the plan until Commit. The nip.io defaulting of
+// ingress.domain must already have run.
+//
+// For a cluster whose TLS ends at the router it decides the None provider,
+// with the CA trust Secret of the CA that verifies the router's
+// certificate, as RouterCertificate serves it, and syncs no CA key pair:
+// the router, not the cluster, issues the certificate.
 func Resolve(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 	names, err := secrets.ListCachedSecretNames()
 	if err != nil {
@@ -93,17 +105,9 @@ func Resolve(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 	// The cache holds at most one root CA. More is an error whatever the
 	// cache would otherwise serve, so no install depends on which root
 	// was meant.
-	roots, err := secrets.CachedRootCAs()
+	roots, err := cachedRootCA()
 	if err != nil {
 		return nil, err
-	}
-	if len(roots) > 1 {
-		return nil, fmt.Errorf(`the local secrets cache holds more than one root CA: %s.
-
-It can hold only one root CA, from which deploys mint a CA for each
-ingress domain. Remove the root CAs you do not use with:
-
-  educates local secrets remove NAME`, secrets.QuoteNames(roots))
 	}
 
 	// A wildcard TLS certificate covering the domain is served as it is,
@@ -115,6 +119,16 @@ ingress domain. Remove the root CAs you do not use with:
 	for _, c := range expired {
 		plan.Notices = append(plan.Notices, fmt.Sprintf("Skipped TLS certificate %q for ingress domain %q: it expired on %s.",
 			c.name, domain, c.cert().NotAfter.UTC().Format(time.DateOnly)))
+	}
+	if cfg.Ingress.ExternalTLSTermination {
+		// The router ends TLS for the domain, and the cluster issues no
+		// certificate: it only trusts the CA of the router's.
+		source, err := routerSourceFor(names, domain, selected, expired, roots)
+		if err != nil {
+			return nil, err
+		}
+		plan.trustTheRouter(source, domain, names)
+		return plan, nil
 	}
 	if selected != nil {
 		plan.useStaticCertificate(selected, domain, names)
@@ -173,6 +187,24 @@ is fixed: %v`, err))
 		return plan, nil
 	}
 	return resolved, nil
+}
+
+// cachedRootCA returns the names of the root CAs in the local secrets
+// cache: at most one, since more is an error.
+func cachedRootCA() ([]string, error) {
+	roots, err := secrets.CachedRootCAs()
+	if err != nil {
+		return nil, err
+	}
+	if len(roots) > 1 {
+		return nil, fmt.Errorf(`the local secrets cache holds more than one root CA: %s.
+
+It can hold only one root CA, from which deploys mint a CA for each
+ingress domain. Remove the root CAs you do not use with:
+
+  educates local secrets remove NAME`, secrets.QuoteNames(roots))
+	}
+	return roots, nil
 }
 
 // tlsCertificate is a wildcard TLS certificate in the local secrets

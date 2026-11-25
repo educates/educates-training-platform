@@ -59,6 +59,20 @@ type RouterFile struct {
 	Content []byte
 }
 
+// RouterCertificate is the certificate the router ends TLS with for the
+// ingress domain of a local cluster whose TLS ends at the router.
+type RouterCertificate struct {
+	// Domain is the ingress domain the certificate serves.
+	Domain string
+
+	// Certificate is the certificate, followed by the intermediate CAs it
+	// chains through, as PEM.
+	Certificate []byte
+
+	// Key is the certificate's private key, as PEM.
+	Key []byte
+}
+
 // RenderRouter returns the files of the router folder that configure the
 // router to serve routes: haproxy.cfg, the host map, the body of the 404
 // for a name no route matches, and the body of each route's 503.

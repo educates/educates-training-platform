@@ -82,6 +82,34 @@ func MintDomainCA(root *x509.Certificate, rootKey crypto.Signer, domain string) 
 	return issueCertificate(tmpl, root, rootKey)
 }
 
+// IssueDomainCertificate issues, from CA certificate ca and its private
+// key caKey, a TLS server certificate for ingress domain domain and every
+// name one label under it, *.<domain>, valid from now until notAfter or
+// until ca expires, whichever comes first. It returns the certificate and
+// a new private key as PEM. Its subject is the domain under the CA's
+// organization, and like the CAs it uses an RSA 2048 key.
+func IssueDomainCertificate(ca *x509.Certificate, caKey crypto.Signer, domain string, notAfter time.Time) (certPEM, keyPEM []byte, err error) {
+	notBefore := time.Now().UTC().Add(-1 * time.Hour)
+	if notBefore.Before(ca.NotBefore) {
+		notBefore = ca.NotBefore
+	}
+	if notAfter.After(ca.NotAfter) {
+		notAfter = ca.NotAfter
+	}
+	tmpl := &x509.Certificate{
+		Subject: pkix.Name{
+			CommonName:   domain,
+			Organization: ca.Subject.Organization,
+		},
+		DNSNames:    []string{domain, "*." + domain},
+		NotBefore:   notBefore,
+		NotAfter:    notAfter,
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	return issueCertificate(tmpl, ca, caKey)
+}
+
 // issueCertificate issues a certificate from tmpl for a new RSA 2048
 // key, with a random 128-bit serial number, signed by parent with
 // parentKey, or self-signed when parent is nil. It returns the

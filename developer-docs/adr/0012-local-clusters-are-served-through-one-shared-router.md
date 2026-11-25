@@ -113,9 +113,12 @@ again. ``cluster.listenAddress`` and the ``--listen-address`` option are
 removed, and a config in the data home that still has the field is moved once
 into ``router.yaml``, with the previous config kept as a backup beside it.
 
-The runtime and the operator are unchanged: URLs stay on ports 80 and 443, and
-Envoy keeps its host ports on each node. Envoy sees the router as every
-client, as it already saw Docker's port forwarding. With TLS passed through,
+The runtime is unchanged: URLs stay on ports 80 and 443, and Envoy keeps its
+host ports on each node. Envoy sees the router as every client, as it already
+saw Docker's port forwarding. The operator gains a CA trust Secret beside the
+``None`` certificates provider, so that a cluster whose TLS ends outside it
+trusts the CA of the certificate presented there. For a cluster whose TLS
+ends at the router, the CLI gives it the local root. With TLS passed through,
 the router can only refuse a connection for a stopped cluster's name, while
 plain HTTP gets a response naming the cluster. ``educates cluster workshop
 serve`` listens on the router address, on a port of its own for each run.

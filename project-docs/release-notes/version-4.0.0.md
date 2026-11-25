@@ -1252,7 +1252,12 @@ Features Changed
 * Every local cluster is now served through one router, the Docker
   container ``educates-router``, which publishes ports 80 and 443 once, on
   the router address, and sends each request to the local cluster that owns
-  the name it asks for, plain HTTP by its ``Host`` header. Version 3
+  the name it asks for, plain HTTP by its ``Host`` header and HTTPS by the
+  server name in its TLS handshake, passed through untouched, so that each
+  cluster presents its own certificate and the router holds no keys. An
+  HTTPS connection for a name no local cluster serves, with no server name,
+  or for a stopped cluster is closed, as the router has no certificate to
+  answer with. Version 3
   published a cluster's ports from its Kind node, on every host address
   unless ``localKindCluster.listenAddress`` named one, and Kind nodes now
   publish no ports at all. The router runs HAProxy, from the long-term

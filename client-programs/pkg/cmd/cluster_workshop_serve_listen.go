@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
@@ -17,14 +18,22 @@ import (
 // cluster it serves.
 const (
 	localHostFlagName = "local-host"
+	localPortFlagName = "local-port"
+	proxyPortFlagName = "proxy-port"
 	hugoPortFlagName  = "hugo-port"
 )
 
+// hugoHost is the address the Hugo server that cluster workshop serve
+// runs listens on, Hugo's default bind address.
+const hugoHost = "127.0.0.1"
+
 // serveListen is where cluster workshop serve listens: the host address
-// and port of its proxy, and the port of its Hugo server.
+// and port of its proxy, the port workshop sessions reach the proxy on,
+// which the workshop is patched with, and the port of its Hugo server.
 type serveListen struct {
 	LocalHost string
 	LocalPort int
+	ProxyPort int
 	HugoPort  int
 }
 
@@ -43,7 +52,7 @@ type serveTarget struct {
 	kubeContext func() string
 
 	// dataHome is the data home, whose local clusters a kube context can
-	// be the context of.
+	// be the context of, and whose router serves them.
 	dataHome string
 }
 
@@ -76,51 +85,71 @@ func (o *ClusterWorkshopServeOptions) listenForTargetedCluster(c *cobra.Command)
 		dataHome: utils.GetEducatesHomeDir(),
 	}
 	listen, err := chooseServeListen(
-		serveListen{LocalHost: o.LocalHost, LocalPort: o.LocalPort, HugoPort: o.HugoPort},
-		c.Flags().Changed, target, localclusters.ConfiguredListenAddress, freeLoopbackPort)
+		serveListen{LocalHost: o.LocalHost, LocalPort: o.LocalPort, ProxyPort: o.ProxyPort, HugoPort: o.HugoPort},
+		c.Flags().Changed, target, hostRouterAddress, freePortOn)
 	if err != nil {
 		return err
 	}
-	o.LocalHost, o.LocalPort, o.HugoPort = listen.LocalHost, listen.LocalPort, listen.HugoPort
+	o.LocalHost, o.LocalPort, o.ProxyPort, o.HugoPort = listen.LocalHost, listen.LocalPort, listen.ProxyPort, listen.HugoPort
 	return nil
 }
 
 // chooseServeListen returns where cluster workshop serve listens. flags
-// holds the values of --local-host, --local-port and --hugo-port, and
-// given reports whether the flag it names was given on the command line.
+// holds the values of --local-host, --local-port, --proxy-port and
+// --hugo-port, and given reports whether the flag it names was given on
+// the command line.
 //
 // When serve serves no local cluster, as target says, it returns flags as
-// they are. When it serves one, two defaults change, so that a serve for
-// each of several local clusters can run at once. The proxy listens on
-// the cluster's listen address, which listenAddress returns, when that is
-// a specific IP address: the cluster's loopback Service reaches the host
-// there, so each cluster's serve can keep port 10081 on an address of its
-// own. Otherwise it keeps --local-host. The Hugo server listens on the
-// free port freePort returns, instead of every serve wanting 1313. A flag
-// given on the command line still wins, and what it overrides is never
-// consulted: with both --local-host and --hugo-port given, not even the
-// cluster serve serves.
+// they are. When it serves one, the defaults change, so that a serve for
+// each of several local clusters can run at once:
+//
+//   - The proxy listens on the router address of the data home, which
+//     routerAddress returns: the cluster's loopback Service names the
+//     cluster's localhost.<domain>, which resolves to the router address,
+//     so workshop sessions reach the host there.
+//   - The proxy listens on the port freePort returns as free on the host
+//     the proxy listens on, instead of every serve wanting 10081 on the
+//     one router address.
+//   - The workshop is patched with the port the proxy listens on, since
+//     sessions reach the proxy directly.
+//   - The Hugo server listens on the port freePort returns as free on
+//     the loopback address it listens on, instead of every serve wanting
+//     1313.
+//
+// A flag given on the command line still wins, and what it overrides is
+// never consulted: with every one of them given, not even the cluster
+// serve serves.
 func chooseServeListen(flags serveListen, given func(flag string) bool, target serveTarget,
-	listenAddress func(localclusters.Identity) (string, error), freePort func() (int, error)) (serveListen, error) {
-	if given(localHostFlagName) && given(hugoPortFlagName) {
+	routerAddress func(dataHome string) (string, error), freePort func(host string) (int, error)) (serveListen, error) {
+	if given(localHostFlagName) && given(localPortFlagName) && given(proxyPortFlagName) && given(hugoPortFlagName) {
 		return flags, nil
 	}
-	id, ok := target.cluster()
-	if !ok {
+	if _, ok := target.cluster(); !ok {
 		return flags, nil
 	}
 	listen := flags
 	if !given(localHostFlagName) {
-		addr, err := listenAddress(id)
+		address, err := routerAddress(target.dataHome)
 		if err != nil {
-			return serveListen{}, fmt.Errorf("%w; pass --%s to choose the address the proxy listens on", err, localHostFlagName)
+			// The error can end with a command to run, on a line of its
+			// own, so the flag goes on a line after it.
+			return serveListen{}, fmt.Errorf("%w\n\nOr choose the address the proxy listens on with --%s", err, localHostFlagName)
 		}
-		if host, ok := specificListenHost(addr); ok {
-			listen.LocalHost = host
+		listen.LocalHost = listenHost(address)
+	}
+	if !given(localPortFlagName) {
+		port, err := freePort(listen.LocalHost)
+		if err != nil {
+			return serveListen{}, fmt.Errorf("choose a free port for the proxy on %s: %w; pass --%s to choose one",
+				listen.LocalHost, err, localPortFlagName)
 		}
+		listen.LocalPort = port
+	}
+	if !given(proxyPortFlagName) {
+		listen.ProxyPort = listen.LocalPort
 	}
 	if !given(hugoPortFlagName) {
-		port, err := freePort()
+		port, err := freePort(hugoHost)
 		if err != nil {
 			return serveListen{}, fmt.Errorf("choose a free port for the Hugo server: %w; pass --%s to choose one", err, hugoPortFlagName)
 		}
@@ -129,11 +158,23 @@ func chooseServeListen(flags serveListen, given func(flag string) bool, target s
 	return listen, nil
 }
 
-// freeLoopbackPort returns a port that no listener holds on 127.0.0.1,
-// where the Hugo server listens, as the operating system picks one for a
-// listener that asks for any port.
-func freeLoopbackPort() (int, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+// hostRouterAddress returns the router address of the data home
+// dataHome, as localclusters.LoadRouterAddress loads it, checked against
+// the addresses of the host's network interfaces.
+func hostRouterAddress(dataHome string) (string, error) {
+	interfaces, err := hostinfo.InterfaceAddresses()
+	if err != nil {
+		return "", err
+	}
+	return localclusters.LoadRouterAddress(dataHome, interfaces)
+}
+
+// freePortOn returns a port that no listener holds on host, as the
+// operating system picks one for a listener on host that asks for any
+// port. host is joined with the port as the proxy and the Hugo server
+// join it, so an IPv6 address is bracketed.
+func freePortOn(host string) (int, error) {
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:0", host))
 	if err != nil {
 		return 0, err
 	}
@@ -141,19 +182,12 @@ func freeLoopbackPort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-// specificListenHost returns the host part of a listen address on the
-// IP address address, and reports whether address is a specific IP
-// address, as localclusters.ValidateListenAddress accepts one: neither
-// one meaning every address nor a loopback address. An IPv4-mapped IPv6
-// address is given as IPv4, and an IPv6 address is bracketed, as a host
-// joined with a port needs it to be.
-func specificListenHost(address string) (string, bool) {
-	if localclusters.ValidateListenAddress(address) != nil {
-		return "", false
+// listenHost returns the host part of a listen address on the IP address
+// address, bracketed when it is an IPv6 address, as a host joined with a
+// port needs it to be.
+func listenHost(address string) string {
+	if ip, err := netip.ParseAddr(address); err == nil && ip.Unmap().Is6() {
+		return "[" + ip.Unmap().String() + "]"
 	}
-	ip := netip.MustParseAddr(address).Unmap()
-	if ip.Is6() {
-		return "[" + ip.String() + "]", true
-	}
-	return ip.String(), true
+	return address
 }

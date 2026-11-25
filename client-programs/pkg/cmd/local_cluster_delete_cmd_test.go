@@ -48,6 +48,27 @@ func clusterConfigWithCAKeyPair(name string) *unstructured.Unstructured {
 	}}
 }
 
+// clusterConfigWithNoCertificate is the EducatesClusterConfig of a local
+// deploy on a.test that issues no certificate, in the shape the API server
+// returns it: with protocol https, one whose TLS ends at the router, which
+// trusts the root CA educates-ca, and with protocol http, an insecure one.
+func clusterConfigWithNoCertificate(protocol string) *unstructured.Unstructured {
+	certificates := map[string]interface{}{"provider": "None"}
+	if protocol == "https" {
+		certificates["none"] = map[string]interface{}{
+			"caCertificateSecretRef": map[string]interface{}{"name": "educates-ca", "namespace": "educates-secrets"},
+		}
+	}
+	return &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "config.educates.dev/v1alpha1",
+		"kind":       "EducatesClusterConfig",
+		"metadata":   map[string]interface{}{"name": "cluster"},
+		"spec": map[string]interface{}{
+			"ingress": map[string]interface{}{"domain": "a.test", "protocol": protocol, "certificates": certificates},
+		},
+	}}
+}
+
 func clusterAnswers(clusterConfig *unstructured.Unstructured) readClusterConfigFunc {
 	return func(context.Context, localclusters.Identity) (*unstructured.Unstructured, error) {
 		return clusterConfig, nil
@@ -97,6 +118,19 @@ func TestClusterCAKeyPairs(t *testing.T) {
 		{
 			name:      "none when the cluster's EducatesClusterConfig references none",
 			read:      clusterAnswers(clusterConfigWithCAKeyPair("")),
+			load:      configWithDomain("a.test"),
+			wantKnown: true,
+		},
+		{
+			name:      "the CA key pair of its domain, which the router's certificate is issued from, when TLS ends at the router",
+			read:      clusterAnswers(clusterConfigWithNoCertificate("https")),
+			load:      configWithDomain("b.test"),
+			wantKnown: true,
+			wantNames: []string{"a.test-ca-key-pair"},
+		},
+		{
+			name:      "none when the cluster serves plain HTTP",
+			read:      clusterAnswers(clusterConfigWithNoCertificate("http")),
 			load:      configWithDomain("a.test"),
 			wantKnown: true,
 		},

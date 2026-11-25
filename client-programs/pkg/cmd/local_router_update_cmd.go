@@ -139,8 +139,11 @@ func (rc routerChange) updateRouter(ctx context.Context, w io.Writer, rep progre
 	if err != nil || changed {
 		return err
 	}
+	var notes []string
+	defer func() { noteAll(rep, notes) }()
 	return runStep(rep, "reloading router", "reloaded", func(s progress.Step) error {
-		return rc.serveRoutes(ctx, s, inventory, true)
+		notes, err = rc.serveRoutes(ctx, s, inventory, true)
+		return err
 	})
 }
 

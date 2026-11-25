@@ -149,8 +149,10 @@ func readLocalClusterConfig(ctx context.Context, id localclusters.Identity) (*un
 // pairs in the local secrets cache.
 //
 // While its cluster answers with an EducatesClusterConfig, that is the CA
-// key pair the EducatesClusterConfig references, or none when it
-// references none, as for a TLS certificate of the user's or plain HTTP.
+// key pair the EducatesClusterConfig references; for a cluster whose TLS
+// ends at the router, which references none, the CA key pair of its
+// domain, which the router's certificate is issued from; and otherwise
+// none, as for a TLS certificate of the user's or plain HTTP.
 // When the cluster does not answer, as a stopped one does not, or has no
 // EducatesClusterConfig, as one created with --cluster-only has none, it
 // is the CA key pair for the ingress domain of the cluster's config in the
@@ -164,6 +166,13 @@ func clusterCAKeyPairs(ctx context.Context, id localclusters.Identity, readClust
 		result.Known = true
 		name, _, _ := unstructured.NestedString(clusterConfig.Object,
 			"spec", "ingress", "certificates", "bundledCertManager", "customCA", "caKeyPairSecretRef", "name")
+		if name == "" && tlsEndsOutsideCluster(clusterConfig) {
+			// The router ends TLS for the cluster, with a certificate
+			// issued from the CA key pair of its domain.
+			if domain, _, _ := unstructured.NestedString(clusterConfig.Object, "spec", "ingress", "domain"); domain != "" {
+				name = secrets.CAKeyPairName(domain)
+			}
+		}
 		if name != "" {
 			result.Names = []string{name}
 		}
@@ -189,6 +198,16 @@ func clusterCAKeyPairs(ctx context.Context, id localclusters.Identity, readClust
 	}
 
 	return result
+}
+
+// tlsEndsOutsideCluster reports whether the EducatesClusterConfig
+// clusterConfig serves https with no certificate of the cluster's own:
+// the None certificates provider with ingress.protocol https, which a
+// local cluster has when its TLS ends at the router.
+func tlsEndsOutsideCluster(clusterConfig *unstructured.Unstructured) bool {
+	provider, _, _ := unstructured.NestedString(clusterConfig.Object, "spec", "ingress", "certificates", "provider")
+	protocol, _, _ := unstructured.NestedString(clusterConfig.Object, "spec", "ingress", "protocol")
+	return provider == "None" && protocol == "https"
 }
 
 // removeUnusedCAKeyPairs removes from the local secrets cache the CA key

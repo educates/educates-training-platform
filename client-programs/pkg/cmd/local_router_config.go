@@ -8,6 +8,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localcerts"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/router"
 )
@@ -44,8 +45,9 @@ var dockerRouterContainer = routerContainer{
 
 // routerChange is what a local cluster command needs to create, re-create
 // or refresh the router: the router container, the data home whose router
-// folder it serves, and the check of Docker Desktop's privileged port
-// setting, which applies wherever the router is created or re-created.
+// folder it serves, the check of Docker Desktop's privileged port setting,
+// which applies wherever the router is created or re-created, and where
+// the certificates come from that the router ends TLS with.
 type routerChange struct {
 	container routerContainer
 	dataHome  string
@@ -54,6 +56,47 @@ type routerChange struct {
 	// router's ports 80 and 443 on a non-loopback address, as
 	// checkDockerDesktopPrivilegedPorts does.
 	checkPrivilegedPorts func(ctx context.Context) error
+
+	// certificate returns the certificate the router ends TLS with for an
+	// ingress domain, given the one it serves now, nil for none, with a
+	// line for each change it made, as localcerts.RouterCertificate does.
+	certificate func(domain string, current *localclusters.RouterCertificate) (localclusters.RouterCertificate, []string, error)
+}
+
+// writeRouterFolder writes the router folder serving routes, as
+// localclusters.RenderRouter renders them, with the certificate the router
+// ends TLS with for each route whose TLS ends at the router, which
+// rc.certificate gives from the one the folder holds, issuing it again
+// near its expiry. It returns a line for each change to a certificate, for
+// the caller to note once step is done. A certificate it can't get is a
+// warning in step, and the router closes the TLS connections of that
+// cluster's domain until a later write gets one.
+func (rc routerChange) writeRouterFolder(step progress.Step, routes []localclusters.RouterRoute) ([]string, error) {
+	var certificates []localclusters.RouterCertificate
+	var notes []string
+	for _, domain := range localclusters.RouterCertificateDomains(routes) {
+		current, err := localclusters.ReadRouterCertificate(rc.dataHome, domain)
+		if err != nil {
+			step.Warn(fmt.Sprintf("%v: the router gets another certificate for ingress domain %q", err, domain))
+			current = nil
+		}
+		certificate, changes, err := rc.certificate(domain, current)
+		notes = append(notes, changes...)
+		if err != nil {
+			step.Warn(fmt.Sprintf("the router has no certificate for ingress domain %q, whose TLS ends at the router, "+
+				"so it closes the domain's TLS connections: %v", domain, err))
+			continue
+		}
+		certificates = append(certificates, certificate)
+	}
+	return notes, localclusters.WriteRouterFolder(rc.dataHome, localclusters.RenderRouter(routes, certificates...))
+}
+
+// noteAll notes each of notes on rep.
+func noteAll(rep progress.Reporter, notes []string) {
+	for _, n := range notes {
+		rep.Note(n)
+	}
 }
 
 // ensureRouter creates the router container when it is missing, and
@@ -85,6 +128,8 @@ func (rc routerChange) ensureRouter(ctx context.Context, rep progress.Reporter, 
 	if plan.Action == localclusters.RouterRecreate {
 		label = fmt.Sprintf("re-creating router %s on %s", router.ContainerName, plan.Address)
 	}
+	var notes []string
+	defer func() { noteAll(rep, notes) }()
 	err = runStep(rep, label, "running", func(s progress.Step) error {
 		if plan.Why != "" {
 			s.Update(plan.Why + ", which drops every connection through it")
@@ -96,7 +141,7 @@ func (rc routerChange) ensureRouter(ctx context.Context, rep progress.Reporter, 
 		for _, e := range leftOut {
 			s.Warn(e.Error())
 		}
-		if err := localclusters.WriteRouterFolder(rc.dataHome, localclusters.RenderRouter(routes)); err != nil {
+		if notes, err = rc.writeRouterFolder(s, routes); err != nil {
 			return err
 		}
 		if plan.Action == localclusters.RouterRecreate {
@@ -145,8 +190,10 @@ func (rc routerChange) refreshRouter(ctx context.Context, rep progress.Reporter,
 		running = observed.Running
 	}
 	step := rep.Start("refreshing router")
+	var notes []string
+	defer func() { noteAll(rep, notes) }()
 	if err == nil {
-		err = rc.serveRoutes(ctx, step, inventory, running, given...)
+		notes, err = rc.serveRoutes(ctx, step, inventory, running, given...)
 	}
 	if err != nil {
 		step.Warn(fmt.Sprintf("not refreshed: %v. Run 'educates local router update' once that is fixed", err))
@@ -162,28 +209,32 @@ func (rc routerChange) refreshRouter(ctx context.Context, rep progress.Reporter,
 
 // serveRoutes renders the router's configuration again, from the local
 // clusters inventory holds, with the local clusters of given served from
-// the configs given for them, writes it to the router folder, joins the
-// router to the kind network, and reloads the router when running is set.
-// It warns in step about each config the router leaves out.
+// the configs given for them, writes it to the router folder with the
+// certificates the router ends TLS with, as writeRouterFolder does, joins
+// the router to the kind network, and reloads the router when running is
+// set. It warns in step about each config the router leaves out, and
+// returns a line for each change to a certificate, for the caller to note
+// once step is done.
 func (rc routerChange) serveRoutes(ctx context.Context, step progress.Step, inventory localclusters.Inventory,
-	running bool, given ...localclusters.LoadedConfig) error {
+	running bool, given ...localclusters.LoadedConfig) ([]string, error) {
 	routes, leftOut, err := inventory.RouterRoutes(given...)
 	for _, e := range leftOut {
 		step.Warn(e.Error())
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := localclusters.WriteRouterFolder(rc.dataHome, localclusters.RenderRouter(routes)); err != nil {
-		return err
+	notes, err := rc.writeRouterFolder(step, routes)
+	if err != nil {
+		return notes, err
 	}
 	if err := rc.container.join(ctx); err != nil {
-		return err
+		return notes, err
 	}
 	if !running {
-		return nil
+		return notes, nil
 	}
-	return rc.container.reload(ctx)
+	return notes, rc.container.reload(ctx)
 }
 
 // removeRouter removes the router container and the router folder of the
@@ -207,5 +258,6 @@ func dockerRouterChange(dataHome string, w io.Writer) routerChange {
 		checkPrivilegedPorts: func(ctx context.Context) error {
 			return checkDockerDesktopPrivilegedPorts(ctx, w)
 		},
+		certificate: localcerts.RouterCertificate,
 	}
 }

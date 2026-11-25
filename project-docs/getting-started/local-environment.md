@@ -766,12 +766,12 @@ educates cluster workshop serve --patch-workshop --local-cluster=
 educates cluster workshop serve --patch-workshop --local-cluster test2
 ```
 
-When the command serves a local cluster, two of its defaults change, so that two serves do not compete for the same ports:
+When the command serves a local cluster, its defaults change, so that two serves do not compete for the same ports:
 
-* The proxy that workshop sessions connect to listens on the cluster's listen address, such as `10.10.10.2`, instead of on `0.0.0.0`, every host address. It keeps port 10081, since a cluster's sessions reach your host through a loopback service under the cluster's ingress domain, which resolves to the cluster's own listen address. Every serve binds the address of the cluster it serves, so two serves share port 10081 on macOS and Linux alike.
+* The proxy that workshop sessions connect to listens on the [router address](local-router-address), such as `10.10.10.1`, instead of on `0.0.0.0`, every host address, since a cluster's sessions reach your host through a loopback service under the cluster's ingress domain, `localhost.<domain>`, which resolves to the router address. As every local cluster shares that address, the proxy listens on a port that is free on the router address, chosen for each run, instead of on port 10081, and `--patch-workshop` patches the workshop with that port. The command prints the address and port the proxy listens on.
 * The Hugo server, which renders the instructions, listens on a free port the operating system picks, instead of on port 1313.
 
-The `--local-host`, `--local-port` and `--hugo-port` options still take precedence when you give them. With `--patch-workshop`, both commands use the access token the command line tool keeps in the data home. When the command serves no local cluster, as for a remote cluster or a Kind cluster you created yourself, it listens on `0.0.0.0` and port 1313, as it always has.
+The `--local-host`, `--local-port`, `--proxy-port` and `--hugo-port` options still take precedence when you give them. A workshop is patched with the `--local-port` you give, unless you also give `--proxy-port`, and a workshop definition you configured yourself to reach the proxy on port 10081 needs `--local-port 10081`. With `--patch-workshop`, both commands use the access token the command line tool keeps in the data home. When the command serves no local cluster, as for a remote cluster or a Kind cluster you created yourself, it listens on `0.0.0.0` and port 10081, with the Hugo server on port 1313, as it always has.
 
 ### A second data home is not a second cluster
 

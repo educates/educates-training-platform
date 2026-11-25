@@ -85,7 +85,8 @@ func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
 // that passes validateClusterNodes. An EducatesLocalConfig that declares no
 // ingress.domain gets a nip.io name, as DeriveDomain gives it, with
 // ingress.insecure set to true, so it is served over plain HTTP with
-// no CA to manage. It then gets the static defaults config.Load gives it.
+// no CA to manage, unless its TLS ends at the router. It then gets the
+// static defaults config.Load gives it.
 // An EducatesConfig gets no fallback and no defaults: its domain is the
 // one its custom resources declare.
 //
@@ -138,7 +139,8 @@ func parseConfig(id Identity, data []byte, source string) (v1alpha1.Config, erro
 
 // DeriveDomain gives the EducatesLocalConfig c of the local cluster id,
 // when it declares no ingress.domain, a nip.io name, with dashes, and
-// ingress.insecure set to true, as LoadConfigFile does: for the default
+// ingress.insecure set to true unless c ends TLS at the router, as
+// useDerivedDomain does and LoadConfigFile does: for the default
 // local cluster the nip.io name of the router address, the one address
 // every local cluster is served on, and for a named one the nip.io name of
 // its listen address. Until the data home holds a router file, the
@@ -160,8 +162,7 @@ func DeriveDomain(id Identity, c *v1alpha1.EducatesLocalConfig) error {
 				return fmt.Errorf("the router address %s, in %s, %s: set ingress.domain to a domain that resolves to it",
 					routerAddress, config.LocalRouterPath(id.DataHome), noNipDomain)
 			}
-			c.Ingress.Domain = domain
-			c.Ingress.Insecure = true
+			useDerivedDomain(c, domain)
 			return nil
 		case !errors.Is(err, fs.ErrNotExist):
 			return err
@@ -175,9 +176,19 @@ func DeriveDomain(id Identity, c *v1alpha1.EducatesLocalConfig) error {
 		return fmt.Errorf("cluster.listenAddress %s %s: set ingress.domain to a domain that resolves to it",
 			c.Cluster.ListenAddress, noNipDomain)
 	}
-	c.Ingress.Domain = domain
-	c.Ingress.Insecure = true
+	useDerivedDomain(c, domain)
 	return nil
+}
+
+// useDerivedDomain gives the EducatesLocalConfig c the derived nip.io
+// domain domain, served over plain HTTP with ingress.insecure set to true,
+// unless c ends TLS at the router with ingress.externalTLSTermination, which
+// serves it over https and can't be combined with ingress.insecure.
+func useDerivedDomain(c *v1alpha1.EducatesLocalConfig, domain string) {
+	c.Ingress.Domain = domain
+	if !c.Ingress.ExternalTLSTermination {
+		c.Ingress.Insecure = true
+	}
 }
 
 // listenAddressAdvice says how to give the local cluster id, whose config

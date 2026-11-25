@@ -84,6 +84,18 @@ type LocalIngressConfig struct {
 	// secrets add ca` step is skipped. Translates to the operator's
 	// certificates.provider: None with ingress.protocol: http.
 	Insecure bool `yaml:"insecure,omitempty"`
+
+	// ExternalTLSTermination serves the local cluster over https with TLS
+	// ended outside it, at the router, as a cloud load balancer ends it
+	// for the cloud kinds' externalTLSTermination: the cluster issues no
+	// certificate and serves plain HTTP, while its portal and workshop
+	// URLs use https. The router ends TLS for the cluster's domain with a
+	// certificate from the local secrets cache, and the cluster trusts the
+	// CA that verifies it. Translates to the operator's
+	// certificates.provider: None with ingress.protocol: https and the CA
+	// trust Secret in certificates.none. It can't be combined with
+	// Insecure.
+	ExternalTLSTermination bool `yaml:"externalTLSTermination,omitempty"`
 }
 
 // LocalWebsiteStylingConfig is the narrow subset exposed by EducatesLocalConfig.

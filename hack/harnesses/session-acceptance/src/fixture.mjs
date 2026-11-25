@@ -7,6 +7,7 @@ import { PortalClient, holdConsole, newFixtureLog, openDashboard, screenshot, wa
 import { consoleLog, kubectlChecks, tunnelCheck, waitForSessionPod } from "./checks.mjs";
 import { copyPasteProblems, runCopyPaste } from "./copypaste.mjs";
 import { workshopName } from "./portal.mjs";
+import { DASHBOARD_STYLESHEET, PORTAL_STYLESHEET, checkTheme, themeOutcome } from "./theme.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -34,6 +35,7 @@ export async function runFixture(h, fixture) {
       vcluster: !!spec.vcluster?.enabled,
       tunnel: !!(spec.sshd?.enabled && spec.sshd?.tunnel?.enabled),
       terminalCopyPaste: fixture.terminalCopyPaste,
+      mirror: !!h.mirror,
     },
     problems: [],
     notes: [],
@@ -74,6 +76,8 @@ export async function runFixture(h, fixture) {
     const apiPage = await newPage();
     portal = new PortalClient(apiPage, h.portalUrl, h.credentials);
     await portal.open();
+    result.theme = { portal: await checkTheme(apiPage, PORTAL_STYLESHEET, h.theme.marker) };
+    log("theme-portal", result.theme.portal);
     const environment = await portal.environmentFor(workshopName(h.portal, fixture));
     result.environment = environment;
 
@@ -90,11 +94,23 @@ export async function runFixture(h, fixture) {
     log("session-requested", { name: details.name, environment, workshop: details.workshop });
     say(`session ${details.name} requested`);
 
+    // The session's pod is watched while the dashboard opens: the portal's
+    // session page deletes a session that has not started within two
+    // minutes, and a pod that can't pull its image is reported as such
+    // before then, not as a dashboard that never showed.
     const page = await newPage();
-    await openDashboard(page, h.portalUrl, details, h.cluster, log);
-
-    const pod = await waitForSessionPod(h.cluster, environment, details.name, log);
+    const podReady = waitForSessionPod(h.cluster, environment, details.name, log);
+    const opened = openDashboard(page, h.portalUrl, details, h.cluster, log);
+    podReady.catch(() => {});
+    opened.catch(() => {});
+    await Promise.race([opened, podReady.then(() => opened)]);
+    const pod = await podReady;
     result.pod = pod;
+    if (h.mirror) {
+      result.mirror = await h.mirror.sessionEvidence(environment, pod);
+      log("mirror", result.mirror);
+      if (!result.mirror.fromMirror) result.problems.push(`mirror: the workshop container runs ${result.mirror.image}, not the mirror's ${h.mirror.image}`);
+    }
     result.kubectl = await kubectlChecks(h.cluster, environment, pod);
     log("kubectl-checks", result.kubectl);
     say(`kubectl checks done, walking the instructions`);
@@ -104,6 +120,14 @@ export async function runFixture(h, fixture) {
     if (!result.walk.completed) result.problems.push("the walk did not reach the last instruction page");
     for (const f of result.walk.failed) result.problems.push(`walk: ${f.page}${f.action !== undefined ? ` action ${f.action}` : ""}: ${f.error}`);
     for (const e of result.walk.terminalErrors) result.problems.push(`terminal error on ${e.page}: ${e.line}`);
+
+    // The walk leaves the page on the dashboard, served from the session's
+    // environment, whose namespace holds its copy of the theme.
+    result.theme.dashboard = await checkTheme(page, DASHBOARD_STYLESHEET, h.theme.marker);
+    log("theme-dashboard", result.theme.dashboard);
+    for (const [where, t] of Object.entries(result.theme)) {
+      if (!t.served || !t.applied) result.problems.push(`theme: the ${where} ${themeOutcome(t)}`);
+    }
 
     if (result.features.console) {
       say(`holding the console for ${Math.round(h.profile.holdMs / 1000)}s`);
@@ -141,7 +165,7 @@ export async function runFixture(h, fixture) {
     const workshopContainer = restarts.status?.containerStatuses?.find((c) => c.name === "workshop");
     result.workshopContainerRestarts = workshopContainer?.restartCount ?? null;
   } catch (e) {
-    result.problems.push(`harness: ${String(e.message || e).slice(0, 400)}`);
+    result.problems.push(`harness: ${String(e.message || e).slice(0, 800)}`);
     log("fatal", { error: String(e.stack || e).slice(0, 2000) });
   } finally {
     if (portal?.token && result.session) {

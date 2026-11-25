@@ -2,6 +2,7 @@
 // observed, current behaviour included.
 
 import { CASES, SHORTCUTS, copyPasteCaseCell, describeExpected, describeObserved } from "./copypaste.mjs";
+import { themeOutcome } from "./theme.mjs";
 
 function kubectlCell(check) {
   return check ? check.outcome : "-";
@@ -55,6 +56,19 @@ function copyPasteTable(results) {
   return rows.length > 1 ? markdownTable(rows) : null;
 }
 
+function themeCell(r) {
+  if (!r.theme) return "not checked";
+  const where = ["portal", "dashboard"];
+  if (where.every((w) => r.theme[w]?.served && r.theme[w]?.applied)) return "served";
+  return where.map((w) => `${w} ${r.theme[w] ? (r.theme[w].served && r.theme[w].applied ? "served" : "failed") : "not checked"}`).join(", ");
+}
+
+function mirrorCell(r) {
+  if (!r.features.mirror) return "-";
+  if (!r.mirror) return "not pulled";
+  return r.mirror.fromMirror ? "pulled from the mirror" : "not from the mirror";
+}
+
 function walkCell(r) {
   if (!r.walk) return "not walked";
   return `${r.walk.pages} pages, ${r.walk.clicked} actions, ${r.walk.terminalErrors.length} terminal errors`;
@@ -62,10 +76,12 @@ function walkCell(r) {
 
 export function summaryTable(results) {
   const rows = [
-    ["Fixture", "Result", "Walk", "get ns <own>", "get ns", "get pods", "Context namespace", "Console", "Tunnel", "Copy and paste"],
+    ["Fixture", "Result", "Workshop image", "Theme", "Walk", "get ns <own>", "get ns", "get pods", "Context namespace", "Console", "Tunnel", "Copy and paste"],
     ...results.map((r) => [
       r.fixture,
       r.passed ? "PASS" : "FAIL",
+      mirrorCell(r),
+      themeCell(r),
       walkCell(r),
       kubectlCell(r.kubectl?.getOwnNamespace),
       kubectlCell(r.kubectl?.listNamespaces),
@@ -88,6 +104,17 @@ function fixtureSection(r) {
   const out = [`## ${r.fixture}: ${r.passed ? "PASS" : "FAIL"}`, "", r.summary, ""];
   out.push(`- Session: ${r.session ?? "-"} in environment ${r.environment ?? "-"}, pod ${r.pod ?? "-"}, ${r.seconds}s`);
   if (r.workshopContainerRestarts !== undefined) out.push(`- Workshop container restarts: ${r.workshopContainerRestarts}`);
+  if (r.mirror) {
+    const m = r.mirror;
+    const copy = m.copy ? `present${Object.keys(m.copy).length ? `, ${Object.entries(m.copy).map(([k, v]) => `${k}: ${v}`).join(", ")}` : ""}` : "absent";
+    out.push(
+      `- Workshop image: ${m.image}, ${m.fromMirror ? "the mirror's" : "not the mirror's"}; pod's pull secrets [${m.podPullSecrets.join(", ")}], ` +
+        `service account ${m.serviceAccount}'s [${(m.serviceAccountPullSecrets ?? []).join(", ")}]; the mirror's pull Secret in the namespace: ${copy}`,
+    );
+  }
+  if (r.theme) {
+    for (const where of ["portal", "dashboard"]) out.push(`- Website theme: the ${where} ${themeOutcome(r.theme[where])}`);
+  }
   if (r.walk) {
     out.push(
       `- Walk: ${r.walk.completed ? "reached the last page" : "did not finish"}, ${r.walk.pages} pages, ` +
@@ -177,6 +204,8 @@ export function markdownReport(run, results) {
     `- CLI: ${run.cli} (${run.cliVersion})`,
     `- Profile: ${run.profileName}, console held ${Math.round(run.profile.holdMs / 1000)}s, probed every ${Math.round(run.profile.probeEvery / 1000)}s`,
     `- Test portal: ${run.portal}; robot credentials from ${run.credentialsSource}`,
+    `- Website theme: ${run.theme ?? "not installed"}`,
+    `- Authenticated mirror: ${run.mirror ?? "not used"}`,
     `- Started ${run.started}, finished ${run.finished}`,
     `- Result: ${passed === results.length ? "PASS" : "FAIL"}, ${passed} of ${results.length} fixtures passed`,
     "",

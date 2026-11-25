@@ -1,0 +1,19 @@
+{{- /*
+Keeps a replica running through voluntary disruptions such as node drains.
+Rendered only above one replica: a budget on a single replica would block
+every drain of its node.
+*/ -}}
+{{- if gt (int .Values.replicas) 1 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: secrets-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "secrets-manager.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "secrets-manager.selectorLabels" . | nindent 6 }}
+{{- end }}

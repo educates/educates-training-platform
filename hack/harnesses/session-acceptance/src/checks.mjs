@@ -7,18 +7,63 @@ import { run } from "./cluster.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const PULL_FAILURES = new Set(["ErrImagePull", "ImagePullBackOff"]);
+
+// imagePullFailure returns the first container of the pod, init containers
+// first, that waits on a failed image pull, with the kubelet's reason and
+// message, or null when none does.
+export function imagePullFailure(pod) {
+  const statuses = [...(pod.status?.initContainerStatuses ?? []), ...(pod.status?.containerStatuses ?? [])];
+  for (const s of statuses) {
+    const waiting = s.state?.waiting;
+    if (waiting && PULL_FAILURES.has(waiting.reason)) {
+      return { container: s.name, image: s.image, reason: waiting.reason, message: waiting.message ?? "" };
+    }
+  }
+  return null;
+}
+
+// A session's pod that has failed to pull an image for this long fails the
+// fixture, rather than the wait running out: the kubelet keeps retrying,
+// but a refused pull doesn't heal. It is well inside the two minutes after
+// which the portal's session page deletes a session that has not started.
+const PULL_FAILURE_GRACE_MS = 45_000;
+
 // waitForSessionPod waits for the session's pod in the environment
 // namespace to be ready, and for its workshop container to have the
-// kubeconfig its setup writes.
+// kubeconfig its setup writes. It fails early when the pod has failed to
+// pull an image for PULL_FAILURE_GRACE_MS, even if the pod has been deleted
+// since.
 export async function waitForSessionPod(cluster, environment, session, log) {
   const deadline = Date.now() + 10 * 60_000;
   let pod = null;
+  let pullFailingSince = null;
+  let failing = null;
+  // The kubelet's message for a failed pull says why; once it backs off, its
+  // message says only that it is backing off.
+  let pullError = "";
   while (Date.now() < deadline) {
     const pods = await cluster.kubectlJson(["-n", environment, "get", "pods", "-l", `training.educates.dev/session.name=${session}`]);
     const ready = pods.items.find((p) => p.status?.conditions?.some((c) => c.type === "Ready" && c.status === "True"));
     if (ready) {
       pod = ready.metadata.name;
       break;
+    }
+    const now = pods.items.map((p) => ({ pod: p.metadata.name, failure: imagePullFailure(p) })).find((f) => f.failure);
+    if (now) {
+      if (now.failure.reason === "ErrImagePull") pullError = now.failure.message;
+      if (pullFailingSince === null) {
+        pullFailingSince = Date.now();
+        log("session-pod-pull-failing", { pod: now.pod, ...now.failure });
+      }
+      failing = now;
+    } else if (pods.items.length) {
+      pullFailingSince = null;
+      failing = null;
+    }
+    if (failing && Date.now() - pullFailingSince >= PULL_FAILURE_GRACE_MS) {
+      const f = failing.failure;
+      throw new Error(`the pod ${failing.pod} of session ${session} could not pull ${f.image}: ${pullError || `${f.reason}: ${f.message}`}`);
     }
     await sleep(3000);
   }

@@ -127,6 +127,8 @@ make restart-training-platform
 
 For the operator itself, `make image-operator` then `kubectl rollout restart deployment -n educates-installer`. See the [operator README](../installer/operator/README.md) and the make targets there (`make smoke-test`, `make test`) for the operator development loop.
 
+`make -C installer/operator rbac-verify` checks that the operator can install and tear down the platform under its fine-grained roles, without cluster-admin. It needs no cluster and no earlier build: it builds the operator image and the runtime images the samples deploy from the checkout, for the host architecture and under the tag `rbac-verify`, so the `latest` images of a local build are left alone, creates a kind cluster of its own, `educates-rbac-verify`, loads the images into it, and deletes the cluster when it ends. `SKIP_BUILD=true` reuses the images an earlier run built, and `KEEP_CLUSTER=true` keeps the cluster. The script switches the current context of the kube config to its cluster, so set `KUBECONFIG` to a file of its own to leave yours as it is.
+
 If the cluster is already up and you only want to (re)deploy the platform, run:
 
 ```
@@ -142,7 +144,7 @@ educates admin platform delete
 Container image conventions
 ---------------------------
 
-The Python runtime component images (`secrets-manager`, `session-manager`, `tunnel-manager` and `training-portal`) share one layout, and a change to one of them should normally be mirrored in the others. The `lookup-service` image is built from Go instead, as the operator's is: a builder stage on `golang` cross-compiles a static binary, which the final stage packages on `gcr.io/distroless/static:nonroot`. That image has no shell. It keeps the system CA certificates the distroless base ships, which the service trusts as its system roots, but it has neither the combined bundle at `/opt/app-root/ca-bundle.crt` that the Python images build, described under "CA certificates" below, nor the environment variables which point at that bundle. The service instead reads the cluster ingress CA from the `ca.crt` the chart mounts, through its `--ingress-ca-file` flag, and trusts it besides the system roots.
+The Python runtime component images (`session-manager`, `tunnel-manager` and `training-portal`) share one layout, and a change to one of them should normally be mirrored in the others. The `lookup-service` and `secrets-manager` images are built from Go instead, as the operator's is: a builder stage on `golang` cross-compiles a static binary, with the Go workspace off and `-trimpath`, which the final stage packages on `gcr.io/distroless/static:nonroot`. Their `.dockerignore` files keep the build context to the module's sources. Those images have no shell. They keep the system CA certificates the distroless base ships, but have neither the combined bundle at `/opt/app-root/ca-bundle.crt` that the Python images build, described under "CA certificates" below, nor the environment variables which point at that bundle. The lookup service trusts the system roots, and reads the cluster ingress CA from the `ca.crt` the chart mounts, through its `--ingress-ca-file` flag, and trusts it besides them. The secrets-manager talks only to the Kubernetes API server, which it trusts through the CA certificate Kubernetes mounts beside its service account token, so it needs neither.
 
 * **Base image.** `debian:trixie-slim`, pinned by codename only. A rebuild picks up the current Debian point release and security rebuilds. The codename is bumped when Debian stable moves on, which happens roughly every two years; there is no six-monthly base image bump as there was with Fedora. The `image-cache` image is the exception and uses `gcr.io/distroless/base-debian13:nonroot`, since `zot` is a self-contained binary.
 
@@ -199,17 +201,19 @@ Running CI checks locally
 
 The GitHub Actions workflows that gate pull requests
 (`.github/workflows/client-programs-ci.yaml`,
-`.github/workflows/installer-operator-ci.yaml` and
-`.github/workflows/lookup-service-ci.yaml`) invoke these same make
+`.github/workflows/installer-operator-ci.yaml`,
+`.github/workflows/lookup-service-ci.yaml` and
+`.github/workflows/secrets-manager-ci.yaml`) invoke these same make
 targets, so running them locally exercises exactly what CI runs — there is
 no second copy of the step list to drift out of sync. From the repository
 root:
 
 ```
-make ci                   # run all CI checks (CLI, operator, Lookup Service)
+make ci                   # run all CI checks (CLI, operator, Lookup Service, secrets-manager)
 make ci-cli               # only the client-programs checks
 make ci-operator          # only the installer-operator checks
 make ci-lookup-service    # only the Lookup Service checks
+make ci-secrets-manager   # only the secrets-manager checks
 ```
 
 `make ci-cli` is what the client-programs workflow runs: it stages the
@@ -236,6 +240,15 @@ runs the service in process against envtest and compares its responses
 with the golden responses under `lookup-service/testdata/golden`, and
 `golangci-lint` (`make -C lookup-service lint`).
 
+`make ci-secrets-manager` is what the secrets-manager workflow runs: it
+runs `go vet` and `go build` against `secrets-manager`, the DeepCopy drift
+check (`make -C secrets-manager generate` followed by a `git diff`), the
+test suites (`make -C secrets-manager test`), among them the scenario
+suite, which runs the secrets-manager in process against envtest with the
+custom resource definitions of its subchart, and `golangci-lint`
+(`make -C secrets-manager lint`). The workflow also runs when those custom
+resource definitions change.
+
 The CLI's Hugo renderer embeds theme files via `//go:embed` from
 `client-programs/pkg/renderer/files/`, but that directory is `.gitignore`d
 and populated at build time from the workshop base environment
@@ -248,8 +261,9 @@ you ever need it on its own, run:
 make stage-renderer-files
 ```
 
-The operator and Lookup Service modules are pinned to a specific Go
-version (see `installer/operator/go.mod` and `lookup-service/go.mod`). If
+The operator, Lookup Service and secrets-manager modules are pinned to a
+specific Go version (see `installer/operator/go.mod`,
+`lookup-service/go.mod` and `secrets-manager/go.mod`). If
 you have more than one Go toolchain installed, set `GOTOOLCHAIN` to that
 version (e.g. `GOTOOLCHAIN=go1.26.0 make ci-operator`) or ensure the
 pinned toolchain is the one on your `PATH`, otherwise some build steps may

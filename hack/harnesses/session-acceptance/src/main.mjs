@@ -9,8 +9,11 @@ import { parseArgs } from "node:util";
 import { defaultChrome, launchBrowser } from "./browser.mjs";
 import { LocalCluster, mustRun } from "./cluster.mjs";
 import { runFixture } from "./fixture.mjs";
+import { onInterrupt, once } from "./interrupt.mjs";
+import { AuthenticatedMirror } from "./mirror.mjs";
 import { deployPortal, loadFixtures, removePortal, robotCredentials } from "./portal.mjs";
 import { markdownReport, summaryTable } from "./report.mjs";
+import { WebsiteTheme } from "./theme.mjs";
 
 const HARNESS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = path.resolve(HARNESS_DIR, "..", "..", "..");
@@ -37,7 +40,15 @@ Drives a session of every fixture on a local cluster and writes a report.
   --out <dir>             results directory (default: results/<time>-<cluster>
                           beside this README)
   --portal <name>         name of the test portal (default: session-acceptance)
-  --keep                  leave the test portal and its workshops in place
+  --authenticated-mirror  pull the workshop image from an authenticated
+                          registry mirror the run starts in the cluster, with
+                          its pull secret named in the EducatesClusterConfig
+  --withhold-pull-secret  with --authenticated-mirror, name no pull secret,
+                          so that sessions can't pull the workshop image
+  --keep                  leave the test portal, its workshops, the website
+                          theme and the mirror in place
+  --clean                 remove what an earlier run left in place, such as
+                          with --keep, and exit
   --chrome <path>         Chrome to drive (default: $CHROME_PATH, else the
                           platform's Google Chrome)
   --headful               show Chrome's windows
@@ -83,7 +94,10 @@ async function main() {
       parallel: { type: "string", default: "3" },
       out: { type: "string" },
       portal: { type: "string", default: "session-acceptance" },
+      "authenticated-mirror": { type: "boolean", default: false },
+      "withhold-pull-secret": { type: "boolean", default: false },
       keep: { type: "boolean", default: false },
+      clean: { type: "boolean", default: false },
       chrome: { type: "string" },
       headful: { type: "boolean", default: false },
       "list-fixtures": { type: "boolean", default: false },
@@ -115,6 +129,10 @@ async function main() {
   }
   const parallel = Number(values.parallel);
   if (!Number.isInteger(parallel) || parallel < 1) throw new UsageError(`--parallel must be a positive number`);
+  if (values["withhold-pull-secret"] && !values["authenticated-mirror"]) {
+    throw new UsageError("--withhold-pull-secret needs --authenticated-mirror");
+  }
+  if (values.clean && values.keep) throw new UsageError("--clean and --keep can't be given together");
 
   const clusterName = values["local-cluster"] ?? process.env.EDUCATES_LOCAL_CLUSTER ?? "";
   const cli = resolvePath(values.cli) || defaultCli();
@@ -132,6 +150,22 @@ async function main() {
   }
   const cliVersion = (await mustRun(cli, ["version", "--full"])).stderr.trim() || "unknown";
   say(`Driving ${cluster.description} (${cluster.context}): ${cluster.protocol}://*.${cluster.domain} on ${cluster.listenAddress}`);
+
+  const theme = new WebsiteTheme({ cluster, portal: values.portal, log: say });
+  const mirror = new AuthenticatedMirror({ cluster, portal: values.portal, withholdPullSecret: values["withhold-pull-secret"], log: say });
+  // removeAll removes the test portal first, since its sessions use the
+  // theme and the mirror, and then the theme and the mirror.
+  const removeAll = async () => {
+    await removePortal({ cluster, portal: values.portal, fixtures: allFixtures, log: say });
+    await theme.remove();
+    await mirror.remove();
+  };
+  if (values.clean) {
+    await removeAll();
+    say("Removed what earlier runs left in place");
+    return 0;
+  }
+
   say(`CLI ${cli} (${cliVersion}), profile ${profileName}, fixtures ${fixtures.map((f) => f.name).join(", ")}`);
 
   const outDir = resolvePath(values.out) || path.join(HARNESS_DIR, "results", `${timestamp()}-${clusterName || "default"}`);
@@ -149,14 +183,49 @@ async function main() {
   };
 
   let results = [];
-  let browser = null;
+  // Every browser the run launches, its fixtures' own included, so that the
+  // run closes them all when it ends or is interrupted.
+  const browsers = new Set();
+  const launch = async (profileDir) => {
+    const launched = await launchBrowser({ chrome, cluster, profileDir, headful: values.headful });
+    browsers.add(launched);
+    launched.once("disconnected", () => browsers.delete(launched));
+    return launched;
+  };
   let exitCode = 0;
+  // restore puts the cluster back as the run found it. The run's end and a
+  // signal that interrupts the run both ask for it, and it runs once.
+  const restore = once(async () => {
+    await Promise.all([...browsers].map((b) => b.close().catch(() => {})));
+    fs.rmSync(path.join(outDir, "chrome-profile"), { recursive: true, force: true });
+    if (values.keep) {
+      say(`Keeping the test portal ${values.portal}, its website theme and any mirror; remove them with 'run.sh --clean' and the same --local-cluster and --portal`);
+    } else {
+      await removeAll().catch((e) => {
+        say(`Removing the test portal, its website theme or the mirror failed: ${e.message}`);
+        exitCode = 1;
+      });
+    }
+  });
+  const interruption = onInterrupt(restore, { log: say });
   try {
+    // Remove what an earlier run left: the portal, or namespaces of it that
+    // are still terminating, and a mirror, which this run may not use. The
+    // theme is installed over one an earlier run left.
+    await removePortal({ cluster, portal: values.portal, fixtures: allFixtures, log: say });
+    await mirror.remove();
+    if (values["authenticated-mirror"]) {
+      await mirror.install();
+      run.mirror = mirror.describe();
+    }
+    await theme.install();
+    run.theme = `${theme.describe()}, marker ${theme.marker}`;
+
     const trainingPortal = await deployPortal({
       cluster,
       portal: values.portal,
+      theme: theme.name,
       fixtures,
-      allFixtures,
       samplesDir: path.join(REPO_ROOT, "workshop-samples"),
       buildDir,
       workshopVersion: clusterName || "default",
@@ -171,40 +240,41 @@ async function main() {
       workshops[f.name] = await cluster.kubectlJson(["get", "workshops.training.educates.dev", `${values.portal}-${f.name}`]);
     }
 
-    browser = await launchBrowser({ chrome, cluster, profileDir: path.join(outDir, "chrome-profile"), headful: values.headful });
+    const browser = await launch(path.join(outDir, "chrome-profile"));
     const h = {
       cluster,
       browser,
       // A fixture that needs a browser of its own launches it alike.
-      launchBrowser: (profileDir) => launchBrowser({ chrome, cluster, profileDir, headful: values.headful }),
+      launchBrowser: launch,
       outDir,
       portal: values.portal,
       portalUrl: trainingPortal.status.educates.url.replace(/\/$/, ""),
       credentials,
       workshops,
       profile,
+      theme,
+      mirror: values["authenticated-mirror"] ? mirror : null,
       say,
     };
 
     const queue = [...fixtures];
     const worker = async () => {
-      for (let f = queue.shift(); f; f = queue.shift()) results.push(await runFixture(h, f));
+      // An interrupted run starts no further fixture.
+      for (let f = queue.shift(); f && !interruption.signal; f = queue.shift()) results.push(await runFixture(h, f));
     };
     await Promise.all(Array.from({ length: Math.min(parallel, fixtures.length) }, worker));
     results.sort((a, b) => a.fixture.localeCompare(b.fixture));
     exitCode = results.every((r) => r.passed) ? 0 : 1;
+  } catch (e) {
+    // What fails once the run is interrupted fails for its browsers and
+    // portal going away, and the run still ends with its signal's status.
+    if (!interruption.signal) throw e;
   } finally {
-    if (browser) await browser.close().catch(() => {});
-    fs.rmSync(path.join(outDir, "chrome-profile"), { recursive: true, force: true });
-    if (values.keep) {
-      say(`Keeping the test portal ${values.portal}; remove it with 'educates cluster portal delete --portal ${values.portal}'`);
-    } else {
-      await removePortal({ cluster, portal: values.portal, fixtures: allFixtures, log: say }).catch((e) => {
-        say(`Removing the test portal failed: ${e.message}`);
-        exitCode = 1;
-      });
-    }
+    await restore();
   }
+  // An interrupted run ends with its signal's status once the restore is
+  // done, and writes no report.
+  if (interruption.signal) await interruption.exiting;
 
   run.finished = new Date().toISOString();
   fs.writeFileSync(path.join(outDir, "report.json"), JSON.stringify({ ...run, cluster: { ...cluster }, results }, null, 2));

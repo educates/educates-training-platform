@@ -6,9 +6,13 @@ metadata:
   labels:
     {{- include "secrets-manager.labels" . | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicas | default 1 }}
+  # Replicas elect a leader with the Lease secrets-manager, so a new pod
+  # starts as a standby while the old one still leads, and takes over once
+  # the old one stops and releases the Lease: an update leaves no gap and
+  # never two writers.
   strategy:
-    type: Recreate
+    type: RollingUpdate
   selector:
     matchLabels:
       {{- include "secrets-manager.selectorLabels" . | nindent 6 }}
@@ -19,52 +23,63 @@ spec:
         {{- include "secrets-manager.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: secrets-manager
-      automountServiceAccountToken: false
+      # The kubelet projects a short-lived token of the service account into
+      # the pod and rotates it.
+      automountServiceAccountToken: true
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if gt (int .Values.replicas) 1 }}
+      # Spread the replicas over nodes where the scheduler can, so that a
+      # standby survives the loss of the leader's node.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "secrets-manager.selectorLabels" . | nindent 20 }}
+      {{- end }}
       containers:
+        # The image's entrypoint is the secrets-manager's binary, so the
+        # chart gives only its flags.
         - name: operator
           image: "{{ include "secrets-manager.image.repository" . }}:{{ include "secrets-manager.image.tag" . }}"
           imagePullPolicy: {{ include "secrets-manager.image.pullPolicy" . }}
-          env:
-            - name: LOG_LEVEL
-              value: {{ .Values.logLevel | quote }}
+          args:
+            - --log-level={{ .Values.logLevel }}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-          startupProbe:
-            httpGet:
-              path: /healthz?probe=startup
-              port: 8080
-            initialDelaySeconds: 15
-            periodSeconds: 10
-            timeoutSeconds: 5
-            successThreshold: 1
-            failureThreshold: 4
+          ports:
+            - name: probes
+              containerPort: 8081
+          # The secrets-manager answers /healthz while its process serves
+          # requests.
           livenessProbe:
             httpGet:
-              path: /healthz?probe=liveness
-              port: 8080
+              path: /healthz
+              port: 8081
             initialDelaySeconds: 15
-            periodSeconds: 30
-            timeoutSeconds: 5
-            successThreshold: 1
-            failureThreshold: 3
+            periodSeconds: 10
+          # /readyz answers once the secrets-manager has synced its caches,
+          # whether or not it holds the Lease: a standby is ready too.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 2
+            periodSeconds: 5
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          volumeMounts:
-            - name: token
-              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
-              readOnly: true
-      volumes:
-        - name: token
-          secret:
-            secretName: secrets-manager-token

@@ -1,0 +1,79 @@
+package secretinjector
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"slices"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+
+	secretsv1beta1 "github.com/educates/educates-training-platform/secrets-manager/api/v1beta1"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/convergence"
+	"github.com/educates/educates-training-platform/secrets-manager/internal/feedback"
+)
+
+// publish writes the status outcome, what injecting the Secrets of injector
+// found and did, makes of it, and returns the result of the reconcile. When
+// a service account changed while it was written, the status waits for the
+// reconcile that retries it.
+func (r *Reconciler) publish(ctx context.Context, injector *secretsv1beta1.SecretInjector,
+	outcome *Outcome) (ctrl.Result, error) {
+	err := outcome.Err()
+	if outcome.Conflicted {
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		return convergence.RetryConflict(), nil
+	}
+
+	statusErr := feedback.Publish(ctx, r.feedback, injector, func(i *secretsv1beta1.SecretInjector) {
+		i.Status = status(i.Status.Conditions, injector.Generation, outcome)
+	})
+	return convergence.AfterStatus(ctrl.Result{}, err, statusErr)
+}
+
+// status is the status outcome makes of a SecretInjector at generation:
+// what each rule matched and injected, counted, and the Ready condition of
+// the dominant problem, set on conditions, the SecretInjector's.
+func status(conditions []metav1.Condition, generation int64, outcome *Outcome) secretsv1beta1.SecretInjectorStatus {
+	result := secretsv1beta1.SecretInjectorStatus{
+		ObservedGeneration: generation,
+		Conditions:         slices.Clone(conditions),
+		Rules:              make([]secretsv1beta1.InjectionCounts, 0, len(outcome.Rules)),
+	}
+	var findings feedback.Findings
+	var summary secretsv1beta1.InjectionCounts
+	for i := range outcome.Rules {
+		rule := &outcome.Rules[i]
+		if rule.InvalidSelector != nil {
+			findings.Add(secretsv1beta1.ReasonInvalidSelector, "", fmt.Sprintf("rules[%d]: %v", i, rule.InvalidSelector))
+		}
+		for _, failure := range rule.Failures {
+			findings.Add(secretsv1beta1.ReasonTargetErrors, failure.Namespace, failure.Err.Error())
+		}
+		counts := secretsv1beta1.InjectionCounts{
+			TargetNamespaces:       count(rule.TargetNamespaces),
+			ServiceAccountsMatched: count(rule.ServiceAccountsMatched),
+			InjectionsInSync:       count(rule.ServiceAccountsInSync),
+			Failures:               count(len(rule.Failures)),
+		}
+		summary.TargetNamespaces += counts.TargetNamespaces
+		summary.ServiceAccountsMatched += counts.ServiceAccountsMatched
+		summary.InjectionsInSync += counts.InjectionsInSync
+		summary.Failures += counts.Failures
+		result.Rules = append(result.Rules, counts)
+	}
+	result.Summary = &secretsv1beta1.InjectionSummary{
+		InjectionCounts: summary,
+		InSyncRatio:     feedback.Ratio(summary.InjectionsInSync, summary.ServiceAccountsMatched),
+	}
+	feedback.SetReady(&result.Conditions, findings.Ready(), generation)
+	return result
+}
+
+// count is n as a status count, which no cluster exceeds.
+func count(n int) int32 {
+	return int32(min(n, math.MaxInt32))
+}

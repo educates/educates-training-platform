@@ -9,7 +9,6 @@ __pycache__
 /project-docs/venv
 /project-docs/_build
 /session-manager/venv
-/secrets-manager/venv
 /training-portal/venv
 /training-portal/data/db.sqlite3
 /training-portal/data/secret-key.txt

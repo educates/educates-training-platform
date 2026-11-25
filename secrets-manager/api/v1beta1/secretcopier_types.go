@@ -1,0 +1,165 @@
+package v1beta1
+
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// SecretCopierKind is the kind of a SecretCopier.
+const SecretCopierKind = "SecretCopier"
+
+// ReclaimPolicy says what happens to a SecretCopier rule's copies when the
+// SecretCopier is deleted.
+type ReclaimPolicy string
+
+const (
+	// ReclaimDelete has Kubernetes delete the copies with their SecretCopier.
+	ReclaimDelete ReclaimPolicy = "Delete"
+
+	// ReclaimRetain keeps the copies when their SecretCopier is deleted.
+	ReclaimRetain ReclaimPolicy = "Retain"
+)
+
+// SecretReference names a Secret.
+type SecretReference struct {
+	// name is the Secret's name.
+	Name string `json:"name"`
+
+	// namespace is the Secret's namespace.
+	Namespace string `json:"namespace"`
+}
+
+// TargetSecret shapes the copies of a SecretCopier or SecretExporter rule.
+type TargetSecret struct {
+	// name is the name of the copies, the source's when empty.
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// labels are set on the copies, besides the source's labels, winning
+	// over a source label with the same key.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// annotations are set on the copies. The source's annotations are
+	// never copied. At most 32, none of them under secrets.educates.dev/.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// keys limits the copies to these keys of the source, those the source
+	// has. When it is set it lists at least one key; the copies hold every
+	// key of the source when it is absent.
+	// +optional
+	Keys []string `json:"keys,omitempty"`
+}
+
+// CopyAuthorization gates a copy on a SecretImporter that holds the same
+// shared secret.
+type CopyAuthorization struct {
+	// sharedSecret, when set, even to an empty string, must equal the
+	// sharedSecret of the SecretImporter named after the copy in the target
+	// namespace.
+	// +optional
+	SharedSecret *string `json:"sharedSecret,omitempty"`
+}
+
+// SecretCopierRule copies one source Secret into the namespaces it
+// selects.
+type SecretCopierRule struct {
+	// sourceSecret is the Secret copied.
+	SourceSecret SecretReference `json:"sourceSecret"`
+
+	// targetNamespaces selects the namespaces the Secret is copied into.
+	// +optional
+	TargetNamespaces TargetNamespaces `json:"targetNamespaces,omitempty"`
+
+	// targetSecret shapes the copies.
+	// +optional
+	TargetSecret TargetSecret `json:"targetSecret,omitempty"`
+
+	// copyAuthorization, when set, copies only where a SecretImporter
+	// holding the same shared secret accepts the copy.
+	// +optional
+	CopyAuthorization *CopyAuthorization `json:"copyAuthorization,omitempty"`
+
+	// reclaimPolicy says whether the copies are deleted with the
+	// SecretCopier. The API server defaults it to Delete.
+	// +optional
+	ReclaimPolicy ReclaimPolicy `json:"reclaimPolicy,omitempty"`
+}
+
+// CopyName is the name of the rule's copies: targetSecret.name, or the
+// source's name.
+func (r *SecretCopierRule) CopyName() string {
+	if r.TargetSecret.Name != "" {
+		return r.TargetSecret.Name
+	}
+	return r.SourceSecret.Name
+}
+
+// SecretCopierSpec holds the rules of a SecretCopier.
+type SecretCopierSpec struct {
+	// rules each copy one Secret.
+	// +optional
+	Rules []SecretCopierRule `json:"rules,omitempty"`
+}
+
+// SecretCopier copies Secrets into the namespaces its rules select. It is
+// cluster scoped.
+//
+// +kubebuilder:object:root=true
+type SecretCopier struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec SecretCopierSpec `json:"spec,omitempty"`
+
+	// +optional
+	Status SecretCopierStatus `json:"status,omitempty"`
+}
+
+// SecretCopierStatus says whether a SecretCopier is in sync, and why not.
+type SecretCopierStatus struct {
+	// observedGeneration is the generation of the spec the status
+	// describes.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// conditions holds the Ready condition.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// summary counts the targets of every rule.
+	// +optional
+	Summary *CopySummary `json:"summary,omitempty"`
+
+	// rules counts the targets of each rule, in the order of the spec's
+	// rules.
+	// +optional
+	Rules []SecretCopierRuleStatus `json:"rules,omitempty"`
+}
+
+// SecretCopierRuleStatus counts the targets of one rule of a SecretCopier.
+type SecretCopierRuleStatus struct {
+	// sourceSecret is the Secret the rule copies.
+	SourceSecret SecretReference `json:"sourceSecret"`
+
+	// sourceExists reports whether the source Secret exists.
+	SourceExists bool `json:"sourceExists"`
+
+	TargetCounts `json:",inline"`
+}
+
+// SecretCopierList is a list of SecretCopiers.
+//
+// +kubebuilder:object:root=true
+type SecretCopierList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+
+	Items []SecretCopier `json:"items"`
+}
+
+func init() {
+	register(&SecretCopier{}, &SecretCopierList{})
+}

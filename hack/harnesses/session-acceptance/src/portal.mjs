@@ -34,13 +34,16 @@ export function loadFixtures(fixturesDir) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function portalManifest(name) {
+// portalManifest returns the test portal, with the website theme whose
+// Secret is named theme.
+export function portalManifest(name, theme) {
   return {
     apiVersion: "training.educates.dev/v1beta1",
     kind: "TrainingPortal",
     metadata: { name, labels: { "training.educates.dev/harness": "session-acceptance" } },
     spec: {
       portal: {
+        theme: { name: theme },
         registration: { type: "anonymous" },
         updates: { workshop: true },
         sessions: { maximum: 20 },
@@ -60,16 +63,13 @@ export function workshopName(portal, fixture) {
   return `${portal}-${fixture.name}`;
 }
 
-// deployPortal creates the test portal, after removing one left by an
-// earlier run, and deploys each fixture to it with the CLI, publishing the
-// files of the fixtures built from a workshop sample first.
-export async function deployPortal({ cluster, portal, fixtures, allFixtures, samplesDir, buildDir, workshopVersion, log }) {
-  // Remove what an earlier run left: the portal, or namespaces of it that
-  // are still terminating.
-  await removePortal({ cluster, portal, fixtures: allFixtures, log });
-
+// deployPortal creates the test portal with the website theme whose Secret
+// is named theme, and deploys each fixture to it with the CLI, publishing
+// the files of the fixtures built from a workshop sample first. A portal an
+// earlier run left must be removed first, with removePortal.
+export async function deployPortal({ cluster, portal, theme, fixtures, samplesDir, buildDir, workshopVersion, log }) {
   log(`Creating the test portal ${portal}`);
-  const apply = await cluster.kubectl(["apply", "-f", "-"], { input: JSON.stringify(portalManifest(portal)) });
+  const apply = await cluster.kubectl(["apply", "-f", "-"], { input: JSON.stringify(portalManifest(portal, theme)) });
   if (apply.code !== 0) throw new Error(`creating the test portal ${portal} failed: ${apply.stderr.trim()}`);
 
   for (const fixture of fixtures) {

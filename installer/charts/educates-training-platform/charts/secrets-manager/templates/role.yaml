@@ -1,0 +1,41 @@
+{{- /*
+The secrets-manager's access in its own namespace, for leader election: the
+Lease secrets-manager its replicas elect a leader with, and the core Events
+controller-runtime's leader election records each change of leader with.
+Kubernetes cannot restrict create by name, so create covers the namespace's
+Leases, while get and update cover only that one.
+*/ -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: educates-secrets-manager-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "secrets-manager.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [create]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    resourceNames: [secrets-manager]
+    verbs: [get, update]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: educates-secrets-manager-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "secrets-manager.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: educates-secrets-manager-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: secrets-manager
+    namespace: {{ .Release.Namespace }}

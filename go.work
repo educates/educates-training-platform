@@ -5,4 +5,5 @@ use (
 	./installer/operator/
 	./lookup-service/
 	./node-ca-injector/
+	./secrets-manager/
 )

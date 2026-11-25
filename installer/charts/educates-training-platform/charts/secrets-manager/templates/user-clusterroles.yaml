@@ -1,9 +1,13 @@
 {{- /*
 User-facing ClusterRoles for the secrets.educates.dev custom resources.
-Not bound to anything by the chart — grant them to users or automation
+Not bound to anything by the chart: grant them to users or automation
 that needs to manage or inspect SecretCopiers, SecretExporters,
 SecretImporters and SecretInjectors. The aggregation labels also merge
 these rules into the built-in `admin` and `view` ClusterRoles.
+
+The view role leaves out SecretExporters and SecretImporters: their
+copyAuthorization.sharedSecret is what authorizes an import, so a user who
+can only view a namespace must not read it.
 */ -}}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -33,7 +37,5 @@ rules:
   - apiGroups: [secrets.educates.dev]
     resources:
       - secretcopiers
-      - secretexporters
-      - secretimporters
       - secretinjectors
     verbs: [get, list, watch]

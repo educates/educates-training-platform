@@ -164,6 +164,11 @@ func routerLeaf(t *testing.T, cert localclusters.RouterCertificate, domain strin
 	if want := []string{domain, "*." + domain}; !slices.Equal(chain[0].DNSNames, want) {
 		t.Errorf("certificate names %q, want %q", chain[0].DNSNames, want)
 	}
+	// OpenSSL, unlike Go, takes a certificate whose subject is its
+	// issuer's for a self-signed one, and refuses it.
+	if chain[0].Subject.String() == chain[1].Subject.String() {
+		t.Errorf("certificate subject %q is its CA's", chain[0].Subject)
+	}
 	roots := x509.NewCertPool()
 	roots.AddCert(root.Cert)
 	intermediates := x509.NewCertPool()

@@ -86,8 +86,11 @@ func MintDomainCA(root *x509.Certificate, rootKey crypto.Signer, domain string) 
 // key caKey, a TLS server certificate for ingress domain domain and every
 // name one label under it, *.<domain>, valid from now until notAfter or
 // until ca expires, whichever comes first. It returns the certificate and
-// a new private key as PEM. Its subject is the domain under the CA's
-// organization, and like the CAs it uses an RSA 2048 key.
+// a new private key as PEM. Its subject is the wildcard of the domain
+// under the CA's organization, which differs from the subject of a CA
+// MintDomainCA mints for the domain: TLS clients such as OpenSSL take a
+// certificate named as its issuer for a self-signed one. Like the CAs it
+// uses an RSA 2048 key.
 func IssueDomainCertificate(ca *x509.Certificate, caKey crypto.Signer, domain string, notAfter time.Time) (certPEM, keyPEM []byte, err error) {
 	notBefore := time.Now().UTC().Add(-1 * time.Hour)
 	if notBefore.Before(ca.NotBefore) {
@@ -98,7 +101,7 @@ func IssueDomainCertificate(ca *x509.Certificate, caKey crypto.Signer, domain st
 	}
 	tmpl := &x509.Certificate{
 		Subject: pkix.Name{
-			CommonName:   domain,
+			CommonName:   "*." + domain,
 			Organization: ca.Subject.Organization,
 		},
 		DNSNames:    []string{domain, "*." + domain},

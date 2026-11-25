@@ -250,6 +250,24 @@ New Features
   this provider, so no unused in-cluster certificate is issued when TLS is
   handled by an external load balancer or proxy.
 
+* With the ``None`` certificates provider, ``EducatesClusterConfig`` now
+  accepts a CA trust Secret for the certificate a load balancer or proxy
+  presents when it terminates TLS in front of the cluster with a certificate
+  a private CA issued. ``ingress.certificates.none.caCertificateSecretRef``
+  references a Secret holding that CA's certificate under ``ca.crt``, with
+  an optional ``namespace`` that defaults to the operator namespace. As for
+  the CA trust Secret of the ``StaticCertificate`` provider, the operator
+  derives ``educates-ingress-ca`` from its ``ca.crt`` alone, publishes it as
+  ``status.ingress.caCertificateSecretRef`` and keeps it updated when the
+  Secret changes, so Educates components and, through the node CA injector,
+  the cluster nodes reach the cluster's own names over ``https``. A Secret
+  that is missing, has no ``ca.crt`` or holds no valid certificate there
+  sets ``CertificatesReady`` to ``False`` with the reason
+  ``CATrustSecretNotFound``, ``CATrustSecretIncomplete`` or
+  ``CATrustSecretUnparseable``. The ``none`` block is accepted only with the
+  ``None`` provider, and is set through the ``EducatesConfig`` configuration
+  kind or by applying the ``EducatesClusterConfig`` directly.
+
 * The ``educates local mirror list`` command lists the local image
   registry mirrors that have been deployed, complementing the existing
   ``deploy`` and ``delete`` commands in the ``educates local mirror``

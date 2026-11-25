@@ -302,7 +302,9 @@ components knowing the difference.
 - EducatesClusterConfig's structural CEL rules cover the singleton name,
   mode immutability (`oldSelf`), immutability of how each cluster service
   is provided (certificates, ingress controller, DNS and policy
-  enforcement; `oldSelf`), and mode-field exclusivity. Teardown relies on
+  enforcement; `oldSelf`), mode-field exclusivity, and the `None`
+  certificates provider's `none` block (its CA trust Secret) being
+  allowed only with that provider. Teardown relies on
   the provider rules: it removes a cluster service only when the spec says
   the operator installed it. The three platform CRDs have singleton-name
   only.

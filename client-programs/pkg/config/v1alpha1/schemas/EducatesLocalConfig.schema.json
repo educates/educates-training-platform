@@ -84,7 +84,7 @@
       "additionalProperties": false,
       "description": "This cluster's entries in the local DNS resolver every local cluster shares, which has no settings of its own. This cluster's names, its ingress domain always plus extraDomains, resolve to the router address in <data-home>/router.yaml, where the router sends them on to this cluster. Names that resolve anywhere else, such as a VM, go in dnsmasq configuration files of your own, <data-home>/dnsmasq.d/*.conf, which the resolver also reads. 'educates local resolver view' shows every name it answers for.",
       "properties": {
-        "extraDomains":  { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "More names that resolve to this cluster's address, as its ingress domain does, each with its subdomains. A name another local cluster also claims is an error." }
+        "extraDomains":  { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "More names that resolve to this cluster's address, as its ingress domain does, each with its subdomains. A name another local cluster also claims is an error. When the router ends TLS for this cluster, with ingress.externalTLSTermination, it serves these names on port 80 only, since its certificate covers the ingress domain alone." }
       }
     },
 

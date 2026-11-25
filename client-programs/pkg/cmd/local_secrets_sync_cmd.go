@@ -96,10 +96,13 @@ func (p *ProjectInfo) NewLocalSecretsSyncCmd() *cobra.Command {
 CA root key pairs are never copied. A CA key pair is copied only when the
 local config's ingress.domain selects it, and is minted first from the
 root CA when it is missing or stale. Without a local config, no CA key
-pair is copied. When the local config's certificates cannot be decided,
-such as a secure ingress.domain with neither a root CA nor a wildcard
-certificate for it cached, the command warns why and copies every secret
-that holds no CA key.
+pair is copied, and neither is one for a local config that sets
+ingress.externalTLSTermination: TLS ends at the router, and the cluster
+only trusts the CA of the router's certificate, whose CA trust Secret is
+copied with the other secrets. When the local config's certificates
+cannot be decided, such as a secure ingress.domain with neither a root CA
+nor a wildcard certificate for it cached, the command warns why and
+copies every secret that holds no CA key.
 
 The local config is the config of the local cluster that --local-cluster
 or EDUCATES_LOCAL_CLUSTER selects: <data-home>/config.yaml for the default

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"os"
 	"strconv"
 	"time"
 
@@ -202,12 +203,13 @@ func createContainer(ctx context.Context, cli *client.Client, hostIP netip.Addr,
 				constants.EducatesContainersAppLabelKey:  constants.EducatesContainersAppLabel,
 				constants.EducatesContainersRoleLabelKey: constants.EducatesContainersRouterRoleLabel,
 			},
+			User: containerUser(),
 		},
 		HostConfig: &container.HostConfig{
 			NetworkMode:  container.NetworkMode(registry.EducatesNetworkName),
 			PortBindings: bindings,
-			// The image runs HAProxy as a user that is not root, which
-			// binds ports below 1024 only with this setting.
+			// HAProxy runs as a user that is not root, which binds ports
+			// below 1024 only with this setting.
 			Sysctls: map[string]string{"net.ipv4.ip_unprivileged_port_start": "0"},
 			Mounts: []mount.Mount{{
 				Type:     mount.TypeBind,
@@ -223,6 +225,20 @@ func createContainer(ctx context.Context, cli *client.Client, hostIP netip.Addr,
 		Name: ContainerName,
 	})
 	return err
+}
+
+// containerUser is the user the router container runs HAProxy as: the
+// CLI's own user and group, by their IDs, so that HAProxy reads the keys
+// of the router folder, which only that user may read, on a Linux engine,
+// whose bind mounts keep the host's owners, as well as on Docker Desktop.
+// Where the host has no such IDs, as on Windows, it is empty, and the
+// image's own user, haproxy, runs it.
+func containerUser() string {
+	uid, gid := os.Getuid(), os.Getgid()
+	if uid < 0 || gid < 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d:%d", uid, gid)
 }
 
 // waitForStart waits for the router container another command creates to

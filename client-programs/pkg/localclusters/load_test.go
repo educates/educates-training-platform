@@ -167,6 +167,7 @@ func TestLoadConfigOfTheDefaultClusterTakesOtherKindsAsTheyAre(t *testing.T) {
 
 func TestLoadedConfigDomain(t *testing.T) {
 	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.9\n")
 	const listen = "cluster:\n  listenAddress: 10.10.10.1\n"
 	const targetListen = "  cluster:\n    listenAddress: 10.10.10.1\n"
 	cases := []struct {
@@ -177,8 +178,8 @@ func TestLoadedConfigDomain(t *testing.T) {
 	}{
 		{name: "a declared domain", body: localConfigHeader + listen + "ingress:\n  domain: educates.test\n",
 			want: "educates.test"},
-		{name: "the default cluster's listen address nip.io domain", body: localConfigHeader + listen,
-			want: "10-10-10-1.nip.io"},
+		{name: "the default cluster's router address nip.io domain", body: localConfigHeader + listen,
+			want: "10-10-10-9.nip.io"},
 		{name: "a named cluster's listen address nip.io domain", cluster: "test2",
 			body: localConfigHeader + "cluster:\n  listenAddress: 10.10.10.2\n", want: "10-10-10-2.nip.io"},
 		{name: "the domain an EducatesConfig declares", body: escapeConfig(targetListen, "workshops.example.test"),
@@ -201,5 +202,79 @@ func TestLoadedConfigDomain(t *testing.T) {
 				t.Errorf("Domain() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// The default local cluster, declaring no ingress domain, is served at the
+// nip.io name of the router address, the one address every local cluster
+// is served on, whatever its own listen address.
+func TestLoadConfigOfTheDefaultClusterTakesTheNipDomainOfTheRouterAddress(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 192.168.1.20\n")
+
+	loaded, err := LoadConfig(Default(dataHome))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if got, want := loaded.Domain(), "10-10-10-1.nip.io"; got != want {
+		t.Errorf("Domain() = %q, want %q", got, want)
+	}
+	if c := loaded.Config.(*v1alpha1.EducatesLocalConfig); !c.Ingress.Insecure {
+		t.Errorf("ingress.insecure = false, want true for the nip.io domain")
+	}
+}
+
+// Until the router file is written, the default local cluster's domain is
+// the nip.io name of its listen address.
+func TestLoadConfigOfTheDefaultClusterWithNoRouterFileTakesTheNipDomainOfItsListenAddress(t *testing.T) {
+	dataHome := t.TempDir()
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 192.168.1.20\n")
+
+	loaded, err := LoadConfig(Default(dataHome))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if got, want := loaded.Domain(), "192-168-1-20.nip.io"; got != want {
+		t.Errorf("Domain() = %q, want %q", got, want)
+	}
+}
+
+func TestLoadConfigOfTheDefaultClusterRefusesARouterAddressWithNoNipName(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: fd00::20\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 192.168.1.20\n")
+	id := Default(dataHome)
+
+	_, err := LoadConfig(id)
+
+	wantErrorMentioning(t, err, id.ConfigPath, "router address fd00::20", "nip.io", "set ingress.domain")
+}
+
+func TestLoadConfigOfTheDefaultClusterRefusesARouterAddressTheRulesRefuse(t *testing.T) {
+	dataHome := t.TempDir()
+	path := routerFile(t, dataHome, routerHeader+"address: 127.0.0.1\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 192.168.1.20\n")
+
+	_, err := LoadConfig(Default(dataHome))
+
+	wantErrorMentioning(t, err, path, "loopback")
+}
+
+// A declared domain needs no router address.
+func TestLoadConfigOfTheDefaultClusterKeepsADeclaredDomainWhateverTheRouterFile(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 127.0.0.1\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+
+		"cluster:\n  listenAddress: 192.168.1.20\ningress:\n  domain: educates.test\n")
+
+	loaded, err := LoadConfig(Default(dataHome))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if got := loaded.Domain(); got != "educates.test" {
+		t.Errorf("Domain() = %q, want educates.test", got)
 	}
 }

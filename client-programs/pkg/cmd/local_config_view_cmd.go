@@ -99,7 +99,7 @@ func (p *ProjectInfo) runLocalConfigView(o *LocalConfigViewOptions, id localclus
 	// why, so that it can be fixed.
 	ruleErr := localclusters.CheckConfig(id, body, cfgPath)
 	// ruleErr says why when the domain can't be derived.
-	_ = p.applyLocalConfigDefaults(declared)
+	_ = p.applyLocalConfigDefaults(id, declared)
 	effective, err := yaml.Marshal(declared)
 	if err != nil {
 		return fmt.Errorf("marshal effective configuration: %w", err)

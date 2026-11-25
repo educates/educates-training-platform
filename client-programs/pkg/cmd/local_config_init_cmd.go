@@ -181,7 +181,7 @@ func (p *ProjectInfo) writeDefaultedLocalConfig(id localclusters.Identity, flags
 	}
 	// Only a config with no listen address gets no domain, and
 	// runLocalConfigInit says what to set then.
-	_ = p.applyLocalConfigDefaults(cfg)
+	_ = p.applyLocalConfigDefaults(id, cfg)
 	body, err := config.MarshalLocalConfig(cfg, isHostIP)
 	if err != nil {
 		return err
@@ -195,13 +195,14 @@ func (p *ProjectInfo) writeDefaultedLocalConfig(id localclusters.Identity, flags
 	return nil
 }
 
-// applyLocalConfigDefaults applies every CLI default to cfg: the static
-// WithDefaults, the CLI image registry and version, and, when no
-// ingress.domain is set, the nip.io name of cluster.listenAddress with
-// ingress.insecure. domainErr says why the domain could not be derived,
-// in which case it is left unset.
-func (p *ProjectInfo) applyLocalConfigDefaults(cfg *v1alpha1.EducatesLocalConfig) (domainErr error) {
+// applyLocalConfigDefaults applies every CLI default to cfg, the config
+// of the local cluster id: the static WithDefaults, the CLI image
+// registry and version, and, when no ingress.domain is set, the nip.io
+// name localclusters.DeriveDomain derives, with ingress.insecure.
+// domainErr says why the domain could not be derived, in which case it is
+// left unset.
+func (p *ProjectInfo) applyLocalConfigDefaults(id localclusters.Identity, cfg *v1alpha1.EducatesLocalConfig) (domainErr error) {
 	cfg.WithDefaults()
 	cfg.ApplyCLIDefaults(p.Version, p.ImageRepository)
-	return localclusters.DeriveDomain(cfg)
+	return localclusters.DeriveDomain(id, cfg)
 }

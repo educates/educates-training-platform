@@ -85,7 +85,7 @@ func TestLocalConfigView_FullyDefaulted_SkipsComment(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.APIVersion, Kind: v1alpha1.KindEducatesLocalConfig},
 		Cluster:  v1alpha1.LocalClusterConfig{ListenAddress: "10.10.10.1"},
 	}
-	if err := p.applyLocalConfigDefaults(cfg); err != nil {
+	if err := p.applyLocalConfigDefaults(defaultLocalCluster(), cfg); err != nil {
 		t.Fatalf("applyLocalConfigDefaults: %v", err)
 	}
 	body, err := config.MarshalLocalConfig(cfg, false)

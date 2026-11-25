@@ -44,6 +44,30 @@ func LoadRouterAddress(dataHome string, interfaces []netip.Addr) (string, error)
 	return address, nil
 }
 
+// configuredRouterAddress returns the router address the router file of
+// the data home dataHome, router.yaml, declares, in its canonical form,
+// once it passes the rules of CheckRouterAddress that need no host
+// interface: the address every local cluster's names resolve to. A file
+// that doesn't load is that error, and an address the rules refuse an
+// error naming the file and why. A missing file is the error
+// config.LoadLocalRouter returns, wrapping fs.ErrNotExist.
+//
+// Rendering what serves the local clusters' names takes the address as it
+// is configured: only where the router is created is it checked against
+// the host's interfaces, with LoadRouterAddress.
+func configuredRouterAddress(dataHome string) (string, error) {
+	router, err := config.LoadLocalRouter(dataHome)
+	if err != nil {
+		return "", err
+	}
+	ip, err := checkSpecificRouterAddress(router.Address)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w. Set another in it, or with:\n\n  %s",
+			config.LocalRouterPath(dataHome), err, setRouterAddressCommand)
+	}
+	return ip.String(), nil
+}
+
 // EnsureRouterFile writes the router file of the data home dataHome,
 // router.yaml, when it is missing, with the host's IP address as the
 // router address and a comment saying that an alias such as 10.10.10.1,

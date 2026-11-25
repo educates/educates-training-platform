@@ -76,6 +76,11 @@ type Identity struct {
 	// KindConfigPath is the path of the kind config file the cluster is
 	// created from.
 	KindConfigPath string
+
+	// DataHome is the data home the cluster belongs to, which holds its
+	// config and the files every local cluster shares, such as the router
+	// file.
+	DataHome string
 }
 
 // Default returns the identity of the default local cluster of the data
@@ -87,6 +92,7 @@ func Default(dataHome string) Identity {
 		Context:        "kind-" + defaultKindName,
 		ConfigPath:     config.LocalConfigPath(dataHome),
 		KindConfigPath: filepath.Join(dataHome, kindConfigFileName),
+		DataHome:       dataHome,
 	}
 }
 
@@ -106,6 +112,7 @@ func Named(name, dataHome string) (Identity, error) {
 		Context:        "kind-" + kindName,
 		ConfigPath:     filepath.Join(dir, "config.yaml"),
 		KindConfigPath: filepath.Join(dir, kindConfigFileName),
+		DataHome:       dataHome,
 	}, nil
 }
 

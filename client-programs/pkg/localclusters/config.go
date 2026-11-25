@@ -1,7 +1,9 @@
 package localclusters
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/netip"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
@@ -127,21 +129,43 @@ func parseConfig(id Identity, data []byte, source string) (v1alpha1.Config, erro
 		return nil, fmt.Errorf("%s: %s: %w", source, declared.nodesField, err)
 	}
 	if c, ok := cfg.(*v1alpha1.EducatesLocalConfig); ok {
-		if err := DeriveDomain(c); err != nil {
+		if err := DeriveDomain(id, c); err != nil {
 			return nil, fmt.Errorf("%s: %w", source, err)
 		}
 	}
 	return config.ApplyDefaults(cfg), nil
 }
 
-// DeriveDomain gives the EducatesLocalConfig c, when it declares no
-// ingress.domain, the nip.io name of its listen address, with dashes, and
-// ingress.insecure set to true, as LoadConfigFile does. It returns why it
-// can't, leaving c as it is: a listen address ValidateListenAddress
-// refuses, or one with no nip.io name.
-func DeriveDomain(c *v1alpha1.EducatesLocalConfig) error {
+// DeriveDomain gives the EducatesLocalConfig c of the local cluster id,
+// when it declares no ingress.domain, a nip.io name, with dashes, and
+// ingress.insecure set to true, as LoadConfigFile does: for the default
+// local cluster the nip.io name of the router address, the one address
+// every local cluster is served on, and for a named one the nip.io name of
+// its listen address. Until the data home holds a router file, the
+// default local cluster takes the nip.io name of its listen address too.
+//
+// It returns why it can't, leaving c as it is: a router file that does
+// not load, a listen address ValidateListenAddress refuses, or an address
+// with no nip.io name.
+func DeriveDomain(id Identity, c *v1alpha1.EducatesLocalConfig) error {
 	if c.Ingress.Domain != "" {
 		return nil
+	}
+	if id.IsDefault() {
+		routerAddress, err := configuredRouterAddress(id.DataHome)
+		switch {
+		case err == nil:
+			domain, ok := nipDomain(routerAddress)
+			if !ok {
+				return fmt.Errorf("the router address %s, in %s, %s: set ingress.domain to a domain that resolves to it",
+					routerAddress, config.LocalRouterPath(id.DataHome), noNipDomain)
+			}
+			c.Ingress.Domain = domain
+			c.Ingress.Insecure = true
+			return nil
+		case !errors.Is(err, fs.ErrNotExist):
+			return err
+		}
 	}
 	if err := ValidateListenAddress(c.Cluster.ListenAddress); err != nil {
 		return fmt.Errorf("cluster.listenAddress: %w", err)

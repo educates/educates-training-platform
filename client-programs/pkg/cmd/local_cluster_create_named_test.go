@@ -14,10 +14,12 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 )
 
-// namedClusterForTest sets a temporary data home and returns it with the
-// identity of the named local cluster test2 in it.
+// namedClusterForTest sets a temporary data home, on a host whose IP
+// address is 192.168.50.151, and returns it with the identity of the
+// named local cluster test2 in it.
 func namedClusterForTest(t *testing.T) (string, localclusters.Identity) {
 	t.Helper()
+	stubHostIP(t, "192.168.50.151")
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	id, err := localclusters.Named("test2", dataHome)

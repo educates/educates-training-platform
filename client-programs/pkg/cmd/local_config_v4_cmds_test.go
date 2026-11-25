@@ -56,10 +56,13 @@ func TestLocalConfigInit_WritesTheHostIPAsTheListenAddress(t *testing.T) {
 	}
 }
 
+// With a router file already written, init needs no host IP address for
+// it, and writes the config without a listen address.
 func TestLocalConfigInit_WithNoHostIP_WritesNoListenAddressAndSaysWhatToSet(t *testing.T) {
 	stubHostIP(t, "")
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 
 	var out bytes.Buffer
 	if err := (&ProjectInfo{}).runLocalConfigInit(&LocalConfigInitOptions{}, defaultLocalCluster(), &out); err != nil {

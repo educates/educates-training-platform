@@ -11,6 +11,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 // localConfigSchemaModeline is the yaml-language-server modeline every
@@ -77,6 +78,14 @@ a named local cluster instead, to <data-home>/clusters/<name>/config.yaml,
 which needs --listen-address. --defaults writes only the default local
 cluster's config.
 
+Before the config, init writes <data-home>/router.yaml when it is
+missing: the router address, the one host address every local cluster
+shares, set to the host's IP address, with a comment saying that an
+alias such as 10.10.10.1, added to a network interface, survives network
+changes. An existing router.yaml is left as it is. With no IP address of
+the host detected, init writes nothing, and says how to set the router
+address.
+
 <data-home> is $EDUCATES_CLI_DATA_HOME if set, otherwise
 $XDG_DATA_HOME/educates.`,
 		Example: localConfigInitExample,
@@ -102,7 +111,8 @@ $XDG_DATA_HOME/educates.`,
 // --listen-address, and with --defaults gets every CLI default written
 // too. A named local cluster's config declares only what the flags give,
 // so it takes no --defaults: 'local config view' shows the defaults it
-// gets.
+// gets. A missing router file is written first, as ensureRouterFile
+// writes it.
 func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclusters.Identity, w io.Writer) error {
 	if o.Defaults && !id.IsDefault() {
 		return fmt.Errorf("--defaults writes the default local cluster's config only; a named local cluster's config "+
@@ -110,6 +120,11 @@ func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclus
 			localclusters.ListenAddressFlagName, localclusters.DomainFlagName, localClusterFlagArg(id))
 	}
 	if err := refuseExistingConfig(id.ConfigPath, o.Force); err != nil {
+		return err
+	}
+	// The router file comes first, so that no config is written without
+	// it, and init can be run again once the router address is set.
+	if err := ensureRouterFile(w); err != nil {
 		return err
 	}
 	flags := localclusters.ConfigFlags{ListenAddress: o.ListenAddress, Domain: o.Domain}
@@ -126,6 +141,23 @@ func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclus
 	// set.
 	if _, err := localclusters.LoadConfig(id); err != nil {
 		fmt.Fprintf(w, "note: %v\n", err)
+	}
+	return nil
+}
+
+// ensureRouterFile writes the router file of the data home, router.yaml,
+// when it is missing, with the host's IP address as the router address,
+// as localclusters.EnsureRouterFile writes it, and tells w when it does.
+// An existing router file is left as it is.
+func ensureRouterFile(w io.Writer) error {
+	dataHome := utils.GetEducatesHomeDir()
+	address, err := localclusters.EnsureRouterFile(dataHome)
+	if err != nil {
+		return err
+	}
+	if address != "" {
+		fmt.Fprintf(w, "wrote %s, with this host's IP address %s as the router address\n",
+			config.LocalRouterPath(dataHome), address)
 	}
 	return nil
 }

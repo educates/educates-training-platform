@@ -84,6 +84,10 @@ served over plain HTTP. When the local cluster's config is missing,
 create writes it from --listen-address and the optional --domain, and
 without --listen-address the default local cluster takes the host's IP
 address.
+Once the config loads, create writes <data-home>/router.yaml when it is
+missing, before any check: the router address, the one host address
+every local cluster shares, set to the host's IP address. An existing
+router.yaml is left as it is.
 On Docker Desktop 4.97 or later, create refuses to run while "Allow
 privileged port forwarding to external machines" is off, in Settings >
 Advanced, since ports 80 and 443 on a non-loopback address need it.
@@ -161,6 +165,13 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 		fmt.Fprintf(w, "Continuing with defaults; view or edit it with 'educates local config view' / 'educates local config edit'.\n\n")
 	case createdConfig:
 		fmt.Fprintf(w, "Local cluster %q had no config; wrote one from --%s to %s\n\n", id.Name, localclusters.ListenAddressFlagName, configPath)
+	}
+	// The router file, router.yaml in the data home, holds the one host
+	// address every local cluster shares. A missing one is written with
+	// the host's IP address before any check, and before anything touches
+	// Docker.
+	if err := ensureRouterFile(w); err != nil {
+		return err
 	}
 
 	// 0. Preflight: fail fast (before any docker / kind / k8s mutation)

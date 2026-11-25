@@ -105,7 +105,7 @@ New Features
   configuration, with validation against the configuration schemas. The
   ``view`` command prints the effective configuration with all CLI defaults
   filled in, so the values the CLI supplies on your behalf (including the
-  ``nip.io`` name of ``cluster.listenAddress`` as the domain and the
+  ``nip.io`` name of the router address as the domain and the
   insecure default it implies) are explicit rather than hidden behind a
   sparse file; pass ``--raw`` to print the configuration file exactly as
   written instead. The ``init`` command writes a minimal file by default,
@@ -242,8 +242,8 @@ New Features
   On the local configuration, setting ``ingress.insecure`` selects a plain
   HTTP install and skips the one-time ``educates local secrets add ca``
   step. A local configuration that sets no ingress domain now defaults to
-  this insecure mode, since the ``nip.io`` name of its listen address it
-  falls back to cannot obtain a trusted certificate; set a custom ``ingress.domain``
+  this insecure mode, since the ``nip.io`` name it falls back to cannot
+  obtain a trusted certificate; set a custom ``ingress.domain``
   to get the certificate-backed HTTPS install. On the
   ``EducatesGKEConfig``, ``EducatesEKSConfig`` and
   ``EducatesInlineConfig`` kinds, ``externalTLSTermination`` now maps to
@@ -307,8 +307,8 @@ New Features
   (``control-plane`` or ``worker``), optional Kubernetes node ``labels``, and
   optional ``taints``, so a laptop cluster can model node pools for workshops
   that schedule across several nodes. Exactly one node has the
-  ``control-plane`` role, since that node publishes ports 80 and 443 on the
-  listen address. ``educates local cluster create``, ``educates local
+  ``control-plane`` role, the node the router sends the cluster's names
+  to. ``educates local cluster create``, ``educates local
   config edit`` and ``educates local config set`` refuse a list with none or
   with more than one, and ``educates local config view`` says why the
   cluster can't use such a config. Leaving ``cluster.nodes`` unset keeps the
@@ -398,9 +398,9 @@ New Features
 
   The one local DNS resolver has no settings of its own: every local
   cluster contributes its names, its ingress domain and its
-  ``resolver.extraDomains``, which resolve to its listen address. A named
-  cluster on ``test2.educates.test`` therefore resolves to its own IP
-  address while ``educates.test`` still resolves to the default cluster.
+  ``resolver.extraDomains``, which resolve to the router address. The
+  router sends a named cluster on ``test2.educates.test`` its own names
+  while ``educates.test`` still reaches the default cluster.
   ``educates local resolver deploy`` and ``update`` configure it for every
   cluster, creating or deleting a cluster refreshes a running resolver, and
   two clusters claiming the same domain is an error. A refresh that fails
@@ -421,7 +421,7 @@ New Features
   broader name, one of your files naming a domain a cluster also serves,
   or, on macOS, a name no ``/etc/resolver`` file forwards. In
   ``dnsmasq.conf``, each cluster's entries start with a comment naming the
-  cluster, its configuration file and its listen address.
+  cluster, its configuration file and the router address.
 
   Every local cluster shares the local image registry and the registry
   mirrors, so the commands which manage them take no ``--local-cluster``
@@ -1196,9 +1196,10 @@ Features Changed
 * The local DNS resolver's ``targetAddress`` setting,
   ``localDNSResolver.targetAddress`` in a version 3 ``values.yaml``, is
   gone. A local cluster's names, its ingress domain and
-  ``resolver.extraDomains``, now resolve to its ``cluster.listenAddress``.
-  To have them resolve to an alias added to a network interface, set
-  ``cluster.listenAddress`` to the alias and create the cluster again. Names that resolve to anything other
+  ``resolver.extraDomains``, now resolve to the router address, where the
+  router serves every local cluster. To have them resolve to an alias added
+  to a network interface, set ``address`` in ``router.yaml`` to the alias.
+  Names that resolve to anything other
   than a local cluster, such as a virtual machine, go in ``*.conf`` files of
   your own in the ``dnsmasq.d`` folder of the CLI data home, which the
   resolver reads. The CLI's first-run migration of a version 3
@@ -1248,34 +1249,45 @@ Features Changed
   local mirror deploy`` commands that record its mirrors. See
   [declaring mirrors for every cluster](local-mirrors-file).
 
-* Every local cluster now declares the specific IP address of the host it
-  publishes its ports 80 and 443 on, ``cluster.listenAddress``. Version 3
-  left a missing ``localKindCluster.listenAddress`` to Kind, which published
-  the ports on every host address, as ``0.0.0.0`` does. ``educates local
-  config init``, and ``educates local cluster create`` when no configuration
-  exists yet, now write the host's IP address there, with a comment saying
-  that an alias added to a network interface, such as ``10.10.10.1``,
-  survives network changes. The CLI's first-run migration of a version 3
-  ``values.yaml`` sets a missing or ``0.0.0.0`` listen address to the
-  host's IP address, saying so in its notice. A missing listen address,
-  ``0.0.0.0`` and a loopback address such as ``127.0.0.1`` are refused
-  wherever the cluster is used, with an error naming
-  ``cluster.listenAddress``, saying why, and giving the command that sets
-  it, while ``educates local config get``, ``view`` and ``edit`` still open
-  such a configuration so that it can be fixed. A loopback address can't
-  work, since workshop sessions resolve the cluster's ingress domain to it
-  and reach their own pod instead of the host. Without an
-  ``ingress.domain``, the cluster's domain is now the ``nip.io`` name of its
-  listen address, rather than of the host's IP address, and its names in
-  the local DNS resolver resolve to its listen address. ``educates local
-  config init`` and ``educates local cluster create`` take
-  ``--listen-address`` and ``--domain`` to write the default cluster's
-  configuration as they do a named cluster's. On Docker Desktop 4.97 or
-  later, ``educates local cluster create`` and ``start`` refuse to run
+* Every local cluster is now served through one router, the Docker
+  container ``educates-router``, which publishes ports 80 and 443 once, on
+  the router address, and sends each request to the local cluster that owns
+  the name it asks for, plain HTTP by its ``Host`` header. Version 3
+  published a cluster's ports from its Kind node, on every host address
+  unless ``localKindCluster.listenAddress`` named one, and Kind nodes now
+  publish no ports at all. The router runs HAProxy, from the long-term
+  support branch the CLI pins, and reaches each cluster's ingress on its
+  control-plane node over Docker's ``kind`` network. The router address
+  lives in ``router.yaml`` in the CLI data home: ``educates local config
+  init``, ``educates local cluster create`` and ``educates local cluster
+  start`` write it when it is missing, with the host's IP address and a
+  comment saying that an alias added to a network interface, such as
+  ``10.10.10.1``, survives network changes. It must be a specific IP address
+  of a network interface of the host: ``0.0.0.0``, ``::`` and loopback
+  addresses such as ``127.0.0.1`` are refused, since workshop sessions and
+  nodes resolve every cluster's names to it. Without an ``ingress.domain``,
+  the default cluster's domain is the ``nip.io`` name of the router address,
+  and the local DNS resolver answers every cluster's names with the router
+  address. A name no local cluster serves gets a plain-text 404 listing the
+  domains the router serves, a stopped cluster's name a plain-text 503
+  naming the command that starts it, and a workshop terminal may stay idle
+  for an hour. ``educates local cluster create`` and ``start`` create the
+  router when it is missing and re-create it when it runs another image or
+  listens on another address, and otherwise, as ``educates local cluster
+  delete`` does, reload it, which keeps open terminals.
+  ``educates local cluster delete --all`` removes it, with the last local
+  cluster, keeping ``router.yaml``. A cluster's configuration still declares
+  ``cluster.listenAddress``, a specific IP address of the host, which
+  ``educates local config init`` and the CLI's first-run migration of a
+  version 3 ``values.yaml`` write as before, but nothing is published on
+  it. Clusters created by an earlier release of the CLI publish ports 80 and
+  443 from their node and can't run beside the router: creating the router
+  fails while one exists, naming it, so delete such a cluster and create it
+  again. On Docker Desktop 4.97 or later, creating the router refuses to run
   while "Allow privileged port forwarding to external machines", under
   **Settings > Advanced**, is off, since Docker Desktop then serves ports
-  below 1024 on loopback addresses only, and warn when they can't read the
-  setting. See [listen address](local-cluster-listen-address).
+  below 1024 on loopback addresses only, and warns when it can't read the
+  setting. See [router address](local-router-address).
 
 * The CLI's first-run migration of a version 3 ``values.yaml`` carries
   ``imagePuller`` over to ``imagePrePuller``, so the pre-puller keeps its

@@ -145,10 +145,12 @@ remove it. A version 3 file without ``imagePuller`` leaves
 
 Version 3 left a missing ``localKindCluster.listenAddress`` to Kind, which
 published the cluster's ports 80 and 443 on every host address, as ``0.0.0.0``
-does. Every local cluster now publishes them on a specific IP address of the
-host, as described in [listen address](local-cluster-listen-address), so the
-migration sets a missing or ``0.0.0.0`` listen address to your host's IP
-address, with a line of the notice saying so. An alias added to a network
+does. Every local cluster is now served through one router, which publishes
+them on the router address, as described in
+[router address](local-router-address), and a cluster's configuration declares
+a specific IP address of the host as its listen address, so the migration sets
+a missing or ``0.0.0.0`` listen address to your host's IP address, with a line
+of the notice saying so. An alias added to a network
 interface, such as ``10.10.10.1``, survives network changes, where the host's
 IP address may not, so you may want to set ``cluster.listenAddress`` to one
 instead. When the host's IP address can't be detected, the migration leaves
@@ -156,11 +158,10 @@ instead. When the host's IP address can't be detected, the migration leaves
 listen address is kept as it was.
 
 The migration also drops ``localDNSResolver.targetAddress``. A local cluster's
-names now resolve to its ``cluster.listenAddress``. The migration does not set
-``cluster.listenAddress`` from the target address, since setting it changes
-where Kind publishes the cluster's ports. To keep resolving the cluster at the
-old target address, set ``cluster.listenAddress`` to it and create the cluster
-again. Names that resolve elsewhere go in files of your own in the data home's
+names now resolve to the router address, where the router serves every local
+cluster. To keep resolving the cluster at the old target address, set
+``address`` in ``router.yaml`` in the data home to it, as described in
+[router address](local-router-address). Names that resolve elsewhere go in files of your own in the data home's
 ``dnsmasq.d`` folder, as described in [names of your own](local-dns-resolver-own-names).
 
 Version 4 declares registry mirrors once for every local cluster, in

@@ -24,13 +24,13 @@ The argument is a dotted field path; with no argument the top-level fields are l
 EducatesLocalConfig
 -------------------
 
-The laptop scenario: a local kind cluster with operator-managed cluster services and a self-signed CA. This is the only kind that lives at a fixed location (`<data-home>/config.yaml` for the default local cluster, and `<data-home>/clusters/<name>/config.yaml` for a named local cluster, where `<data-home>` is `$XDG_DATA_HOME/educates`, overridable via `EDUCATES_CLI_DATA_HOME`) and is managed with the `educates local config` commands rather than edited as a project file. Every local cluster's `cluster.listenAddress`, the default cluster's included, must be a specific IP address of the host, as described in [listen address](local-cluster-listen-address). See [local environment](local-environment).
+The laptop scenario: a local kind cluster with operator-managed cluster services and a self-signed CA. This is the only kind that lives at a fixed location (`<data-home>/config.yaml` for the default local cluster, and `<data-home>/clusters/<name>/config.yaml` for a named local cluster, where `<data-home>` is `$XDG_DATA_HOME/educates`, overridable via `EDUCATES_CLI_DATA_HOME`) and is managed with the `educates local config` commands rather than edited as a project file. Every local cluster's `cluster.listenAddress`, the default cluster's included, must be a specific IP address of the host. Every local cluster is served through one router on the router address, kept in `router.yaml` in the data home, as described in [router address](local-router-address). See [local environment](local-environment).
 
 ```yaml
 apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
 ingress:
-  domain: workshops.educates.test    # empty = nip.io name of cluster.listenAddress
+  domain: workshops.educates.test    # empty = nip.io name of the router address
 cluster:
   listenAddress: 10.10.10.1          # required: a specific IP address of the host
 lookupService: true                  # default true
@@ -43,8 +43,8 @@ operator:
 
 Key fields (all optional but `cluster.listenAddress`: an `apiVersion` + `kind` stub validates against the schema, but a local cluster can't use it until `cluster.listenAddress` is set, which `educates local config init` writes):
 
-* `ingress.domain`: wildcard ingress domain. When empty, for a local cluster's configuration, the CLI falls back to the `nip.io` name of `cluster.listenAddress`, such as `10-10-10-1.nip.io`.
-* `cluster.listenAddress`: the specific IP address of the host the cluster publishes its ports 80 and 443 on: neither `0.0.0.0` nor a loopback address. `educates local config init` writes the IP address of the host.
+* `ingress.domain`: wildcard ingress domain. When empty, for a local cluster's configuration, the CLI falls back to the `nip.io` name of the router address for the default local cluster, such as `10-10-10-1.nip.io`, and of `cluster.listenAddress` for a named one.
+* `cluster.listenAddress`: a specific IP address of the host: neither `0.0.0.0` nor a loopback address. Nothing is published on it, since the router publishes ports 80 and 443 for every local cluster on the router address. `educates local config init` writes the IP address of the host.
 * `cluster.*`: kind cluster shape: API server overrides, pod/service subnets, host volume mounts. Registry pull-through mirrors are not declared here but once for every local cluster, in `mirrors.yaml` in the CLI data home, as [declaring mirrors for every cluster](local-mirrors-file) describes. `educates local mirror deploy` records a mirror there and `educates local mirror delete` removes it. A configuration in the data home that still has `cluster.registryMirrors` has its mirrors moved there the first time a command reads it, keeping the previous configuration as a backup beside it, and a configuration elsewhere with it fails to load, showing the `educates local mirror deploy` commands that record its mirrors, as [mirrors in a cluster's configuration](local-mirrors-move) describes.
 * `resolver.*` — local DNS resolver settings (macOS `*.educates.test` style resolution).
 * `clusterAdmin`, `lookupService` — component toggles (both default `true`).

@@ -456,13 +456,15 @@ New Features
   local clusters at once, from a terminal for each. When it serves a local
   cluster, the one selected, or with none selected, the one whose kube
   context it reaches its cluster through, ``kind-educates`` or
-  ``kind-educates-<name>``, its proxy listens on the cluster's listen
-  address instead of on ``0.0.0.0``, keeping port 10081, and its Hugo
-  server listens on a free port instead of on 1313. Every serve binds the
-  address of the cluster it serves, so two serves share port 10081 on macOS
-  and Linux alike. ``--local-host``, ``--local-port`` and ``--hugo-port``
-  still take precedence, and for any other cluster the command listens as
-  before.
+  ``kind-educates-<name>``, its proxy listens on the router address, where
+  the cluster's ``localhost.<domain>`` resolves, instead of on
+  ``0.0.0.0``, on a port free there that is chosen for each run instead of
+  on 10081, and ``--patch-workshop`` patches the workshop with that port.
+  Its Hugo server listens on a free port instead of on 1313.
+  ``--local-host``, ``--local-port``, ``--proxy-port`` and ``--hugo-port``
+  still take precedence, so a workshop definition you configured yourself
+  to reach port 10081 needs ``--local-port 10081``, and for any other
+  cluster the command listens as before.
 
 * An extension package listed under ``spec.workshop.packages`` of a workshop
   definition can now be declared as a published image, by setting ``image`` to

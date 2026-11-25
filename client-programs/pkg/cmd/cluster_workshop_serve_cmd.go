@@ -60,14 +60,16 @@ func calculateWorkshopRoot(path string) (string, error) {
 var clusterWorkshopServeExample = `
   # Serve the workshop in the current directory from the local system to
   # the cluster of the current kube context. For a local cluster, the proxy
-  # listens on its listen address, with the Hugo server on a free port:
+  # listens on a free port of the router address, with the Hugo server on
+  # a free port:
   educates cluster workshop serve
 
   # Serve a workshop from a path on a specific local port:
   educates cluster workshop serve --file ./my-workshop --local-port 10081
 
-  # Serve the workshop to the named local cluster test2, listening on its
-  # listen address, with the Hugo server on a free port:
+  # Serve the workshop to the named local cluster test2, the proxy
+  # listening on a free port of the router address, with the Hugo server
+  # on a free port:
   educates cluster workshop serve --local-cluster test2
 `
 
@@ -330,21 +332,21 @@ func (p *ProjectInfo) NewClusterWorkshopServeCmd() *cobra.Command {
 	)
 	c.Flags().IntVar(
 		&o.ProxyPort,
-		"proxy-port",
+		proxyPortFlagName,
 		10081,
-		"port on which any remote proxy service will listen",
+		"port on which any remote proxy service will listen; when serving a local cluster, selected or through its kube context, the port the local proxy listens on",
 	)
 	c.Flags().StringVar(
 		&o.LocalHost,
 		localHostFlagName,
 		"0.0.0.0",
-		"host on which the local proxy will listen; when serving a local cluster, selected or through its kube context, its listen address",
+		"host on which the local proxy will listen; when serving a local cluster, selected or through its kube context, the router address",
 	)
 	c.Flags().IntVar(
 		&o.LocalPort,
-		"local-port",
+		localPortFlagName,
 		10081,
-		"port on which the local proxy will listen",
+		"port on which the local proxy will listen; when serving a local cluster, selected or through its kube context, a free port",
 	)
 	c.Flags().IntVar(
 		&o.HugoPort,

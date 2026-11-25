@@ -97,6 +97,11 @@ When the local cluster's config is missing, create writes it, declaring
 the optional --domain and nothing else. --listen-address is ignored, with
 a warning: every local cluster is served on the router address.
 
+Before kind is touched, create refuses a domain of the cluster, its
+ingress domain or one of its resolver.extraDomains, that another local
+cluster, running or stopped, claims, naming that cluster. A subdomain of
+another cluster's domain is allowed: the most specific domain wins.
+
 Before kind is touched, create creates the router when it is missing, and
 re-creates it when it runs another image than the one this CLI pins,
 publishes on another address than router.yaml's, or has stopped, which
@@ -220,15 +225,22 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	if err := inventory.CheckMirrors(declaredMirrors); err != nil {
 		return err
 	}
-	// The local DNS resolver serves the domains of every local cluster,
-	// so a domain another cluster claims is refused here, whether or not
-	// the resolver runs. Another cluster's config that the resolver can't
-	// use is that cluster's problem, so it is only a warning. A running
-	// resolver is refreshed once the kind cluster exists, from what the
-	// Docker host holds then.
+	// A name leads to one local cluster only, through the router and the
+	// local DNS resolver alike, so a domain another local cluster, running
+	// or stopped, claims is refused here, naming that cluster.
 	resolverInput := localclusters.ResolverInput{
 		LoadedConfig: localclusters.LoadedConfig{Identity: id, Config: in.Deploy, Source: configPath},
 	}
+	if err := inventory.CheckCreateDomains(resolverInput.LoadedConfig); err != nil {
+		return err
+	}
+	// The local DNS resolver serves the domains of every local cluster,
+	// the default local cluster's config included when it has no cluster,
+	// so a configuration it can't render is refused here too, whether or
+	// not the resolver runs. Another cluster's config that the resolver
+	// can't use is that cluster's problem, so it is only a warning. A
+	// running resolver is refreshed once the kind cluster exists, from what
+	// the Docker host holds then.
 	_, leftOut, err := inventory.ResolverConfig(resolverInput)
 	if err != nil {
 		return err

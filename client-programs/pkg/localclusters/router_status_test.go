@@ -191,10 +191,11 @@ func TestRouterStatusSaysWhyTheRouterAddressCannotServe(t *testing.T) {
 		dataHome := routerStatusDataHome(t)
 		routerFile(t, dataHome, routerHeader+"address: 10.10.10.9\n")
 
-		status := routerStatus(t, dataHome, routerContainer(pinnedRouterImage, "10.10.10.9", true))
+		status := routerStatus(t, dataHome, routerContainer(pinnedRouterImage, "10.10.10.1", true))
 
-		if status.Address != "10.10.10.9" {
-			t.Errorf("address = %q, want 10.10.10.9", status.Address)
+		if status.Address != "10.10.10.9" || status.Advice != "" {
+			t.Errorf("address %q, advice %q; want 10.10.10.9, and no advice to re-create the router on it",
+				status.Address, status.Advice)
 		}
 		wantErrorMentioning(t, status.AddressError, "10.10.10.9", "no network interface", "educates local router update --address <ip>")
 	})

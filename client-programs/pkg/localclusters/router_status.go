@@ -130,9 +130,10 @@ func (inv Inventory) RouterStatus(image string) (RouterStatus, error) {
 		if published, ok := router.publishedAddress(); ok {
 			status.PublishedAddress = published.String()
 		}
-		// The router can be re-created only on a router address that
-		// loads: AddressError says how to fix one that does not.
-		if why := router.recreateReason(image, status.Address); status.Address != "" && why != "" {
+		// The router can be re-created only on a router address that can
+		// serve local clusters: AddressError says how to fix one that
+		// can't.
+		if why := router.recreateReason(image, status.Address); status.AddressError == nil && why != "" {
 			status.Advice = fmt.Sprintf("The router has to be re-created, since %s: '%s' re-creates it.", why, updateRouterCommand)
 		}
 	}

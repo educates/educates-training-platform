@@ -146,21 +146,7 @@ func (rc routerChange) refreshRouter(ctx context.Context, rep progress.Reporter,
 	}
 	step := rep.Start("refreshing router")
 	if err == nil {
-		var routes []localclusters.RouterRoute
-		var leftOut []error
-		routes, leftOut, err = inventory.RouterRoutes(given...)
-		for _, e := range leftOut {
-			step.Warn(e.Error())
-		}
-		if err == nil {
-			err = localclusters.WriteRouterFolder(rc.dataHome, localclusters.RenderRouter(routes))
-		}
-		if err == nil {
-			err = rc.container.join(ctx)
-		}
-		if err == nil && running {
-			err = rc.container.reload(ctx)
-		}
+		err = rc.serveRoutes(ctx, step, inventory, running, given...)
 	}
 	if err != nil {
 		step.Warn(fmt.Sprintf("not refreshed: %v. Run 'educates local router update' once that is fixed", err))
@@ -172,6 +158,32 @@ func (rc routerChange) refreshRouter(ctx context.Context, rep progress.Reporter,
 			router.ContainerName, config.LocalRouterDir(rc.dataHome)))
 	}
 	step.Done("updated")
+}
+
+// serveRoutes renders the router's configuration again, from the local
+// clusters inventory holds, with the local clusters of given served from
+// the configs given for them, writes it to the router folder, joins the
+// router to the kind network, and reloads the router when running is set.
+// It warns in step about each config the router leaves out.
+func (rc routerChange) serveRoutes(ctx context.Context, step progress.Step, inventory localclusters.Inventory,
+	running bool, given ...localclusters.LoadedConfig) error {
+	routes, leftOut, err := inventory.RouterRoutes(given...)
+	for _, e := range leftOut {
+		step.Warn(e.Error())
+	}
+	if err != nil {
+		return err
+	}
+	if err := localclusters.WriteRouterFolder(rc.dataHome, localclusters.RenderRouter(routes)); err != nil {
+		return err
+	}
+	if err := rc.container.join(ctx); err != nil {
+		return err
+	}
+	if !running {
+		return nil
+	}
+	return rc.container.reload(ctx)
 }
 
 // removeRouter removes the router container and the router folder of the

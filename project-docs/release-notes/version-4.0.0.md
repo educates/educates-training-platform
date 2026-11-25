@@ -326,6 +326,28 @@ New Features
   every node, so the labels ``cluster.nodes`` declares show on their nodes.
   The ``--all-labels`` option shows every label of each node instead.
 
+* The new ``educates local router`` command group manages the router every
+  local cluster is served through. Like the commands of the other host
+  services every local cluster shares, its commands take no
+  ``--local-cluster``. ``educates local router status`` shows the router
+  address, whether the router runs, the address it publishes ports 80 and
+  443 on and its image, and a row for each name the router sends to a local
+  cluster, with the cluster, how the router serves the name's HTTPS, and
+  whether the cluster runs. It says when the router is missing, has
+  stopped, or runs another image or on another address than the CLI wants,
+  and that ``educates local router update`` creates or re-creates it.
+  ``educates local router update`` renders the router's configuration again
+  and reloads the router, which keeps open terminals, re-creates it when its
+  address or image changed, and creates it when it is missing while a local
+  cluster exists. With ``--address``, as in ``educates local router update
+  --address 10.10.10.1``, it first sets the router address in
+  ``router.yaml``, keeping the file's comments, and refuses a loopback
+  address, the unspecified address and one no network interface of the host
+  has. It then points the local DNS resolver at the new address, re-creates
+  the router on it, leaving the clusters running, and names each cluster
+  whose ``nip.io`` domain follows the address, to deploy again. See
+  [checking and updating the router](local-router-commands).
+
 * ``educates local cluster status`` now also reports whether Educates is
   installed on the local cluster and whether its platform components are
   ready. It reads the ``EducatesClusterConfig``, ``SecretsManager``,
@@ -363,10 +385,10 @@ New Features
   create`` now always targets the cluster it has just created, whatever
   ``KUBECONFIG`` or the current kube context say.
 
-  ``educates local cluster list`` shows every local cluster, the default
-  one marked, with its state, number of nodes, Kubernetes version, listen
-  address, ingress domain, declared or derived as the DNS resolver serves
-  it, and kube context. A Kind cluster
+  ``educates local cluster list`` shows the router address, then every
+  local cluster, the default one marked, with its state, number of nodes,
+  Kubernetes version, ingress domain, declared or derived as the DNS
+  resolver serves it, and kube context. A Kind cluster
   named ``educates-<name>`` counts as a local cluster only when its folder
   ``clusters/<name>/`` exists in the data home, so Kind clusters made by
   hand are left out of the list and of every check, and ``delete``,
@@ -1200,7 +1222,8 @@ Features Changed
   gone. A local cluster's names, its ingress domain and
   ``resolver.extraDomains``, now resolve to the router address, where the
   router serves every local cluster. To have them resolve to an alias added
-  to a network interface, set ``address`` in ``router.yaml`` to the alias.
+  to a network interface, make the alias the router address with
+  ``educates local router update --address``.
   Names that resolve to anything other
   than a local cluster, such as a virtual machine, go in ``*.conf`` files of
   your own in the ``dnsmasq.d`` folder of the CLI data home, which the

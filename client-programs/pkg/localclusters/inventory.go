@@ -123,16 +123,11 @@ type ListRow struct {
 	// can't be read.
 	KubernetesVersion string
 
-	// ListenAddress is the host address the cluster's control-plane node
-	// is configured to publish ports 80 and 443 on, empty when it
-	// publishes neither.
-	ListenAddress string
-
 	// Domain is the cluster's ingress domain, declared or derived, as
 	// LoadedConfig.Domain gives it from the cluster's config in the data
-	// home: the domain the local DNS resolver serves for the cluster. It is
-	// empty when the cluster has none, or its config is missing or does not
-	// load.
+	// home: the domain the local DNS resolver points at the router
+	// address, and the router sends to the cluster. It is empty when the
+	// cluster has none, or its config is missing or does not load.
 	Domain string
 
 	// ConfigError is why the cluster's config in the data home does not
@@ -141,7 +136,8 @@ type ListRow struct {
 }
 
 // List returns a row for each Educates cluster, in the order of
-// Clusters.
+// Clusters. A row has no host address: every local cluster is reached on
+// the router address, which RouterAddress returns.
 func (inv Inventory) List() []ListRow {
 	rows := make([]ListRow, 0, len(inv.clusters))
 	for _, id := range inv.clusters {
@@ -152,9 +148,6 @@ func (inv Inventory) List() []ListRow {
 		}
 		if node, ok := inv.controlPlaneNode(id); ok {
 			row.KubernetesVersion = node.KubernetesVersion
-		}
-		if addrs := inv.ingressAddresses(id); len(addrs) > 0 {
-			row.ListenAddress = addrs[0].String()
 		}
 		switch loaded, err := LoadConfig(id); {
 		case errors.Is(err, fs.ErrNotExist):

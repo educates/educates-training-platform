@@ -112,6 +112,38 @@ func EnsureRouterFile(dataHome string) (string, error) {
 	return ip, nil
 }
 
+// SetRouterAddress makes the router file of the data home, router.yaml,
+// declare address as the router address, in its canonical form, once it
+// passes CheckRouterAddress against the host's interfaces, as
+// config.SetLocalRouterAddress writes it: keeping the file's comments, or
+// creating a missing file. It returns the address the file declared
+// before, in its canonical form when it is an IP address, and empty when
+// the file was missing.
+//
+// An address the rules refuse is an error saying why, and a file that
+// does not load is that error: either way nothing is written.
+func (inv Inventory) SetRouterAddress(address string) (string, error) {
+	canonical, err := CheckRouterAddress(address, inv.observed.InterfaceAddresses)
+	if err != nil {
+		return "", err
+	}
+	previous := ""
+	switch router, err := config.LoadLocalRouter(inv.dataHome); {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		return "", err
+	default:
+		previous = router.Address
+		if ip, err := netip.ParseAddr(previous); err == nil {
+			previous = ip.Unmap().String()
+		}
+	}
+	if err := config.SetLocalRouterAddress(inv.dataHome, canonical); err != nil {
+		return "", err
+	}
+	return previous, nil
+}
+
 // CheckRouterAddress returns the router address address in its canonical
 // form when it can serve local clusters, and otherwise an error saying
 // why it can't. The router address must be a specific IP address of a

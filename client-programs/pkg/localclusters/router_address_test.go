@@ -164,6 +164,64 @@ func TestEnsureRouterFileWithNoHostIPSaysTheAddressMustBeSet(t *testing.T) {
 	}
 }
 
+// Setting the router address writes it in its canonical form, keeping
+// the user's comments, and reports the address it replaced.
+func TestSetRouterAddressWritesAnAddressOfAHostInterface(t *testing.T) {
+	dataHome := t.TempDir()
+	path := routerFile(t, dataHome, routerHeader+"# The alias on bridge1.\naddress: 192.168.1.20\n")
+	inv := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, dataHome)
+
+	previous, err := inv.SetRouterAddress("::ffff:10.10.10.1")
+
+	if err != nil || previous != "192.168.1.20" {
+		t.Fatalf("SetRouterAddress() = %q, %v, want 192.168.1.20, nil", previous, err)
+	}
+	if body, _ := os.ReadFile(path); string(body) != routerHeader+"# The alias on bridge1.\naddress: 10.10.10.1\n" {
+		t.Errorf("router.yaml =\n%s\nwant the canonical address under the user's comment", body)
+	}
+}
+
+// A data home without the router file gets one, with no address replaced.
+func TestSetRouterAddressWritesAMissingRouterFile(t *testing.T) {
+	dataHome := t.TempDir()
+	inv := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, dataHome)
+
+	previous, err := inv.SetRouterAddress("10.10.10.1")
+
+	if err != nil || previous != "" {
+		t.Fatalf("SetRouterAddress() = %q, %v, want no address replaced and no error", previous, err)
+	}
+	if got, err := LoadRouterAddress(dataHome, hostInterfaces); err != nil || got != "10.10.10.1" {
+		t.Errorf("LoadRouterAddress() = %q, %v, want 10.10.10.1, nil", got, err)
+	}
+}
+
+// An address the router address rules refuse is never written.
+func TestSetRouterAddressRefusesWhatCantServeLocalClusters(t *testing.T) {
+	for _, tc := range []struct {
+		address string
+		why     string
+	}{
+		{"127.0.0.1", "loopback address"},
+		{"0.0.0.0", "unspecified address"},
+		{"10.10.10.9", "on no network interface of this host"},
+	} {
+		t.Run(tc.address, func(t *testing.T) {
+			dataHome := t.TempDir()
+			body := routerHeader + "address: 10.10.10.1\n"
+			path := routerFile(t, dataHome, body)
+			inv := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, dataHome)
+
+			_, err := inv.SetRouterAddress(tc.address)
+
+			wantErrorMentioning(t, err, tc.address, tc.why)
+			if got, _ := os.ReadFile(path); string(got) != body {
+				t.Errorf("router.yaml changed to\n%s", got)
+			}
+		})
+	}
+}
+
 // Each refusal says why the address can't be the router address.
 func TestCheckRouterAddressRefusesWhatCantServeLocalClusters(t *testing.T) {
 	cases := []struct {

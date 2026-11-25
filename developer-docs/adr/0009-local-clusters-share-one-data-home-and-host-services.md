@@ -1,6 +1,11 @@
 Local clusters share one data home and host services, each on its own address
 =============================================================================
 
+Superseded in part by
+[0012 - Local clusters are served through one shared router on one host address](0012-local-clusters-are-served-through-one-shared-router.md):
+clusters no longer have host addresses of their own, and every cluster is
+served through one router on the router address.
+
 The CLI runs a default local cluster and any number of named ones beside
 it. The default local cluster is the kind cluster ``educates``, with the kube
 context ``kind-educates``, and a named local cluster ``<name>`` is the kind

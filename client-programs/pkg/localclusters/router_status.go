@@ -29,6 +29,18 @@ const (
 	// chosen by the server name of the TLS handshake: the cluster presents
 	// its own certificate, and the router holds no key for it.
 	RouterTLSPassthrough RouterTLS = "passthrough"
+
+	// RouterTLSTerminated ends TLS at the router, with the certificate of
+	// the cluster's domain, and sends the requests on to the cluster as
+	// plain HTTP: the domain of a cluster with
+	// ingress.externalTLSTermination.
+	RouterTLSTerminated RouterTLS = "terminated"
+
+	// RouterTLSNone serves the name on port 80 only, and closes its TLS
+	// connections: an extra domain of a cluster whose TLS ends at the
+	// router, which the router's certificate for the cluster's domain does
+	// not cover.
+	RouterTLSNone RouterTLS = "none"
 )
 
 // RouterStatus is what local router status shows: the router address,
@@ -143,14 +155,24 @@ func (inv Inventory) RouterStatus(image string) (RouterStatus, error) {
 		if len(names) == 0 {
 			names = []string{""}
 		}
-		for _, name := range names {
-			status.Routes = append(status.Routes, RouterStatusRow{Name: name, Cluster: r.Cluster, TLS: routeTLS(r), State: r.State})
+		for i, name := range names {
+			status.Routes = append(status.Routes, RouterStatusRow{Name: name, Cluster: r.Cluster, TLS: routeTLS(r, i), State: r.State})
 		}
 	}
 	return status, nil
 }
 
-// routeTLS returns how the router serves the TLS of the route r.
-func routeTLS(RouterRoute) RouterTLS {
-	return RouterTLSPassthrough
+// routeTLS returns how the router serves the TLS of the name at index i of
+// the names of the route r: for a route whose TLS ends at the router, it
+// ends there for the route's domain, its first name, and its other names,
+// its extra domains, have no TLS.
+func routeTLS(r RouterRoute, i int) RouterTLS {
+	switch {
+	case !r.TLSEndsAtRouter:
+		return RouterTLSPassthrough
+	case i == 0:
+		return RouterTLSTerminated
+	default:
+		return RouterTLSNone
+	}
 }

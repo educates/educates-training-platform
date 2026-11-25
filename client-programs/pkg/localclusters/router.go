@@ -3,6 +3,7 @@ package localclusters
 import (
 	"cmp"
 	"fmt"
+	"io/fs"
 	"slices"
 	"strings"
 )
@@ -47,6 +48,14 @@ type RouterRoute struct {
 	// does not depend on it: a stopped cluster keeps its route, and the
 	// router answers its names with a 503 until its node runs again.
 	State State
+
+	// TLSEndsAtRouter reports whether the router ends TLS for the cluster,
+	// as its ingress.externalTLSTermination asks, rather than passing it
+	// through: for its ingress domain, the first of Names, with the
+	// certificate the router holds for it. The names under its extra
+	// domains, which that certificate does not cover, are served on port
+	// 80 only.
+	TLSEndsAtRouter bool
 }
 
 // RouterFile is a file of the router folder, config.LocalRouterDir, as
@@ -57,6 +66,10 @@ type RouterFile struct {
 
 	// Content is the file's content.
 	Content []byte
+
+	// Mode is the file's permissions: 0644, readable by every user, when
+	// zero, and 0600, readable only by the user, for a private key.
+	Mode fs.FileMode
 }
 
 // RouterCertificate is the certificate the router ends TLS with for the
@@ -75,7 +88,9 @@ type RouterCertificate struct {
 
 // RenderRouter returns the files of the router folder that configure the
 // router to serve routes: haproxy.cfg, the host map, the body of the 404
-// for a name no route matches, and the body of each route's 503.
+// for a name no route matches, the body of each route's 503, and the
+// certificate and key of each route whose TLS ends at the router, among
+// certificates, the one for its domain.
 //
 // Port 80 routes each request by its Host header, without its port,
 // through the host map, to the node of the cluster whose domain is the
@@ -91,27 +106,100 @@ type RouterCertificate struct {
 // lowercased, through the same host map, and passes it through untouched
 // to the node's port 443, where the cluster's ingress presents the
 // certificate its own domain CA issued: the router holds no certificate
-// and no key. A connection that is not TLS, names no server, or names one
-// no route matches is closed, and so is one for a route whose node does
-// not answer. A connection passed through may stay idle for an hour.
+// and no key for it. A connection that is not TLS, names no server, or
+// names one no route matches is closed, and so is one for a route whose
+// node does not answer. A connection passed through may stay idle for an
+// hour.
+//
+// For a route whose TLS ends at the router, port 443 hands the connection
+// instead to an internal frontend, which ends TLS with the certificate of
+// the cluster's domain and sends each request on as plain HTTP, as port
+// 80 does, with its Host header unchanged and X-Forwarded-Proto: https and
+// X-Forwarded-For added, so a stopped cluster's names get the 503 over
+// https too. A name under one of the route's extra domains, which the
+// certificate does not cover, is closed, as an unknown name is, and so is
+// every connection for the route when certificates hold none for its
+// domain.
 //
 // Each node is found by its container name through Docker's embedded DNS,
 // and its address resolved again every second, so a stopped cluster never
 // stops the router from starting, and a node that comes back on another
 // address is reached there. A route with no names is left out.
-func RenderRouter(routes []RouterRoute) []RouterFile {
+func RenderRouter(routes []RouterRoute, certificates ...RouterCertificate) []RouterFile {
 	routes = slices.DeleteFunc(slices.Clone(routes), func(r RouterRoute) bool { return len(r.Names) == 0 })
+	ended := certificatesOfRoutes(routes, certificates)
 
 	files := []RouterFile{
-		{Name: routerConfigFile, Content: []byte(renderHAProxyConfig(routes))},
+		{Name: routerConfigFile, Content: []byte(renderHAProxyConfig(routes, ended))},
 		{Name: routerHostMapFile, Content: []byte(renderHostMap(routes))},
 		{Name: routerNotFoundFile, Content: []byte(renderNotFound(routes))},
 	}
 	for _, r := range routes {
 		files = append(files, RouterFile{Name: unavailableFile(r.Cluster), Content: []byte(renderUnavailable(r.Cluster))})
 	}
+	for _, r := range routes {
+		if c, ok := ended[routeKey(r.Cluster)]; ok {
+			certFile := routerCertificateFile(c.Domain)
+			files = append(files,
+				RouterFile{Name: certFile, Content: c.Certificate},
+				RouterFile{Name: certFile + routerKeySuffix, Content: c.Key, Mode: 0o600})
+		}
+	}
 	return files
 }
+
+// RouterCertificateDomains returns the domain of each route of routes
+// whose TLS ends at the router, in order: the domains the router needs a
+// certificate for.
+func RouterCertificateDomains(routes []RouterRoute) []string {
+	var domains []string
+	for _, r := range routes {
+		if r.TLSEndsAtRouter && len(r.Names) > 0 {
+			domains = append(domains, r.Names[0])
+		}
+	}
+	return domains
+}
+
+// certificatesOfRoutes returns, by route key, the certificate among
+// certificates for the domain of each route of routes whose TLS ends at
+// the router, leaving out a route with none.
+func certificatesOfRoutes(routes []RouterRoute, certificates []RouterCertificate) map[string]RouterCertificate {
+	byDomain := map[string]RouterCertificate{}
+	for _, c := range certificates {
+		byDomain[domainKey(c.Domain)] = c
+	}
+	ended := map[string]RouterCertificate{}
+	for _, r := range routes {
+		if !r.TLSEndsAtRouter {
+			continue
+		}
+		if c, ok := byDomain[domainKey(r.Names[0])]; ok {
+			ended[routeKey(r.Cluster)] = c
+		}
+	}
+	return ended
+}
+
+// The router's certificates live in a folder of the router folder, from
+// which the frontend that ends TLS loads every certificate: a file per
+// domain, named for the domain, and its key beside it, named for the
+// certificate file with routerKeySuffix, as HAProxy looks for it.
+const (
+	routerCertificatesDir = "certs"
+	routerKeySuffix       = ".key"
+)
+
+// routerCertificateFile is the name of the file holding the certificate
+// the router ends TLS with for domain.
+func routerCertificateFile(domain string) string {
+	return routerCertificatesDir + "/" + domainKey(domain) + ".pem"
+}
+
+// tlsEndedAddress is the internal address port 443 hands the connections
+// whose TLS ends at the router to: an abstract socket, which only the
+// router's own processes reach.
+const tlsEndedAddress = "abns@educates-tls-ended"
 
 // routerConfigPath is the path of the router folder's file name in the
 // router container.
@@ -176,8 +264,10 @@ resolvers docker
     hold valid 1s
 `
 
-// renderHAProxyConfig renders the router's haproxy.cfg serving routes.
-func renderHAProxyConfig(routes []RouterRoute) string {
+// renderHAProxyConfig renders the router's haproxy.cfg serving routes,
+// ended holding by route key the certificate of each route whose TLS
+// ends at the router and that has one.
+func renderHAProxyConfig(routes []RouterRoute, ended map[string]RouterCertificate) string {
 	var b strings.Builder
 	b.WriteString(haproxyHeader)
 	fmt.Fprintf(&b, `
@@ -210,6 +300,27 @@ frontend https
     use_backend tls_%%[var(sess.cluster)]
 `, routerConfigPath(routerHostMapFile))
 
+	if len(ended) > 0 {
+		fmt.Fprintf(&b, `
+# The local clusters whose TLS ends at the router: port 443 hands their
+# connections to this frontend, which ends TLS with the certificate of the
+# cluster's domain and refuses a server name no certificate covers. Each
+# request goes on as plain HTTP to the port 80 backend of the local cluster
+# whose domain is the most specific to match the server name, with its Host
+# header unchanged, as a load balancer in front of a cloud cluster sends it.
+# Every hop speaks HTTP/1.1, as port 80 does, so websockets upgrade as they
+# do there.
+frontend tls_ended
+    mode http
+    bind %s accept-proxy ssl crt %s/ strict-sni alpn http/1.1
+    option forwardfor
+    http-request set-header X-Forwarded-Proto https
+    http-request set-var(txn.sni) ssl_fc_sni,lower
+    http-request set-var(txn.cluster) str(.),concat(,txn.sni,),map_end(%s)
+    use_backend http_%%[var(txn.cluster)]
+`, tlsEndedAddress, routerConfigPath(routerCertificatesDir), routerConfigPath(routerHostMapFile))
+	}
+
 	for _, r := range routes {
 		key := routeKey(r.Cluster)
 		fmt.Fprintf(&b, `
@@ -219,22 +330,50 @@ backend http_%s
     http-error status 503 content-type "text/plain; charset=utf-8" file %s
     server node %s:80
 `, routeDescription(r.Cluster), key, routerConfigPath(unavailableFile(r.Cluster)), r.Node)
-		b.WriteString(renderTLSBackend(r))
+		_, certified := ended[key]
+		b.WriteString(renderTLSBackend(r, certified))
 	}
 	return b.String()
 }
 
 // renderTLSBackend renders the backend port 443 sends the connections of
-// route r to, by the server name of their TLS handshake: the connection
-// passes through untouched to the node's port 443, where the cluster's
-// ingress presents the certificate its own domain CA issued. A node with
-// no address, such as a stopped cluster's, closes the connection.
-func renderTLSBackend(r RouterRoute) string {
-	return fmt.Sprintf(`
+// route r to, by the server name of their TLS handshake, certified
+// reporting whether the router holds the certificate of r's domain.
+//
+// When TLS passes through, the connection goes untouched to the node's
+// port 443, where the cluster's ingress presents the certificate its own
+// domain CA issued, and a node with no address, such as a stopped
+// cluster's, closes the connection. When it ends at the router, the
+// connection goes to frontend tls_ended, with the client's address in a
+// PROXY protocol header for its X-Forwarded-For, for a name in r's domain
+// alone, and is closed for every name when the router has no certificate.
+func renderTLSBackend(r RouterRoute, certified bool) string {
+	switch {
+	case !r.TLSEndsAtRouter:
+		return fmt.Sprintf(`
 backend tls_%s
     mode tcp
     server node %s:443
 `, routeKey(r.Cluster), r.Node)
+	case !certified:
+		return fmt.Sprintf(`
+backend tls_%s
+    mode tcp
+    # TLS ends at the router for this cluster's domain, but the router has
+    # no certificate for it: every connection is closed.
+    tcp-request content reject
+`, routeKey(r.Cluster))
+	default:
+		return fmt.Sprintf(`
+backend tls_%s
+    mode tcp
+    # TLS ends at the router for this cluster's domain: frontend tls_ended
+    # presents its certificate. A name under one of its extra domains, which
+    # the certificate does not cover, is closed, as an unknown name is.
+    tcp-request content reject unless { str(.),concat(,sess.sni,) -m end .%s }
+    server tls_ended %s send-proxy-v2
+`, routeKey(r.Cluster), domainKey(r.Names[0]), tlsEndedAddress)
+	}
 }
 
 // routeDescription names the local cluster id in the router's files.

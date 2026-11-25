@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"maps"
 	"slices"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
 // routerServer names the router in the errors of the configs it leaves
@@ -23,7 +25,9 @@ const routerServer = "the router"
 //
 // A cluster's names are its ingress domain, declared or derived as
 // LoadedConfig.Domain gives it, then its resolver.extraDomains, each once,
-// which the local DNS resolver points at the router address.
+// which the local DNS resolver points at the router address. The router
+// ends TLS for a cluster whose config sets ingress.externalTLSTermination,
+// and passes it through for every other.
 //
 // A config given that the router can't serve is an error. A cluster whose
 // config in the data home is missing, does not load or can't be served is
@@ -60,10 +64,11 @@ func (inv Inventory) RouterRoutes(given ...LoadedConfig) ([]RouterRoute, []error
 			names = append(names, name.domain)
 		}
 		routes = append(routes, RouterRoute{
-			Cluster: id,
-			Names:   names,
-			Node:    id.ControlPlaneNode(),
-			State:   id.State(inv.observed.Nodes),
+			Cluster:         id,
+			Names:           names,
+			Node:            id.ControlPlaneNode(),
+			State:           id.State(inv.observed.Nodes),
+			TLSEndsAtRouter: endsTLSAtRouter(loaded.Config) && loaded.Domain() != "",
 		})
 	}
 
@@ -75,6 +80,14 @@ func (inv Inventory) RouterRoutes(given ...LoadedConfig) ([]RouterRoute, []error
 		return nil, nil, err
 	}
 	return routes, leftOut, nil
+}
+
+// endsTLSAtRouter reports whether the config cfg asks the router to end
+// TLS for its cluster: an EducatesLocalConfig with
+// ingress.externalTLSTermination.
+func endsTLSAtRouter(cfg v1alpha1.Config) bool {
+	c, ok := cfg.(*v1alpha1.EducatesLocalConfig)
+	return ok && c.Ingress.ExternalTLSTermination
 }
 
 // routedClusters returns the local clusters the router serves, as

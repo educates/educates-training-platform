@@ -20,8 +20,10 @@ import (
 // Each file is written to a new file beside it, which is then renamed
 // over it, so the router never reads a file half written. The router
 // container mounts the folder rather than each file, so it sees a file
-// replaced this way. Files and folders are readable by every user, as the
-// router container's user is not the CLI's.
+// replaced this way. Files and folders are readable by every user, since
+// the router container's user may not be the CLI's, except a file whose
+// Mode says otherwise, such as a certificate's private key, readable only
+// by the user.
 func WriteRouterFolder(dataHome string, files []RouterFile) error {
 	dir := config.LocalRouterDir(dataHome)
 	keep := map[string]bool{}
@@ -30,7 +32,11 @@ func WriteRouterFolder(dataHome string, files []RouterFile) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fmt.Errorf("create the router folder %s: %w", filepath.Dir(path), err)
 		}
-		if err := writeFileByRename(path, f.Content, 0o644); err != nil {
+		mode := f.Mode
+		if mode == 0 {
+			mode = 0o644
+		}
+		if err := writeFileByRename(path, f.Content, mode); err != nil {
 			return err
 		}
 		keep[path] = true
@@ -46,6 +52,29 @@ func WriteRouterFolder(dataHome string, files []RouterFile) error {
 		}
 		return nil
 	})
+}
+
+// ReadRouterCertificate returns the certificate the router folder of the
+// data home dataHome holds for domain, as WriteRouterFolder wrote it from
+// RenderRouter's files, or nil when it holds none, its certificate or its
+// key missing.
+func ReadRouterCertificate(dataHome, domain string) (*RouterCertificate, error) {
+	path := filepath.Join(config.LocalRouterDir(dataHome), filepath.FromSlash(routerCertificateFile(domain)))
+	certificate, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read the router's certificate for %s: %w", domain, err)
+	}
+	key, err := os.ReadFile(path + routerKeySuffix)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read the router's certificate key for %s: %w", domain, err)
+	}
+	return &RouterCertificate{Domain: domain, Certificate: certificate, Key: key}, nil
 }
 
 // RemoveRouterFolder removes the router folder of the data home dataHome,

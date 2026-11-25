@@ -36,9 +36,14 @@ from the configs of every local cluster that exists, running or not: the
 cluster's ingress domain, then its resolver.extraDomains. A name reaches
 its cluster with every name under it, the most specific name winning. TLS
 says how the router serves the name on port 443: passthrough sends the
-connection to the cluster untouched, which presents its own certificate.
-STATE is whether the cluster runs: the router answers a stopped cluster's
-names on port 80 with a 503 naming the command that starts it.`,
+connection to the cluster untouched, which presents its own certificate;
+terminated ends TLS at the router, with a certificate from the local
+secrets cache, and sends the requests on as plain HTTP, for a cluster
+with ingress.externalTLSTermination; none serves the name on port 80 only,
+for the extra domains of such a cluster, which the router's certificate
+does not cover. STATE is whether the cluster runs: the router answers a
+stopped cluster's names on port 80, and on 443 when TLS ends at the
+router, with a 503 naming the command that starts it.`,
 		Example: localRouterStatusExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			inventory, err := localClusterInventory(cmd.Context())

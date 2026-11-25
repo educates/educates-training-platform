@@ -157,6 +157,10 @@ func TestListRowsShowTheDomainTheResolverServes(t *testing.T) {
 		controlPlane("educates-test2", "10.10.10.2", true),
 	}}, dataHome)
 
+	if err := writeRouterFileUnlessPresent(dataHome, "10.10.10.1"); err != nil {
+		t.Fatal(err)
+	}
+
 	rows := inv.List()
 
 	for i, want := range []string{"10-10-10-1.nip.io", "10-10-10-2.nip.io"} {

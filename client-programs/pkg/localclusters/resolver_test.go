@@ -3,11 +3,14 @@ package localclusters
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 )
 
 // writeDataHomeConfig writes body as the config at rel, a path relative to
@@ -28,6 +31,11 @@ type resolverInputs struct {
 	DataHome string
 	Observed []NodeContainer
 	Given    []ResolverInput
+
+	// RouterAddress is the router address of the data home's router file,
+	// which is written when the data home has none: 10.10.10.1 when it is
+	// empty.
+	RouterAddress string
 }
 
 // renderResolver renders the resolver config of the inventory of in's
@@ -44,7 +52,24 @@ func renderResolver(in resolverInputs) ([]byte, error) {
 // renderResolverLeavingOut renders the resolver config as renderResolver
 // does, and returns the configs the resolver leaves out.
 func renderResolverLeavingOut(in resolverInputs) ([]byte, []error, error) {
+	if err := writeRouterFileUnlessPresent(in.DataHome, in.RouterAddress); err != nil {
+		return nil, nil, err
+	}
 	return NewInventory(Observed{Nodes: in.Observed}, in.DataHome).ResolverConfig(in.Given...)
+}
+
+// writeRouterFileUnlessPresent writes the router file of the data home
+// dataHome, with the router address address, 10.10.10.1 when it is
+// empty, unless the data home holds one: every local cluster's names point
+// at the router address.
+func writeRouterFileUnlessPresent(dataHome, address string) error {
+	if _, err := os.Stat(config.LocalRouterPath(dataHome)); !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if address == "" {
+		address = "10.10.10.1"
+	}
+	return os.WriteFile(config.LocalRouterPath(dataHome), []byte(routerHeader+"address: "+address+"\n"), 0o644)
 }
 
 // renderAddresses renders the resolver config from in and returns its
@@ -71,7 +96,7 @@ func wantAddresses(t *testing.T, got []string, want ...string) {
 	}
 }
 
-func TestResolverConfigServesTheDefaultClusterDomainAtItsListenAddress(t *testing.T) {
+func TestResolverConfigServesTheDefaultClusterDomainAtTheRouterAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
@@ -87,7 +112,7 @@ server=1.0.0.1
 server=1.1.1.1
 strict-order
 
-# Default local cluster (config.yaml): 10.10.10.1, its listen address
+# Default local cluster (config.yaml): 10.10.10.1, the router address
 address=/educates.test/10.10.10.1
 
 # Your own entries: dnsmasq.d/*.conf
@@ -115,7 +140,7 @@ func renderHeadings(t *testing.T, in resolverInputs) []string {
 	return headings
 }
 
-func TestResolverConfigHeadingsNameEachClusterConfigAndListenAddress(t *testing.T) {
+func TestResolverConfigHeadingsNameEachClusterConfigAndTheRouterAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
@@ -125,8 +150,8 @@ func TestResolverConfigHeadingsNameEachClusterConfigAndListenAddress(t *testing.
 	got := renderHeadings(t, resolverInputs{DataHome: dataHome, Observed: observed})
 
 	want := []string{
-		"# Default local cluster (config.yaml): 10.10.10.1, its listen address",
-		"# Local cluster test2 (clusters/test2/config.yaml): 10.10.10.2, its listen address",
+		"# Default local cluster (config.yaml): 10.10.10.1, the router address",
+		"# Local cluster test2 (clusters/test2/config.yaml): 10.10.10.1, the router address",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("headings:\n got  %q\n want %q", got, want)
@@ -141,13 +166,13 @@ func TestResolverConfigHeadingNamesAGivenConfigByThePathGiven(t *testing.T) {
 
 	got := renderHeadings(t, resolverInputs{DataHome: dataHome, Given: []ResolverInput{def}})
 
-	want := []string{"# Default local cluster (my-config.yaml): 10.10.10.1, its listen address"}
+	want := []string{"# Default local cluster (my-config.yaml): 10.10.10.1, the router address"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("headings:\n got  %q\n want %q", got, want)
 	}
 }
 
-func TestResolverConfigPointsTheDefaultClusterAtItsSpecificListenAddress(t *testing.T) {
+func TestResolverConfigPointsTheDefaultClusterNamesAtTheRouterAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"+
@@ -158,16 +183,16 @@ func TestResolverConfigPointsTheDefaultClusterAtItsSpecificListenAddress(t *test
 	wantAddresses(t, got, "address=/educates.test/10.10.10.1", "address=/example.test/10.10.10.1")
 }
 
-func TestResolverConfigServesTheDefaultClusterNipDomainOfItsListenAddressWhenItDeclaresNone(t *testing.T) {
+func TestResolverConfigServesTheDefaultClusterNipDomainOfTheRouterAddressWhenItDeclaresNone(t *testing.T) {
 	dataHome := t.TempDir()
-	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n")
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 192.168.1.20\n")
 
-	got := renderAddresses(t, resolverInputs{DataHome: dataHome})
+	got := renderAddresses(t, resolverInputs{DataHome: dataHome, RouterAddress: "10.10.10.9"})
 
-	wantAddresses(t, got, "address=/10-10-10-1.nip.io/10.10.10.1")
+	wantAddresses(t, got, "address=/10-10-10-9.nip.io/10.10.10.9")
 }
 
-func TestResolverConfigServesEveryClusterAtItsOwnListenAddress(t *testing.T) {
+func TestResolverConfigPointsEveryClusterNamesAtTheRouterAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
@@ -183,12 +208,13 @@ func TestResolverConfigServesEveryClusterAtItsOwnListenAddress(t *testing.T) {
 			controlPlane("educates-test3", "10.10.10.3", true),
 			controlPlane("educates-test2", "10.10.10.2", false),
 		},
+		RouterAddress: "10.10.10.9",
 	})
 
 	wantAddresses(t, got,
-		"address=/educates.test/10.10.10.1",
-		"address=/test2.educates.test/10.10.10.2",
-		"address=/test3.example.test/10.10.10.3",
+		"address=/educates.test/10.10.10.9",
+		"address=/test2.educates.test/10.10.10.9",
+		"address=/test3.example.test/10.10.10.9",
 	)
 }
 
@@ -202,7 +228,7 @@ func TestResolverConfigServesANamedClusterNipDomainWhenItDeclaresNone(t *testing
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
 	})
 
-	wantAddresses(t, got, "address=/10-10-10-2.nip.io/10.10.10.2")
+	wantAddresses(t, got, "address=/10-10-10-2.nip.io/10.10.10.1")
 }
 
 func TestResolverConfigLeavesOutNamedClustersThatDoNotExist(t *testing.T) {
@@ -292,9 +318,9 @@ func TestResolverConfigServesExtraDomainsOncePerCluster(t *testing.T) {
 	})
 
 	wantAddresses(t, got,
-		"address=/test2.educates.test/10.10.10.2",
-		"address=/example.test/10.10.10.2",
-		"address=/other.test/10.10.10.2",
+		"address=/test2.educates.test/10.10.10.1",
+		"address=/example.test/10.10.10.1",
+		"address=/other.test/10.10.10.1",
 	)
 }
 
@@ -329,9 +355,9 @@ func TestResolverConfigServesTheDomainAnEducatesConfigDeclares(t *testing.T) {
 	wantAddresses(t, got,
 		"address=/workshops.example.test/10.10.10.1",
 		"address=/extra.example.test/10.10.10.1",
-		"address=/test2.example.test/10.10.10.2",
-		"address=/test3.example.test/10.10.10.3",
-		"address=/extra3.example.test/10.10.10.3",
+		"address=/test2.example.test/10.10.10.1",
+		"address=/test3.example.test/10.10.10.1",
+		"address=/extra3.example.test/10.10.10.1",
 	)
 }
 
@@ -346,7 +372,7 @@ func TestResolverConfigServesNoDomainForAnEducatesConfigThatDeclaresNone(t *test
 		Observed: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)},
 	})
 
-	wantAddresses(t, got, "address=/extra.example.test/10.10.10.2")
+	wantAddresses(t, got, "address=/extra.example.test/10.10.10.1")
 }
 
 // unservableDefaultConfigs are default local cluster configs the local
@@ -400,7 +426,7 @@ func TestResolverConfigLeavesOutADataHomeDefaultConfigItCannotServe(t *testing.T
 				t.Fatalf("ResolverConfig: %v", err)
 			}
 
-			if !strings.Contains(string(content), "address=/test2.educates.test/10.10.10.2\n") {
+			if !strings.Contains(string(content), "address=/test2.educates.test/10.10.10.1\n") {
 				t.Errorf("rendered config does not serve test2:\n%s", content)
 			}
 			if strings.Contains(string(content), "Default local cluster") {
@@ -439,7 +465,7 @@ func TestResolverConfigLeavesOutAnotherClustersConfigThatDoesNotLoad(t *testing.
 				t.Fatalf("ResolverConfig: %v", err)
 			}
 
-			for _, line := range []string{"address=/educates.test/10.10.10.1\n", "address=/10-10-10-3.nip.io/10.10.10.3\n"} {
+			for _, line := range []string{"address=/educates.test/10.10.10.1\n", "address=/10-10-10-3.nip.io/10.10.10.1\n"} {
 				if !strings.Contains(string(content), line) {
 					t.Errorf("rendered config has no line %q:\n%s", line, content)
 				}
@@ -507,7 +533,7 @@ func TestResolverConfigServesAClusterBeingCreatedFromItsGivenConfig(t *testing.T
 
 	wantAddresses(t, got,
 		"address=/educates.test/10.10.10.1",
-		"address=/test2.educates.test/10.10.10.2",
+		"address=/test2.educates.test/10.10.10.1",
 	)
 }
 
@@ -544,7 +570,7 @@ func TestResolverConfigOverridesOnlyTheDefaultClusterDomain(t *testing.T) {
 	wantAddresses(t, got,
 		"address=/override.test/10.10.10.1",
 		"address=/extra.test/10.10.10.1",
-		"address=/test2.educates.test/10.10.10.2",
+		"address=/test2.educates.test/10.10.10.1",
 	)
 }
 
@@ -552,6 +578,31 @@ func TestResolverConfigServesNothingForADataHomeWithNoConfig(t *testing.T) {
 	got := renderAddresses(t, resolverInputs{DataHome: t.TempDir()})
 
 	wantAddresses(t, got)
+}
+
+// Every local cluster's names point at the router address, so with a
+// cluster to serve and no router file there is nothing to point them at.
+func TestResolverConfigRefusesToServeAClusterWithoutARouterFile(t *testing.T) {
+	dataHome := t.TempDir()
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
+		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
+
+	_, _, err := NewInventory(Observed{}, dataHome).ResolverConfig()
+
+	wantErrorMentioning(t, err, config.LocalRouterPath(dataHome), "educates local router update --address")
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("error %q does not wrap fs.ErrNotExist", err)
+	}
+}
+
+func TestResolverConfigNeedsNoRouterFileWithNoClusterToServe(t *testing.T) {
+	content, _, err := NewInventory(Observed{}, t.TempDir()).ResolverConfig()
+	if err != nil {
+		t.Fatalf("ResolverConfig: %v", err)
+	}
+	if strings.Contains(string(content), "address=") {
+		t.Errorf("rendered config serves names:\n%s", content)
+	}
 }
 
 func TestResolverConfigIncludesTheUserEntriesAfterEveryCluster(t *testing.T) {

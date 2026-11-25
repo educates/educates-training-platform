@@ -11,13 +11,14 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 )
 
-// twoClusterDataHome writes a data home with a default cluster on
-// 10.10.10.1 with two extra domains, a named cluster test2 on 10.10.10.2
-// and an include file with one address= line, and returns it with the
-// inventory of both clusters running.
+// twoClusterDataHome writes a data home with the router address
+// 10.10.10.1, a default cluster with two extra domains, a named cluster
+// test2 and an include file with one address= line, and returns it with
+// the inventory of both clusters running.
 func twoClusterDataHome(t *testing.T) (string, localclusters.Inventory) {
 	t.Helper()
 	dataHome := t.TempDir()
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
 			"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"+
@@ -54,7 +55,7 @@ func TestLocalResolverViewPrintsTheClustersAndTheNames(t *testing.T) {
 	wantTables := [][]string{
 		{"CLUSTER", "ADDRESS", "CONFIG"},
 		{"(default)", "10.10.10.1", "config.yaml"},
-		{"test2", "10.10.10.2", "clusters/test2/config.yaml"},
+		{"test2", "10.10.10.1", "clusters/test2/config.yaml"},
 		{},
 		{"NAME", "CLUSTER", "FROM", "NOTE"},
 		{"educates.test", "(default)", "ingress.domain", "-"},
@@ -92,13 +93,13 @@ server=1.0.0.1
 server=1.1.1.1
 strict-order
 
-# Default local cluster (config.yaml): 10.10.10.1, its listen address
+# Default local cluster (config.yaml): 10.10.10.1, the router address
 address=/educates.test/10.10.10.1
 address=/example.test/10.10.10.1
 address=/workshops.lab.test/10.10.10.1
 
-# Local cluster test2 (clusters/test2/config.yaml): 10.10.10.2, its listen address
-address=/test2.educates.test/10.10.10.2
+# Local cluster test2 (clusters/test2/config.yaml): 10.10.10.1, the router address
+address=/test2.educates.test/10.10.10.1
 
 # Your own entries: dnsmasq.d/*.conf
 conf-dir=/etc/dnsmasq.d/,*.conf

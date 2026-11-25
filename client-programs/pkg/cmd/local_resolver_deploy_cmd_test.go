@@ -33,7 +33,9 @@ func wantLines(t *testing.T, content string, lines ...string) {
 }
 
 func TestDefaultResolverConfig_EscapeConfig_ServesItsIngressDomain(t *testing.T) {
-	t.Setenv("EDUCATES_CLI_DATA_HOME", t.TempDir())
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	path := writeFixture(t, `apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesConfig
 target:
@@ -60,13 +62,14 @@ educatesClusterConfig:
 	}
 
 	wantLines(t, renderWithDefault(t, def),
-		"address=/workshops.example.test/192.168.50.50",
-		"address=/extra.example.test/192.168.50.50")
+		"address=/workshops.example.test/10.10.10.1",
+		"address=/extra.example.test/10.10.10.1")
 }
 
 func TestDefaultResolverConfig_Domain_OverridesTheDataHomeConfigDomain(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"), 0o644); err != nil {
 		t.Fatal(err)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
 // whyRouterAddressResolves is why the router address must be one the
@@ -28,11 +29,7 @@ const setRouterAddressCommand = "educates local router update --address <ip>"
 // A missing file is an error wrapping fs.ErrNotExist that says how to
 // write it.
 func LoadRouterAddress(dataHome string, interfaces []netip.Addr) (string, error) {
-	router, err := config.LoadLocalRouter(dataHome)
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("%w. The router address, an IP address of a network interface of this host, "+
-			"must be set with:\n\n  %s", err, setRouterAddressCommand)
-	}
+	router, err := loadRouterFile(dataHome)
 	if err != nil {
 		return "", err
 	}
@@ -56,7 +53,7 @@ func LoadRouterAddress(dataHome string, interfaces []netip.Addr) (string, error)
 // is configured: only where the router is created is it checked against
 // the host's interfaces, with LoadRouterAddress.
 func configuredRouterAddress(dataHome string) (string, error) {
-	router, err := config.LoadLocalRouter(dataHome)
+	router, err := loadRouterFile(dataHome)
 	if err != nil {
 		return "", err
 	}
@@ -66,6 +63,18 @@ func configuredRouterAddress(dataHome string) (string, error) {
 			config.LocalRouterPath(dataHome), err, setRouterAddressCommand)
 	}
 	return ip.String(), nil
+}
+
+// loadRouterFile loads the router file of the data home dataHome, as
+// config.LoadLocalRouter loads it. A missing file is an error wrapping
+// fs.ErrNotExist that says how to write it.
+func loadRouterFile(dataHome string) (*v1alpha1.EducatesLocalRouter, error) {
+	router, err := config.LoadLocalRouter(dataHome)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("%w. The router address, an IP address of a network interface of this host, "+
+			"must be set with:\n\n  %s", err, setRouterAddressCommand)
+	}
+	return router, err
 }
 
 // EnsureRouterFile writes the router file of the data home dataHome,

@@ -18,6 +18,9 @@ type viewInputs struct {
 // resolverView builds the view of the local DNS resolver from in.
 func resolverView(t *testing.T, in viewInputs) ResolverView {
 	t.Helper()
+	if err := writeRouterFileUnlessPresent(in.DataHome, ""); err != nil {
+		t.Fatal(err)
+	}
 	inv := NewInventory(Observed{Nodes: in.Observed}, in.DataHome)
 	view, err := inv.ResolverView(in.Includes, in.ResolverFileExists)
 	if err != nil {
@@ -63,7 +66,7 @@ func TestResolverViewShowsEachClusterNameAndWhereItComesFrom(t *testing.T) {
 			name:          "a default cluster that declares no domain",
 			defaultConfig: localConfigHeader + "cluster:\n  listenAddress: 10.10.10.1\n",
 			want: []ResolverNameRow{
-				{Name: "10-10-10-1.nip.io", Cluster: "(default)", From: "nip.io name of the listen address"},
+				{Name: "10-10-10-1.nip.io", Cluster: "(default)", From: "nip.io name of the router address"},
 				{Name: "10-10-10-2.nip.io", Cluster: "test2", From: "nip.io name of the listen address"},
 				{Name: "test3.example.test", Cluster: "test3", From: "educatesClusterConfig.ingress.domain"},
 				{Name: "extra3.example.test", Cluster: "test3", From: "target.resolver.extraDomains"},
@@ -226,6 +229,9 @@ func TestResolverViewRefusesADomainTwoClustersClaim(t *testing.T) {
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
 		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: educates.test\n")
+	if err := writeRouterFileUnlessPresent(dataHome, ""); err != nil {
+		t.Fatal(err)
+	}
 	inv := NewInventory(Observed{Nodes: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)}}, dataHome)
 
 	_, err := inv.ResolverView(nil, nil)
@@ -233,7 +239,7 @@ func TestResolverViewRefusesADomainTwoClustersClaim(t *testing.T) {
 	wantErrorMentioning(t, err, "the default local cluster", `local cluster "test2"`, `"educates.test"`)
 }
 
-func TestResolverViewShowsEachClusterListenAddressAndConfig(t *testing.T) {
+func TestResolverViewShowsTheRouterAddressAndConfigOfEachCluster(t *testing.T) {
 	observed := []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)}
 	for _, tc := range []struct {
 		name          string
@@ -255,7 +261,7 @@ func TestResolverViewShowsEachClusterListenAddressAndConfig(t *testing.T) {
 
 			want := []ResolverClusterRow{
 				{Cluster: "(default)", Address: "10.10.10.1", Config: "config.yaml"},
-				{Cluster: "test2", Address: "10.10.10.2", Config: "clusters/test2/config.yaml"},
+				{Cluster: "test2", Address: "10.10.10.1", Config: "clusters/test2/config.yaml"},
 			}
 			if !reflect.DeepEqual(view.Clusters, want) {
 				t.Errorf("cluster rows:\n got  %+v\n want %+v", view.Clusters, want)

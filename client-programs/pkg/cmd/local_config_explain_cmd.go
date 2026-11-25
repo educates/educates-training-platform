@@ -26,6 +26,8 @@ var explainableKinds = map[string][]byte{
 	"escape":               schemas.EducatesConfig,
 	"educateslocalmirrors": schemas.EducatesLocalMirrors,
 	"mirrors":              schemas.EducatesLocalMirrors,
+	"educateslocalrouter":  schemas.EducatesLocalRouter,
+	"router":               schemas.EducatesLocalRouter,
 }
 
 var localConfigExplainExample = `
@@ -42,6 +44,9 @@ var localConfigExplainExample = `
 
   # Describe the registry mirrors file, mirrors.yaml in the data home:
   educates local config explain registryMirrors --kind mirrors
+
+  # Describe the router file, router.yaml in the data home:
+  educates local config explain address --kind router
 `
 
 type LocalConfigExplainOptions struct {
@@ -66,8 +71,10 @@ file is needed; the descriptions come from the schema.
 --kind accepts a kind name or a short alias:
   EducatesLocalConfig (local), EducatesGKEConfig (gke),
   EducatesEKSConfig (eks), EducatesInlineConfig (inline),
-  EducatesConfig (escape), and EducatesLocalMirrors (mirrors), the
-  kind of the registry mirrors file, mirrors.yaml in the data home.`,
+  EducatesConfig (escape), EducatesLocalMirrors (mirrors), the kind of
+  the registry mirrors file, mirrors.yaml in the data home, and
+  EducatesLocalRouter (router), the kind of the router file, router.yaml
+  in the data home.`,
 		Example: localConfigExplainExample,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			schema, err := explainSchemaForKind(o.Kind)
@@ -87,7 +94,7 @@ file is needed; the descriptions come from the schema.
 		},
 	}
 	c.Flags().StringVar(&o.Kind, "kind", "",
-		"configuration kind to explain (default EducatesLocalConfig); a kind name or alias local|gke|eks|inline|escape|mirrors")
+		"configuration kind to explain (default EducatesLocalConfig); a kind name or alias local|gke|eks|inline|escape|mirrors|router")
 	return c
 }
 
@@ -102,5 +109,5 @@ func explainSchemaForKind(kind string) ([]byte, error) {
 	if schema, ok := explainableKinds[strings.ToLower(kind)]; ok {
 		return schema, nil
 	}
-	return nil, fmt.Errorf("unknown --kind %q; valid kinds: EducatesLocalConfig, EducatesGKEConfig, EducatesEKSConfig, EducatesInlineConfig, EducatesConfig, EducatesLocalMirrors (aliases: local, gke, eks, inline, escape, mirrors)", kind)
+	return nil, fmt.Errorf("unknown --kind %q; valid kinds: EducatesLocalConfig, EducatesGKEConfig, EducatesEKSConfig, EducatesInlineConfig, EducatesConfig, EducatesLocalMirrors, EducatesLocalRouter (aliases: local, gke, eks, inline, escape, mirrors, router)", kind)
 }

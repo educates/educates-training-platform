@@ -71,7 +71,8 @@ const (
 // in-cluster TLS entirely: the operator installs no cert-manager,
 // creates no ClusterIssuer and no wildcard Certificate, and Educates
 // serves plain HTTP unless TLS is terminated outside the cluster (see
-// ingress.protocol). The provider is immutable: changing it requires
+// ingress.protocol, and certificates.none for the CA of a certificate
+// presented there). The provider is immutable: changing it requires
 // deleting and recreating the EducatesClusterConfig.
 // +kubebuilder:validation:Enum=BundledCertManager;ExternalCertManager;StaticCertificate;None
 type CertificatesProvider string
@@ -501,7 +502,26 @@ type StaticCertificateConfig struct {
 	CACertificateSecretRef *SecretReference `json:"caCertificateSecretRef,omitempty"`
 }
 
+// NoneCertificatesConfig configures the None certificates provider, where
+// the cluster presents no certificate of its own. TLS, when the public
+// URLs use https, is terminated outside the cluster, by a load balancer
+// or proxy that forwards plain HTTP inward.
+type NoneCertificatesConfig struct {
+	// caCertificateSecretRef optionally references a CA trust Secret
+	// holding the certificate of the CA that issued the certificate
+	// presented outside the cluster, under ca.crt. Set it when that CA is
+	// private, so Educates components and nodes reach the cluster's own
+	// names over https: they trust it through educates-ingress-ca, which
+	// the operator derives from its ca.crt alone, so any other key it
+	// holds, a private key included, is ignored. Namespace defaults to the
+	// operator namespace when empty.
+	// +optional
+	CACertificateSecretRef *SecretReference `json:"caCertificateSecretRef,omitempty"`
+}
+
 // Certificates groups certificate-provider configuration.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.none) || self.provider == 'None'",message="certificates.none is only valid when certificates.provider is None"
 type Certificates struct {
 	// +required
 	Provider CertificatesProvider `json:"provider"`
@@ -514,6 +534,11 @@ type Certificates struct {
 
 	// +optional
 	StaticCertificate *StaticCertificateConfig `json:"staticCertificate,omitempty"`
+
+	// none configures the None provider. It is only valid when provider
+	// is None.
+	// +optional
+	None *NoneCertificatesConfig `json:"none,omitempty"`
 }
 
 // EnvoyServiceType selects the Kubernetes Service type for the

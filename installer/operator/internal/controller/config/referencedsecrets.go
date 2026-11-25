@@ -50,11 +50,12 @@ type referencedSecret struct {
 // referencedSecrets lists the Secrets the spec names by SecretReference
 // and the reconciler reads for the spec's mode and certificate provider:
 // the wildcard certificate and CA trust Secrets in Inline mode, the CA
-// key pair and CA trust Secret of a custom CA, and the wildcard
-// certificate and CA trust Secret of the StaticCertificate provider. A
-// reference under a provider or issuer type the spec does not select is
-// left out. It is the one list the Secret watch, the operator's Secret
-// cache scope and the CA trust source all read.
+// key pair and CA trust Secret of a custom CA, the wildcard certificate
+// and CA trust Secret of the StaticCertificate provider, and the CA
+// trust Secret of the None provider. A reference under a provider or
+// issuer type the spec does not select is left out. It is the one list
+// the Secret watch, the operator's Secret cache scope and the CA trust
+// source all read.
 func referencedSecrets(obj *configv1alpha1.EducatesClusterConfig) []referencedSecret {
 	var out []referencedSecret
 	add := func(ref *configv1alpha1.SecretReference, field string, role referencedSecretRole) {
@@ -76,6 +77,9 @@ func referencedSecrets(obj *configv1alpha1.EducatesClusterConfig) []referencedSe
 		if static := staticCertificateConfig(obj); static != nil {
 			add(&static.TLSSecretRef, staticTLSField, wildcardCertificateSecretRole)
 			add(static.CACertificateSecretRef, staticCATrustField, caTrustSecretRole)
+		}
+		if none := noneCertificatesConfig(obj); none != nil {
+			add(none.CACertificateSecretRef, noneCATrustField, caTrustSecretRole)
 		}
 	}
 	return out

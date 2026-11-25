@@ -240,6 +240,31 @@ func staticCASecret(ca *testpki.Certificate) *corev1.Secret {
 	return makeSecret(testCASecretsNamespace, "wildcard-ca", map[string][]byte{"ca.crt": ca.CertPEM})
 }
 
+// noneCertificatesSpec returns a Managed-mode spec whose TLS is
+// terminated outside the cluster: the None certificates provider with
+// https public URLs, trusting the CA trust Secret terminator-ca in
+// testCASecretsNamespace.
+func noneCertificatesSpec() configv1alpha1.EducatesClusterConfigSpec {
+	spec := validManagedSpec()
+	spec.Ingress.Protocol = configv1alpha1.IngressProtocolHTTPS
+	spec.Ingress.Certificates = configv1alpha1.Certificates{
+		Provider: configv1alpha1.CertificatesProviderNone,
+		None: &configv1alpha1.NoneCertificatesConfig{
+			CACertificateSecretRef: &configv1alpha1.SecretReference{
+				Name:      "terminator-ca",
+				Namespace: testCASecretsNamespace,
+			},
+		},
+	}
+	return spec
+}
+
+// noneCASecret returns the CA trust Secret noneCertificatesSpec
+// references, with the given data.
+func noneCASecret(data map[string][]byte) *corev1.Secret {
+	return makeSecret(testCASecretsNamespace, "terminator-ca", data)
+}
+
 // makeCustomCASecret returns the CA key pair validManagedSpec references:
 // a self-signed root CA's tls.crt + tls.key in the operator namespace,
 // with no ca.crt, the shape the local CLI cache produces.
@@ -294,10 +319,11 @@ func wildcardTLSData() map[string][]byte {
 	return s.Data
 }
 
-// driveStaticCertificateToReady takes a StaticCertificate config to
+// driveToReadyWithoutCertManager takes a config whose certificates
+// provider installs no cert-manager, StaticCertificate or None, to
 // Ready: it waits for the certificates phase to finish, which the
 // Contour namespace appearing signals, then stands up Contour.
-func driveStaticCertificateToReady() {
+func driveToReadyWithoutCertManager() {
 	GinkgoHelper()
 	Eventually(func() error {
 		return k8sClient.Get(ctx, types.NamespacedName{Name: contourNamespace}, &corev1.Namespace{})
@@ -1157,7 +1183,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
 			Spec:       staticCertificateSpec(),
 		})).To(Succeed())
-		driveStaticCertificateToReady()
+		driveToReadyWithoutCertManager()
 
 		// Ready has no periodic requeue before the certificate expires,
 		// so only the Secret watch can carry the change through in time.
@@ -1273,7 +1299,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
 			Spec:       staticCertificateSpec(),
 		})).To(Succeed())
-		driveStaticCertificateToReady()
+		driveToReadyWithoutCertManager()
 		Expect(ingressCAData()).To(Equal(map[string][]byte{"ca.crt": root.CertPEM}))
 
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: testCASecretsNamespace, Name: "wildcard-ca"}, trust)).To(Succeed())
@@ -1325,7 +1351,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
 			Spec:       staticCertificateSpec(),
 		})).To(Succeed())
-		driveStaticCertificateToReady()
+		driveToReadyWithoutCertManager()
 		Expect(certificatesReadyReason()).To(Equal("StaticCertificateValid"))
 
 		// Ready leaves nothing else to requeue reconcile, so only the
@@ -1333,6 +1359,121 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 		Eventually(certificatesReadyReason, 30*time.Second, 200*time.Millisecond).
 			Should(Equal(pki.ReasonWildcardCertificateExpired))
 		Expect(readyConditionStatus()).To(Equal(metav1.ConditionFalse))
+	})
+
+	It("publishes the None provider's CA trust key-free and reaches Ready without cert-manager", func() {
+		root := testpki.NewRootCA()
+		// A key the source also holds never reaches the derived CA trust.
+		Expect(k8sClient.Create(ctx, noneCASecret(map[string][]byte{
+			"ca.crt":  root.CertPEM,
+			"tls.key": root.KeyPEM,
+		}))).To(Succeed())
+		Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       noneCertificatesSpec(),
+		})).To(Succeed())
+		driveToReadyWithoutCertManager()
+
+		got := &configv1alpha1.EducatesClusterConfig{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+		Expect(meta.IsStatusConditionTrue(got.Status.Conditions, conditionCertificatesReady)).To(BeTrue())
+		Expect(got.Status.Ingress.Protocol).To(Equal(configv1alpha1.IngressProtocolHTTPS))
+		Expect(got.Status.Ingress.WildcardCertificateSecretRef).To(BeNil())
+		Expect(got.Status.Ingress.ClusterIssuerRef).To(BeNil())
+		Expect(got.Status.Ingress.CACertificateSecretRef).To(Equal(&configv1alpha1.NamespacedSecretRef{
+			Namespace: testOperatorNamespace,
+			Name:      "educates-ingress-ca",
+		}))
+		Expect(ingressCAData()).To(Equal(map[string][]byte{"ca.crt": root.CertPEM}))
+
+		derived := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: testOperatorNamespace, Name: ingressCASecretName}, derived)).To(Succeed())
+		Expect(derived.Type).To(Equal(corev1.SecretTypeOpaque))
+		Expect(derived.OwnerReferences).To(HaveLen(1))
+		Expect(derived.OwnerReferences[0].Kind).To(Equal("EducatesClusterConfig"))
+
+		// No in-cluster certificate is involved.
+		Expect(wildcardTLSData()).To(BeNil())
+		expectNoReleaseInstalled(helmFac, certManagerRelease)
+	})
+
+	It("keeps educates-ingress-ca following the None provider's CA trust Secret, and reports it once deleted", func() {
+		first, second := testpki.NewRootCA(), testpki.NewRootCA()
+		trust := noneCASecret(map[string][]byte{"ca.crt": first.CertPEM})
+		Expect(k8sClient.Create(ctx, trust)).To(Succeed())
+		Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       noneCertificatesSpec(),
+		})).To(Succeed())
+		driveToReadyWithoutCertManager()
+		Expect(ingressCAData()).To(Equal(map[string][]byte{"ca.crt": first.CertPEM}))
+
+		// Ready has no periodic requeue, so only the Secret watch can carry
+		// the change through.
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: testCASecretsNamespace, Name: "terminator-ca"}, trust)).To(Succeed())
+		trust.Data = map[string][]byte{"ca.crt": second.CertPEM}
+		Expect(k8sClient.Update(ctx, trust)).To(Succeed())
+		Eventually(ingressCAData, 10*time.Second, 200*time.Millisecond).
+			Should(Equal(map[string][]byte{"ca.crt": second.CertPEM}))
+
+		Expect(k8sClient.Delete(ctx, trust)).To(Succeed())
+		Eventually(certificatesReadyReason, 10*time.Second, 200*time.Millisecond).
+			Should(Equal(pki.ReasonCATrustSecretNotFound))
+		got := &configv1alpha1.EducatesClusterConfig{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+		Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseDegraded))
+		Expect(meta.IsStatusConditionFalse(got.Status.Conditions, conditionCertificatesReady)).To(BeTrue())
+		Expect(meta.IsStatusConditionFalse(got.Status.Conditions, conditionReady)).To(BeTrue())
+		Expect(validationSucceededMessage()).To(ContainSubstring(noneCATrustField))
+	})
+
+	DescribeTable("rejects an unusable None provider CA trust Secret with a specific reason",
+		func(secret func() *corev1.Secret, wantReason string) {
+			if s := secret(); s != nil {
+				Expect(k8sClient.Create(ctx, s)).To(Succeed())
+			}
+			Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+				Spec:       noneCertificatesSpec(),
+			})).To(Succeed())
+
+			Eventually(certificatesReadyReason, 30*time.Second, 200*time.Millisecond).Should(Equal(wantReason))
+
+			got := &configv1alpha1.EducatesClusterConfig{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+			Expect(got.Status.Phase).To(Equal(configv1alpha1.ClusterConfigPhaseDegraded))
+			Expect(meta.IsStatusConditionFalse(got.Status.Conditions, conditionReady)).To(BeTrue())
+			Expect(ingressCAData()).To(BeNil())
+		},
+		Entry("when the CA trust Secret is missing",
+			func() *corev1.Secret { return nil },
+			pki.ReasonCATrustSecretNotFound),
+		Entry("when the CA trust Secret has no ca.crt",
+			func() *corev1.Secret {
+				return noneCASecret(map[string][]byte{"tls.crt": testpki.NewRootCA().CertPEM})
+			},
+			pki.ReasonCATrustSecretIncomplete),
+		Entry("when ca.crt does not parse",
+			func() *corev1.Secret {
+				return noneCASecret(map[string][]byte{"ca.crt": []byte("not a certificate")})
+			},
+			pki.ReasonCATrustSecretUnparseable),
+	)
+
+	It("publishes no CA trust for the None provider without a CA trust Secret", func() {
+		spec := noneCertificatesSpec()
+		spec.Ingress.Certificates.None = nil
+		Expect(k8sClient.Create(ctx, &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec:       spec,
+		})).To(Succeed())
+		driveToReadyWithoutCertManager()
+
+		got := &configv1alpha1.EducatesClusterConfig{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
+		Expect(got.Status.Ingress.Protocol).To(Equal(configv1alpha1.IngressProtocolHTTPS))
+		Expect(got.Status.Ingress.CACertificateSecretRef).To(BeNil())
+		Expect(ingressCAData()).To(BeNil())
 	})
 
 	It("reaches Ready=True once cert-manager and Contour have rolled out and the wildcard Certificate is Issued", func() {
@@ -1441,7 +1582,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
 			Spec:       staticCertificateSpec(),
 		})).To(Succeed())
-		driveStaticCertificateToReady()
+		driveToReadyWithoutCertManager()
 
 		// A second node goes not Ready: its envoy pod is unavailable, and
 		// the DaemonSet counts one of its two pods available.
@@ -2008,7 +2149,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
 			Spec:       staticCertificateSpec(),
 		})).To(Succeed())
-		driveStaticCertificateToReady()
+		driveToReadyWithoutCertManager()
 
 		got := &configv1alpha1.EducatesClusterConfig{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cluster"}, got)).To(Succeed())
@@ -2037,7 +2178,7 @@ var _ = Describe("EducatesClusterConfig Managed-mode reconciler", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
 			Spec:       staticCertificateSpec(),
 		})).To(Succeed())
-		driveStaticCertificateToReady()
+		driveToReadyWithoutCertManager()
 
 		// Unset, it is published empty, as in Inline mode, so components
 		// always find it.

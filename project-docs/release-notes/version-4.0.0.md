@@ -268,6 +268,38 @@ New Features
   ``None`` provider, and is set through the ``EducatesConfig`` configuration
   kind or by applying the ``EducatesClusterConfig`` directly.
 
+* A local cluster can now have its TLS ended at the router, as a load
+  balancer ends it in front of a cloud cluster, with
+  ``ingress.externalTLSTermination: true`` in its ``EducatesLocalConfig``,
+  the meaning the ``EducatesGKEConfig``, ``EducatesEKSConfig`` and
+  ``EducatesInlineConfig`` kinds give ``externalTLSTermination``. The router
+  ends TLS for the cluster's ingress domain with the wildcard certificate
+  cached for it with ``educates local secrets add tls``, or else with a
+  certificate the CLI issues for the domain and ``*.<domain>`` from the CA
+  minted for the domain from the local root CA. An issued certificate is
+  valid for a year, and ``educates local cluster create``, ``educates local
+  cluster start`` and ``educates local router update`` issue it again
+  within 30 days of its expiry. The router forwards plain HTTP to the
+  cluster's ingress with the ``Host`` header unchanged and
+  ``X-Forwarded-Proto: https`` and ``X-Forwarded-For`` added, answers a
+  stopped cluster's names with its ``503`` over ``https`` too, and serves
+  port 80 as plain HTTP with no redirect. The cluster is deployed with the
+  ``None`` certificates provider and ``ingress.protocol: https``, so it
+  issues no certificate, and trusts the CA that verifies the router's
+  certificate through ``ingress.certificates.none.caCertificateSecretRef``:
+  the local root CA for a certificate the CLI issued, or the cached CA
+  certificate that verifies a cached wildcard certificate, which a deploy
+  refuses when no cached CA certificate verifies it. No CA key pair is
+  copied into the cluster. The certificate's private key stays in the
+  router folder of the CLI data home, readable only by the user, and
+  deleting the cluster removes it. Since the CA minted for a domain signs
+  only for that domain, the router serves the cluster's
+  ``resolver.extraDomains`` on port 80 only, and ``educates local router
+  status`` shows their TLS as ``none`` and the ingress domain's as
+  ``terminated``. The setting can't be combined with ``ingress.insecure``,
+  and a configuration setting both is refused, naming both. See
+  [TLS ended at the router](local-router-tls-termination).
+
 * The ``educates local mirror list`` command lists the local image
   registry mirrors that have been deployed, complementing the existing
   ``deploy`` and ``delete`` commands in the ``educates local mirror``
@@ -1282,10 +1314,12 @@ Features Changed
   the router address, and sends each request to the local cluster that owns
   the name it asks for, plain HTTP by its ``Host`` header and HTTPS by the
   server name in its TLS handshake, passed through untouched, so that each
-  cluster presents its own certificate and the router holds no keys. An
-  HTTPS connection for a name no local cluster serves, with no server name,
-  or for a stopped cluster is closed, as the router has no certificate to
-  answer with. Version 3
+  cluster presents its own certificate and the router holds no keys, unless
+  the cluster has the router end its TLS with
+  ``ingress.externalTLSTermination``. An HTTPS connection for a name no
+  local cluster serves, with no server name, or for a stopped cluster whose
+  TLS passes through is closed, as the router has no certificate to answer
+  with. Version 3
   published a cluster's ports from its Kind node, on every host address
   unless ``localKindCluster.listenAddress`` named one, and Kind nodes now
   publish no ports at all. The router runs HAProxy, from the long-term

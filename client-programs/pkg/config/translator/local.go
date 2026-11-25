@@ -16,16 +16,21 @@ import (
 //
 // ingress.certificates comes from opts.LocalCertificates, the decision
 // the CLI's local certificate resolution step made from the local
-// secrets cache: provider None; BundledCertManager with the CustomCA
-// issuer, its CA key pair reference and, optionally, the CA trust Secret
-// reference; or StaticCertificate with the wildcard certificate
-// reference and, optionally, the CA trust Secret reference. Returns an
+// secrets cache: provider None, optionally with the CA trust Secret
+// reference of a certificate presented outside the cluster;
+// BundledCertManager with the CustomCA issuer, its CA key pair reference
+// and, optionally, the CA trust Secret reference; or StaticCertificate
+// with the wildcard certificate reference and, optionally, the CA trust
+// Secret reference. Returns an
 // error when that decision is missing or incomplete, so an install that
 // cannot get its certificates fails at translate time rather than at
 // deploy time.
 //
 // When ingress.insecure is set the cluster serves plain HTTP
-// (ingress.protocol http).
+// (ingress.protocol http). When ingress.externalTLSTermination is set, TLS
+// ends at the router, the cluster serves plain HTTP behind it with https
+// URLs (ingress.protocol https), and the decision must be None, optionally
+// with the CA trust Secret of the router's certificate.
 //
 // Static field defaults (clusterAdmin true, lookupService true,
 // imagePrePuller.enabled true, operator.logLevel info) have already been
@@ -40,6 +45,10 @@ func TranslateLocal(cfg *v1alpha1.EducatesLocalConfig, opts Options) (*Output, e
 	certificates, err := localCertificates(opts.LocalCertificates)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.Ingress.ExternalTLSTermination && opts.LocalCertificates.Provider != CertificatesProviderNone {
+		return nil, fmt.Errorf("translator: EducatesLocalConfig with ingress.externalTLSTermination needs the None certificates decision, not %q: the router ends TLS for the cluster, which issues no certificate",
+			opts.LocalCertificates.Provider)
 	}
 	out := &Output{
 		OperatorChartValues:   operatorChartValuesFor(cfg.Operator),
@@ -58,8 +67,15 @@ func TranslateLocal(cfg *v1alpha1.EducatesLocalConfig, opts Options) (*Output, e
 func localCertificates(lc LocalCertificates) (map[string]interface{}, error) {
 	switch lc.Provider {
 	case CertificatesProviderNone:
-		// No cert-manager, no issuer, no certificate.
-		return map[string]interface{}{"provider": string(CertificatesProviderNone)}, nil
+		// No cert-manager, no issuer, no certificate: at most the CA
+		// trust of a certificate presented outside the cluster.
+		certificates := map[string]interface{}{"provider": string(CertificatesProviderNone)}
+		if lc.None != nil && lc.None.CACertificateSecretRef != nil {
+			certificates["none"] = map[string]interface{}{
+				"caCertificateSecretRef": secretRef(*lc.None.CACertificateSecretRef),
+			}
+		}
+		return certificates, nil
 	case CertificatesProviderBundledCertManager:
 		if lc.CustomCA == nil || lc.CustomCA.CAKeyPairSecretRef.Name == "" {
 			return nil, fmt.Errorf("translator: the BundledCertManager decision for EducatesLocalConfig has no CA key pair Secret name")
@@ -126,8 +142,14 @@ func localECCSpec(cfg *v1alpha1.EducatesLocalConfig, certificates map[string]int
 		},
 		"certificates": certificates,
 	}
-	if cfg.Ingress.Insecure {
+	switch {
+	case cfg.Ingress.Insecure:
 		ingress["protocol"] = "http"
+	case cfg.Ingress.ExternalTLSTermination:
+		// TLS ends at the router, which forwards plain HTTP to the
+		// cluster: the cluster issues no certificate, but its URLs are
+		// still https.
+		ingress["protocol"] = "https"
 	}
 	if cfg.Ingress.Domain != "" {
 		ingress["domain"] = cfg.Ingress.Domain

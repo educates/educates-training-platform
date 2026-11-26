@@ -134,14 +134,11 @@ func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclus
 //
 // The default local cluster's config, as an earlier release wrote it, may
 // still declare the address its cluster was served on, which becomes the
-// router address in place of the host's IP address: it is moved first,
-// as config.MoveClusterListenAddress moves it, with a note on standard
-// error, whichever local cluster the command is for.
+// router address in place of the host's IP address, with a note on
+// standard error, whichever local cluster the command is for, as
+// localclusters.EnsureRouterFile moves it.
 func ensureRouterFile(w io.Writer) (written bool, err error) {
 	dataHome := utils.GetEducatesHomeDir()
-	if err := config.MoveClusterListenAddress(dataHome, config.LocalConfigPath(dataHome), os.Stderr); err != nil {
-		return false, err
-	}
 	address, err := localclusters.EnsureRouterFile(dataHome)
 	if err != nil {
 		return false, err

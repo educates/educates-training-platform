@@ -196,6 +196,22 @@ func TestSetRouterAddressWritesAMissingRouterFile(t *testing.T) {
 	}
 }
 
+// In a data home a 4.0 pre-release left, the address replaced is the one
+// the default config declared.
+func TestSetRouterAddressReplacesTheDefaultConfigsListenAddress(t *testing.T) {
+	dataHome := alphaDataHome(t)
+	inv := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, dataHome)
+
+	previous, err := inv.SetRouterAddress("10.10.10.2")
+
+	if err != nil || previous != "10.10.10.1" {
+		t.Fatalf("SetRouterAddress() = %q, %v, want 10.10.10.1 replaced", previous, err)
+	}
+	if got, err := LoadRouterAddress(dataHome, hostInterfaces); err != nil || got != "10.10.10.2" {
+		t.Errorf("LoadRouterAddress() = %q, %v, want 10.10.10.2, nil", got, err)
+	}
+}
+
 // An address the router address rules refuse is never written.
 func TestSetRouterAddressRefusesWhatCantServeLocalClusters(t *testing.T) {
 	for _, tc := range []struct {

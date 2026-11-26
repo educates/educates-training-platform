@@ -54,6 +54,52 @@ func TestLoadConfigMovesTheRegistryMirrorsOfANamedConfig(t *testing.T) {
 	assertRecordedMirrors(t, dataHome, v1alpha1.RegistryMirror{Mirror: "ghcr.io"})
 }
 
+// alphaDataHome writes a data home as a 4.0 pre-release left it: the
+// default config declares the address its cluster was served on, and
+// there is no router file. It returns the data home.
+func alphaDataHome(t *testing.T) string {
+	t.Helper()
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n")
+	return dataHome
+}
+
+// A named config that declares no domain takes it from the router
+// address, which a pre-release data home still holds in the default
+// config: it is moved to the router file first, whichever config is read.
+func TestLoadConfigOfANamedClusterMovesTheDefaultConfigsListenAddressToTheRouterFileFirst(t *testing.T) {
+	dataHome := alphaDataHome(t)
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader)
+
+	loaded, err := LoadConfig(namedID(t, "test2", dataHome))
+	if err != nil {
+		t.Fatalf("LoadConfig(test2): %v", err)
+	}
+
+	if got := loaded.Domain(); got != "test2.10-10-10-1.nip.io" {
+		t.Errorf("Domain() = %q, want test2.10-10-10-1.nip.io", got)
+	}
+	if got, err := LoadRouterAddress(dataHome, hostInterfaces); err != nil || got != "10.10.10.1" {
+		t.Errorf("LoadRouterAddress() = %q, %v, want the default config's address 10.10.10.1", got, err)
+	}
+	if body, err := os.ReadFile(Default(dataHome).ConfigPath); err != nil || strings.Contains(string(body), "listenAddress") {
+		t.Errorf("default config =\n%s\n(%v), want its listen address moved", body, err)
+	}
+}
+
+// What reads the router address alone, such as the router's status, the
+// list and serve, moves it too.
+func TestRouterAddressMovesTheDefaultConfigsListenAddressToTheRouterFileFirst(t *testing.T) {
+	dataHome := alphaDataHome(t)
+
+	got, err := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, dataHome).RouterAddress()
+
+	if err != nil || got != "10.10.10.1" {
+		t.Errorf("RouterAddress() = %q, %v, want the default config's address 10.10.10.1", got, err)
+	}
+}
+
 func TestLoadConfigAppliesTheRulesOfTheCluster(t *testing.T) {
 	dataHome := t.TempDir()
 	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")

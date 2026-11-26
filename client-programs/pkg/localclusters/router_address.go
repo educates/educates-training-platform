@@ -66,15 +66,36 @@ func configuredRouterAddress(dataHome string) (string, error) {
 }
 
 // loadRouterFile loads the router file of the data home dataHome, as
-// config.LoadLocalRouter loads it. A missing file is an error wrapping
-// fs.ErrNotExist that says how to write it.
+// config.LoadLocalRouter loads it, once a missing file has been written
+// from the default local cluster's config, as moveListenAddress writes
+// it. A file still missing is an error wrapping fs.ErrNotExist that says
+// how to write it.
 func loadRouterFile(dataHome string) (*v1alpha1.EducatesLocalRouter, error) {
 	router, err := config.LoadLocalRouter(dataHome)
+	if errors.Is(err, fs.ErrNotExist) {
+		if err := moveListenAddress(dataHome); err != nil {
+			return nil, err
+		}
+		router, err = config.LoadLocalRouter(dataHome)
+	}
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("%w. The router address, an IP address of a network interface of this host, "+
 			"must be set with:\n\n  %s", err, setRouterAddressCommand)
 	}
 	return router, err
+}
+
+// moveListenAddress moves the listen address the default local cluster's
+// config of the data home dataHome still declares, as a data home an
+// earlier release wrote has it, to the router file, as
+// config.MoveClusterListenAddress moves it, with a note on standard
+// error: it becomes the router address when the router file is missing.
+// Whatever reads or writes the router file of a data home that has none
+// moves it first, whichever local cluster it is for, so that a command
+// that reads a named cluster's config, or the router address alone, finds
+// the address the default config declared.
+func moveListenAddress(dataHome string) error {
+	return config.MoveClusterListenAddress(dataHome, config.LocalConfigPath(dataHome), os.Stderr)
 }
 
 // EnsureRouterFile writes the router file of the data home dataHome,
@@ -84,16 +105,24 @@ func loadRouterFile(dataHome string) (*v1alpha1.EducatesLocalRouter, error) {
 // address it wrote, or an empty string when the file exists: an existing
 // file is never overwritten, nor read.
 //
+// A missing file is first written from the listen address the default
+// local cluster's config still declares, as moveListenAddress writes it,
+// which then takes the place of the host's IP address, and the address
+// returned is empty.
+//
 // With no IP address of the host detected, or one the router address
 // rules refuse whatever the interfaces, nothing is written, and the error
 // says the router address must be set and how.
 func EnsureRouterFile(dataHome string) (string, error) {
 	path := config.LocalRouterPath(dataHome)
-	switch _, err := os.Stat(path); {
-	case err == nil:
-		return "", nil
-	case !errors.Is(err, fs.ErrNotExist):
-		return "", fmt.Errorf("read %s: %w", path, err)
+	if exists, err := routerFileExists(path); err != nil || exists {
+		return "", err
+	}
+	if err := moveListenAddress(dataHome); err != nil {
+		return "", err
+	}
+	if exists, err := routerFileExists(path); err != nil || exists {
+		return "", err
 	}
 	ip, err := hostinfo.DetectHostIP()
 	if err == nil {
@@ -112,6 +141,18 @@ func EnsureRouterFile(dataHome string) (string, error) {
 	return ip, nil
 }
 
+// routerFileExists reports whether the router file at path exists.
+func routerFileExists(path string) (bool, error) {
+	switch _, err := os.Stat(path); {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	default:
+		return false, fmt.Errorf("read %s: %w", path, err)
+	}
+}
+
 // SetRouterAddress makes the router file of the data home, router.yaml,
 // declare address as the router address, in its canonical form, once it
 // passes CheckRouterAddress against the host's interfaces, as
@@ -128,7 +169,7 @@ func (inv Inventory) SetRouterAddress(address string) (string, error) {
 		return "", err
 	}
 	previous := ""
-	switch router, err := config.LoadLocalRouter(inv.dataHome); {
+	switch router, err := loadRouterFile(inv.dataHome); {
 	case errors.Is(err, fs.ErrNotExist):
 	case err != nil:
 		return "", err

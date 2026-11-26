@@ -364,23 +364,21 @@ func checkConfig(ctx context.Context, cli *client.Client) error {
 	return nil
 }
 
-// Remove stops and removes the router container. A missing container is
-// no error.
+// Remove removes the router container, killing it first when it runs. A
+// missing container is no error.
+//
+// The router is removed only where its open connections are dropped
+// anyway, when it is re-created or deleted with the last local cluster,
+// so it is not stopped gracefully: the image stops HAProxy with SIGUSR1,
+// a soft stop that waits for every open connection, such as a terminal's,
+// to close.
 func Remove(ctx context.Context) error {
 	cli, err := docker.NewDockerClient()
 	if err != nil {
 		return errors.Wrap(err, "unable to create docker client")
 	}
 
-	if _, err := cli.ContainerInspect(ctx, ContainerName, client.ContainerInspectOptions{}); cerrdefs.IsNotFound(err) {
-		return nil
-	}
-
-	timeout := 30
-	if _, err := cli.ContainerStop(ctx, ContainerName, client.ContainerStopOptions{Timeout: &timeout}); err != nil && !cerrdefs.IsNotFound(err) {
-		return errors.Wrapf(err, "unable to stop router container %s", ContainerName)
-	}
-	if _, err := cli.ContainerRemove(ctx, ContainerName, client.ContainerRemoveOptions{}); err != nil && !cerrdefs.IsNotFound(err) {
+	if _, err := cli.ContainerRemove(ctx, ContainerName, client.ContainerRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
 		return errors.Wrapf(err, "unable to remove router container %s", ContainerName)
 	}
 	return nil

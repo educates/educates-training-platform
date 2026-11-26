@@ -116,7 +116,8 @@ Laptop installs migrate automatically
 
 For local kind-cluster users, the v4 CLI migrates your configuration on first use. When a v4 command needs the local config (`educates local cluster create`, `educates admin platform deploy --local-config`, ...) and finds a v3 `values.yaml` in the CLI data home with `clusterInfrastructure.provider` empty or `kind`, it:
 
-* translates it to a v4 ``config.yaml`` (``EducatesLocalConfig``), carrying over
+* translates it to a v4 ``config.yaml`` (``EducatesLocalConfig``), starting
+  with the schema modeline ``educates local config init`` writes, carrying over
   the ingress domain, kind cluster settings (listen address, API server,
   subnets, volume mounts), the local DNS resolver's extra domains, image
   version overrides, image pre-puller settings, website styling references,
@@ -148,12 +149,12 @@ published the cluster's ports 80 and 443 on every host address, as ``0.0.0.0``
 does. Every local cluster now publishes them on a specific IP address of the
 host, as described in [listen address](local-cluster-listen-address), so the
 migration sets a missing or ``0.0.0.0`` listen address to your host's IP
-address, with a line of the notice saying so. An alias added to a network
-interface, such as ``10.10.10.1``, survives network changes, where the host's
-IP address may not, so you may want to set ``cluster.listenAddress`` to one
-instead. When the host's IP address can't be detected, the migration leaves
-``cluster.listenAddress`` unset, and the notice says to set it. Any other
-listen address is kept as it was.
+address, with a comment above it and a line of the notice saying so. An alias
+added to a network interface, such as ``10.10.10.1``, survives network
+changes, where the host's IP address may not, so you may want to set
+``cluster.listenAddress`` to one instead. When the host's IP address can't be
+detected, the migration leaves ``cluster.listenAddress`` unset, and the notice
+says to set it. Any other listen address is kept as it was.
 
 The migration also drops ``localDNSResolver.targetAddress``. A local cluster's
 names now resolve to its ``cluster.listenAddress``. The migration does not set

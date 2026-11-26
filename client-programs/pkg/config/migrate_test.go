@@ -129,6 +129,15 @@ func TestMaybeMigrateV3_KindProvider_Migrates(t *testing.T) {
 	}
 }
 
+func TestMaybeMigrateV3_WritesTheSchemaModeline(t *testing.T) {
+	_, written, _ := migrateV3Values(t, v3KindValues)
+
+	const modeline = "# yaml-language-server: $schema=https://schemas.educates.dev/cli/v1alpha1/EducatesLocalConfig.json\n"
+	if !strings.HasPrefix(written, modeline+"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n") {
+		t.Errorf("migrated file does not start with the schema modeline and then the config:\n%s", written)
+	}
+}
+
 func TestMaybeMigrateV3_EmptyProvider_Migrates(t *testing.T) {
 	dataHome := t.TempDir()
 	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"),
@@ -576,6 +585,24 @@ func TestMaybeMigrateV3_ListenAddressOnEveryHostAddress_BecomesTheHostIP(t *test
 				}
 			}
 		})
+	}
+}
+
+func TestMaybeMigrateV3_ListenAddress_IsCommentedOnlyWhenItIsTheHostIP(t *testing.T) {
+	const comment = "cluster:\n" +
+		"  # This host's IP address when this file was written. An alias such as\n" +
+		"  # 10.10.10.1, added to a network interface, survives network changes.\n" +
+		"  listenAddress: 192.168.50.151\n"
+	stubHostIP(t, "192.168.50.151")
+
+	_, written, _ := migrateV3Values(t, "localKindCluster:\n  listenAddress: 0.0.0.0\n")
+	if !strings.Contains(written, comment) {
+		t.Errorf("migrated file does not comment the host's IP address as its listen address:\n%s", written)
+	}
+
+	_, written, _ = migrateV3Values(t, "localKindCluster:\n  listenAddress: 10.10.10.1\n")
+	if strings.Contains(written, "This host's IP address") {
+		t.Errorf("migrated file comments a listen address kept from v3 as the host's IP address:\n%s", written)
 	}
 }
 

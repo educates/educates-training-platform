@@ -83,7 +83,7 @@ The original %s file is left untouched; you can keep it as a
 reference while re-declaring.`, v3Path, provider, v3Path)
 	}
 
-	cfg, notes := translateV3ToV4(v3raw)
+	cfg, listenAddressIsHostIP, notes := translateV3ToV4(v3raw)
 	// v4 declares registry mirrors for every local cluster in a file of
 	// their own, written before the config, so a mirror is never lost: a
 	// migration that fails here leaves the v3 values.yaml in place.
@@ -96,14 +96,12 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 		notes = append(notes, mirrorsNote)
 	}
 	notes = append(notes, droppedNotes...)
-	out, err := yaml.Marshal(cfg)
+	// The config is written as `local config init` writes it, starting
+	// with the yaml-language-server modeline.
+	out, err := MarshalLocalConfig(cfg, listenAddressIsHostIP)
 	if err != nil {
-		return fmt.Errorf("marshal v4 config: %w", err)
+		return err
 	}
-	// Prepend the apiVersion/kind header line so the file reads
-	// naturally even though yaml.v2's inline TypeMeta marshal works
-	// fine — keeps the file consistent with what `local config init`
-	// emits.
 	if err := os.WriteFile(v4Path, out, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", v4Path, err)
 	}
@@ -186,10 +184,11 @@ v3 certificate:
 
 // translateV3ToV4 builds the v4 EducatesLocalConfig from a v3 values map
 // parsed as map[string]interface{}. Missing fields stay zero — the v4
-// schema defaults pick up the rest at load time. It also returns the
-// lines of the migration notice that say what it carried over in a
-// changed form or dropped.
-func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, []string) {
+// schema defaults pick up the rest at load time. It also returns whether
+// its cluster.listenAddress is the host's IP address the CLI detected,
+// and the lines of the migration notice that say what it carried over in
+// a changed form or dropped.
+func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, bool, []string) {
 	var notes []string
 	cfg := &v1alpha1.EducatesLocalConfig{
 		TypeMeta: v1alpha1.TypeMeta{
@@ -207,8 +206,9 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 	}
 
 	// cluster
+	var listenAddressIsHostIP bool
 	var note string
-	cfg.Cluster.ListenAddress, note = migrateV3ListenAddress(strV3Path(v3, "localKindCluster", "listenAddress"))
+	cfg.Cluster.ListenAddress, listenAddressIsHostIP, note = migrateV3ListenAddress(strV3Path(v3, "localKindCluster", "listenAddress"))
 	if note != "" {
 		notes = append(notes, note)
 	}
@@ -279,7 +279,7 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		}
 	}
 
-	return cfg, notes
+	return cfg, listenAddressIsHostIP, notes
 }
 
 // translateV3RegistryMirrors returns the registry mirrors of a v3 values
@@ -366,17 +366,17 @@ func migrateV3RegistryMirrors(dataHome string, mirrors []v1alpha1.RegistryMirror
 
 // migrateV3ListenAddress returns the cluster.listenAddress of the
 // migrated config for the v3 localKindCluster.listenAddress listenAddress,
-// with the line of the migration notice that says why it changed, empty
-// when it did not.
+// whether it is the host's IP address the CLI detected, and the line of
+// the migration notice that says why it changed, empty when it did not.
 //
 // v3 left a missing listen address to kind, which publishes the cluster's
 // ports on every host address, as 0.0.0.0 does, and every local cluster
 // now publishes them on a specific IP address of the host. Either becomes
 // the host's IP address, and with none detected, stays unset for the user
 // to set. Any other address is kept as it is.
-func migrateV3ListenAddress(listenAddress string) (string, string) {
+func migrateV3ListenAddress(listenAddress string) (string, bool, string) {
 	if listenAddress != "" && listenAddress != "0.0.0.0" {
-		return listenAddress, ""
+		return listenAddress, false, ""
 	}
 	was := "was not set"
 	if listenAddress != "" {
@@ -386,10 +386,10 @@ func migrateV3ListenAddress(listenAddress string) (string, string) {
 		"host address, and every local cluster now publishes them on a specific IP address of the host", was)
 	hostIP, err := hostinfo.DetectHostIP()
 	if err != nil || hostIP == "" {
-		return "", fmt.Sprintf("left cluster.listenAddress unset: %s, and no IP address of this host was detected. "+
+		return "", false, fmt.Sprintf("left cluster.listenAddress unset: %s, and no IP address of this host was detected. "+
 			"Set it with 'educates local config set cluster.listenAddress <ip>' before using the cluster", why)
 	}
-	return hostIP, fmt.Sprintf("set cluster.listenAddress to %s, this host's IP address: %s. An alias such as "+
+	return hostIP, true, fmt.Sprintf("set cluster.listenAddress to %s, this host's IP address: %s. An alias such as "+
 		"10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not",
 		hostIP, why)
 }

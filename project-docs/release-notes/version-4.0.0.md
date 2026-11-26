@@ -1314,8 +1314,9 @@ Features Changed
   that an alias added to a network interface, such as ``10.10.10.1``,
   survives network changes. The CLI's first-run migration of a version 3
   ``values.yaml`` sets a missing or ``0.0.0.0`` listen address to the
-  host's IP address, saying so in its notice. A missing listen address,
-  ``0.0.0.0`` and a loopback address such as ``127.0.0.1`` are refused
+  host's IP address, with the same comment, saying so in its notice. A
+  missing listen address, ``0.0.0.0`` and a loopback address such as
+  ``127.0.0.1`` are refused
   wherever the cluster is used, with an error naming
   ``cluster.listenAddress``, saying why, and giving the command that sets
   it, while ``educates local config get``, ``view`` and ``edit`` still open

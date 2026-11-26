@@ -186,3 +186,59 @@ func TestRenderContourValues_NonClusterIPLeavesExternalTrafficPolicy(t *testing.
 		}
 	}
 }
+
+func trustedHops(values map[string]any) (any, bool) {
+	inline, ok := values["configInline"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	network, ok := inline["network"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	hops, ok := network["num-trusted-hops"]
+	return hops, ok
+}
+
+// A None certificates provider with ingress.protocol https declares that
+// TLS ends in front of the cluster, at a proxy that sets the forwarded
+// headers: Envoy trusts that one hop, so X-Forwarded-Proto: https reaches
+// the backends instead of being overwritten with http.
+func TestRenderContourValues_TLSEndedInFrontTrustsOneHop(t *testing.T) {
+	obj := contourConfig(configv1alpha1.EnvoyServiceTypeClusterIP)
+	obj.Spec.Ingress.Certificates.Provider = configv1alpha1.CertificatesProviderNone
+	obj.Spec.Ingress.Protocol = configv1alpha1.IngressProtocolHTTPS
+
+	hops, ok := trustedHops(renderContourValues(obj))
+	if !ok || hops != 1 {
+		t.Fatalf("configInline.network.num-trusted-hops = %v (set %v), want 1", hops, ok)
+	}
+}
+
+// Envoy is the first proxy a request meets when it ends TLS itself, or when
+// the cluster serves plain HTTP: trusting a hop would let a client set the
+// forwarded headers, so Contour keeps its default of none.
+func TestRenderContourValues_NoProxyInFrontTrustsNoHop(t *testing.T) {
+	cases := map[string]func(*configv1alpha1.EducatesClusterConfig){
+		"None provider, plain HTTP": func(o *configv1alpha1.EducatesClusterConfig) {
+			o.Spec.Ingress.Certificates.Provider = configv1alpha1.CertificatesProviderNone
+		},
+		"None provider, protocol http": func(o *configv1alpha1.EducatesClusterConfig) {
+			o.Spec.Ingress.Certificates.Provider = configv1alpha1.CertificatesProviderNone
+			o.Spec.Ingress.Protocol = configv1alpha1.IngressProtocolHTTP
+		},
+		"certificate in the cluster, protocol https": func(o *configv1alpha1.EducatesClusterConfig) {
+			o.Spec.Ingress.Certificates.Provider = configv1alpha1.CertificatesProviderBundledCertManager
+			o.Spec.Ingress.Protocol = configv1alpha1.IngressProtocolHTTPS
+		},
+	}
+	for name, set := range cases {
+		t.Run(name, func(t *testing.T) {
+			obj := contourConfig(configv1alpha1.EnvoyServiceTypeLoadBalancer)
+			set(obj)
+			if hops, ok := trustedHops(renderContourValues(obj)); ok {
+				t.Fatalf("configInline.network.num-trusted-hops = %v, want it unset", hops)
+			}
+		})
+	}
+}

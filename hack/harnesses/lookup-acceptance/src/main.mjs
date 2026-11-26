@@ -33,9 +33,7 @@ const HELPER = path.resolve(HARNESS_DIR, "..", "local-cluster.sh");
 const DEFAULTS = {
   tag: "lookup-acceptance",
   lookupCluster: "lookup-acceptance-a",
-  lookupAddress: "10.10.10.18",
   remoteCluster: "lookup-acceptance-b",
-  remoteAddress: "10.10.10.19",
   sessions: 6,
 };
 
@@ -62,10 +60,8 @@ Deletes the clusters at the end.
                             this checkout's client-programs/bin/educates-<os>-<arch>)
   --lookup-cluster <name>   the cluster the Lookup Service is used on
                             (default: ${DEFAULTS.lookupCluster})
-  --lookup-address <ip>     its listen address (default: ${DEFAULTS.lookupAddress})
   --remote-cluster <name>   the cluster it reaches as a remote cluster
                             (default: ${DEFAULTS.remoteCluster})
-  --remote-address <ip>     its listen address (default: ${DEFAULTS.remoteAddress})
   --sessions <n>            new sessions to request, an even number from 2 to
                             ${MAX_SESSIONS} (default: ${DEFAULTS.sessions})
   --reuse                   use clusters an earlier run kept, created from the
@@ -103,9 +99,7 @@ function parseOptions() {
         tag: { type: "string", default: DEFAULTS.tag },
         cli: { type: "string" },
         "lookup-cluster": { type: "string", default: DEFAULTS.lookupCluster },
-        "lookup-address": { type: "string", default: DEFAULTS.lookupAddress },
         "remote-cluster": { type: "string", default: DEFAULTS.remoteCluster },
-        "remote-address": { type: "string", default: DEFAULTS.remoteAddress },
         sessions: { type: "string", default: String(DEFAULTS.sessions) },
         reuse: { type: "boolean", default: false },
         keep: { type: "boolean", default: false },
@@ -122,7 +116,6 @@ function parseOptions() {
     throw new UsageError(`--sessions must be an even number from 2 to ${MAX_SESSIONS}`);
   }
   if (values["lookup-cluster"] === values["remote-cluster"]) throw new UsageError("the two clusters need different names");
-  if (values["lookup-address"] === values["remote-address"]) throw new UsageError("the two clusters need different listen addresses");
   return { ...values, sessions };
 }
 
@@ -140,8 +133,8 @@ async function main() {
   const cli = resolvePath(options.cli) || defaultCli();
   if (!fs.existsSync(cli)) throw new UsageError(`no educates CLI at ${cli}; build it with 'make local-build PACKAGE_VERSION=${options.tag}' or pass --cli`);
 
-  const lookup = new LocalCluster({ name: options["lookup-cluster"], listenAddress: options["lookup-address"], cli, helper: HELPER });
-  const remote = new LocalCluster({ name: options["remote-cluster"], listenAddress: options["remote-address"], cli, helper: HELPER });
+  const lookup = new LocalCluster({ name: options["lookup-cluster"], cli, helper: HELPER });
+  const remote = new LocalCluster({ name: options["remote-cluster"], cli, helper: HELPER });
   const clusters = [lookup, remote];
   const deleteCommand = `run.sh --delete${clusterNameOptions(options)}`;
 
@@ -163,9 +156,6 @@ async function main() {
       throw new UsageError(`local cluster ${c.name} exists, left by an earlier run; pass --reuse to use it, or delete it with '${deleteCommand}'`);
     }
     if (marker.TAG !== options.tag) throw new UsageError(`local cluster ${c.name} runs build '${marker.TAG}', not '${options.tag}'; delete it with '${deleteCommand}'`);
-    if (marker.LISTEN_ADDRESS !== c.requestedAddress) {
-      throw new UsageError(`local cluster ${c.name} listens on ${marker.LISTEN_ADDRESS}, not ${c.requestedAddress}; pass its address`);
-    }
     markers.set(c.name, marker);
   }
 
@@ -213,7 +203,6 @@ async function main() {
     run.clusters = clusters.map((c) => ({
       name: c.name,
       role: c === lookup ? "runs the Lookup Service" : "remote",
-      listenAddress: c.listenAddress ?? c.requestedAddress,
       domain: c.domain,
       created: Boolean(c.created),
     }));
@@ -275,12 +264,15 @@ async function check(run, { lookup, remote, markers, say }) {
       say(`Using local cluster ${c.name}, which an earlier run kept`);
       continue;
     }
-    say(`Creating local cluster ${c.name} on ${c.requestedAddress} from build ${run.tag}; this takes several minutes`);
+    say(`Creating local cluster ${c.name} from build ${run.tag}; this takes several minutes`);
     await c.create(run.tag, say);
     c.created = true;
   }
 
   for (const c of clusters) await c.resolve();
+  // Every local cluster is served through the one router, so both clusters
+  // resolve to the same router address.
+  run.routerAddress = lookup.routerAddress;
   if (lookup.protocol !== remote.protocol) {
     throw new Error(`${lookup.name} is served over ${lookup.protocol} and ${remote.name} over ${remote.protocol}; the harness checks two clusters served the same way`);
   }
@@ -291,7 +283,7 @@ async function check(run, { lookup, remote, markers, say }) {
   if (lookup.protocol === "https" && lookup.caCertificate.trim() !== remote.caCertificate.trim()) {
     throw new Error(`the ingress CAs of ${lookup.name} and ${remote.name} differ, so the Lookup Service can't verify the remote portal; create both from one CLI data home`);
   }
-  say(`Lookup Service on ${lookup.name} (${lookup.protocol}://*.${lookup.domain} on ${lookup.listenAddress}); remote cluster ${remote.name} (${remote.protocol}://*.${remote.domain} on ${remote.listenAddress})`);
+  say(`Lookup Service on ${lookup.name} (${lookup.protocol}://*.${lookup.domain}); remote cluster ${remote.name} (${remote.protocol}://*.${remote.domain}); both through the router on ${run.routerAddress}`);
 
   run.lookupUrl = await waitFor(
     `the LookupService on ${lookup.name} becoming Ready`,

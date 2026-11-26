@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { parseClusterList } from "../../lib/local-cluster-list.mjs";
+import { routerAddressFor } from "../../lib/local-router-status.mjs";
 
 // run runs a command and resolves with its exit code and output. It never
 // rejects on a non-zero exit, so callers decide what a failure means. With
@@ -52,16 +53,15 @@ export async function mustRun(command, args, options) {
 }
 
 export class LocalCluster {
-  constructor({ name, listenAddress, cli, helper }) {
+  constructor({ name, cli, helper }) {
     this.name = name;
-    this.requestedAddress = listenAddress;
     this.cli = cli;
     this.helper = helper;
     this.context = `kind-educates-${name}`;
     // The CLI writes every local cluster's context into this file, whatever
     // KUBECONFIG says, so kubectl reads it from there too.
     this.kubeconfig = path.join(os.homedir(), ".kube", "config");
-    this.listenAddress = null;
+    this.routerAddress = null;
     this.domain = null;
     this.protocol = null;
     this.caCertificate = null;
@@ -86,7 +86,7 @@ export class LocalCluster {
   async create(tag, log) {
     const result = await run(
       this.helper,
-      ["create", this.name, "--listen-address", this.requestedAddress, "--tag", tag, "--cli", this.cli],
+      ["create", this.name, "--tag", tag, "--cli", this.cli],
       { timeout: 45 * 60_000, onLine: (line) => log(`  [${this.name}] ${line}`) },
     );
     if (result.code !== 0) throw new Error(`creating local cluster ${this.name} failed (exit ${result.code})`);
@@ -108,17 +108,18 @@ export class LocalCluster {
     return parseClusterList(list.stdout);
   }
 
-  // resolve reads the cluster's listen address and state from the CLI's
-  // list of local clusters, its ingress domain and protocol from its
-  // EducatesClusterConfig status, and, for a cluster served over HTTPS, its
-  // ingress CA certificate from the CA trust Secret the operator publishes.
-  // A cluster served over plain HTTP has no such Secret, and no CA
-  // certificate.
+  // resolve reads the cluster's state from the CLI's list of local clusters,
+  // its ingress domain and protocol from its EducatesClusterConfig status,
+  // the router address, where the router serves every local cluster, from
+  // the CLI's router status, which has to show the router running and
+  // sending the domain to this cluster, and, for a cluster served over
+  // HTTPS, its ingress CA certificate from the CA trust Secret the operator
+  // publishes. A cluster served over plain HTTP has no such Secret, and no
+  // CA certificate.
   async resolve() {
     const row = (await this.listed()).find((r) => r.context === this.context);
     if (!row) throw new Error(`local cluster ${this.name} (kube context ${this.context}) is not in 'educates local cluster list'`);
     if (row.state !== "running") throw new Error(`local cluster ${this.name} is ${row.state}, not running`);
-    this.listenAddress = row.listenAddress;
     const config = await this.kubectlJson(["get", "educatesclusterconfigs.config.educates.dev", "cluster"]);
     const ingress = config.status?.ingress ?? {};
     if (!ingress.domain || !ingress.protocol) {
@@ -126,6 +127,8 @@ export class LocalCluster {
     }
     this.domain = ingress.domain;
     this.protocol = ingress.protocol;
+    const status = await mustRun(this.cli, ["local", "router", "status"]);
+    this.routerAddress = routerAddressFor(status.stdout, { name: this.name, domain: this.domain });
     this.caCertificate = null;
     if (this.protocol !== "https") return this;
     const secret = await this.kubectlJson(["-n", "educates-installer", "get", "secret", "educates-ingress-ca"]);
@@ -137,7 +140,7 @@ export class LocalCluster {
   }
 
   // serves reports whether a URL's host is one of this cluster's ingress
-  // names, which resolve to its listen address.
+  // names, which the router at the router address sends to this cluster.
   serves(url) {
     const host = new URL(url).hostname;
     return host === this.domain || host.endsWith(`.${this.domain}`);

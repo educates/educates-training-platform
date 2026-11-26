@@ -131,7 +131,7 @@ async function main() {
     throw new UsageError(e.message);
   }
   const cliVersion = (await mustRun(cli, ["version", "--full"])).stderr.trim() || "unknown";
-  say(`Driving ${cluster.description} (${cluster.context}): ${cluster.protocol}://*.${cluster.domain} on ${cluster.listenAddress}`);
+  say(`Driving ${cluster.description} (${cluster.context}): ${cluster.protocol}://*.${cluster.domain} through the router on ${cluster.routerAddress}`);
   say(`CLI ${cli} (${cliVersion}), profile ${profileName}, fixtures ${fixtures.map((f) => f.name).join(", ")}`);
 
   const outDir = resolvePath(values.out) || path.join(HARNESS_DIR, "results", `${timestamp()}-${clusterName || "default"}`);

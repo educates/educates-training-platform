@@ -57,8 +57,11 @@ them against what the change intends.
   they do for a cluster under `educates.test` with the local DNS resolver
   running, or on its `nip.io` name, and over HTTPS its CA must be trusted,
   as `educates local secrets add ca` arranges. Chrome needs neither: the
-  harness maps the cluster's names to its listen address in Chrome itself
+  harness maps the cluster's names to the router address in Chrome itself
   and accepts its certificate.
+- The router, which `educates local cluster create` makes, running and
+  sending the cluster's domain to the cluster, as `educates local router
+  status` shows.
 
 ## Running it
 
@@ -70,10 +73,15 @@ The cluster is selected as the CLI selects it: `--local-cluster <name>`,
 else `EDUCATES_LOCAL_CLUSTER`, else the default local cluster. The harness
 reaches the cluster only through its own kube context, `kind-educates` or
 `kind-educates-<name>`, whatever the current context is, and runs every
-`educates` command with the cluster selected. It reads the cluster's listen
-address from `educates local cluster list`, and its ingress domain and
-protocol from the cluster's `EducatesClusterConfig` status, so it works the
-same over HTTPS and plain HTTP.
+`educates` command with the cluster selected. It reads the cluster's state
+from `educates local cluster list`, its ingress domain and protocol from
+the cluster's `EducatesClusterConfig` status, so it works the same over
+HTTPS and plain HTTP, and the router address from `educates local router
+status`. Every local cluster is served through the router on that one
+address, which sends each request to the cluster that owns its name, so
+Chrome reaches the cluster at the router address. The harness refuses to
+start when the router does not run, or does not send the cluster's domain
+to the cluster.
 
 To reach a cluster served over plain HTTP, the harness's Chrome runs with
 its `HttpsFirstBalancedModeAutoEnable` feature turned off. Chrome turns its
@@ -289,8 +297,9 @@ gitignored.
 
 ## Tests
 
-Finding the cluster in the CLI's list of local clusters has unit tests,
-which need no cluster. `npm test` also runs the tests of the modules in
+Finding the cluster in the CLI's list of local clusters, and the router
+address it is reached on in the CLI's router status, has unit tests, which
+need no cluster. `npm test` also runs the tests of the modules in
 [`lib/`](../lib/) that the harness shares with the other harnesses:
 
 ```

@@ -46,12 +46,13 @@ export function markdownReport(run) {
   out.push(`- Started ${run.started}, finished ${run.finished}`);
   out.push(`- Build tag \`${run.tag}\`, CLI \`${run.cli}\` (${run.cliVersion})`);
   out.push(`- Lookup Service: ${run.lookupUrl ?? "not reached"}`);
+  out.push(`- Router address, where both clusters are served: ${run.routerAddress ?? "not read"}`);
   out.push(`- New sessions requested: ${run.sessions}, each portal and environment with room for ${run.capacity}`);
   out.push("");
   out.push(
     table(
-      ["Cluster", "Role", "Listen address", "Domain", "Created by this run", "Kept"],
-      run.clusters.map((c) => [c.name, c.role, c.listenAddress, c.domain, c.created ? "yes" : "no", run.keep ? "yes" : "no"]),
+      ["Cluster", "Role", "Domain", "Created by this run", "Kept"],
+      run.clusters.map((c) => [c.name, c.role, c.domain, c.created ? "yes" : "no", run.keep ? "yes" : "no"]),
     ),
   );
   out.push("");

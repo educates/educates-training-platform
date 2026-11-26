@@ -29,8 +29,9 @@ export function defaultChrome() {
 }
 
 // launchBrowser starts Chrome with a throwaway profile, mapping every name
-// under the cluster's ingress domain to the cluster's listen address, the
-// only address its ingress is published on. Chrome enables its HTTPS-First
+// under the cluster's ingress domain to the router address, where the
+// router serves every local cluster and sends each name to its cluster,
+// whatever the host's resolver answers for it. Chrome enables its HTTPS-First
 // balanced mode by itself, which makes headless Chrome refuse a page served
 // over plain HTTP with net::ERR_BLOCKED_BY_CLIENT, so that is turned off for
 // a cluster served over plain HTTP; it changes nothing for one over HTTPS.
@@ -41,7 +42,7 @@ export function launchBrowser({ chrome, cluster, profileDir, headful }) {
     userDataDir: profileDir,
     acceptInsecureCerts: true,
     args: [
-      `--host-resolver-rules=MAP *.${cluster.domain} ${cluster.listenAddress}`,
+      `--host-resolver-rules=MAP *.${cluster.domain} ${cluster.routerAddress}`,
       "--disable-features=HttpsFirstBalancedModeAutoEnable",
       "--window-size=1600,1000",
       "--no-first-run",

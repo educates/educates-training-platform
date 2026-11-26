@@ -23,7 +23,8 @@ Every local cluster is served through one router, the Docker container `educates
 
 The router address lives in `router.yaml` in the data home, a file of its own beside the cluster configurations, since it is shared by every cluster:
 
-```
+```yaml
+# yaml-language-server: $schema=https://schemas.educates.dev/cli/v1alpha1/EducatesLocalRouter.json
 apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalRouter
 # This host's IP address when this file was written. An alias such as
@@ -31,7 +32,7 @@ kind: EducatesLocalRouter
 address: 192.168.1.10
 ```
 
-`educates local config init`, `educates local cluster create` and `educates local cluster start` write `router.yaml` when it is missing, with the IP address of your host and the comment above. When the IP address of your host can't be detected, they write nothing and fail, saying that the router address must be set. An existing `router.yaml` is never overwritten. The router address must be a specific IP address of a network interface of your host:
+`educates local config init`, `educates local cluster create` and `educates local cluster start` write `router.yaml` when it is missing, with the IP address of your host and the comment above. The first line points an editor with a YAML language server at the schema of the file, so it validates the file and completes its field, and `educates local config explain --kind router` describes it. When the IP address of your host can't be detected, they write nothing and fail, saying that the router address must be set. An existing `router.yaml` is never overwritten. The router address must be a specific IP address of a network interface of your host:
 
 * It cannot be `0.0.0.0` or `::`, which names no address the clusters' names could resolve to.
 

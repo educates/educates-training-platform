@@ -64,10 +64,10 @@ func TestRenderRouterRoutesAClusterDomainToItsControlPlaneNodeOnPort80(t *testin
 	dataHome := t.TempDir()
 
 	files := RenderRouter([]RouterRoute{{
-		Cluster: Default(dataHome),
-		Names:   []string{"educates.test"},
-		Node:    "educates-control-plane",
-		State:   Running,
+		Cluster:       Default(dataHome),
+		IngressDomain: "educates.test",
+		Node:          "educates-control-plane",
+		State:         Running,
 	}})
 
 	wantEntries(t, mapEntries(t, files), ".educates.test educates")
@@ -86,8 +86,8 @@ func TestRenderRouterOrdersTheMostSpecificDomainFirstAcrossClusters(t *testing.T
 	test2 := namedID(t, "test2", dataHome)
 
 	files := RenderRouter([]RouterRoute{
-		{Cluster: Default(dataHome), Names: []string{"educates.test", "Apps.Example.Test"}, Node: "educates-control-plane", State: Running},
-		{Cluster: test2, Names: []string{"test2.educates.test", "example.test"}, Node: "educates-test2-control-plane", State: Running},
+		{Cluster: Default(dataHome), IngressDomain: "educates.test", ExtraDomains: []string{"Apps.Example.Test"}, Node: "educates-control-plane", State: Running},
+		{Cluster: test2, IngressDomain: "test2.educates.test", ExtraDomains: []string{"example.test"}, Node: "educates-test2-control-plane", State: Running},
 	})
 
 	// Domains of as many labels are in no particular order to the router,
@@ -117,8 +117,8 @@ func TestRenderRouterListsEveryServedDomainInThe404(t *testing.T) {
 	dataHome := t.TempDir()
 
 	files := RenderRouter([]RouterRoute{
-		{Cluster: Default(dataHome), Names: []string{"educates.test", "example.test"}, Node: "educates-control-plane", State: Running},
-		{Cluster: namedID(t, "test2", dataHome), Names: []string{"test2.10-10-10-1.nip.io"}, Node: "educates-test2-control-plane", State: Stopped},
+		{Cluster: Default(dataHome), IngressDomain: "educates.test", ExtraDomains: []string{"example.test"}, Node: "educates-control-plane", State: Running},
+		{Cluster: namedID(t, "test2", dataHome), IngressDomain: "test2.10-10-10-1.nip.io", Node: "educates-test2-control-plane", State: Stopped},
 	})
 
 	want := `No local cluster serves this name. The router serves these domains,
@@ -147,8 +147,8 @@ func TestRenderRouterNamesEachClusterAndItsStartCommandInIts503(t *testing.T) {
 	dataHome := t.TempDir()
 
 	files := RenderRouter([]RouterRoute{
-		{Cluster: Default(dataHome), Names: []string{"10-10-10-1.nip.io"}, Node: "educates-control-plane", State: Running},
-		{Cluster: namedID(t, "test2", dataHome), Names: []string{"test2.educates.test"}, Node: "educates-test2-control-plane", State: Stopped},
+		{Cluster: Default(dataHome), IngressDomain: "10-10-10-1.nip.io", Node: "educates-control-plane", State: Running},
+		{Cluster: namedID(t, "test2", dataHome), IngressDomain: "test2.educates.test", Node: "educates-test2-control-plane", State: Stopped},
 	})
 
 	for name, want := range map[string]string{
@@ -168,7 +168,7 @@ func TestRenderRouterNamesEachClusterAndItsStartCommandInIts503(t *testing.T) {
 // and the router answers with the cluster's 503.
 func TestRenderRouterRendersTheSameFilesForAStoppedCluster(t *testing.T) {
 	dataHome := t.TempDir()
-	route := RouterRoute{Cluster: Default(dataHome), Names: []string{"educates.test"}, Node: "educates-control-plane", State: Running}
+	route := RouterRoute{Cluster: Default(dataHome), IngressDomain: "educates.test", Node: "educates-control-plane", State: Running}
 	stopped := route
 	stopped.State = Stopped
 
@@ -181,11 +181,11 @@ func TestRenderRouterRendersTheSameFilesForAStoppedCluster(t *testing.T) {
 	}
 }
 
-func TestRenderRouterLeavesOutARouteWithNoNames(t *testing.T) {
+func TestRenderRouterLeavesOutARouteWithNoDomains(t *testing.T) {
 	dataHome := t.TempDir()
 
 	files := RenderRouter([]RouterRoute{
-		{Cluster: Default(dataHome), Names: []string{"educates.test"}, Node: "educates-control-plane", State: Running},
+		{Cluster: Default(dataHome), IngressDomain: "educates.test", Node: "educates-control-plane", State: Running},
 		{Cluster: namedID(t, "test2", dataHome), Node: "educates-test2-control-plane", State: Running},
 	})
 
@@ -208,7 +208,7 @@ func TestRenderRouterLeavesOutARouteWithNoNames(t *testing.T) {
 // whose server name no route matches, since the router has no certificate
 // to answer with.
 func TestRenderRouterRoutesPort443ByTheTLSServerName(t *testing.T) {
-	files := RenderRouter([]RouterRoute{{Cluster: Default(t.TempDir()), Names: []string{"educates.test"}, Node: "educates-control-plane"}})
+	files := RenderRouter([]RouterRoute{{Cluster: Default(t.TempDir()), IngressDomain: "educates.test", Node: "educates-control-plane"}})
 
 	want := `frontend https
     mode tcp
@@ -233,8 +233,8 @@ func TestRenderRouterPassesEachClusterTLSThroughToItsControlPlaneNodeOnPort443(t
 	dataHome := t.TempDir()
 
 	files := RenderRouter([]RouterRoute{
-		{Cluster: Default(dataHome), Names: []string{"educates.test"}, Node: "educates-control-plane", State: Running},
-		{Cluster: namedID(t, "test2", dataHome), Names: []string{"test2.educates.test"}, Node: "educates-test2-control-plane", State: Stopped},
+		{Cluster: Default(dataHome), IngressDomain: "educates.test", Node: "educates-control-plane", State: Running},
+		{Cluster: namedID(t, "test2", dataHome), IngressDomain: "test2.educates.test", Node: "educates-test2-control-plane", State: Stopped},
 	})
 
 	for header, want := range map[string]string{
@@ -254,7 +254,7 @@ func TestRenderRouterPassesEachClusterTLSThroughToItsControlPlaneNodeOnPort443(t
 // leading dot so a domain matches itself and every name under it, answers
 // a name no route matches with the 404, and never redirects to https.
 func TestRenderRouterRoutesPort80ByTheHostHeader(t *testing.T) {
-	files := RenderRouter([]RouterRoute{{Cluster: Default(t.TempDir()), Names: []string{"educates.test"}, Node: "educates-control-plane"}})
+	files := RenderRouter([]RouterRoute{{Cluster: Default(t.TempDir()), IngressDomain: "educates.test", Node: "educates-control-plane"}})
 
 	want := `frontend http
     mode http

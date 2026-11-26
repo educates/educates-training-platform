@@ -46,7 +46,8 @@ func endingTLS(t *testing.T, dataHome, name, domain string, extra ...string) Rou
 	id := namedID(t, name, dataHome)
 	return RouterRoute{
 		Cluster:         id,
-		Names:           append([]string{domain}, extra...),
+		IngressDomain:   domain,
+		ExtraDomains:    extra,
 		Node:            id.ControlPlaneNode(),
 		State:           Running,
 		TLSEndsAtRouter: true,
@@ -101,7 +102,7 @@ func TestRouterRoutesEndTLSAtTheRouterForAClusterThatAsksForIt(t *testing.T) {
 // TLS passes through as before.
 func TestRenderRouterEndsTLSForOneClusterBesideAnotherPassingItThrough(t *testing.T) {
 	dataHome := t.TempDir()
-	passthrough := RouterRoute{Cluster: Default(dataHome), Names: []string{"educates.test"}, Node: "educates-control-plane", State: Running}
+	passthrough := RouterRoute{Cluster: Default(dataHome), IngressDomain: "educates.test", Node: "educates-control-plane", State: Running}
 	ended := endingTLS(t, dataHome, "tls1", "TLS1.test", "extra.test")
 
 	files := RenderRouter([]RouterRoute{passthrough, ended}, routerCertificateFor("TLS1.test"))
@@ -160,7 +161,7 @@ func TestRenderRouterEndsTLSForOneClusterBesideAnotherPassingItThrough(t *testin
 // With no cluster ending TLS at the router, the router holds no
 // certificate and ends TLS for nothing.
 func TestRenderRouterWithNoClusterEndingTLSHasNoCertificate(t *testing.T) {
-	files := RenderRouter([]RouterRoute{{Cluster: Default(t.TempDir()), Names: []string{"educates.test"}, Node: "educates-control-plane"}},
+	files := RenderRouter([]RouterRoute{{Cluster: Default(t.TempDir()), IngressDomain: "educates.test", Node: "educates-control-plane"}},
 		routerCertificateFor("educates.test"))
 
 	if cfg := renderedFile(t, files, "haproxy.cfg"); strings.Contains(cfg, "tls_ended") || strings.Contains(cfg, " crt ") {

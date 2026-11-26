@@ -23,8 +23,8 @@ const routerServer = "the router"
 // the router serves no cluster that does not exist, so a config in the
 // data home routes nothing until its cluster is created.
 //
-// A cluster's names are its ingress domain, declared or derived as
-// LoadedConfig.Domain gives it, then its resolver.extraDomains, each once,
+// A cluster's domains are its ingress domain, declared or derived as
+// LoadedConfig.Domain gives it, and its resolver.extraDomains, each once,
 // which the local DNS resolver points at the router address. The router
 // ends TLS for a cluster whose config sets ingress.externalTLSTermination,
 // and passes it through for every other.
@@ -59,22 +59,28 @@ func (inv Inventory) RouterRoutes(given ...LoadedConfig) ([]RouterRoute, []error
 			leftOut = append(leftOut, leftOutBy(routerServer, id, err))
 			continue
 		}
-		var names []string
-		for _, name := range servedNames(loaded.Domain(), "", fields.resolver.ExtraDomains, "") {
-			names = append(names, name.domain)
-		}
-		routes = append(routes, RouterRoute{
+		route := RouterRoute{
 			Cluster:         id,
-			Names:           names,
+			IngressDomain:   loaded.Domain(),
 			Node:            id.ControlPlaneNode(),
 			State:           id.State(inv.observed.Nodes),
 			TLSEndsAtRouter: endsTLSAtRouter(loaded.Config) && loaded.Domain() != "",
-		})
+		}
+		// servedNames gives the ingress domain first, when there is one,
+		// then each extra domain it does not already give.
+		served := servedNames(route.IngressDomain, "", fields.resolver.ExtraDomains, "")
+		if route.IngressDomain != "" {
+			served = served[1:]
+		}
+		for _, name := range served {
+			route.ExtraDomains = append(route.ExtraDomains, name.domain)
+		}
+		routes = append(routes, route)
 	}
 
 	claims := make([]claimedNames, 0, len(routes))
 	for _, r := range routes {
-		claims = append(claims, claimedNames{id: r.Cluster, names: r.Names})
+		claims = append(claims, claimedNames{id: r.Cluster, names: r.Domains()})
 	}
 	if err := checkDomainsClaimedOnce(claims); err != nil {
 		return nil, nil, err

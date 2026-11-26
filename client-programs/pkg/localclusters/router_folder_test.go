@@ -37,7 +37,7 @@ func folderFiles(t *testing.T, dir string) map[string]string {
 
 func TestWriteRouterFolderWritesTheRenderedFiles(t *testing.T) {
 	dataHome := t.TempDir()
-	files := RenderRouter([]RouterRoute{{Cluster: Default(dataHome), Names: []string{"educates.test"}, Node: "educates-control-plane"}})
+	files := RenderRouter([]RouterRoute{{Cluster: Default(dataHome), IngressDomain: "educates.test", Node: "educates-control-plane"}})
 
 	if err := WriteRouterFolder(dataHome, files); err != nil {
 		t.Fatalf("WriteRouterFolder: %v", err)
@@ -67,13 +67,13 @@ func TestWriteRouterFolderRemovesTheFilesNoLongerRendered(t *testing.T) {
 	dataHome := t.TempDir()
 	test2 := namedID(t, "test2", dataHome)
 	both := RenderRouter([]RouterRoute{
-		{Cluster: Default(dataHome), Names: []string{"educates.test"}, Node: "educates-control-plane"},
-		{Cluster: test2, Names: []string{"test2.educates.test"}, Node: "educates-test2-control-plane"},
+		{Cluster: Default(dataHome), IngressDomain: "educates.test", Node: "educates-control-plane"},
+		{Cluster: test2, IngressDomain: "test2.educates.test", Node: "educates-test2-control-plane"},
 	})
 	if err := WriteRouterFolder(dataHome, append(both, RouterFile{Name: "certs/test2.educates.test.pem", Content: []byte("x")})); err != nil {
 		t.Fatalf("WriteRouterFolder: %v", err)
 	}
-	one := RenderRouter([]RouterRoute{{Cluster: Default(dataHome), Names: []string{"educates.test"}, Node: "educates-control-plane"}})
+	one := RenderRouter([]RouterRoute{{Cluster: Default(dataHome), IngressDomain: "educates.test", Node: "educates-control-plane"}})
 
 	if err := WriteRouterFolder(dataHome, one); err != nil {
 		t.Fatalf("WriteRouterFolder: %v", err)

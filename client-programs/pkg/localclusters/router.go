@@ -28,16 +28,20 @@ const (
 	routerNotFoundFile = "404.txt"
 )
 
-// RouterRoute is what the router serves for one local cluster: the names
-// it sends to the cluster, and where it sends them.
+// RouterRoute is what the router serves for one local cluster: the
+// domains it sends to the cluster, and where it sends them. A domain
+// matches itself and every name under it.
 type RouterRoute struct {
 	// Cluster is the local cluster's identity.
 	Cluster Identity
 
-	// Names are the domains the router sends to the cluster: its ingress
-	// domain, declared or derived, then its resolver.extraDomains, each
-	// once. A domain matches itself and every name under it.
-	Names []string
+	// IngressDomain is the cluster's ingress domain, declared or derived,
+	// empty when its config declares none.
+	IngressDomain string
+
+	// ExtraDomains are the cluster's resolver.extraDomains, each once, and
+	// none of them its ingress domain.
+	ExtraDomains []string
 
 	// Node is the name of the container of the cluster's control-plane
 	// node, which the router reaches through Docker's DNS: Envoy listens
@@ -51,11 +55,19 @@ type RouterRoute struct {
 
 	// TLSEndsAtRouter reports whether the router ends TLS for the cluster,
 	// as its ingress.externalTLSTermination asks, rather than passing it
-	// through: for its ingress domain, the first of Names, with the
-	// certificate the router holds for it. The names under its extra
-	// domains, which that certificate does not cover, are served on port
-	// 80 only.
+	// through: for its ingress domain, with the certificate the router
+	// holds for it. The names under its extra domains, which that
+	// certificate does not cover, are served on port 80 only.
 	TLSEndsAtRouter bool
+}
+
+// Domains returns the domains the router sends to the cluster of route r:
+// its ingress domain, when it has one, then its extra domains.
+func (r RouterRoute) Domains() []string {
+	if r.IngressDomain == "" {
+		return r.ExtraDomains
+	}
+	return append([]string{r.IngressDomain}, r.ExtraDomains...)
 }
 
 // RouterFile is a file of the router folder, config.LocalRouterDir, as
@@ -124,9 +136,9 @@ type RouterCertificate struct {
 // Each node is found by its container name through Docker's embedded DNS,
 // and its address resolved again every second, so a stopped cluster never
 // stops the router from starting, and a node that comes back on another
-// address is reached there. A route with no names is left out.
+// address is reached there. A route with no domains is left out.
 func RenderRouter(routes []RouterRoute, certificates ...RouterCertificate) []RouterFile {
-	routes = slices.DeleteFunc(slices.Clone(routes), func(r RouterRoute) bool { return len(r.Names) == 0 })
+	routes = slices.DeleteFunc(slices.Clone(routes), func(r RouterRoute) bool { return len(r.Domains()) == 0 })
 	ended := certificatesOfRoutes(routes, certificates)
 
 	files := []RouterFile{
@@ -154,8 +166,8 @@ func RenderRouter(routes []RouterRoute, certificates ...RouterCertificate) []Rou
 func RouterCertificateDomains(routes []RouterRoute) []string {
 	var domains []string
 	for _, r := range routes {
-		if r.TLSEndsAtRouter && len(r.Names) > 0 {
-			domains = append(domains, r.Names[0])
+		if r.TLSEndsAtRouter && r.IngressDomain != "" {
+			domains = append(domains, r.IngressDomain)
 		}
 	}
 	return domains
@@ -174,7 +186,7 @@ func certificatesOfRoutes(routes []RouterRoute, certificates []RouterCertificate
 		if !r.TLSEndsAtRouter {
 			continue
 		}
-		if c, ok := byDomain[domainKey(r.Names[0])]; ok {
+		if c, ok := byDomain[domainKey(r.IngressDomain)]; ok {
 			ended[routeKey(r.Cluster)] = c
 		}
 	}
@@ -372,7 +384,7 @@ backend tls_%s
     # the certificate does not cover, is closed, as an unknown name is.
     tcp-request content reject unless { str(.),concat(,sess.sni,) -m end .%s }
     server tls_ended %s send-proxy-v2
-`, routeKey(r.Cluster), domainKey(r.Names[0]), tlsEndedAddress)
+`, routeKey(r.Cluster), domainKey(r.IngressDomain), tlsEndedAddress)
 	}
 }
 
@@ -401,7 +413,7 @@ func renderHostMap(routes []RouterRoute) string {
 	type entry struct{ domain, key string }
 	var entries []entry
 	for _, r := range routes {
-		for _, name := range r.Names {
+		for _, name := range r.Domains() {
 			entries = append(entries, entry{domain: domainKey(name), key: routeKey(r.Cluster)})
 		}
 	}
@@ -430,7 +442,7 @@ func renderNotFound(routes []RouterRoute) string {
 	b.WriteString("No local cluster serves this name. The router serves these domains,\n" +
 		"each with every name under it:\n\n")
 	for _, r := range routes {
-		for _, name := range r.Names {
+		for _, name := range r.Domains() {
 			fmt.Fprintf(&b, "  %s (%s)\n", name, r.Cluster.Description())
 		}
 	}

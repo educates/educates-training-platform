@@ -20,19 +20,20 @@ func kindControlPlane(kindName string, running bool) NodeContainer {
 }
 
 // routeSummary is what a test compares of a route: its cluster by kind
-// name, its names, its node and its state.
+// name, its ingress and extra domains, its node and its state.
 type routeSummary struct {
-	KindName string
-	Names    []string
-	Node     string
-	State    State
+	KindName      string
+	IngressDomain string
+	ExtraDomains  []string
+	Node          string
+	State         State
 }
 
 // summarizeRoutes returns the summaries of routes, in order.
 func summarizeRoutes(routes []RouterRoute) []routeSummary {
 	summaries := make([]routeSummary, 0, len(routes))
 	for _, r := range routes {
-		summaries = append(summaries, routeSummary{KindName: r.Cluster.KindName, Names: r.Names, Node: r.Node, State: r.State})
+		summaries = append(summaries, routeSummary{KindName: r.Cluster.KindName, IngressDomain: r.IngressDomain, ExtraDomains: r.ExtraDomains, Node: r.Node, State: r.State})
 	}
 	return summaries
 }
@@ -82,9 +83,9 @@ func TestRouterRoutesServeEveryEducatesClusterRunningOrStopped(t *testing.T) {
 	})
 
 	wantRoutes(t, routes,
-		routeSummary{KindName: "educates", Names: []string{"educates.test", "example.test"},
+		routeSummary{KindName: "educates", IngressDomain: "educates.test", ExtraDomains: []string{"example.test"},
 			Node: "educates-control-plane", State: Running},
-		routeSummary{KindName: "educates-test2", Names: []string{"test2.educates.test"},
+		routeSummary{KindName: "educates-test2", IngressDomain: "test2.educates.test",
 			Node: "educates-test2-control-plane", State: Stopped},
 	)
 }
@@ -100,7 +101,7 @@ func TestRouterRoutesLeaveOutAClusterThatDoesNotExist(t *testing.T) {
 
 	routes := routerRoutes(t, dataHome, []NodeContainer{kindControlPlane("educates-test2", true)})
 
-	wantRoutes(t, routes, routeSummary{KindName: "educates-test2", Names: []string{"test2.educates.test"},
+	wantRoutes(t, routes, routeSummary{KindName: "educates-test2", IngressDomain: "test2.educates.test",
 		Node: "educates-test2-control-plane", State: Running})
 }
 
@@ -111,7 +112,7 @@ func TestRouterRoutesServeTheDefaultClusterAtTheNipDomainOfTheRouterAddress(t *t
 
 	routes := routerRoutes(t, dataHome, []NodeContainer{kindControlPlane("educates", true)})
 
-	wantRoutes(t, routes, routeSummary{KindName: "educates", Names: []string{"10-10-10-1.nip.io"},
+	wantRoutes(t, routes, routeSummary{KindName: "educates", IngressDomain: "10-10-10-1.nip.io",
 		Node: "educates-control-plane", State: Running})
 }
 
@@ -136,11 +137,11 @@ func TestRouterRoutesServeNamedClustersByNameMostSpecificDomainFirst(t *testing.
 	})
 
 	wantRoutes(t, routes,
-		routeSummary{KindName: "educates", Names: []string{"10-10-10-1.nip.io", "educates.test"},
+		routeSummary{KindName: "educates", IngressDomain: "10-10-10-1.nip.io", ExtraDomains: []string{"educates.test"},
 			Node: "educates-control-plane", State: Running},
-		routeSummary{KindName: "educates-pr1341", Names: []string{"pr1341.educates.test", "apps.example.test"},
+		routeSummary{KindName: "educates-pr1341", IngressDomain: "pr1341.educates.test", ExtraDomains: []string{"apps.example.test"},
 			Node: "educates-pr1341-control-plane", State: Stopped},
-		routeSummary{KindName: "educates-test2", Names: []string{"test2.10-10-10-1.nip.io"},
+		routeSummary{KindName: "educates-test2", IngressDomain: "test2.10-10-10-1.nip.io",
 			Node: "educates-test2-control-plane", State: Running},
 	)
 	wantEntries(t, mapEntries(t, RenderRouter(routes)),
@@ -163,7 +164,7 @@ func TestRouterRoutesServeAClusterBeingCreatedFromItsGivenConfig(t *testing.T) {
 	routes := routerRoutes(t, dataHome, nil,
 		givenLoadedConfig(t, test2, localConfigHeader+"ingress:\n  domain: test2.educates.test\n"))
 
-	wantRoutes(t, routes, routeSummary{KindName: "educates-test2", Names: []string{"test2.educates.test"},
+	wantRoutes(t, routes, routeSummary{KindName: "educates-test2", IngressDomain: "test2.educates.test",
 		Node: "educates-test2-control-plane", State: Stopped})
 }
 
@@ -186,7 +187,7 @@ func TestRouterRoutesLeaveOutAClusterWhoseConfigTheyCannotUse(t *testing.T) {
 		t.Fatalf("RouterRoutes: %v", err)
 	}
 
-	wantRoutes(t, routes, routeSummary{KindName: "educates", Names: []string{"educates.test"},
+	wantRoutes(t, routes, routeSummary{KindName: "educates", IngressDomain: "educates.test",
 		Node: "educates-control-plane", State: Running})
 	if len(leftOut) != 2 {
 		t.Fatalf("left out %v, want test2's and test3's configs", leftOut)

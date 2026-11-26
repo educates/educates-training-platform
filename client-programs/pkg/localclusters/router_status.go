@@ -151,26 +151,26 @@ func (inv Inventory) RouterStatus(image string) (RouterStatus, error) {
 	}
 
 	for _, r := range routes {
-		names := r.Names
-		if len(names) == 0 {
-			names = []string{""}
+		domains := r.Domains()
+		if len(domains) == 0 {
+			domains = []string{""}
 		}
-		for i, name := range names {
-			status.Routes = append(status.Routes, RouterStatusRow{Name: name, Cluster: r.Cluster, TLS: routeTLS(r, i), State: r.State})
+		for _, domain := range domains {
+			status.Routes = append(status.Routes, RouterStatusRow{Name: domain, Cluster: r.Cluster, TLS: r.domainTLS(domain), State: r.State})
 		}
 	}
 	return status, nil
 }
 
-// routeTLS returns how the router serves the TLS of the name at index i of
-// the names of the route r: for a route whose TLS ends at the router, it
-// ends there for the route's domain, its first name, and its other names,
-// its extra domains, have no TLS.
-func routeTLS(r RouterRoute, i int) RouterTLS {
+// domainTLS returns how the router serves the TLS of domain, one of the
+// domains of the route r: for a route whose TLS ends at the router, it
+// ends there for the route's ingress domain, and its extra domains have
+// no TLS.
+func (r RouterRoute) domainTLS(domain string) RouterTLS {
 	switch {
 	case !r.TLSEndsAtRouter:
 		return RouterTLSPassthrough
-	case i == 0:
+	case domain == r.IngressDomain:
 		return RouterTLSTerminated
 	default:
 		return RouterTLSNone

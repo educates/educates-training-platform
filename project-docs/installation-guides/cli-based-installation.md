@@ -29,7 +29,14 @@ To see exactly what would be installed without touching the cluster:
 educates admin platform render --config config.yaml
 ```
 
-This prints a single YAML stream with the operator chart values followed by the four custom resources, in deploy order. The output is deterministic for a given config file and CLI version, which makes it suitable for diffing, review, and committing to a Git repository for [GitOps-driven installation](helm-based-installation).
+This prints the operator chart values followed by the four custom resources, in deploy order, as one YAML stream whose first document is the chart values. The output is deterministic for a given config file and CLI version, which makes it suitable for diffing, review, and committing to a Git repository for [GitOps-driven installation](helm-based-installation). To commit them, write the chart values and the custom resources to files of their own, for `helm install -f` and `kubectl apply -f`:
+
+```shell
+educates admin platform render --config config.yaml \
+  --values-file values.yaml --resources-file resources.yaml
+```
+
+Standard output keeps the part not written to a file, so either part can also be piped to its command with `-f -`.
 
 Deploying the platform
 ----------------------

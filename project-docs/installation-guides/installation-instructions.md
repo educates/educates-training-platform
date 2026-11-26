@@ -30,7 +30,7 @@ There are two ways to drive this machinery:
 * **The `educates` CLI** — you describe your scenario in a single high-level config file and the CLI does everything: installs the chart, applies the custom resources, and waits until everything reports ready. This is the most convenient path and the right choice for most users. See [CLI-based installation](cli-based-installation).
 * **Helm and kubectl directly** — you `helm install` the operator chart from the OCI registry and `kubectl apply` the custom resources yourself. This is the right choice for GitOps tooling (ArgoCD, Flux) or when you want full control over the resources. See [Helm-based installation](helm-based-installation).
 
-Both methods install exactly the same artifacts; the CLI is a convenience wrapper, not a separate mechanism. You can start with the CLI and switch to GitOps later — `educates admin platform render` prints the chart values and custom resources the CLI would apply, ready to commit to a Git repository.
+Both methods install exactly the same artifacts; the CLI is a convenience wrapper, not a separate mechanism. You can start with the CLI and switch to GitOps later: `educates admin platform render` writes the chart values and the custom resources the CLI would apply, to standard output or to a file each, ready to commit to a Git repository.
 
 Supported scenarios
 -------------------

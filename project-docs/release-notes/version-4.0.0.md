@@ -93,12 +93,14 @@ New Features
 * New ``educates admin platform`` commands drive the installation
   end-to-end. ``deploy`` installs the operator chart, applies the platform
   custom resources and waits for each to report ``Ready``. ``render`` emits
-  the Helm chart values and custom resources for inspection, or for committing
-  to a GitOps repository. ``delete`` uninstalls everything in reverse order
-  and supports ``--yes`` and ``--purge`` options. ``educates local cluster
-  create`` lays down the full local environment — kind cluster, local image
-  registry and platform — in a single command, with preflight checks for
-  common problems such as ports already being in use.
+  the Helm chart values and custom resources for inspection, or, with its
+  ``--values-file`` and ``--resources-file`` options, writes each to a file of
+  its own for committing to a GitOps repository. ``delete`` uninstalls
+  everything in reverse order and supports ``--yes`` and ``--purge`` options.
+  ``educates local cluster create`` lays down the full local environment, the
+  kind cluster, the local image registry and the platform, in a single
+  command, with preflight checks for common problems such as ports already
+  being in use.
 
 * The ``educates local config`` command group now provides ``init``, ``get``,
   ``set``, ``view``, ``edit`` and ``explain`` commands for managing the local
@@ -2491,6 +2493,22 @@ Bugs Fixed
   registry and version of the CLI for these kinds too, so the rendered chart
   values name the operator image. An ``EducatesConfig`` configuration is
   still used as declared.
+
+* ``educates admin platform render`` wrote the operator chart values and the
+  platform custom resources as one YAML stream with no document separator
+  between them, so the chart values, such as ``logLevel``, parsed as fields
+  of the ``EducatesClusterConfig`` resource, and the output had to be split
+  by hand before ``helm install -f`` or ``kubectl apply -f`` could use it.
+  The chart values are now a YAML document of their own. The new
+  ``--values-file`` and ``--resources-file`` options write the chart values
+  and the custom resources to files of their own in place of standard
+  output, for ``helm install -f`` and ``kubectl apply -f``, and standard
+  output keeps the part not written to a file, so either part can also be
+  piped to its command, as it is when an option names the file ``-``. Helm
+  reads every document of a values file, so the stream holding both parts is
+  not a values file. The command refuses a file that is the configuration
+  file it renders, or that both options name, and a file it cannot write
+  leaves the other file as it was.
 
 * Deleting an ``EducatesClusterConfig`` in ``Managed`` mode, which
   ``educates admin platform delete`` does, uninstalled the Helm releases named

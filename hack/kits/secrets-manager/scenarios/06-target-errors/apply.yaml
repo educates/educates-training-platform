@@ -1,4 +1,4 @@
-# A copy the API server rejects: targetSecret.keys leaves tls.crt and
+# A copy the API server rejects: sourceSecret.keys leaves tls.crt and
 # tls.key out of a kubernetes.io/tls source.
 apiVersion: v1
 kind: Secret
@@ -20,10 +20,9 @@ spec:
   - sourceSecret:
       name: tls
       namespace: kit-secrets-manager-source
+      keys:
+      - ca.crt
     targetNamespaces:
       nameSelector:
         matchNames:
         - kit-secrets-manager-target-a
-    targetSecret:
-      keys:
-      - ca.crt

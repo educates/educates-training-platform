@@ -95,6 +95,10 @@ type ruleReport struct {
 	// err is the failure to read the source, when reading it failed.
 	err error
 
+	// missingKeys are the keys the rule's sourceSecret.keys lists that the
+	// source lacks, when the source is copied.
+	missingKeys []string
+
 	// targets are the copies of the source, one in each namespace the rule
 	// selects. Nothing is copied into them when the source does not exist or
 	// its namespace is being deleted.
@@ -181,10 +185,23 @@ func (r *Reconciler) reconcileRule(ctx context.Context, converger *copyrules.Con
 			Rule:        secretsv1beta1.CopierRule(secretsv1beta1.SecretCopierKind, copier.Name),
 			Labels:      rule.TargetSecret.Labels,
 			Annotations: rule.TargetSecret.Annotations,
-			Keys:        rule.TargetSecret.Keys,
+			Keys:        rule.SourceSecret.Keys,
 		},
 		Owner: func(*secretsv1beta1.SecretImporter) *copyengine.Owner { return owner(copier, rule) },
 	}, namespaces)
+
+	if src != nil {
+		missing, err := r.engine.MissingKeys(ctx, src, rule.SourceSecret.Keys)
+		switch {
+		case apierrors.IsNotFound(err):
+			log.V(1).Info("The source Secret was deleted while being copied")
+		case err != nil:
+			report.err = fmt.Errorf("reading the source Secret %s: %w", report.source, err)
+			converger.Fail(report.err)
+		default:
+			report.missingKeys = missing
+		}
+	}
 	return report
 }
 

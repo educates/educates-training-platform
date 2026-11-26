@@ -28,6 +28,18 @@ type SecretReference struct {
 	Namespace string `json:"namespace"`
 }
 
+// SourceSecret names the Secret a SecretCopier rule copies, and selects the
+// keys of it the copies hold.
+type SourceSecret struct {
+	SecretReference `json:",inline"`
+
+	// keys limits the copies to these keys of the Secret, those the Secret
+	// has. When it is set it lists at least one key; the copies hold every
+	// key of the Secret when it is absent.
+	// +optional
+	Keys []string `json:"keys,omitempty"`
+}
+
 // TargetSecret shapes the copies of a SecretCopier or SecretExporter rule.
 type TargetSecret struct {
 	// name is the name of the copies, the source's when empty.
@@ -43,12 +55,6 @@ type TargetSecret struct {
 	// never copied. At most 32, none of them under secrets.educates.dev/.
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// keys limits the copies to these keys of the source, those the source
-	// has. When it is set it lists at least one key; the copies hold every
-	// key of the source when it is absent.
-	// +optional
-	Keys []string `json:"keys,omitempty"`
 }
 
 // CopyAuthorization gates a copy on a SecretImporter that holds the same
@@ -64,8 +70,8 @@ type CopyAuthorization struct {
 // SecretCopierRule copies one source Secret into the namespaces it
 // selects.
 type SecretCopierRule struct {
-	// sourceSecret is the Secret copied.
-	SourceSecret SecretReference `json:"sourceSecret"`
+	// sourceSecret is the Secret copied, and the keys of it copied.
+	SourceSecret SourceSecret `json:"sourceSecret"`
 
 	// targetNamespaces selects the namespaces the Secret is copied into.
 	// +optional

@@ -64,6 +64,10 @@ func exporterStatus(conditions []metav1.Condition, generation int64,
 		if rule.invalidSelector != nil {
 			findings.Add(secretsv1beta1.ReasonInvalidSelector, "", fmt.Sprintf("rules[%d]: %v", i, rule.invalidSelector))
 		}
+		if len(rule.missingKeys) > 0 {
+			findings.Add(secretsv1beta1.ReasonSourceKeysMissing, "", fmt.Sprintf("rules[%d]: exported Secret %s %s",
+				i, report.source, feedback.Lacks(rule.missingKeys)))
+		}
 		result.Rules = append(result.Rules, copyrules.Count(&findings, rule.targets, missing != ""))
 	}
 	result.Summary = copyrules.Summary(result.Rules)

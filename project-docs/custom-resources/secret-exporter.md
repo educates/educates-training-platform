@@ -139,7 +139,7 @@ Annotation keys starting with ``secrets.educates.dev/`` are reserved for the ann
 Selecting the keys copied
 -------------------------
 
-A copy holds every key of the secret exported. To copy only some of the keys, list them in ``targetSecret.keys``.
+A copy holds every key of the secret exported. To copy only some of the keys, list them in ``sourceSecret.keys``. The name and namespace of the ``SecretExporter`` name the secret exported, so the ``sourceSecret`` of a rule holds only ``keys``.
 
 ```yaml
 apiVersion: secrets.educates.dev/v1beta1
@@ -149,19 +149,19 @@ metadata:
   namespace: databases
 spec:
   rules:
-  - targetNamespaces:
+  - sourceSecret:
+      keys:
+      - username
+      - password
+    targetNamespaces:
       nameSelector:
         matchNames:
         - "*"
     copyAuthorization:
       sharedSecret: my-shared-secret
-    targetSecret:
-      keys:
-      - username
-      - password
 ```
 
-A listed key which the secret exported does not hold is not copied. When ``keys`` is set it must list at least one key, and a ``SecretExporter`` with an empty ``keys`` list is rejected when it is created or updated. To copy every key, leave ``keys`` out.
+A listed key which the secret exported does not hold is not copied, and the ``SecretExporter`` reports it: its ``Ready`` condition is ``False``, with reason ``SourceKeysMissing``, and its message names the rule, the secret exported and the keys it lacks. The copies still hold the listed keys which the secret exported has, and count as in sync, and once the secret exported holds every listed key, the ``SecretExporter`` is ``Ready`` again. When ``sourceSecret`` is set, its ``keys`` must list at least one key, and a ``SecretExporter`` with a ``sourceSecret`` that has no ``keys``, or an empty ``keys`` list, is rejected when it is created or updated. To copy every key, leave ``sourceSecret`` out.
 
 The data of a copy always equals what the rule selects from the secret exported. A key which the secret exported drops, or which is no longer listed, is removed from the copies, and so is a key which anything else adds to a copy.
 
@@ -379,7 +379,7 @@ The ``rules`` property is a list, so rules for more than one set of target names
 Overlapping rules for target secret
 -----------------------------------
 
-A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. A ``SecretExporter`` and a ``SecretCopier`` which copy the same secret under the same name into a namespace agree: the one which created the copy keeps it and decides what it holds, and the other counts the copy as in sync. A rule which would copy another secret under the name of the copy leaves the copy untouched and reports a ``Conflict``, as a rule does for a secret the secrets manager did not create. A copy stays with the resource whose rule created it only while one of that resource's rules still targets the copy, which for a ``SecretExporter`` also needs the ``SecretImporter`` to still accept the rule, and while that resource is not being deleted. Once none does, such as when the rule no longer selects the namespace of the copy, was removed, or is no longer accepted by the ``SecretImporter``, another rule which targets the copy takes it over within seconds.
+A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. A ``SecretExporter`` and a ``SecretCopier`` which copy the same secret under the same name into a namespace agree, whatever keys their rules select: the one which created the copy keeps it and decides what it holds, and the other counts the copy as in sync. A rule which would copy another secret under the name of the copy leaves the copy untouched and reports a ``Conflict``, as a rule does for a secret the secrets manager did not create. A copy stays with the resource whose rule created it only while one of that resource's rules still targets the copy, which for a ``SecretExporter`` also needs the ``SecretImporter`` to still accept the rule, and while that resource is not being deleted. Once none does, such as when the rule no longer selects the namespace of the copy, was removed, or is no longer accepted by the ``SecretImporter``, another rule which targets the copy takes it over within seconds.
 
 The page for the ``SecretCopier`` custom resource describes overlapping rules in full.
 
@@ -399,7 +399,7 @@ Changes to a copy
 
 A copy which is deleted is created again within seconds. A copy whose data, or whose labels or annotations set by its rule, are changed by someone else, is restored within seconds.
 
-When the secret exported is replaced by one of a different ``type``, its copies are deleted and created again with the new type, since Kubernetes does not let the type of a secret change. A copy is deleted only once Kubernetes has said it would accept the new one. Where it would not, such as when ``targetSecret.keys`` leaves out a key the new type requires, the copy is kept as it is and the rule reports a failure for that namespace. A copy which someone else has marked with ``immutable: true`` is never deleted: when its data or type must change, the rule reports a failure for that namespace, retried until someone deletes the copy, as Kubernetes never lets the data of an immutable secret change, and the rule then creates it again. The message of the ``Ready`` condition says that the copy is immutable and was not updated, and the secrets manager records a ``Warning`` Event with reason ``CopyNotUpdated``, described below.
+When the secret exported is replaced by one of a different ``type``, its copies are deleted and created again with the new type, since Kubernetes does not let the type of a secret change. A copy is deleted only once Kubernetes has said it would accept the new one. Where it would not, such as when ``sourceSecret.keys`` leaves out a key the new type requires, the copy is kept as it is and the rule reports a failure for that namespace. A copy which someone else has marked with ``immutable: true`` is never deleted: when its data or type must change, the rule reports a failure for that namespace, retried until someone deletes the copy, as Kubernetes never lets the data of an immutable secret change, and the rule then creates it again. The message of the ``Ready`` condition says that the copy is immutable and was not updated, and the secrets manager records a ``Warning`` Event with reason ``CopyNotUpdated``, described below.
 
 Tracking the source of a secret
 -------------------------------
@@ -438,11 +438,13 @@ NAME                   READY   REASON                  IN SYNC   AGE
 registry-credentials   False   AwaitingAuthorization   2/3       5m
 ```
 
-The ``Ready`` condition is ``True``, with reason ``InSync``, when every target namespace each rule selects holds a copy in sync with the secret exported. Otherwise it is ``False``, with the reason of the first of these problems which applies:
+The ``Ready`` condition is ``True``, with reason ``InSync``, when every target namespace each rule selects holds a copy in sync with the secret exported, and the secret exported holds every key each rule lists. Otherwise it is ``False``, with the reason of the first of these problems which applies:
 
 * ``InvalidSelector``: a rule's ``targetNamespaces`` is not valid, so the rule selects no namespace.
 
 * ``SourceMissing``: the secret exported does not exist, or its namespace is being deleted, so it is not copied.
+
+* ``SourceKeysMissing``: the secret exported lacks keys a rule's ``sourceSecret.keys`` lists. The copies hold the listed keys it has, and count as in sync.
 
 * ``TargetErrors``: a copy could not be written in some namespaces, and is retried.
 
@@ -450,7 +452,7 @@ The ``Ready`` condition is ``True``, with reason ``InSync``, when every target n
 
 * ``AwaitingAuthorization``: in some namespaces no ``SecretImporter`` accepts the copy, as none is named after the copy, or the one named after it holds another shared secret or does not admit the namespace of the ``SecretExporter``.
 
-The message of the condition names up to five of the namespaces affected, and what failed where a copy could not be written. ``status.sourceExists`` says whether the secret exported exists. The ``status.summary`` counts, for all the rules together, the ``targetNamespaces`` selected and, of them, those whose copy is ``inSync``, those in ``conflicts``, those ``awaitingAuthorization`` and the ``failures``. Its ``inSyncRatio`` is the ``In Sync`` column. The ``status.rules`` list gives the same counts for each rule, in the order of ``spec.rules``.
+The message of the condition names up to five of the namespaces affected, what failed where a copy could not be written, and the keys the secret exported lacks. ``status.sourceExists`` says whether the secret exported exists. The ``status.summary`` counts, for all the rules together, the ``targetNamespaces`` selected and, of them, those whose copy is ``inSync``, those in ``conflicts``, those ``awaitingAuthorization`` and the ``failures``. Its ``inSyncRatio`` is the ``In Sync`` column. The ``status.rules`` list gives the same counts for each rule, in the order of ``spec.rules``.
 
 A copy which cannot be written in one namespace never stops copies into the other namespaces. It is retried with an increasing delay, at most 5 minutes apart. Every ``SecretExporter`` is also checked again 5 minutes after it was last checked, which repairs any copy a missed change left out of sync.
 

@@ -22,6 +22,7 @@ const maxListed = 5
 var problemOrder = []string{
 	secretsv1beta1.ReasonInvalidSelector,
 	secretsv1beta1.ReasonSourceMissing,
+	secretsv1beta1.ReasonSourceKeysMissing,
 	secretsv1beta1.ReasonTargetErrors,
 	secretsv1beta1.ReasonConflict,
 	secretsv1beta1.ReasonAwaitingAuthorization,
@@ -30,9 +31,10 @@ var problemOrder = []string{
 // problemWording is how a Ready message words each problem, and the word
 // that introduces the namespaces it affects.
 var problemWording = map[string]struct{ lead, preposition string }{
-	secretsv1beta1.ReasonInvalidSelector: {"Rules with invalid selectors select nothing", "in"},
-	secretsv1beta1.ReasonSourceMissing:   {"Not copied", "into"},
-	secretsv1beta1.ReasonTargetErrors:    {"Failed", "in"},
+	secretsv1beta1.ReasonInvalidSelector:   {"Rules with invalid selectors select nothing", "in"},
+	secretsv1beta1.ReasonSourceMissing:     {"Not copied", "into"},
+	secretsv1beta1.ReasonSourceKeysMissing: {"Copied without keys the source lacks", "into"},
+	secretsv1beta1.ReasonTargetErrors:      {"Failed", "in"},
 	secretsv1beta1.ReasonConflict: {
 		"Secrets the secrets-manager did not create, or that another rule copies from another source, " +
 			"hold the copy's name", "in",
@@ -115,6 +117,15 @@ func List(items []string, separator string) string {
 		return strings.Join(items, separator)
 	}
 	return fmt.Sprintf("%s and %d more", strings.Join(items[:maxListed], separator), len(items)-maxListed)
+}
+
+// Lacks words the keys a source lacks, as a Ready message names them:
+// "lacks key a", or "lacks keys a, b".
+func Lacks(keys []string) string {
+	if len(keys) == 1 {
+		return "lacks key " + keys[0]
+	}
+	return "lacks keys " + strings.Join(keys, ", ")
 }
 
 // SetReady sets ready as the Ready condition of conditions, observed at

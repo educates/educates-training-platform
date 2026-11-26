@@ -216,7 +216,7 @@ var _ = Describe("Status, printer columns and Events", Label(areaFeedback, expec
 		unrelated := s.secret(conflicting.Name, src.Name, data("password", "unrelated"))
 		// The API server rejects a kubernetes.io/tls copy without its
 		// tls.crt and tls.key.
-		unwritable := copierRule(tls, inNamespaces(rejected), shaped(copyShape{Keys: []string{"ca.crt"}}))
+		unwritable := copierRule(tls, inNamespaces(rejected), copying(tls, "ca.crt"))
 		others := []object{
 			copierRule(src, inNamespaces(conflicting)),
 			copierRule(gated, inNamespaces(waiting), sharedSecret(passphrase)),

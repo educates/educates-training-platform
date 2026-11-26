@@ -99,7 +99,7 @@ func printLocalRouterStatus(w, errW io.Writer, status localclusters.RouterStatus
 			if r.Cluster.IsDefault() {
 				cluster = "(default)"
 			}
-			table = append(table, []string{orDash(r.Name), cluster, string(r.TLS), string(r.State)})
+			table = append(table, []string{orDash(r.Domain), cluster, string(r.TLS), string(r.ClusterState)})
 		}
 		fmt.Fprintln(w, utils.PrintTable([]string{"NAME", "CLUSTER", "TLS", "STATE"}, table))
 	}

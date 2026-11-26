@@ -13,17 +13,17 @@ import (
 // name, its cluster by kind name, how its TLS is served and the cluster's
 // state.
 type statusRowSummary struct {
-	Name     string
-	KindName string
-	TLS      RouterTLS
-	State    State
+	Domain       string
+	KindName     string
+	TLS          RouterTLS
+	ClusterState State
 }
 
 func wantStatusRows(t *testing.T, got []RouterStatusRow, want ...statusRowSummary) {
 	t.Helper()
 	summaries := make([]statusRowSummary, 0, len(got))
 	for _, r := range got {
-		summaries = append(summaries, statusRowSummary{Name: r.Name, KindName: r.Cluster.KindName, TLS: r.TLS, State: r.State})
+		summaries = append(summaries, statusRowSummary{Domain: r.Domain, KindName: r.Cluster.KindName, TLS: r.TLS, ClusterState: r.ClusterState})
 	}
 	if !reflect.DeepEqual(summaries, want) {
 		t.Errorf("status rows:\n got  %+v\n want %+v", summaries, want)

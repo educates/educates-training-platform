@@ -74,8 +74,9 @@ type RouterStatus struct {
 	// the local clusters as it should, and is empty otherwise.
 	Advice string
 
-	// Routes is a row for each name the router sends to a local cluster,
-	// in the order of RouterRoutes, and each route's names in order.
+	// Routes is a row for each domain the router sends to a local cluster,
+	// in the order of RouterRoutes, and each route's domains in the order
+	// of RouterRoute.Domains.
 	Routes []RouterStatusRow
 
 	// LeftOut is an error for each local cluster the router leaves out,
@@ -83,21 +84,22 @@ type RouterStatus struct {
 	LeftOut []error
 }
 
-// RouterStatusRow is what local router status shows about one name the
+// RouterStatusRow is what local router status shows about one domain the
 // router sends to a local cluster.
 type RouterStatusRow struct {
-	// Name is the domain, which the router sends to the cluster with every
-	// name under it. It is empty for a cluster with no name to route.
-	Name string
+	// Domain is the domain, which the router sends to the cluster with
+	// every name under it. It is empty for a cluster with no domain to
+	// route.
+	Domain string
 
-	// Cluster is the identity of the local cluster the name reaches.
+	// Cluster is the identity of the local cluster the domain reaches.
 	Cluster Identity
 
-	// TLS is how the router serves the name's TLS.
+	// TLS is how the router serves the domain's TLS.
 	TLS RouterTLS
 
-	// State is whether the cluster's node containers run.
-	State State
+	// ClusterState is whether the cluster's node containers run.
+	ClusterState State
 }
 
 // RouterAddress returns the router address the router file of the data
@@ -156,7 +158,7 @@ func (inv Inventory) RouterStatus(image string) (RouterStatus, error) {
 			domains = []string{""}
 		}
 		for _, domain := range domains {
-			status.Routes = append(status.Routes, RouterStatusRow{Name: domain, Cluster: r.Cluster, TLS: r.domainTLS(domain), State: r.State})
+			status.Routes = append(status.Routes, RouterStatusRow{Domain: domain, Cluster: r.Cluster, TLS: r.domainTLS(domain), ClusterState: r.State})
 		}
 	}
 	return status, nil

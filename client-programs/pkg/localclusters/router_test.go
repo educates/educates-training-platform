@@ -267,6 +267,8 @@ func TestRenderRouterRoutesPort80ByTheHostHeader(t *testing.T) {
 	want := `frontend http
     mode http
     bind :80
+    option forwardfor
+    http-request set-header X-Forwarded-Proto http
     http-request set-var(txn.host) req.hdr(host),host_only
     http-request set-var(txn.cluster) str(.),concat(,txn.host,),map_end(/usr/local/etc/haproxy/hosts.map)
     http-request return status 404 content-type "text/plain; charset=utf-8" file /usr/local/etc/haproxy/404.txt unless { var(txn.cluster) -m found }
@@ -284,6 +286,19 @@ func TestRenderRouterRoutesPort80ByTheHostHeader(t *testing.T) {
 	for _, unwanted := range []string{"redirect", "hard-stop-after"} {
 		if strings.Contains(cfg, "    "+unwanted+" ") {
 			t.Errorf("haproxy.cfg sets %s:\n%s", unwanted, cfg)
+		}
+	}
+}
+
+// A cluster whose TLS ends at the router has its Envoy trust the router as
+// a proxy hop, so port 80 sets the forwarded headers itself: a client can't
+// claim https over plain HTTP, and the cluster sees the client's address.
+func TestRenderRouterSetsTheForwardedHeadersOnPort80(t *testing.T) {
+	frontend := configSection(t, RenderRouter(nil), "frontend http")
+
+	for _, want := range []string{"\n    option forwardfor\n", "\n    http-request set-header X-Forwarded-Proto http\n"} {
+		if !strings.Contains(frontend, want) {
+			t.Errorf("frontend http lacks %q:\n%s", strings.TrimSpace(want), frontend)
 		}
 	}
 }

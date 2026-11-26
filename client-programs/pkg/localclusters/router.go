@@ -292,10 +292,14 @@ func renderHAProxyConfig(routes []RouterRoute, ended map[string]RouterCertificat
 	fmt.Fprintf(&b, `
 # Port 80: each request goes to the local cluster whose domain is the most
 # specific to match its Host header, without its port. A name no domain
-# matches gets the 404.
+# matches gets the 404. The router sets the forwarded headers itself: the
+# Envoy of a cluster whose TLS ends at the router trusts the router as a
+# proxy hop, so a client must not be able to claim https over plain HTTP.
 frontend http
     mode http
     bind :80
+    option forwardfor
+    http-request set-header X-Forwarded-Proto http
     http-request set-var(txn.host) req.hdr(host),host_only
     http-request set-var(txn.cluster) str(.),concat(,txn.host,),map_end(%s)
     http-request return status 404 content-type "text/plain; charset=utf-8" file %s unless { var(txn.cluster) -m found }

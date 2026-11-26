@@ -97,6 +97,83 @@ func TestPlanRouterRecreatesARouterThatRunsAnotherImageListensElsewhereOrHasStop
 	}
 }
 
+// pinnedRouterImageID is the ID a Docker host gives the image the tests'
+// CLI pins, and oldRouterImageID the ID of another image.
+const (
+	pinnedRouterImageID = "sha256:c0ffee"
+	oldRouterImageID    = "sha256:0ld"
+)
+
+// Docker reports the image a container was created from as it was given,
+// with its name normalised, reduced to its digest, or as an image ID, and
+// a router on the pinned image is kept whichever form it reports.
+func TestPlanRouterReloadsARouterOnThePinnedImageHoweverDockerReportsIt(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		image, imageID, pinned string
+	}{
+		{name: "as pinned", image: pinnedRouterImage, imageID: pinnedRouterImageID, pinned: pinnedRouterImageID},
+		{name: "with its name normalised", image: "docker.io/library/haproxy:3.4.8-alpine@sha256:8aa6",
+			imageID: pinnedRouterImageID, pinned: pinnedRouterImageID},
+		{name: "reduced to its digest", image: "docker.io/library/haproxy@sha256:8aa6",
+			imageID: pinnedRouterImageID, pinned: pinnedRouterImageID},
+		{name: "as the image ID", image: pinnedRouterImageID, imageID: pinnedRouterImageID, pinned: pinnedRouterImageID},
+		{name: "by a tag alone", image: "haproxy:3.4.8-alpine", imageID: pinnedRouterImageID, pinned: pinnedRouterImageID},
+		{name: "normalised, with the pinned image missing", image: "docker.io/library/haproxy:3.4.8-alpine@sha256:8aa6",
+			imageID: oldRouterImageID},
+		{name: "reduced to its digest, with the pinned image missing", image: "haproxy@sha256:8aa6", imageID: oldRouterImageID},
+		// The containerd image store gives an image the digest of its
+		// image index as its ID.
+		{name: "as an image ID that is the pinned digest", image: "sha256:8aa6", imageID: "sha256:8aa6"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := routerContainer(tc.image, "10.10.10.1", true)
+			router.ImageID, router.PinnedImageID = tc.imageID, tc.pinned
+
+			plan, err := planRouter(t, "10.10.10.1", router)
+			if err != nil {
+				t.Fatalf("PlanRouter: %v", err)
+			}
+
+			if plan.Action != RouterReload {
+				t.Errorf("PlanRouter() = %+v, want to reload the router", plan)
+			}
+		})
+	}
+}
+
+func TestPlanRouterRecreatesARouterOnAnotherImageHoweverDockerReportsIt(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		image, imageID, pinned string
+	}{
+		{name: "an older pinned image", image: "haproxy:3.4.7-alpine@sha256:1234", imageID: oldRouterImageID,
+			pinned: pinnedRouterImageID},
+		{name: "the pinned reference, re-pointed to another image", image: pinnedRouterImage, imageID: oldRouterImageID,
+			pinned: pinnedRouterImageID},
+		{name: "as another image ID", image: oldRouterImageID, imageID: oldRouterImageID, pinned: pinnedRouterImageID},
+		{name: "by a tag of another image", image: "haproxy:3.4.8-alpine", imageID: oldRouterImageID,
+			pinned: pinnedRouterImageID},
+		{name: "another digest, with the pinned image missing", image: "docker.io/library/haproxy@sha256:1234",
+			imageID: oldRouterImageID},
+		{name: "a tag alone, with the pinned image missing", image: "haproxy:3.4.8-alpine", imageID: oldRouterImageID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := routerContainer(tc.image, "10.10.10.1", true)
+			router.ImageID, router.PinnedImageID = tc.imageID, tc.pinned
+
+			plan, err := planRouter(t, "10.10.10.1", router)
+			if err != nil {
+				t.Fatalf("PlanRouter: %v", err)
+			}
+
+			if plan.Action != RouterRecreate || !strings.Contains(plan.Why, tc.image) {
+				t.Errorf("PlanRouter() = %+v, want to re-create the router, naming the image %s", plan, tc.image)
+			}
+		})
+	}
+}
+
 // The router address rules apply wherever the router is created or
 // re-created, so an address on no host interface is refused then.
 func TestPlanRouterRefusesToCreateTheRouterOnAnAddressOnNoInterface(t *testing.T) {

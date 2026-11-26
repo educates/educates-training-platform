@@ -13,8 +13,18 @@ type RouterContainer struct {
 	// Running reports whether the container is running.
 	Running bool
 
-	// Image is the image reference the container was created from.
+	// Image is the image reference the container was created from, as
+	// Docker reports it: as it was given, with its name normalised, such
+	// as docker.io/library/haproxy, reduced to its digest, or as an image
+	// ID.
 	Image string
+
+	// ImageID is the ID of the image the container runs.
+	ImageID string
+
+	// PinnedImageID is the ID the Docker host gives the router image the
+	// CLI pins, empty when the host does not have that image.
+	PinnedImageID string
 
 	// PortBindings are the host ports the container is configured to
 	// publish, whether it runs or not.
@@ -53,7 +63,7 @@ func (r RouterContainer) publishedAddress() (netip.Addr, bool) {
 func (r RouterContainer) recreateReason(image, address string) string {
 	published, publishes := r.publishedAddress()
 	switch {
-	case r.Image != image:
+	case !r.runsImage(image):
 		return fmt.Sprintf("it runs the image %s, not %s, the one this CLI pins", r.Image, image)
 	case !publishes:
 		return fmt.Sprintf("it publishes neither port 80 nor port 443, which it publishes on the router address %s", address)
@@ -65,6 +75,38 @@ func (r RouterContainer) recreateReason(image, address string) string {
 	default:
 		return ""
 	}
+}
+
+// runsImage reports whether the router container runs image, the router
+// image the CLI pins, however Docker reports the image it was created
+// from. When the Docker host gives an ID to both the container's image and
+// the pinned one, the two IDs tell. Otherwise the container runs the
+// pinned image when the digest its image reference names, or its image's
+// ID, is the digest the pinned reference names: the containerd image
+// store gives an image the digest of its image index as its ID.
+func (r RouterContainer) runsImage(image string) bool {
+	if r.ImageID != "" && r.PinnedImageID != "" {
+		return r.ImageID == r.PinnedImageID
+	}
+	pinned := imageDigest(image)
+	if pinned == "" {
+		return r.Image == image
+	}
+	return imageDigest(r.Image) == pinned || r.ImageID == pinned
+}
+
+// imageDigest returns the digest the image reference ref names: the one
+// after its @, the reference itself when it is a digest alone, as an
+// image ID is, and empty when it names none, as a reference by its tag
+// alone does.
+func imageDigest(ref string) string {
+	if i := strings.LastIndex(ref, "@"); i >= 0 {
+		return ref[i+1:]
+	}
+	if strings.HasPrefix(ref, "sha256:") {
+		return ref
+	}
+	return ""
 }
 
 // RouterAction is what local cluster create and start do to the router

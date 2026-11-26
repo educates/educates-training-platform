@@ -77,12 +77,17 @@ func Observe(ctx context.Context) (*localclusters.RouterContainer, error) {
 		return nil, errors.Wrapf(err, "unable to inspect router container %s", ContainerName)
 	}
 
-	router := &localclusters.RouterContainer{}
+	router := &localclusters.RouterContainer{ImageID: info.Container.Image}
 	if info.Container.State != nil {
 		router.Running = info.Container.State.Running
 	}
 	if info.Container.Config != nil {
 		router.Image = info.Container.Config.Image
+	}
+	// The host may not have the pinned image, as when the CLI pins a newer
+	// one than the router runs: the inventory then compares digests.
+	if pinned, err := cli.ImageInspect(ctx, Image); err == nil {
+		router.PinnedImageID = pinned.ID
 	}
 	if info.Container.HostConfig != nil {
 		for _, bindings := range info.Container.HostConfig.PortBindings {

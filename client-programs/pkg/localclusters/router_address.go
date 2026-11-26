@@ -31,8 +31,7 @@ func LoadRouterAddress(dataHome string, interfaces []netip.Addr) (string, error)
 	}
 	address, err := CheckRouterAddress(router.Address, interfaces)
 	if err != nil {
-		return "", fmt.Errorf("%s: %w. Set another in it, or with:\n\n  %s",
-			config.LocalRouterPath(dataHome), err, setRouterAddressCommand)
+		return "", routerAddressRefused(dataHome, err)
 	}
 	return address, nil
 }
@@ -41,10 +40,10 @@ func LoadRouterAddress(dataHome string, interfaces []netip.Addr) (string, error)
 // the data home dataHome, router.yaml, declares, in its canonical form,
 // once it passes config.CheckSpecificRouterAddress, the rules of
 // CheckRouterAddress that need no host interface: the address every local
-// cluster's names resolve to. A file
-// that doesn't load is that error, and an address the rules refuse an
-// error naming the file and why. A missing file is the error
-// config.LoadLocalRouter returns, wrapping fs.ErrNotExist.
+// cluster's names resolve to. A file that doesn't load is that error, and
+// an address the rules refuse an error naming the file, why, and how to
+// set another. A missing file is an error wrapping fs.ErrNotExist that
+// says how to write it.
 //
 // Rendering what serves the local clusters' names takes the address as it
 // is configured: only where the router is created is it checked against
@@ -56,10 +55,17 @@ func configuredRouterAddress(dataHome string) (string, error) {
 	}
 	ip, err := config.CheckSpecificRouterAddress(router.Address)
 	if err != nil {
-		return "", fmt.Errorf("%s: %w. Set another in it, or with:\n\n  %s",
-			config.LocalRouterPath(dataHome), err, setRouterAddressCommand)
+		return "", routerAddressRefused(dataHome, err)
 	}
 	return ip.String(), nil
+}
+
+// routerAddressRefused is the error of the router file of the data home
+// dataHome declaring a router address the router address rules refuse,
+// for the reason err gives: it names the file, why, and how to set
+// another.
+func routerAddressRefused(dataHome string, err error) error {
+	return fmt.Errorf("%s: %w. Set another in it, or with:\n\n  %s", config.LocalRouterPath(dataHome), err, setRouterAddressCommand)
 }
 
 // loadRouterFile loads the router file of the data home dataHome, as

@@ -156,7 +156,7 @@ func (c *dataHomeConfig) rewrite() (string, error) {
 	if info, err := os.Stat(c.path); err == nil {
 		perm = info.Mode().Perm()
 	}
-	if err := writeFileAtomically(c.path, out, perm); err != nil {
+	if err := WriteFileAtomically(c.path, out, perm); err != nil {
 		return "", err
 	}
 	return backup, nil

@@ -19,7 +19,8 @@ import (
 // behind.
 //
 // Each file is written to a new file beside it, which is then renamed
-// over it, so the router never reads a file half written. The router
+// over it, as config.WriteFileAtomically writes it, so the router never
+// reads a file half written. The router
 // container mounts the folder rather than each file, so it sees a file
 // replaced this way. Files and folders are readable by every user, since
 // the router container's user may not be the CLI's, except a file whose
@@ -37,7 +38,7 @@ func WriteRouterFolder(dataHome string, files []RouterFile) error {
 		if mode == 0 {
 			mode = 0o644
 		}
-		if err := writeFileByRename(path, f.Content, mode); err != nil {
+		if err := config.WriteFileAtomically(path, f.Content, mode); err != nil {
 			return err
 		}
 		keep[path] = true
@@ -127,31 +128,6 @@ func RemoveRouterFolder(dataHome string) error {
 	dir := config.LocalRouterDir(dataHome)
 	if err := os.RemoveAll(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("remove the router folder %s: %w", dir, err)
-	}
-	return nil
-}
-
-// writeFileByRename writes data to the file path with the permissions
-// perm, by writing a new file beside it and renaming it over path.
-func writeFileByRename(path string, data []byte, perm fs.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
-	if err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(perm); err != nil {
-		tmp.Close()
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
 }

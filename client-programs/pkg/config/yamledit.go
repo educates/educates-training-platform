@@ -66,12 +66,13 @@ func encodeYAMLDocument(doc *yaml.Node) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// writeFileAtomically writes data to the file at path with the
+// WriteFileAtomically writes data to the file at path with the
 // permissions perm, through a temporary file in the same folder renamed
 // over it, so that a reader sees either the old content or the new one,
-// and a failed write leaves the old content. A path that is a symbolic
-// link has the file it links to written.
-func writeFileAtomically(path string, data []byte, perm fs.FileMode) error {
+// and a failed write leaves the old content. The temporary file is a dot
+// file, named for the file it replaces. A path that is a symbolic link has
+// the file it links to written.
+func WriteFileAtomically(path string, data []byte, perm fs.FileMode) error {
 	if target, err := filepath.EvalSymlinks(path); err == nil {
 		path = target
 	}

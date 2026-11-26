@@ -142,7 +142,7 @@ func SetLocalRouterAddress(dataHome, address string) error {
 	if err != nil {
 		return err
 	}
-	return writeFileAtomically(path, out, info.Mode().Perm())
+	return WriteFileAtomically(path, out, info.Mode().Perm())
 }
 
 // newLocalRouterDocument returns the node tree of a router file that

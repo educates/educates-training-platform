@@ -1,0 +1,17 @@
+# A copier whose source lacks a listed key: the copy holds the other one, until fix adds the key to the source.
+[applied]
+secretcopier/kit-secrets-manager-source-keys-missing  ready    = False
+secretcopier/kit-secrets-manager-source-keys-missing  reason   = SourceKeysMissing
+secretcopier/kit-secrets-manager-source-keys-missing  insync   = 1/1
+secretcopier/kit-secrets-manager-source-keys-missing  message  ~ rules[0]: source Secret kit-secrets-manager-source/keys-missing lacks key password
+kit-secrets-manager-target-a/secret/keys-missing  {{index .data "username" | base64decode}}  = kit
+kit-secrets-manager-target-a/secret/keys-missing  {{len .data}}  = 1
+event secretcopier/kit-secrets-manager-source-keys-missing  Warning NotReady
+
+[fixed]
+secretcopier/kit-secrets-manager-source-keys-missing  ready   = True
+secretcopier/kit-secrets-manager-source-keys-missing  reason  = InSync
+secretcopier/kit-secrets-manager-source-keys-missing  insync  = 1/1
+kit-secrets-manager-target-a/secret/keys-missing  {{index .data "password" | base64decode}}  = added
+kit-secrets-manager-target-a/secret/keys-missing  {{len .data}}  = 2
+event secretcopier/kit-secrets-manager-source-keys-missing  Normal Recovered

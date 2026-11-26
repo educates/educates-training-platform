@@ -16,30 +16,50 @@
 # (Deployment/Service/ClusterRole/CRD/ServiceAccount) are a subset of what the
 # other charts already exercise.
 #
-# Image dependency: only the operator image is built locally and sideloaded
-# into the node (`kind load`; the `dev` tag resolves to imagePullPolicy
-# IfNotPresent so the sideloaded build is used). Every other image is pulled
-# from its public registry over the internet — the upstream cluster services
-# AND the Educates runtime components, which the chart resolves to the
-# published `ghcr.io/educates/educates-*` refs. So this test needs internet
-# and those runtime images to already be published; on a fork or offline the
-# platform components will ImagePullBackOff and the readiness waits will time
-# out (a false failure unrelated to RBAC). The permission surface is
-# image-independent, so that dependency does not weaken what the test proves.
+# Images: the test runs this checkout's build. It builds the operator image
+# and the Educates runtime images the samples deploy (RUNTIME_IMAGES below)
+# for the host architecture, with the root Makefile's image targets, into the
+# Docker daemon, sideloads them into the node (`kind load`), and applies the
+# samples with those images set on them. The images carry a tag of their own,
+# IMAGE_TAG, so the build replaces no image another build or cluster uses,
+# and that tag resolves to imagePullPolicy IfNotPresent, so the sideloaded
+# builds are the ones that run. SKIP_BUILD=true skips the builds and loads
+# the images already in the Docker daemon under those names. Only the
+# upstream cluster services are pulled from their public registries, so the
+# test needs internet for those.
 #
 # The kind cluster is created if absent and torn down on exit
 # (KEEP_CLUSTER=true keeps it). Set rbac.clusterAdmin=true install to compare.
 #
 set -euo pipefail
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+
 CLUSTER_NAME="${CLUSTER_NAME:-educates-rbac-verify}"
 NAMESPACE="${NAMESPACE:-educates-installer}"
-IMG="${IMG:-ghcr.io/educates/educates-operator:dev}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-localhost:5001}"
+IMAGE_TAG="${IMAGE_TAG:-rbac-verify}"
+IMG="${IMG:-$IMAGE_REPOSITORY/educates-operator:$IMAGE_TAG}"
+SKIP_BUILD="${SKIP_BUILD:-false}"
 RELEASE="${RELEASE:-educates-installer}"
 CHART_DIR="${CHART_DIR:-../charts/educates-installer}"
 SAMPLES_DIR="${SAMPLES_DIR:-../samples}"
 READY_TIMEOUT="${READY_TIMEOUT:-300}"   # per-CR wait, seconds
 WORKDIR="$(mktemp -d)"
+
+# The runtime images the samples deploy: the secrets-manager, the Lookup
+# Service, and the images of the SessionManager's inventory its chart runs
+# at install.
+RUNTIME_IMAGES=(secrets-manager lookup-service session-manager node-ca-injector tunnel-manager image-puller)
+
+runtime_image() { echo "$IMAGE_REPOSITORY/educates-$1:$IMAGE_TAG"; }
+
+# apply_sample applies a sample with a merge patch over it, which sets this
+# build's images on the resource.
+apply_sample() {
+    local sample="$1" patch="$2"
+    kubectl patch --local -f "$SAMPLES_DIR/$sample" --type merge -p "$patch" -o yaml | kubectl apply -f -
+}
 
 CREATED_CLUSTER=false
 cleanup() {
@@ -92,6 +112,22 @@ wait_gone() {
     fi
 }
 
+# --- images ----------------------------------------------------------------
+if [[ "$SKIP_BUILD" != "true" ]]; then
+    echo "Building operator image $IMG..."
+    make docker-build IMG="$IMG" >/dev/null
+    for name in "${RUNTIME_IMAGES[@]}"; do
+        echo "Building runtime image $(runtime_image "$name")..."
+        make -C "$REPO_ROOT" "image-$name" PUSH_IMAGES=false \
+            IMAGE_REPOSITORY="$IMAGE_REPOSITORY" PACKAGE_VERSION="$IMAGE_TAG" >"$WORKDIR/build-$name.log" 2>&1 \
+            || { tail -40 "$WORKDIR/build-$name.log" >&2; fail "building the $name image failed"; }
+    done
+fi
+for image in "$IMG" $(for name in "${RUNTIME_IMAGES[@]}"; do runtime_image "$name"; done); do
+    docker image inspect "$image" >/dev/null 2>&1 \
+        || fail "image $image is not in the Docker daemon; run without SKIP_BUILD=true to build it"
+done
+
 # --- cluster ---------------------------------------------------------------
 if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
     echo "Creating kind cluster $CLUSTER_NAME..."
@@ -100,9 +136,11 @@ if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
 fi
 kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null
 
-echo "Building + loading operator image $IMG..."
-make docker-build IMG="$IMG" >/dev/null
+echo "Loading the images into kind cluster $CLUSTER_NAME..."
 kind load docker-image "$IMG" --name "$CLUSTER_NAME"
+for name in "${RUNTIME_IMAGES[@]}"; do
+    kind load docker-image "$(runtime_image "$name")" --name "$CLUSTER_NAME"
+done
 repo="${IMG%:*}"; tag="${IMG##*:}"
 
 # --- install chart (cluster-admin OFF by default) --------------------------
@@ -134,10 +172,16 @@ wait_ready educatesclusterconfig
 assert_no_forbidden "cluster-service install"
 
 echo "Applying platform components..."
-kubectl apply -f "$SAMPLES_DIR/secretsmanager.yaml"
+apply_sample secretsmanager.yaml \
+    "{\"spec\":{\"image\":{\"repository\":\"$IMAGE_REPOSITORY/educates-secrets-manager\",\"tag\":\"$IMAGE_TAG\"}}}"
 wait_ready secretsmanager
-kubectl apply -f "$SAMPLES_DIR/lookupservice.yaml"
-kubectl apply -f "$SAMPLES_DIR/sessionmanager.yaml"
+apply_sample lookupservice.yaml \
+    "{\"spec\":{\"image\":{\"repository\":\"$IMAGE_REPOSITORY/educates-lookup-service\",\"tag\":\"$IMAGE_TAG\"}}}"
+overrides=""
+for name in session-manager node-ca-injector tunnel-manager image-puller; do
+    overrides="$overrides${overrides:+,}{\"name\":\"$name\",\"image\":\"$(runtime_image "$name")\"}"
+done
+apply_sample sessionmanager.yaml "{\"spec\":{\"images\":{\"overrides\":[$overrides]}}}"
 wait_ready lookupservice
 wait_ready sessionmanager
 assert_no_forbidden "platform-component install"

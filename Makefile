@@ -245,7 +245,7 @@ stage-base-environment-fetcher: ## Stage the fetcher source the base image build
 # leave generated files modified in the working tree (same as CI flags).
 # =============================================================================
 
-ci: ci-cli ci-operator ci-lookup-service ## Run all CI checks locally (CLI, operator, Lookup Service)
+ci: ci-cli ci-operator ci-lookup-service ci-secrets-manager ## Run all CI checks locally (CLI, operator, Lookup Service, secrets-manager)
 
 ci-cli: stage-renderer-files ## CI parity for the CLI (client-programs-ci.yaml)
 	cd client-programs && go vet ./...
@@ -276,6 +276,16 @@ ci-lookup-service: ## CI parity for the Lookup Service (lookup-service-ci.yaml)
 		|| { echo "ERROR: generated DeepCopy drifted. Run 'make -C lookup-service generate' and commit."; exit 1; }
 	$(MAKE) -C lookup-service test
 	$(MAKE) -C lookup-service lint
+
+ci-secrets-manager: ## CI parity for the secrets-manager (secrets-manager-ci.yaml)
+	cd secrets-manager && go vet ./...
+	cd secrets-manager && go build ./...
+	$(MAKE) -C secrets-manager generate
+	@drift="$$(git status --porcelain -- secrets-manager/api)"; [ -z "$$drift" ] \
+		|| { git diff -- secrets-manager/api; echo "$$drift"; \
+			echo "ERROR: generated DeepCopy drifted. Run 'make -C secrets-manager generate' and commit."; exit 1; }
+	$(MAKE) -C secrets-manager test
+	$(MAKE) -C secrets-manager lint
 
 # The always-on localhost:5001 registry must exist before images can be
 # pushed to it. The freshly built CLI deploys it (idempotent, no cluster
@@ -396,7 +406,7 @@ prune-builds:
 	rm -rf workshop-images/base-environment/opt/renderer/node_modules
 	rm -rf workshop-images/base-environment/client-programs
 	rm -rf lookup-service/bin
-	rm -rf secrets-manager/venv
+	rm -rf secrets-manager/bin
 	rm -rf session-manager/venv
 	rm -rf training-portal/venv
 	rm -rf tunnel-manager/venv
@@ -433,7 +443,7 @@ help: ## Show available targets
   refresh-operator-embeds refresh-cli-embeds package-local-charts \
   generate-cli-schemas verify-cli-schemas embed-installer-chart verify-installer-chart \
   build-cli build-client-programs client-programs-educates ensure-local-registry \
-  stage-renderer-files ci ci-cli ci-operator ci-lookup-service release-prep \
+  stage-renderer-files ci ci-cli ci-operator ci-lookup-service ci-secrets-manager release-prep \
   build-docker-extension install-docker-extension update-docker-extension \
   restart-training-platform deploy-workshop delete-workshop open-workshop \
   build-project-docs open-project-docs clean-project-docs \

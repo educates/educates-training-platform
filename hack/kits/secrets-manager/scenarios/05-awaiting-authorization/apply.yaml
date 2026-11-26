@@ -1,0 +1,24 @@
+# A copier rule gated by copyAuthorization, with no SecretImporter yet.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gated
+  namespace: kit-secrets-manager-source
+stringData:
+  api-key: gated-value
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretCopier
+metadata:
+  name: kit-secrets-manager-awaiting-authorization
+spec:
+  rules:
+  - sourceSecret:
+      name: gated
+      namespace: kit-secrets-manager-source
+    targetNamespaces:
+      nameSelector:
+        matchNames:
+        - kit-secrets-manager-target-a
+    copyAuthorization:
+      sharedSecret: kit-secrets-manager-shared

@@ -35,6 +35,11 @@ export function defaultChrome() {
 // balanced mode by itself, which makes headless Chrome refuse a page served
 // over plain HTTP with net::ERR_BLOCKED_BY_CLIENT, so that is turned off for
 // a cluster served over plain HTTP; it changes nothing for one over HTTPS.
+//
+// Puppeteer's own signal handlers are left out: its SIGINT handler ends the
+// process at once, before an interrupted run has restored what it changed.
+// Whoever launches a browser closes it. Puppeteer still kills Chrome when
+// the process exits.
 export function launchBrowser({ chrome, cluster, profileDir, headful }) {
   return puppeteer.launch({
     executablePath: chrome,
@@ -50,6 +55,9 @@ export function launchBrowser({ chrome, cluster, profileDir, headful }) {
     ],
     defaultViewport: { width: 1600, height: 1000 },
     protocolTimeout: 300_000,
+    handleSIGINT: false,
+    handleSIGTERM: false,
+    handleSIGHUP: false,
   });
 }
 

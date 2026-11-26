@@ -9,7 +9,7 @@ fixtures have missed real defects. They are not run in CI.
 
 | Harness | What it checks |
 |---|---|
-| [session-acceptance](session-acceptance/README.md) | Real workshop sessions, requested from a test portal and walked in Chrome: instruction actions, kubectl inside the workshop container, the console, the SSH tunnel, and the terminals' copy and paste shortcuts under each platform. |
+| [session-acceptance](session-acceptance/README.md) | Real workshop sessions, requested from a test portal and walked in Chrome: instruction actions, kubectl inside the workshop container, the console, the SSH tunnel, the terminals' copy and paste shortcuts under each platform, a website theme taken from a Secret in another namespace, and, on request, a workshop image pulled from an authenticated registry mirror. |
 | [lookup-acceptance](lookup-acceptance/README.md) | The Lookup Service across two named local clusters it creates and deletes itself: new sessions alternating between two portals of equal capacity, and a returning user getting their session back. |
 
 ## Running a harness on a cluster of its own

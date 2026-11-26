@@ -1,0 +1,25 @@
+# A copy another writer made immutable can't take its source's change, and is never deleted.
+[applied]
+secretcopier/kit-secrets-manager-immutable  ready   = True
+secretcopier/kit-secrets-manager-immutable  reason  = InSync
+secretcopier/kit-secrets-manager-immutable  insync  = 1/1
+kit-secrets-manager-target-b/secret/immutable  {{index .data "value" | base64decode}}  = v1
+
+# One CopyNotUpdated Warning for the change, however often the copy is retried.
+[broken]
+secretcopier/kit-secrets-manager-immutable  ready    = False
+secretcopier/kit-secrets-manager-immutable  reason   = TargetErrors
+secretcopier/kit-secrets-manager-immutable  message  ~ the copy is immutable and was not updated: its source's data changed
+kit-secrets-manager-target-b/secret/immutable  {.immutable}  = true
+kit-secrets-manager-target-b/secret/immutable  {{index .data "value" | base64decode}}  = v1
+event secretcopier/kit-secrets-manager-immutable  Warning CopyNotUpdated  = 1
+event secretcopier/kit-secrets-manager-immutable  Warning NotReady
+
+[fixed]
+secretcopier/kit-secrets-manager-immutable  ready   = True
+secretcopier/kit-secrets-manager-immutable  reason  = InSync
+secretcopier/kit-secrets-manager-immutable  insync  = 1/1
+kit-secrets-manager-target-b/secret/immutable  {.immutable}  != true
+kit-secrets-manager-target-b/secret/immutable  {{index .data "value" | base64decode}}  = v2
+event secretcopier/kit-secrets-manager-immutable  Warning CopyNotUpdated  = 1
+event secretcopier/kit-secrets-manager-immutable  Normal Recovered

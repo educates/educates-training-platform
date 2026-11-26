@@ -14,7 +14,7 @@ Upgrade the Go version to `$ARGUMENTS` (e.g. `1.24`) across all files in the pro
 Check the current Go version before making changes:
 
 ```bash
-grep -rn "^go 1\." go.work client-programs/go.mod installer/operator/go.mod lookup-service/go.mod node-ca-injector/go.mod assets-server/go.mod image-puller/go.mod
+grep -rn "^go 1\." go.work client-programs/go.mod installer/operator/go.mod lookup-service/go.mod secrets-manager/go.mod node-ca-injector/go.mod assets-server/go.mod image-puller/go.mod
 ```
 
 ## Step 2: Update All Files
@@ -24,11 +24,12 @@ You must update **all** of the following. Do not skip any.
 ### Go Module Files
 
 - **`go.work`**: update the `go 1.xx` directive. The workspace covers
-  `client-programs/`, `installer/operator/`, `lookup-service/`, and
-  `node-ca-injector/`.
+  `client-programs/`, `installer/operator/`, `lookup-service/`,
+  `node-ca-injector/`, and `secrets-manager/`.
 - **`client-programs/go.mod`**: update the `go 1.xx` line
 - **`installer/operator/go.mod`**: update the `go 1.xx` line (the kubebuilder operator)
 - **`lookup-service/go.mod`**: update the `go 1.xx` line (the Lookup Service)
+- **`secrets-manager/go.mod`**: update the `go 1.xx` line (the secrets-manager)
 - **`node-ca-injector/go.mod`**: update the `go 1.xx` line
 - **`assets-server/go.mod`**: update the `go 1.xx` line (Docker-only module, not in `go.work`)
 - **`image-puller/go.mod`**: update the `go 1.xx` line (Docker-only module, not in `go.work`)
@@ -52,6 +53,7 @@ or remove the `--platform=$BUILDPLATFORM` prefix** as part of a version bump.
 - **`client-programs/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
 - **`installer/operator/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
 - **`lookup-service/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
+- **`secrets-manager/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
 - **`node-ca-injector/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
 - **`assets-server/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
 - **`image-puller/Dockerfile`**: `FROM --platform=$BUILDPLATFORM golang:1.xx AS builder`
@@ -80,7 +82,7 @@ prefix to a stage that builds with a plain `go build` (no `GOOS`/`GOARCH`)
 produces a wrong-architecture binary** — so the prefix and the `GOOS/GOARCH`
 build must always go together.
 
-All seven Go Dockerfiles above currently cross-compile and carry the prefix. If
+All eight Go Dockerfiles above currently cross-compile and carry the prefix. If
 you ever add a new Go build stage, give it the full three-part set (or no
 `--platform` at all) — never the prefix alone.
 
@@ -110,7 +112,8 @@ The Go workflows (`.github/workflows/*.yaml` — note the extension) pin the
 toolchain with `actions/setup-go` using `go-version-file:` pointing at a module's
 `go.mod` (e.g. `client-programs-ci.yaml` → `client-programs/go.mod`,
 `installer-operator-ci.yaml` → `installer/operator/go.mod`,
-`lookup-service-ci.yaml` → `lookup-service/go.mod`). Because the version
+`lookup-service-ci.yaml` → `lookup-service/go.mod`,
+`secrets-manager-ci.yaml` → `secrets-manager/go.mod`). Because the version
 is read from `go.mod`, bumping the `go.mod` files above is normally enough — no
 hardcoded version to edit.
 
@@ -130,37 +133,39 @@ Run in order, fix any failures before proceeding:
 1. Sync dependencies in every module (run `go mod tidy` in each):
 
 ```bash
-for m in client-programs installer/operator lookup-service node-ca-injector assets-server image-puller; do
+for m in client-programs installer/operator lookup-service secrets-manager node-ca-injector assets-server image-puller; do
   (cd "$m" && go mod tidy)
 done
 ```
 
-2. Build the CLI, the operator and the Lookup Service:
+2. Build the CLI, the operator, the Lookup Service and the secrets-manager:
 
 ```bash
 make build-cli                        # CLI (build-client-programs is an alias)
 make -C installer/operator build      # operator manager binary
 make -C lookup-service build          # Lookup Service binary
+make -C secrets-manager build         # secrets-manager binary
 ```
 
-3. Run tests (the operator's and the Lookup Service's envtest suites are the
-   most likely to surface a toolchain issue):
+3. Run tests (the envtest suites of the operator, the Lookup Service and the
+   secrets-manager are the most likely to surface a toolchain issue):
 
 ```bash
 cd client-programs && go test ./...
 make -C installer/operator test
 make -C lookup-service test
+make -C secrets-manager test
 ```
 
 ## Step 4: Post-Verification Checklist
 
 - [ ] `go.work` updated
-- [ ] All six platform `go.mod` files updated (`client-programs`, `installer/operator`, `lookup-service`, `node-ca-injector`, `assets-server`, `image-puller`)
-- [ ] All seven Dockerfiles with `FROM ...golang:` updated, `--platform=$BUILDPLATFORM` prefix preserved where present
+- [ ] All seven platform `go.mod` files updated (`client-programs`, `installer/operator`, `lookup-service`, `secrets-manager`, `node-ca-injector`, `assets-server`, `image-puller`)
+- [ ] All eight Dockerfiles with `FROM ...golang:` updated, `--platform=$BUILDPLATFORM` prefix preserved where present
 - [ ] Every `ENV GOTOOLCHAIN=go1.<old>` pin in Dockerfiles moved to the new version
 - [ ] CI: no stray hardcoded `go-version:`/`golang:1.` literal left (versions come from `go-version-file: <module>/go.mod`)
 - [ ] `go mod tidy` ran cleanly in all modules
-- [ ] CLI builds (`make build-cli`), and operator and Lookup Service build + tests (`make -C installer/operator build test`, `make -C lookup-service build test`)
+- [ ] CLI builds (`make build-cli`), and the operator, Lookup Service and secrets-manager build + tests (`make -C installer/operator build test`, `make -C lookup-service build test`, `make -C secrets-manager build test`)
 - [ ] No remaining references to the old Go version (`grep -rn "golang:1\.<old>" --include="Dockerfile*" .`)
 
 If `go mod tidy` changes `go.sum`, commit that change but confirm with the user first.

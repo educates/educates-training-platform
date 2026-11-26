@@ -1,0 +1,25 @@
+# A copier whose source Secret lacks a key its sourceSecret.keys lists.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keys-missing
+  namespace: kit-secrets-manager-source
+stringData:
+  username: kit
+---
+apiVersion: secrets.educates.dev/v1beta1
+kind: SecretCopier
+metadata:
+  name: kit-secrets-manager-source-keys-missing
+spec:
+  rules:
+  - sourceSecret:
+      name: keys-missing
+      namespace: kit-secrets-manager-source
+      keys:
+      - username
+      - password
+    targetNamespaces:
+      nameSelector:
+        matchNames:
+        - kit-secrets-manager-target-a

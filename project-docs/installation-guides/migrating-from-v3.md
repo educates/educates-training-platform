@@ -185,15 +185,15 @@ says to set it. Any other listen address is kept as it was.
 A local cluster serves an ingress domain it is given over HTTPS, which needs
 a root CA or a wildcard certificate for the domain in the local secrets cache,
 and with no ``ingress.domain`` it takes the ``nip.io`` name of its listen
-address, with dashes, served over plain HTTP. Version 3 served a ``nip.io``
-domain without a cached certificate over plain HTTP, so when
-``clusterIngress.domain`` is the ``nip.io`` name of an IPv4 address, such as
-``10.10.10.1.nip.io`` or ``10-10-10-1.nip.io``, no unexpired wildcard
-certificate for it is cached, and ``clusterIngress.protocol`` is not
-``http``, the migration leaves ``ingress.domain`` unset, with a line of the
-notice saying so. The cluster's host names then follow its listen address. To
-keep the version 3 domain, set ``ingress.domain`` to it and
-``ingress.insecure`` to ``true``.
+address, with dashes, served over plain HTTP. When ``clusterIngress.domain``
+is the ``nip.io`` name of an IPv4 address, such as ``10.10.10.1.nip.io`` or
+``10-10-10-1.nip.io``, the migration leaves ``ingress.domain`` unset if version
+3 served the domain over plain HTTP: no unexpired wildcard certificate for it
+is cached, and the file sets none of ``clusterIngress.tlsCertificate``,
+``clusterIngress.tlsCertificateRef``, ``clusterInfrastructure.caCertificateRef``
+and ``clusterIngress.protocol``. A line of the notice says so, and the
+cluster's host names then follow its listen address. To keep the version 3
+domain, set ``ingress.domain`` to it and ``ingress.insecure`` to ``true``.
 
 The migration also drops ``localDNSResolver.targetAddress``. A local cluster's
 names now resolve to its ``cluster.listenAddress``. The migration does not set

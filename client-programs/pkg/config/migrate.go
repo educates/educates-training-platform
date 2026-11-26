@@ -91,7 +91,7 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 	}
 
 	cfg, listenAddressIsHostIP, notes := translateV3ToV4(v3raw)
-	if note := dropV3NipDomain(cfg, filepath.Join(dataHome, "secrets")); note != "" {
+	if note := dropV3NipDomain(cfg, v3raw, filepath.Join(dataHome, "secrets")); note != "" {
 		notes = append(notes, note)
 	}
 	// v4 declares registry mirrors for every local cluster in a file of
@@ -130,7 +130,7 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 	// Tell the user how deploys use it: beside a cached wildcard
 	// certificate it is that certificate's CA trust, and otherwise a root
 	// CA is still needed.
-	if domain := strV3Path(v3raw, "clusterIngress", "domain"); domain != "" {
+	if domain := cfg.Ingress.Domain; domain != "" {
 		noteIfV3CACachePresent(w, filepath.Join(dataHome, "secrets"), domain)
 	}
 	return nil
@@ -457,30 +457,43 @@ func droppedV3SettingNote(path string) string {
 	return fmt.Sprintf("dropped %s: %s", path, where)
 }
 
-// dropV3NipDomain leaves the ingress.domain of cfg, a migrated v3 config,
-// to the version 4 default when it is the nip.io name of an IPv4 address
-// that the local secrets cache in secretsDir holds no wildcard TLS
-// certificate for, and returns the line of the migration notice that says
-// so, empty when it keeps the domain. Version 3 served such a domain over
-// plain HTTP, where a local cluster serves a domain it is given over
-// HTTPS, which needs a root CA, and gives a config without one the nip.io
-// name of its cluster.listenAddress, served over plain HTTP. A domain the
-// config already serves over plain HTTP, as v3 clusterIngress.protocol
-// http asked, is kept.
-func dropV3NipDomain(cfg *v1alpha1.EducatesLocalConfig, secretsDir string) string {
+// dropV3NipDomain leaves the ingress.domain of cfg, migrated from the v3
+// values map v3, to the version 4 default when it is the nip.io name of an
+// IPv4 address that version 3 served over plain HTTP, and returns the line
+// of the migration notice that says so, empty when it keeps the domain.
+// Version 3 served it over plain HTTP when v3 declares no HTTPS, as
+// v3ServedHTTPS says, and the local secrets cache in secretsDir holds no
+// wildcard TLS certificate for it. A local cluster serves a domain it is
+// given over HTTPS, which needs a root CA, and gives a config without one
+// the nip.io name of its cluster.listenAddress, served over plain HTTP. A
+// domain the config already serves over plain HTTP, as v3
+// clusterIngress.protocol http asked, is kept.
+func dropV3NipDomain(cfg *v1alpha1.EducatesLocalConfig, v3 map[string]interface{}, secretsDir string) string {
 	domain := cfg.Ingress.Domain
-	if cfg.Ingress.Insecure || !isNipDomain(domain) || cachedWildcardCertificateCovers(secretsDir, domain) {
+	if cfg.Ingress.Insecure || !isNipDomain(domain) || v3ServedHTTPS(v3) ||
+		cachedWildcardCertificateCovers(secretsDir, domain) {
 		return ""
 	}
 	cfg.Ingress.Domain = ""
-	takes := "the nip.io name of its cluster.listenAddress"
+	defaultDomain := "the nip.io name of its cluster.listenAddress"
 	if ip, err := netip.ParseAddr(cfg.Cluster.ListenAddress); err == nil && ip.Is4() {
-		takes += ", " + hostinfo.NipDomain(cfg.Cluster.ListenAddress)
+		defaultDomain += ", " + hostinfo.NipDomain(cfg.Cluster.ListenAddress)
 	}
 	return fmt.Sprintf("dropped clusterIngress.domain %[1]s: no wildcard TLS certificate for it is cached, and a local "+
 		"cluster serves a domain it is given over HTTPS, which needs a root CA, so the cluster takes %[2]s, served "+
 		"over plain HTTP as version 3 served %[1]s; to keep %[1]s, set ingress.domain to it and ingress.insecure to true",
-		domain, takes)
+		domain, defaultDomain)
+}
+
+// v3ServedHTTPS reports whether the v3 values map v3 declares HTTPS for
+// its ingress without the local secrets cache: a wildcard certificate, a
+// CA cert-manager issues one from, or clusterIngress.protocol https.
+func v3ServedHTTPS(v3 map[string]interface{}) bool {
+	ingress := asMap(v3["clusterIngress"])
+	return strMap(ingress, "protocol") == "https" ||
+		!isEmptyV3Value(ingress["tlsCertificate"]) ||
+		!isEmptyV3Value(ingress["tlsCertificateRef"]) ||
+		!isEmptyV3Value(asMap(v3["clusterInfrastructure"])["caCertificateRef"])
 }
 
 // cachedWildcardCertificateCovers reports whether the local secrets cache

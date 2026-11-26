@@ -698,6 +698,49 @@ func TestMaybeMigrateV3_NipDomainWithAnExpiredCachedCertificate_IsDropped(t *tes
 	}
 }
 
+func TestMaybeMigrateV3_NipDomainVersion3ServedOverHTTPS_IsKept(t *testing.T) {
+	const domain = "clusterIngress:\n  domain: 10.10.10.1.nip.io\n"
+	for name, values := range map[string]string{
+		"tlsCertificate":    domain + "  tlsCertificate:\n    tls.crt: CERT\n    tls.key: KEY\n",
+		"tlsCertificateRef": domain + "  tlsCertificateRef:\n    namespace: default\n    name: wildcard\n",
+		"protocol https":    domain + "  protocol: https\n",
+		"clusterInfrastructure.caCertificateRef": domain +
+			"clusterInfrastructure:\n  caCertificateRef:\n    namespace: default\n    name: root-ca\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, _, notice := migrateV3Values(t, values)
+
+			if got, want := cfg.Ingress.Domain, "10.10.10.1.nip.io"; got != want {
+				t.Errorf("Ingress.Domain = %q, want %q, which version 3 served over HTTPS", got, want)
+			}
+			if strings.Contains(notice, "dropped clusterIngress.domain") {
+				t.Errorf("notice says the domain was dropped:\n%s", notice)
+			}
+		})
+	}
+}
+
+func TestMaybeMigrateV3_DroppedNipDomain_GetsNoCACacheNote(t *testing.T) {
+	dataHome := t.TempDir()
+	must(t, os.MkdirAll(filepath.Join(dataHome, "secrets"), 0o755))
+	must(t, os.WriteFile(filepath.Join(dataHome, "secrets", "nip-ca.yaml"), []byte(`apiVersion: v1
+kind: Secret
+metadata:
+  name: nip-ca
+  annotations:
+    training.educates.dev/domain: 10.10.10.1.nip.io
+type: Opaque
+data:
+  ca.crt: dGVzdA==
+`), 0o644))
+
+	_, _, notice := migrateV3ValuesIn(t, dataHome, "clusterIngress:\n  domain: 10.10.10.1.nip.io\n")
+
+	if strings.Contains(notice, "the cached v3 CA certificate") {
+		t.Errorf("notice explains a CA certificate for the domain it dropped:\n%s", notice)
+	}
+}
+
 func TestMaybeMigrateV3_NipDomainOverPlainHTTP_IsKept(t *testing.T) {
 	cfg, _, notice := migrateV3Values(t, "clusterIngress:\n  domain: 10.10.10.1.nip.io\n  protocol: http\n")
 

@@ -1354,7 +1354,9 @@ Features Changed
   ``router.yaml`` when that file is missing and the address is a specific
   IP address, a named cluster's address is dropped, the previous
   configuration is kept as a backup beside it, and a note says so. A
-  configuration elsewhere, such as one given with ``--config``, that
+  command that needs the router address while ``router.yaml`` is missing
+  moves the default cluster's address first, whichever cluster it acts on.
+  A configuration elsewhere, such as one given with ``--config``, that
   declares it is never rewritten, and fails to load with an error naming
   ``router.yaml`` and ``educates local router update --address``. The CLI's
   first-run migration of a version 3 ``values.yaml`` writes a specific

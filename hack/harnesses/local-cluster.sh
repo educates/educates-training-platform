@@ -3,7 +3,7 @@
 # Creates and deletes a named local cluster from a local build, for the
 # harnesses in this directory. See README.md beside this script.
 #
-#   local-cluster.sh create <name> --listen-address <ip> --tag <tag> [--domain <domain> | --insecure] [--cli <path>]
+#   local-cluster.sh create <name> --tag <tag> [--domain <domain> | --insecure] [--cli <path>]
 #   local-cluster.sh delete <name> [--cli <path>]
 #   local-cluster.sh show <name>
 #
@@ -14,8 +14,10 @@
 # local cluster this script did not create. When the CLI's secrets cache had
 # no CA key pair for the cluster's domain before create, the marker records
 # the key pair the CLI mints for it, and delete removes that key pair too.
-# A cluster created with --insecure is served over plain HTTP on the nip.io
-# name of its listen address, and the CLI mints no CA key pair for it.
+# Every local cluster is served through the CLI's router, on the router
+# address, so a cluster takes no host address of its own. A cluster created
+# with --insecure is served over plain HTTP on its name under the nip.io
+# name of the router address, and the CLI mints no CA key pair for it.
 
 set -euo pipefail
 
@@ -35,16 +37,17 @@ REGISTRY=localhost:5001
 usage() {
     cat <<'EOF'
 Usage:
-  local-cluster.sh create <name> --listen-address <ip> --tag <tag> [--domain <domain> | --insecure] [--cli <path>]
+  local-cluster.sh create <name> --tag <tag> [--domain <domain> | --insecure] [--cli <path>]
   local-cluster.sh delete <name> [--cli <path>]
   local-cluster.sh show <name>
 
 create   Creates the named local cluster <name> from the build
-         'make local-build PACKAGE_VERSION=<tag>' produced, on the host
-         address --listen-address, which no other local cluster may use,
-         served over HTTPS under --domain (default: <name>.educates.test).
-         With --insecure it is served over plain HTTP instead, under the
-         nip.io name of --listen-address, which must be an IPv4 address.
+         'make local-build PACKAGE_VERSION=<tag>' produced, served through
+         the router on the router address, as every local cluster is, over
+         HTTPS under --domain (default: <name>.educates.test), which no
+         other local cluster may claim. With --insecure it is served over
+         plain HTTP instead, on its name under the nip.io name of the router
+         address, which must be an IPv4 address.
 delete   Deletes a named local cluster this script created, and its config,
          and the CA key pair the CLI minted for its domain at create, unless
          that key pair was cached before create.
@@ -102,18 +105,29 @@ check_cli() {
     [ -x "$1" ] || die "no educates CLI at $1; build it with 'make local-build PACKAGE_VERSION=<tag>' or pass --cli"
 }
 
-# cluster_rows prints the rows of 'educates local cluster list' as
-# "<listen address> <domain> <context>", the last three columns, which hold
-# no spaces, unlike the state column.
+# cluster_rows prints the rows of the table of local clusters 'educates local
+# cluster list' prints, below the router address that heads the list, as
+# "<domain> <context>", the last two columns, which hold no spaces, unlike
+# the state column.
 cluster_rows() {
-    "$1" local cluster list 2>/dev/null | awk 'NR > 1 && NF >= 5 { print $(NF-2), $(NF-1), $NF }'
+    "$1" local cluster list 2>/dev/null |
+        awk 'table && NF >= 6 { print $(NF-1), $NF } $1 == "NAME" && $NF == "CONTEXT" { table = 1 }'
+}
+
+# router_address prints the router address 'educates local router status'
+# shows, where the router serves every local cluster: - when it shows none,
+# and nothing when the CLI fails.
+router_address() {
+    local status
+    status=$("$1" local router status 2>/dev/null) || return 0
+    awk '$1 == "Router" && $2 == "address:" { print $3; exit }' <<<"$status"
 }
 
 # kind_cluster_exists reports whether the local cluster <name> has node
 # containers, as 'educates local cluster list' sees it.
 kind_cluster_exists() {
     local cli=$1 name=$2
-    cluster_rows "$cli" | awk -v ctx="kind-educates-$name" '$3 == ctx { found = 1 } END { exit !found }'
+    cluster_rows "$cli" | awk -v ctx="kind-educates-$name" '$2 == ctx { found = 1 } END { exit !found }'
 }
 
 marker_value() {
@@ -134,7 +148,7 @@ secret_cached() {
 # list' sees them, serves the domain <domain>.
 domain_in_use() {
     local cli=$1 domain=$2
-    cluster_rows "$cli" | awk -v domain="$domain" '$2 == domain { found = 1 } END { exit !found }'
+    cluster_rows "$cli" | awk -v domain="$domain" '$1 == domain { found = 1 } END { exit !found }'
 }
 
 # remove_minted_key_pair removes the CA key pair <key pair>, recorded in the
@@ -159,10 +173,9 @@ remove_minted_key_pair() {
 }
 
 cmd_create() {
-    local name="" listen="" tag="" domain="" domain_given=false insecure=false cli=""
+    local name="" tag="" domain="" domain_given=false insecure=false cli="" router=""
     while [ $# -gt 0 ]; do
         case "$1" in
-            --listen-address) need_value "$@"; listen=$2; shift 2 ;;
             --tag) need_value "$@"; tag=$2; shift 2 ;;
             --domain) need_value "$@"; domain=$2; domain_given=true; shift 2 ;;
             --insecure) insecure=true; shift ;;
@@ -173,21 +186,16 @@ cmd_create() {
         esac
     done
     [ -n "$name" ] || die "create needs a cluster name"
-    [ -n "$listen" ] || die "create needs --listen-address, a host address no other local cluster uses"
     [ -n "$tag" ] || die "create needs --tag, the PACKAGE_VERSION of the local build"
     check_name "$name"
 
-    # An insecure cluster's config declares no ingress.domain, so the CLI
-    # serves it over plain HTTP on the nip.io name of its listen address,
-    # which it writes with dashes: 10.10.10.2 is 10-10-10-2.nip.io. nip.io
-    # names only IPv4 addresses. A cluster served over HTTPS gets its
-    # certificate from the CA key pair the CLI caches for its domain; an
-    # insecure one has no certificate, and so no CA key pair.
+    # A cluster served over HTTPS gets its certificate from the CA key pair
+    # the CLI caches for its domain; an insecure one has no certificate, and
+    # so no CA key pair. An insecure cluster's domain derives from the router
+    # address, so it is known only once its config is written.
     local served_over ca_key_pair=""
     if [ "$insecure" = true ]; then
-        [ "$domain_given" = false ] || die "--insecure and --domain can't be given together: an insecure cluster is served on the nip.io name of its listen address"
-        [[ "$listen" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || die "--insecure needs an IPv4 --listen-address, since nip.io names only IPv4 addresses; $listen has no nip.io name"
-        domain=${listen//./-}.nip.io
+        [ "$domain_given" = false ] || die "--insecure and --domain can't be given together: an insecure cluster is served on its name under the nip.io name of the router address"
         served_over="plain HTTP"
     else
         domain=${domain:-$name.educates.test}
@@ -223,10 +231,6 @@ cmd_create() {
         die "local cluster '$name' already has a config at $folder that this script did not create; leaving it alone"
     fi
 
-    local row
-    row=$(cluster_rows "$cli" | awk -v ip="$listen" '$1 == ip { print $3 }' | head -n 1)
-    [ -z "$row" ] || die "listen address $listen is used by the local cluster of kube context $row"
-
     # The CLI mints the CA key pair for the domain when its secrets cache has
     # none. One cached before create may serve another cluster, or have been
     # made by hand, so only a key pair create leads the CLI to mint is
@@ -236,11 +240,30 @@ cmd_create() {
         minted_key_pair=$ca_key_pair
     fi
 
-    echo "==> Writing the config of local cluster '$name' ($listen, $domain, $served_over)"
     if [ "$insecure" = true ]; then
-        "$cli" local config init --local-cluster "$name" --listen-address "$listen"
+        echo "==> Writing the config of local cluster '$name' (its name under the nip.io name of the router address, $served_over)"
+        "$cli" local config init --local-cluster "$name"
     else
-        "$cli" local config init --local-cluster "$name" --listen-address "$listen" --domain "$domain"
+        echo "==> Writing the config of local cluster '$name' ($domain, $served_over)"
+        "$cli" local config init --local-cluster "$name" --domain "$domain"
+    fi
+
+    # An insecure cluster's config declares no ingress.domain, so the CLI
+    # serves it over plain HTTP on its name under the nip.io name of the
+    # router address, which it writes with dashes: test2 on the router
+    # address 10.10.10.1 is test2.10-10-10-1.nip.io. nip.io names only IPv4
+    # addresses. init writes the router address first when it is missing.
+    if [ "$insecure" = true ]; then
+        router=$(router_address "$cli")
+        if [ -z "$router" ] || [ "$router" = - ]; then
+            "$cli" local config delete --local-cluster "$name" >/dev/null 2>&1 || true
+            die "the CLI shows no router address, so --insecure has no nip.io name to serve the cluster on; 'educates local router status' says why. The config was removed"
+        fi
+        if ! [[ "$router" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+            "$cli" local config delete --local-cluster "$name" >/dev/null 2>&1 || true
+            die "--insecure needs an IPv4 router address, since nip.io names only IPv4 addresses; the router address $router has no nip.io name. The config was removed"
+        fi
+        domain=$name.${router//./-}.nip.io
     fi
 
     cat > "$folder/$MARKER_FILE" <<EOF
@@ -251,7 +274,6 @@ cmd_create() {
 HARNESS_CLUSTER_NAME=$name
 HARNESS_CLUSTER_TAG=$tag
 HARNESS_CLUSTER_CLI=$cli
-HARNESS_CLUSTER_LISTEN_ADDRESS=$listen
 HARNESS_CLUSTER_DOMAIN=$domain
 HARNESS_CLUSTER_INSECURE=$insecure
 HARNESS_CLUSTER_CONTEXT=kind-educates-$name
@@ -283,13 +305,15 @@ EOF
         kubectl --kubeconfig "$kubeconfig" config use-context "$previous" >/dev/null 2>&1 || true
     fi
 
+    router=$(router_address "$cli")
+
     cat <<EOF
 
 Local cluster '$name' is ready:
   kube context:   kind-educates-$name
-  listen address: $listen
   domain:         $domain
   served over:    $served_over
+  router address: ${router:--}, where the router serves every local cluster
   CLI:            $cli
 Select it with --local-cluster $name, or export EDUCATES_LOCAL_CLUSTER=$name.
 Delete it with: $0 delete $name

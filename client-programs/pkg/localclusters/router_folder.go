@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -75,6 +76,47 @@ func ReadRouterCertificate(dataHome, domain string) (*RouterCertificate, error) 
 		return nil, fmt.Errorf("read the router's certificate key for %s: %w", domain, err)
 	}
 	return &RouterCertificate{Domain: domain, Certificate: certificate, Key: key}, nil
+}
+
+// PruneRouterCertificates removes from the router folder of the data home
+// every certificate, and its key, that no route of RouterRoutes whose TLS
+// ends at the router needs: those of a deleted local cluster, or of one
+// whose TLS no longer ends at the router. Unlike WriteRouterFolder, it
+// needs no router container and changes nothing else in the folder, so a
+// deleted cluster's key leaves it whatever the router's state, and a
+// router that is reloaded later serves the configuration it was rendered
+// with, without that certificate. A folder with no certificates, or no
+// folder, is no error. Two clusters claiming one domain, as RouterRoutes
+// refuses them, is that error, and nothing is removed.
+func (inv Inventory) PruneRouterCertificates() error {
+	routes, _, err := inv.RouterRoutes()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(config.LocalRouterDir(inv.dataHome), routerCertificatesDir)
+	keep := map[string]bool{}
+	for _, domain := range RouterCertificateDomains(routes) {
+		name := path.Base(routerCertificateFile(domain))
+		keep[name], keep[name+routerKeySuffix] = true, true
+	}
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read the router's certificates in %s: %w", dir, err)
+	}
+	for _, e := range entries {
+		// A dot file is a file another command is writing at the same
+		// time, before it renames it into place.
+		if e.IsDir() || keep[e.Name()] || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, e.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("remove %s, which no local cluster the router serves needs: %w", filepath.Join(dir, e.Name()), err)
+		}
+	}
+	return nil
 }
 
 // RemoveRouterFolder removes the router folder of the data home dataHome,

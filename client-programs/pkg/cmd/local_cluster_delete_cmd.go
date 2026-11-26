@@ -256,11 +256,13 @@ func removeUnusedCAKeyPairs(ctx context.Context, w io.Writer, id localclusters.I
 }
 
 // refreshRouterAfterDelete refreshes the router once a local cluster's
-// kind cluster is gone, so it stops serving the cluster's domains, warning
-// when it can't. The reload keeps the other clusters' open connections.
+// kind cluster is gone, so it stops serving the cluster's domains, and
+// removes the cluster's certificate and key from the router folder,
+// whatever the router's state, warning when it can't. The reload keeps the
+// other clusters' open connections.
 func refreshRouterAfterDelete(ctx context.Context) {
 	rep := progress.New(os.Stdout, 0, isStdoutTTY(os.Stdout))
-	dockerRouterChange(utils.GetEducatesHomeDir(), os.Stderr).refreshRouter(ctx, rep, localClusterInventory)
+	dockerRouterChange(utils.GetEducatesHomeDir(), os.Stderr).refreshAfterDelete(ctx, rep, localClusterInventory)
 }
 
 // refreshResolverAfterDelete refreshes a running local DNS resolver once a
@@ -291,7 +293,9 @@ key pair from the root CA.
 
 The router, which serves every local cluster, is refreshed so it no
 longer routes the cluster's names, keeping the other clusters' open
-connections.
+connections. The certificate and key the router ended the cluster's TLS
+with, if any, are removed from the router folder of the data home, even
+when the router container is missing.
 
 With --all it also deletes the local image registry, the DNS resolver, the
 registry mirrors and the router, with the router folder of the data home,

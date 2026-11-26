@@ -2,6 +2,7 @@ package localclusters
 
 import (
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -242,6 +243,49 @@ func TestWriteRouterFolderRemovesTheCertificateOfADeletedCluster(t *testing.T) {
 	}
 	if got, err := ReadRouterCertificate(dataHome, "tls1.test"); err != nil || got != nil {
 		t.Errorf("ReadRouterCertificate() = %v, %v; want none", got, err)
+	}
+}
+
+// A deleted cluster's certificate and key leave the router folder whatever
+// the router's state, while the certificates of the clusters the router
+// still serves, and the rest of the folder, stay as they were written.
+func TestPruneRouterCertificatesRemovesTheCertificateOfADeletedCluster(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+	writeClusterConfig(t, dataHome, "tls1", localConfigHeader+"ingress:\n  domain: tls1.test\n  externalTLSTermination: true\n")
+	writeClusterConfig(t, dataHome, "tls2", localConfigHeader+"ingress:\n  domain: tls2.test\n  externalTLSTermination: true\n")
+	written := RenderRouter([]RouterRoute{endingTLS(t, dataHome, "tls1", "tls1.test"), endingTLS(t, dataHome, "tls2", "tls2.test")},
+		routerCertificateFor("tls1.test"), routerCertificateFor("tls2.test"))
+	if err := WriteRouterFolder(dataHome, written); err != nil {
+		t.Fatalf("WriteRouterFolder: %v", err)
+	}
+	// tls1 is deleted: its node is gone, and its config stays.
+	inv := NewInventory(Observed{Nodes: []NodeContainer{kindControlPlane("educates-tls2", false)}, InterfaceAddresses: hostInterfaces}, dataHome)
+
+	if err := inv.PruneRouterCertificates(); err != nil {
+		t.Fatalf("PruneRouterCertificates: %v", err)
+	}
+
+	got := slices.Sorted(maps.Keys(folderFiles(t, config.LocalRouterDir(dataHome))))
+	var want []string
+	for _, f := range written {
+		if !strings.HasPrefix(f.Name, "certs/tls1.test.") {
+			want = append(want, f.Name)
+		}
+	}
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("router folder holds %q, want %q", got, want)
+	}
+}
+
+// A router folder never written holds no certificate to remove.
+func TestPruneRouterCertificatesOfAMissingRouterFolder(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+
+	if err := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, dataHome).PruneRouterCertificates(); err != nil {
+		t.Errorf("PruneRouterCertificates: %v", err)
 	}
 }
 

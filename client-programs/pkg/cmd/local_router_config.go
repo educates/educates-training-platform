@@ -207,6 +207,28 @@ func (rc routerChange) refreshRouter(ctx context.Context, rep progress.Reporter,
 	step.Done("updated")
 }
 
+// refreshAfterDelete refreshes the router once a local cluster is deleted,
+// from the local clusters observe returns, as refreshRouter does, and
+// removes from the router folder the certificate and key of every local
+// cluster the router no longer serves, as
+// localclusters.Inventory.PruneRouterCertificates does, whatever the
+// router's state: refreshRouter leaves the folder as it is when there is
+// no router container, or one it can't refresh, and no key outlives its
+// cluster. A certificate it can't remove is a warning, since the cluster
+// is gone by then.
+func (rc routerChange) refreshAfterDelete(ctx context.Context, rep progress.Reporter,
+	observe func(context.Context) (localclusters.Inventory, error)) {
+	inventory, err := observe(ctx)
+	rc.refreshRouter(ctx, rep, func(context.Context) (localclusters.Inventory, error) { return inventory, err })
+	if err != nil {
+		return
+	}
+	if err := inventory.PruneRouterCertificates(); err != nil {
+		rep.Note(fmt.Sprintf("Warning: the router folder %s may still hold the certificate and key of the deleted local cluster: %v",
+			config.LocalRouterDir(rc.dataHome), err))
+	}
+}
+
 // serveRoutes renders the router's configuration again, from the local
 // clusters inventory holds, with the local clusters of given served from
 // the configs given for them, writes it to the router folder with the

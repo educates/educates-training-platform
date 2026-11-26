@@ -121,3 +121,28 @@ func TestRefreshRouterWarnsWhenItHasNoCertificateForADomainWhoseTLSEndsThere(t *
 		t.Errorf("router folder holds certificates: %v", err)
 	}
 }
+
+// Deleting a cluster whose TLS ends at the router takes its certificate
+// and key out of the router folder even when there is no router container
+// to refresh.
+func TestRefreshRouterAfterDeleteRemovesTheDeletedClustersCertificateWithNoRouter(t *testing.T) {
+	dataHome, inv := tlsEndedDataHome(t)
+	refreshRouterWithCertificates(&fakeRouterContainer{}, &fakeRouterCertificates{}, dataHome, inv)
+	// tls1 is deleted, and there is no router container.
+	deleted := routerInventory(dataHome, nil, nil)
+	f := &fakeRouterContainer{}
+	var out bytes.Buffer
+
+	routerChangeForTest(f, dataHome, nil).refreshAfterDelete(context.Background(), progress.New(&out, 0, false),
+		func(context.Context) (localclusters.Inventory, error) { return deleted, nil })
+
+	certsDir := filepath.Join(config.LocalRouterDir(dataHome), "certs")
+	for _, name := range []string{"tls1.test.pem", "tls1.test.pem.key"} {
+		if _, err := os.Stat(filepath.Join(certsDir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("router folder still holds %s: %v", name, err)
+		}
+	}
+	if len(f.calls) != 0 || strings.Contains(out.String(), "⚠") {
+		t.Errorf("calls = %q, reported:\n%s\nwant nothing done to a missing router, and no warning", f.calls, out.String())
+	}
+}

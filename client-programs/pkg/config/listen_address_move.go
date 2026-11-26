@@ -49,25 +49,51 @@ func MoveClusterListenAddress(dataHome, path string, w io.Writer) error {
 		address = strings.TrimSpace(value.Value)
 	}
 
-	field := config.field("listenAddress")
-	routerPath := LocalRouterPath(dataHome)
-	isDefault := sameDir(filepath.Dir(path), dataHome)
-	moved := false
-	if isDefault && isSpecificAddress(address) {
-		if moved, err = CreateLocalRouter(dataHome, address, false); err != nil {
+	move := listenAddressMove{
+		path:       path,
+		field:      config.field("listenAddress"),
+		address:    address,
+		routerPath: LocalRouterPath(dataHome),
+		isDefault:  sameDir(filepath.Dir(path), dataHome),
+	}
+	if move.isDefault && isSpecificAddress(address) {
+		if move.moved, err = CreateLocalRouter(dataHome, address, false); err != nil {
 			return fmt.Errorf("%s: %s was removed, and its address can't be moved to %s: %w",
-				path, field, routerPath, err)
+				path, move.field, move.routerPath, err)
 		}
 	}
 
 	removeYAMLMappingKey(config.cluster, "listenAddress")
 	config.removeEmptyClusterBlock()
-	backup, err := config.rewrite()
-	if err != nil {
+	if move.backup, err = config.rewrite(); err != nil {
 		return err
 	}
-	fmt.Fprintln(w, listenAddressMoveNote(path, field, address, routerPath, backup, moved, isDefault))
+	fmt.Fprintln(w, move.note())
 	return nil
+}
+
+// listenAddressMove is what MoveClusterListenAddress did with the listen
+// address of a config, for the note it writes.
+type listenAddressMove struct {
+	// path is the config's path.
+	path string
+
+	// field is the field removed from the config, which declared address.
+	field   string
+	address string
+
+	// routerPath is the path of the router file.
+	routerPath string
+
+	// backup is the path the previous config is kept at.
+	backup string
+
+	// moved says the address became the router address, in the router
+	// file.
+	moved bool
+
+	// isDefault says the config is the default local cluster's.
+	isDefault bool
 }
 
 // removeEmptyClusterBlock removes the config's cluster block when it
@@ -90,25 +116,21 @@ func isSpecificAddress(address string) bool {
 	return err == nil
 }
 
-// listenAddressMoveNote is the note MoveClusterListenAddress writes after
-// removing field, which declared address, from the config at path,
-// keeping the previous config as backup. moved says the address became
-// the router address, in the router file at routerPath, and isDefault
-// that the config is the default local cluster's.
-func listenAddressMoveNote(path, field, address, routerPath, backup string, moved, isDefault bool) string {
-	kept := fmt.Sprintf("The previous config is kept as %s.", backup)
-	if moved {
+// note is the note MoveClusterListenAddress writes after the move m.
+func (m listenAddressMove) note() string {
+	kept := fmt.Sprintf("The previous config is kept as %s.", m.backup)
+	if m.moved {
 		return fmt.Sprintf("note: moved %s of %s to %s as the router address, %s, which every local cluster "+
-			"is served on. %s", field, path, routerPath, address, kept)
+			"is served on. %s", m.field, m.path, m.routerPath, m.address, kept)
 	}
-	removed := field
-	if address != "" {
-		removed += " " + address
+	removed := m.field
+	if m.address != "" {
+		removed += " " + m.address
 	}
 	note := fmt.Sprintf("note: removed %s from %s: a local cluster has no address of its own, since every local "+
-		"cluster is served on the router address, which %s declares.", removed, path, routerPath)
-	if isDefault && address != "" && !isSpecificAddress(address) {
-		note += fmt.Sprintf(" %s is not carried over to it, since it is not a specific IP address of this host.", address)
+		"cluster is served on the router address, which %s declares.", removed, m.path, m.routerPath)
+	if m.isDefault && m.address != "" && !isSpecificAddress(m.address) {
+		note += fmt.Sprintf(" %s is not carried over to it, since it is not a specific IP address of this host.", m.address)
 	}
 	return note + " " + kept
 }

@@ -28,13 +28,19 @@ func Load(path string) (v1alpha1.Config, error) {
 }
 
 // ReadConfigFile reads the CLI config file at path. A config of a local
-// cluster in the data home that still declares registry mirrors in its
-// cluster block has them moved to the registry mirrors file first, once,
-// with a note on standard error (MoveClusterRegistryMirrors), so every
+// cluster in the data home that still declares registry mirrors or a
+// listen address in its cluster block has them moved first, once, with a
+// note on standard error: the registry mirrors to the registry mirrors
+// file (MoveClusterRegistryMirrors), and the default local cluster's
+// listen address to the router file (MoveClusterListenAddress). So every
 // command that reads such a config moves it. A failed read is an error
 // naming path and wrapping the cause, such as fs.ErrNotExist.
 func ReadConfigFile(path string) ([]byte, error) {
-	if err := MoveClusterRegistryMirrors(utils.GetEducatesHomeDir(), path, os.Stderr); err != nil {
+	dataHome := utils.GetEducatesHomeDir()
+	if err := MoveClusterRegistryMirrors(dataHome, path, os.Stderr); err != nil {
+		return nil, err
+	}
+	if err := MoveClusterListenAddress(dataHome, path, os.Stderr); err != nil {
 		return nil, err
 	}
 	data, err := os.ReadFile(path)
@@ -86,10 +92,7 @@ func LoadBytesWithoutDefaults(data []byte, source string) (v1alpha1.Config, erro
 	if apiVersion != v1alpha1.APIVersion {
 		return nil, fmt.Errorf("%s: unsupported apiVersion %q (want %q)", source, apiVersion, v1alpha1.APIVersion)
 	}
-	if err := checkNoResolverTargetAddress(raw, kind); err != nil {
-		return nil, fmt.Errorf("%s: %w", source, err)
-	}
-	if err := checkNoClusterRegistryMirrors(raw, kind); err != nil {
+	if err := CheckNoRemovedFields(raw, kind); err != nil {
 		return nil, fmt.Errorf("%s: %w", source, err)
 	}
 
@@ -113,6 +116,21 @@ func LoadBytesWithoutDefaults(data []byte, source string) (v1alpha1.Config, erro
 	}
 }
 
+// CheckNoRemovedFields returns an error saying where a removed field's
+// setting went when raw, the top level of a config of kind kind, still
+// declares one: the resolver's targetAddress, or the registry mirrors or
+// the listen address of its cluster block. Loading a config checks it
+// before the schema's generic error, and so can a command that edits one.
+func CheckNoRemovedFields(raw map[string]interface{}, kind string) error {
+	if err := checkNoResolverTargetAddress(raw, kind); err != nil {
+		return err
+	}
+	if err := checkNoClusterRegistryMirrors(raw, kind); err != nil {
+		return err
+	}
+	return checkNoClusterListenAddress(raw, kind)
+}
+
 // checkNoResolverTargetAddress returns an error saying what replaces
 // resolver.targetAddress when raw, the top level of a config of kind
 // kind, still sets it: resolver.targetAddress in an EducatesLocalConfig,
@@ -121,13 +139,11 @@ func LoadBytesWithoutDefaults(data []byte, source string) (v1alpha1.Config, erro
 // place of the EducatesConfig's loose decode dropping it silently.
 func checkNoResolverTargetAddress(raw map[string]interface{}, kind string) error {
 	var resolverPath []string
-	listenAddressField := "cluster.listenAddress"
 	switch kind {
 	case v1alpha1.KindEducatesLocalConfig:
 		resolverPath = []string{"resolver"}
 	case v1alpha1.KindEducatesConfig:
 		resolverPath = []string{"target", "resolver"}
-		listenAddressField = "target.cluster.listenAddress"
 	default:
 		return nil
 	}
@@ -136,12 +152,47 @@ func checkNoResolverTargetAddress(raw map[string]interface{}, kind string) error
 		return nil
 	}
 	resolverField := strings.Join(resolverPath, ".")
+	dataHome := utils.GetEducatesHomeDir()
 	return fmt.Errorf("%s.targetAddress was removed: remove it from the config. A local cluster's names, "+
-		"its ingress domain and %s.extraDomains, now resolve to its %s, a specific IP address of the host. "+
-		"Names that resolve anywhere else go in "+
+		"its ingress domain and %s.extraDomains, now resolve to the router address in %s, the IP address of "+
+		"the host every local cluster is served on. Names that resolve anywhere else go in "+
 		"dnsmasq configuration files of your own, %s",
-		resolverField, resolverField, listenAddressField,
-		filepath.Join(DnsmasqIncludeDir(utils.GetEducatesHomeDir()), "*.conf"))
+		resolverField, resolverField, LocalRouterPath(dataHome),
+		filepath.Join(DnsmasqIncludeDir(dataHome), "*.conf"))
+}
+
+// checkNoClusterListenAddress returns an error saying where the address
+// went when raw, the top level of a config of kind kind, still declares a
+// listen address in its cluster block: cluster.listenAddress in an
+// EducatesLocalConfig, or target.cluster.listenAddress in an
+// EducatesConfig. A local cluster has no address of its own: every local
+// cluster is served through the router, on the router address in the
+// router file of the data home, so the error names that file and shows
+// the command that sets the address there. It comes before the schema's
+// generic error, or in place of the EducatesConfig's loose decode
+// dropping the field silently.
+//
+// A config in the data home never gets here, since reading it moves the
+// field out of it (MoveClusterListenAddress).
+func checkNoClusterListenAddress(raw map[string]interface{}, kind string) error {
+	clusterPath := clusterBlockPath(kind)
+	if clusterPath == nil {
+		return nil
+	}
+	cluster, _ := walkV3(raw, clusterPath...)
+	value, set := asMap(cluster)["listenAddress"]
+	if !set {
+		return nil
+	}
+	field := strings.Join(append(clusterPath, "listenAddress"), ".")
+	address, _ := value.(string)
+	if !isSpecificAddress(address) {
+		address = "<ip>"
+	}
+	return fmt.Errorf("%s was removed: a local cluster has no address of its own, since every local cluster "+
+		"is served through the router, on the router address in %s. Remove %s from the config, and set the "+
+		"router address with:\n\n  educates local router update --address %s",
+		field, LocalRouterPath(utils.GetEducatesHomeDir()), field, address)
 }
 
 // checkNoClusterRegistryMirrors returns an error saying where registry

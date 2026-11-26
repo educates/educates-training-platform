@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1/schemas"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
@@ -129,6 +130,11 @@ func runLocalConfigSet(w io.Writer, id localclusters.Identity, path, rawValue st
 	}
 	if asMap == nil {
 		asMap = map[string]interface{}{}
+	}
+	// A field that was removed says where its setting went, rather than
+	// that the schema does not allow it.
+	if err := config.CheckNoRemovedFields(asMap, v1alpha1.KindEducatesLocalConfig); err != nil {
+		return fmt.Errorf("set %q rejected: %s: %w", path, cfgPath, err)
 	}
 	if err := validateAgainstLocalSchema(asMap, cfgPath, path); err != nil {
 		return err

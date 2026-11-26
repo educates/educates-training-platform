@@ -38,10 +38,8 @@ func routerStatusDataHome(t *testing.T) string {
 	t.Helper()
 	dataHome := t.TempDir()
 	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n"+
-		"ingress:\n  domain: educates.test\nresolver:\n  extraDomains:\n  - extra.example.test\n")
-	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n"+
-		"ingress:\n  domain: test2.educates.test\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  domain: educates.test\nresolver:\n  extraDomains:\n  - extra.example.test\n")
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"ingress:\n  domain: test2.educates.test\n")
 	return dataHome
 }
 

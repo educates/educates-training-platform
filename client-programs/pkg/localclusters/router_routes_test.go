@@ -69,10 +69,10 @@ func givenLoadedConfig(t *testing.T, id Identity, body string) LoadedConfig {
 func TestRouterRoutesServeEveryEducatesClusterRunningOrStopped(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"+
+		"ingress:\n  domain: educates.test\n"+
 		"resolver:\n  extraDomains:\n  - example.test\n  - Educates.Test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")
+		"ingress:\n  domain: test2.educates.test\n")
 
 	routes := routerRoutes(t, dataHome, []NodeContainer{
 		kindControlPlane("educates-test2", false),
@@ -94,9 +94,9 @@ func TestRouterRoutesServeEveryEducatesClusterRunningOrStopped(t *testing.T) {
 func TestRouterRoutesLeaveOutAClusterThatDoesNotExist(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
+		"ingress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")
+		"ingress:\n  domain: test2.educates.test\n")
 
 	routes := routerRoutes(t, dataHome, []NodeContainer{kindControlPlane("educates-test2", true)})
 
@@ -107,7 +107,7 @@ func TestRouterRoutesLeaveOutAClusterThatDoesNotExist(t *testing.T) {
 func TestRouterRoutesServeTheDefaultClusterAtTheNipDomainOfTheRouterAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
-	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+"cluster:\n  listenAddress: 192.168.1.20\n")
+	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader)
 
 	routes := routerRoutes(t, dataHome, []NodeContainer{kindControlPlane("educates", true)})
 
@@ -157,11 +157,11 @@ func TestRouterRoutesServeNamedClustersByNameMostSpecificDomainFirst(t *testing.
 func TestRouterRoutesServeAClusterBeingCreatedFromItsGivenConfig(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: old.educates.test\n")
+		"ingress:\n  domain: old.educates.test\n")
 	test2 := namedID(t, "test2", dataHome)
 
 	routes := routerRoutes(t, dataHome, nil,
-		givenLoadedConfig(t, test2, localConfigHeader+"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n"))
+		givenLoadedConfig(t, test2, localConfigHeader+"ingress:\n  domain: test2.educates.test\n"))
 
 	wantRoutes(t, routes, routeSummary{KindName: "educates-test2", Names: []string{"test2.educates.test"},
 		Node: "educates-test2-control-plane", State: Stopped})
@@ -173,7 +173,7 @@ func TestRouterRoutesServeAClusterBeingCreatedFromItsGivenConfig(t *testing.T) {
 func TestRouterRoutesLeaveOutAClusterWhoseConfigTheyCannotUse(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
+		"ingress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", twoControlPlanesConfig)
 	addClusterFolder(t, dataHome, "test3")
 
@@ -212,9 +212,9 @@ func TestRouterRoutesRefuseAGivenConfigTheyCannotServe(t *testing.T) {
 func TestRouterRoutesRefuseADomainTwoClustersClaim(t *testing.T) {
 	dataHome := t.TempDir()
 	writeDataHomeConfig(t, dataHome, "config.yaml", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
+		"ingress:\n  domain: educates.test\n")
 	writeDataHomeConfig(t, dataHome, "clusters/test2/config.yaml", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n"+
+		"ingress:\n  domain: test2.educates.test\n"+
 		"resolver:\n  extraDomains:\n  - Educates.Test\n")
 
 	_, _, err := NewInventory(Observed{Nodes: []NodeContainer{

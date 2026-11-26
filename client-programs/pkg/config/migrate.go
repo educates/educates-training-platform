@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,6 +85,16 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 	}
 
 	cfg, notes := translateV3ToV4(v3raw)
+	// v4 serves every local cluster on the router address, which the
+	// router file declares, written before the config, as the registry
+	// mirrors file is below.
+	routerNote, err := migrateV3ListenAddress(dataHome, strV3Path(v3raw, "localKindCluster", "listenAddress"))
+	if err != nil {
+		return err
+	}
+	if routerNote != "" {
+		notes = append([]string{routerNote}, notes...)
+	}
 	// v4 declares registry mirrors for every local cluster in a file of
 	// their own, written before the config, so a mirror is never lost: a
 	// migration that fails here leaves the v3 values.yaml in place.
@@ -206,12 +217,8 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		cfg.Ingress.Insecure = true
 	}
 
-	// cluster
-	var note string
-	cfg.Cluster.ListenAddress, note = migrateV3ListenAddress(strV3Path(v3, "localKindCluster", "listenAddress"))
-	if note != "" {
-		notes = append(notes, note)
-	}
+	// cluster. Its listen address becomes the router address, which
+	// MaybeMigrateV3 writes to the router file.
 	cfg.Cluster.ApiServer.Address = strV3Path(v3, "localKindCluster", "apiServer", "address")
 	cfg.Cluster.ApiServer.Port = intV3Path(v3, "localKindCluster", "apiServer", "port")
 	cfg.Cluster.Networking.ServiceSubnet = strV3Path(v3, "localKindCluster", "networking", "serviceSubnet")
@@ -227,15 +234,15 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		}
 		cfg.Cluster.VolumeMounts = append(cfg.Cluster.VolumeMounts, vm)
 	}
-	// resolver. A local cluster's names now resolve to its listen address,
-	// so targetAddress goes. Setting the listen address from it instead
-	// would change where kind publishes the cluster's ports, so the notice
-	// says how to do that.
+	// resolver. A local cluster's names now resolve to the router address,
+	// so targetAddress goes. Setting the router address from it instead
+	// would change where every local cluster is served, so the notice says
+	// how to do that.
 	if target := strV3Path(v3, "localDNSResolver", "targetAddress"); target != "" {
 		notes = append(notes, fmt.Sprintf("dropped localDNSResolver.targetAddress %[1]s: a local cluster's names "+
-			"now resolve to its cluster.listenAddress; set cluster.listenAddress to %[1]s to keep resolving the "+
-			"cluster there, or for other names add address=/<name>/%[1]s to a *.conf file in the dnsmasq.d "+
-			"folder of the data home", target))
+			"now resolve to the router address; set it with 'educates local router update --address %[1]s' to "+
+			"keep resolving the cluster there, or for other names add address=/<name>/%[1]s to a *.conf file in "+
+			"the dnsmasq.d folder of the data home", target))
 	}
 	for _, d := range listV3Path(v3, "localDNSResolver", "extraDomains") {
 		if s, ok := d.(string); ok {
@@ -364,34 +371,59 @@ func migrateV3RegistryMirrors(dataHome string, mirrors []v1alpha1.RegistryMirror
 		"cluster needs are declared: %s", path, strings.Join(names, ", ")), nil
 }
 
-// migrateV3ListenAddress returns the cluster.listenAddress of the
-// migrated config for the v3 localKindCluster.listenAddress listenAddress,
-// with the line of the migration notice that says why it changed, empty
-// when it did not.
+// migrateV3ListenAddress writes the router file of the data home
+// dataHome, which declares the router address every local cluster is
+// served on, from listenAddress, the v3 localKindCluster.listenAddress,
+// and returns the line of the migration notice that says so. A file that
+// already exists is left as it is, and the line says how to set a
+// specific listenAddress there by hand.
 //
-// v3 left a missing listen address to kind, which publishes the cluster's
-// ports on every host address, as 0.0.0.0 does, and every local cluster
-// now publishes them on a specific IP address of the host. Either becomes
-// the host's IP address, and with none detected, stays unset for the user
-// to set. Any other address is kept as it is.
-func migrateV3ListenAddress(listenAddress string) (string, string) {
-	if listenAddress != "" && listenAddress != "0.0.0.0" {
-		return listenAddress, ""
+// A specific IP address is the router address as it is. v3 left a missing
+// listen address to kind, which publishes the cluster's ports on every
+// host address, as 0.0.0.0 does, and neither that nor a loopback address
+// can be the router address, so the host's IP address takes their place,
+// as local cluster create writes it, and with none detected the router
+// address stays unset, for the user to set.
+func migrateV3ListenAddress(dataHome, listenAddress string) (string, error) {
+	path := LocalRouterPath(dataHome)
+	if _, err := os.Stat(path); err == nil {
+		if !isSpecificAddress(listenAddress) {
+			return "", nil
+		}
+		return fmt.Sprintf("left localKindCluster.listenAddress %[1]s out, since %[2]s already exists and is "+
+			"left as it is: every local cluster is served on the router address it declares. To serve them on "+
+			"%[1]s, set it with 'educates local router update --address %[1]s'", listenAddress, path), nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("check for %s: %w", path, err)
 	}
-	was := "was not set"
-	if listenAddress != "" {
-		was = "was " + listenAddress
+	if isSpecificAddress(listenAddress) {
+		if _, err := CreateLocalRouter(dataHome, listenAddress, false); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("moved localKindCluster.listenAddress %s to %s, as the router address every local "+
+			"cluster is served on", listenAddress, path), nil
 	}
-	why := fmt.Sprintf("localKindCluster.listenAddress %s, so the cluster published its ports 80 and 443 on every "+
-		"host address, and every local cluster now publishes them on a specific IP address of the host", was)
+
+	why := "localKindCluster.listenAddress was not set, so the cluster published its ports 80 and 443 on every host address"
+	if ip, err := netip.ParseAddr(listenAddress); err == nil && ip.IsUnspecified() {
+		why = fmt.Sprintf("localKindCluster.listenAddress was %s, so the cluster published its ports 80 and 443 on "+
+			"every host address", listenAddress)
+	} else if listenAddress != "" {
+		why = fmt.Sprintf("localKindCluster.listenAddress was %s, which is not a specific IP address of the host",
+			listenAddress)
+	}
+	why += ", and every local cluster is now served on the router address, a specific IP address of the host"
 	hostIP, err := hostinfo.DetectHostIP()
-	if err != nil || hostIP == "" {
-		return "", fmt.Sprintf("left cluster.listenAddress unset: %s, and no IP address of this host was detected. "+
-			"Set it with 'educates local config set cluster.listenAddress <ip>' before using the cluster", why)
+	if err != nil || !isSpecificAddress(hostIP) {
+		return fmt.Sprintf("left the router address unset: %s, and no IP address of this host was detected. Set it "+
+			"with 'educates local router update --address <ip>' before using a local cluster", why), nil
 	}
-	return hostIP, fmt.Sprintf("set cluster.listenAddress to %s, this host's IP address: %s. An alias such as "+
+	if _, err := CreateLocalRouter(dataHome, hostIP, true); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("wrote %s with this host's IP address %s as the router address: %s. An alias such as "+
 		"10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not",
-		hostIP, why)
+		path, hostIP, why), nil
 }
 
 // translateV3ImagePuller fills the image pre-puller block from a v3

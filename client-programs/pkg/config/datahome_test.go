@@ -20,34 +20,25 @@ func TestMarshalLocalConfig(t *testing.T) {
 	const header = "# yaml-language-server: $schema=https://schemas.educates.dev/cli/v1alpha1/EducatesLocalConfig.json\n" +
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"
 	cases := []struct {
-		name     string
-		cfg      *v1alpha1.EducatesLocalConfig
-		fromHost bool
-		want     string
+		name string
+		cfg  *v1alpha1.EducatesLocalConfig
+		want string
 	}{
 		{
-			name:     "the host's IP address, with a comment saying so",
-			cfg:      local(v1alpha1.LocalClusterConfig{ListenAddress: "192.168.50.151"}, v1alpha1.LocalIngressConfig{}),
-			fromHost: true,
-			want: header + "cluster:\n" +
-				"  # This host's IP address when this file was written. An alias such as\n" +
-				"  # 10.10.10.1, added to a network interface, survives network changes.\n" +
-				"  listenAddress: 192.168.50.151\n",
+			name: "a cluster setting and domain given",
+			cfg: local(v1alpha1.LocalClusterConfig{ApiServer: v1alpha1.ApiServerConfig{Port: 6443}},
+				v1alpha1.LocalIngressConfig{Domain: "educates.test"}),
+			want: header + "cluster:\n  apiServer:\n    port: 6443\ningress:\n  domain: educates.test\n",
 		},
 		{
-			name: "a listen address and domain given",
-			cfg:  local(v1alpha1.LocalClusterConfig{ListenAddress: "10.10.10.1"}, v1alpha1.LocalIngressConfig{Domain: "educates.test"}),
-			want: header + "cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n",
-		},
-		{
-			name: "no listen address",
+			name: "nothing given",
 			cfg:  local(v1alpha1.LocalClusterConfig{}, v1alpha1.LocalIngressConfig{}),
 			want: header,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := MarshalLocalConfig(tc.cfg, tc.fromHost)
+			got, err := MarshalLocalConfig(tc.cfg)
 			if err != nil {
 				t.Fatalf("MarshalLocalConfig: %v", err)
 			}

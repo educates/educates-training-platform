@@ -20,8 +20,6 @@ kind: EducatesLocalConfig
 `
 	localWithDomain = `apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
-cluster:
-  listenAddress: 10.10.10.1
 ingress:
   domain: workshop.test
 operator:

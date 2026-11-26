@@ -41,10 +41,6 @@ type LocalConfigInitOptions struct {
 
 	// Domain is the value of --domain.
 	Domain string
-
-	// ListenAddress is the value of --listen-address, which is ignored,
-	// with a warning: a local cluster has no address of its own.
-	ListenAddress string
 }
 
 func (p *ProjectInfo) NewLocalConfigInitCmd() *cobra.Command {
@@ -67,7 +63,7 @@ A local cluster has no address of its own: every local cluster is served
 through the router, on the router address. Without --domain the default
 local cluster takes the nip.io name of the router address, such as
 10-10-10-1.nip.io, and a named one its name under it, such as
-test2.10-10-10-1.nip.io. --listen-address is ignored, with a warning.
+test2.10-10-10-1.nip.io.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, writes the config of
 a named local cluster instead, to <data-home>/clusters/<name>/config.yaml.
@@ -95,7 +91,6 @@ $XDG_DATA_HOME/educates.`,
 	c.Flags().BoolVar(&o.Force, "force", false, "overwrite existing config.yaml")
 	c.Flags().BoolVar(&o.Defaults, "defaults", false, "write the fully-defaulted configuration instead of a minimal file")
 	addLocalClusterFlag(c)
-	addIgnoredListenAddressFlag(c, &o.ListenAddress)
 	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain of the local cluster (default: the nip.io name of the router address for the default local cluster, and the cluster's name under it for a named one)")
 	return c
 }
@@ -105,15 +100,13 @@ $XDG_DATA_HOME/educates.`,
 // with --defaults gets every CLI default written too. A named local
 // cluster's config declares only what --domain gives, so it takes no
 // --defaults: 'local config view' shows the defaults it gets. A missing
-// router file is written first, as ensureRouterFile writes it, and
-// --listen-address is ignored, with a warning.
+// router file is written first, as ensureRouterFile writes it.
 func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclusters.Identity, w io.Writer) error {
 	if o.Defaults && !id.IsDefault() {
 		return fmt.Errorf("--defaults writes the default local cluster's config only; a named local cluster's config "+
 			"declares what --%s gives, and 'educates local config view%s' shows the defaults it gets",
 			localclusters.DomainFlagName, localClusterFlagArg(id))
 	}
-	warnIgnoredListenAddress(w, o.ListenAddress)
 	if err := refuseExistingConfig(id.ConfigPath, o.Force); err != nil {
 		return err
 	}
@@ -138,8 +131,17 @@ func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclus
 // when it is missing, with the host's IP address as the router address,
 // as localclusters.EnsureRouterFile writes it, and tells w when it does,
 // reporting whether it did. An existing router file is left as it is.
+//
+// The default local cluster's config, as an earlier release wrote it, may
+// still declare the address its cluster was served on, which becomes the
+// router address in place of the host's IP address: it is moved first,
+// as config.MoveClusterListenAddress moves it, with a note on standard
+// error, whichever local cluster the command is for.
 func ensureRouterFile(w io.Writer) (written bool, err error) {
 	dataHome := utils.GetEducatesHomeDir()
+	if err := config.MoveClusterListenAddress(dataHome, config.LocalConfigPath(dataHome), os.Stderr); err != nil {
+		return false, err
+	}
 	address, err := localclusters.EnsureRouterFile(dataHome)
 	if err != nil {
 		return false, err
@@ -171,7 +173,7 @@ func (p *ProjectInfo) writeDefaultedLocalConfig(id localclusters.Identity, flags
 	if err := p.applyLocalConfigDefaults(id, cfg); err != nil {
 		return fmt.Errorf("%s: %w", id.ConfigPath, err)
 	}
-	body, err := config.MarshalLocalConfig(cfg, false)
+	body, err := config.MarshalLocalConfig(cfg)
 	if err != nil {
 		return err
 	}

@@ -107,7 +107,7 @@ func TestLocalConfigInit_NamedCluster_ExistingConfig_ErrorsWithoutForce(t *testi
 
 func TestLocalConfigInit_NamedCluster_Force_Overwrites(t *testing.T) {
 	_, id := namedClusterForTest(t)
-	writeNamedConfig(t, id, namedConfigForTest+"cluster:\n  listenAddress: 10.10.10.2\n")
+	writeNamedConfig(t, id, namedConfigForTest+"cluster:\n  apiServer:\n    port: 6443\n")
 
 	o := &LocalConfigInitOptions{Force: true, Domain: "test2.educates.test"}
 	if err := (&ProjectInfo{}).runLocalConfigInit(o, id, io.Discard); err != nil {
@@ -115,9 +115,9 @@ func TestLocalConfigInit_NamedCluster_Force_Overwrites(t *testing.T) {
 	}
 
 	written := declaredConfig(t, id.ConfigPath)
-	if written.Cluster.ListenAddress != "" || written.Ingress.Domain != "test2.educates.test" {
-		t.Errorf("written cluster.listenAddress, ingress.domain = %q, %q, want none, test2.educates.test",
-			written.Cluster.ListenAddress, written.Ingress.Domain)
+	if written.Cluster.ApiServer.Port != 0 || written.Ingress.Domain != "test2.educates.test" {
+		t.Errorf("written cluster.apiServer.port, ingress.domain = %d, %q, want none, test2.educates.test",
+			written.Cluster.ApiServer.Port, written.Ingress.Domain)
 	}
 }
 

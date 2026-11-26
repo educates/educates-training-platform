@@ -89,7 +89,7 @@ func TestLocalConfigView_FullyDefaulted_SkipsComment(t *testing.T) {
 	if err := p.applyLocalConfigDefaults(defaultLocalCluster(), cfg); err != nil {
 		t.Fatalf("applyLocalConfigDefaults: %v", err)
 	}
-	body, err := config.MarshalLocalConfig(cfg, false)
+	body, err := config.MarshalLocalConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

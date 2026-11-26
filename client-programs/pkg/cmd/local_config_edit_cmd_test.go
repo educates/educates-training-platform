@@ -98,7 +98,7 @@ func TestRunLocalConfigEdit_InvalidThenValid(t *testing.T) {
 		"kind: EducatesLocalConfig\n" +
 		"operator:\n  logLevel: trace\n" // logLevel enum violation
 
-	valid := minimalLocalConfigYAML + "cluster:\n  listenAddress: 10.10.10.1\n\n# edited-marker\n"
+	valid := minimalLocalConfigYAML + "cluster:\n  apiServer:\n    port: 6443\n\n# edited-marker\n"
 
 	stateDir := stageFakeEditor(t, invalid, valid)
 
@@ -137,7 +137,7 @@ func TestRunLocalConfigEdit_ValidFirstPass_Saves(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 
-	valid := minimalLocalConfigYAML + "cluster:\n  listenAddress: 10.10.10.1\n\n# first-pass-marker\n"
+	valid := minimalLocalConfigYAML + "cluster:\n  apiServer:\n    port: 6443\n\n# first-pass-marker\n"
 	stateDir := stageFakeEditor(t, valid)
 
 	if err := runLocalConfigEdit(defaultLocalCluster()); err != nil {

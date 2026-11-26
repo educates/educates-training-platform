@@ -20,7 +20,7 @@ func stageLocalClusterConfigs(t *testing.T) string {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(
-		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: default.test\n"), 0o644); err != nil {
+		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ningress:\n  domain: default.test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	test2, err := localclusters.Named("test2", dataHome)
@@ -28,7 +28,7 @@ func stageLocalClusterConfigs(t *testing.T) string {
 		t.Fatal(err)
 	}
 	writeNamedConfig(t, test2, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.test\n")
+		"ingress:\n  domain: test2.test\n")
 	return dataHome
 }
 

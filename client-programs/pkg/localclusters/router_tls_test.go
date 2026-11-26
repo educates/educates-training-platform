@@ -19,8 +19,7 @@ import (
 func TestLoadConfigOfAClusterEndingTLSAtTheRouterKeepsHTTPSOnItsNipDomain(t *testing.T) {
 	dataHome := t.TempDir()
 	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n"+
-		"ingress:\n  externalTLSTermination: true\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  externalTLSTermination: true\n")
 
 	loaded, err := LoadConfig(Default(dataHome))
 	if err != nil {
@@ -77,10 +76,8 @@ func routerFileNamed(files []RouterFile, name string) (RouterFile, bool) {
 func TestRouterRoutesEndTLSAtTheRouterForAClusterThatAsksForIt(t *testing.T) {
 	dataHome := t.TempDir()
 	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n"+
-		"ingress:\n  domain: educates.test\n")
-	writeClusterConfig(t, dataHome, "tls1", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n"+
-		"ingress:\n  domain: tls1.test\n  externalTLSTermination: true\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeClusterConfig(t, dataHome, "tls1", localConfigHeader+"ingress:\n  domain: tls1.test\n  externalTLSTermination: true\n")
 
 	routes := routerRoutes(t, dataHome, []NodeContainer{kindControlPlane("educates", true), kindControlPlane("educates-tls1", true)})
 
@@ -254,10 +251,8 @@ func TestWriteRouterFolderRemovesTheCertificateOfADeletedCluster(t *testing.T) {
 func TestRouterStatusShowsTLSEndedAtTheRouterForTheDomainOnly(t *testing.T) {
 	dataHome := t.TempDir()
 	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n"+
-		"ingress:\n  domain: educates.test\n")
-	writeClusterConfig(t, dataHome, "tls1", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n"+
-		"ingress:\n  domain: tls1.test\n  externalTLSTermination: true\nresolver:\n  extraDomains:\n  - extra.test\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeClusterConfig(t, dataHome, "tls1", localConfigHeader+"ingress:\n  domain: tls1.test\n  externalTLSTermination: true\nresolver:\n  extraDomains:\n  - extra.test\n")
 	inv := NewInventory(Observed{
 		Nodes:              []NodeContainer{kindControlPlane("educates", true), kindControlPlane("educates-tls1", false)},
 		InterfaceAddresses: hostInterfaces,

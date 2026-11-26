@@ -15,8 +15,7 @@
       "additionalProperties": false,
       "description": "Settings for the local Kind cluster the CLI creates.",
       "properties": {
-        "listenAddress":         { "type": "string", "description": "Ignored: a local cluster has no address of its own. Every local cluster is served through the router, which publishes ports 80 and 443 on the router address in <data-home>/router.yaml, set with 'educates local router update --address <ip>'." },
-        "registryListenAddress": { "type": "string", "description": "Host address the local image registry is published on. Defaults to the cluster listenAddress." },
+        "registryListenAddress": { "type": "string", "description": "Ignored: the local image registry is published on the address 'educates local cluster create --registry-bind-ip' gives, 127.0.0.1 by default." },
         "apiServer": {
           "type": "object",
           "additionalProperties": false,

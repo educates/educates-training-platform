@@ -70,7 +70,7 @@ func routerDataHome(t *testing.T) string {
 	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-			"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
+			"ingress:\n  domain: educates.test\n")
 	return dataHome
 }
 
@@ -269,7 +269,7 @@ func TestRefreshRouterRoutesTheConfigGiven(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := writeFixture(t, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-		"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: test2.educates.test\n")
+		"ingress:\n  domain: test2.educates.test\n")
 	cfg, err := localclusters.LoadConfigFile(test2, path)
 	if err != nil {
 		t.Fatal(err)

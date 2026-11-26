@@ -48,7 +48,7 @@ func tlsEndedDataHome(t *testing.T) (string, localclusters.Inventory) {
 	dataHome := routerDataHome(t)
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "tls1", "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-			"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: tls1.test\n  externalTLSTermination: true\n")
+			"ingress:\n  domain: tls1.test\n  externalTLSTermination: true\n")
 	return dataHome, routerInventory(dataHome, []localclusters.NodeContainer{
 		{Name: "educates-control-plane", KindCluster: "educates", Role: "control-plane", Running: true},
 		{Name: "educates-tls1-control-plane", KindCluster: "educates-tls1", Role: "control-plane", Running: true},

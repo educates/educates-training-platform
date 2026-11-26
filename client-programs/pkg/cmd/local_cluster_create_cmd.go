@@ -52,10 +52,6 @@ type LocalClusterCreateOptions struct {
 
 	// Domain writes the local cluster's missing config.
 	Domain string
-
-	// ListenAddress is the value of --listen-address, which is ignored,
-	// with a warning: a local cluster has no address of its own.
-	ListenAddress string
 }
 
 func (p *ProjectInfo) NewLocalClusterCreateCmd() *cobra.Command {
@@ -94,8 +90,7 @@ the router address, such as 10-10-10-1.nip.io, and a named one its name
 under it, such as test2.10-10-10-1.nip.io, and is served over plain HTTP.
 
 When the local cluster's config is missing, create writes it, declaring
-the optional --domain and nothing else. --listen-address is ignored, with
-a warning: every local cluster is served on the router address.
+the optional --domain and nothing else.
 
 Before kind is touched, create refuses a domain of the cluster, its
 ingress domain or one of its resolver.extraDomains, that another local
@@ -163,7 +158,6 @@ deploy against a hand-prepared cluster.`,
 	c.Flags().StringVarP(&o.Config, "config", "c", "", "path to a CLI config file (any kind)")
 	c.Flags().BoolVar(&o.LocalConfig, "local-config", false, "use the local cluster's config in the data home (default when --config is not given)")
 	addLocalClusterFlag(c)
-	addIgnoredListenAddressFlag(c, &o.ListenAddress)
 	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain written to the local cluster's config when it has none (default: the nip.io name of the router address for the default local cluster, and the cluster's name under it for a named one)")
 	c.Flags().StringVar(&o.Kubeconfig, "kubeconfig", "", "kubeconfig file kind writes the cluster's context into, and the platform deploy uses (defaults to ~/.kube/config)")
 	c.Flags().StringVar(&o.ClusterImage, "kind-cluster-image", "", "docker image to use when booting the kind cluster (overrides --kubernetes-version)")
@@ -178,7 +172,6 @@ deploy against a hand-prepared cluster.`,
 }
 
 func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o *LocalClusterCreateOptions, id localclusters.Identity) error {
-	warnIgnoredListenAddress(w, o.ListenAddress)
 	cfg, configPath, createdConfig, err := loadLocalConfig(w, o, id)
 	if err != nil {
 		return err

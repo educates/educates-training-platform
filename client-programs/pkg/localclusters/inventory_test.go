@@ -105,10 +105,10 @@ func writeClusterConfig(t *testing.T, dataHome, name, body string) {
 func TestListRows(t *testing.T) {
 	dataHome := t.TempDir()
 	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
-	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.2\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader)
 	writeClusterConfig(t, dataHome, "test3", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.3\ningress:\n  domain: test3.educates.test\n")
+		"ingress:\n  domain: test3.educates.test\n")
 	observed := Observed{Nodes: []NodeContainer{
 		withKubernetesVersion(controlPlane("educates", "10.10.10.1", true), "v1.36.4"),
 		withKubernetesVersion(controlPlane("educates-test2", "10.10.10.2", false), "v1.35.8"),
@@ -151,8 +151,8 @@ func TestListRows(t *testing.T) {
 
 func TestListRowsShowTheDomainTheResolverServes(t *testing.T) {
 	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n")
-	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.2\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader)
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader)
 	inv := NewInventory(Observed{Nodes: []NodeContainer{
 		controlPlane("educates", "10.10.10.1", true),
 		controlPlane("educates-test2", "10.10.10.2", true),

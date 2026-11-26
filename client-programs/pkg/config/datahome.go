@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v2"
 
@@ -26,45 +25,14 @@ const LocalMirrorsModeline = `# yaml-language-server: $schema=` + v1alpha1.Schem
 // for completion and validation.
 const LocalRouterModeline = `# yaml-language-server: $schema=` + v1alpha1.SchemaBaseURL + v1alpha1.KindEducatesLocalRouter + `.json`
 
-// hostIPListenAddressComment is the comment above a cluster.listenAddress
-// the CLI wrote from the host's detected IP address.
-const hostIPListenAddressComment = `  # This host's IP address when this file was written. An alias such as
-  # 10.10.10.1, added to a network interface, survives network changes.
-`
-
 // MarshalLocalConfig returns cfg as the CLI writes an EducatesLocalConfig
-// into the data home: the yaml-language-server modeline, then cfg. When
-// listenAddressIsHostIP is set, cfg's cluster.listenAddress is the host's
-// IP address the CLI detected, and a comment above it says so, and that
-// an alias such as 10.10.10.1 survives network changes.
-func MarshalLocalConfig(cfg *v1alpha1.EducatesLocalConfig, listenAddressIsHostIP bool) ([]byte, error) {
+// into the data home: the yaml-language-server modeline, then cfg.
+func MarshalLocalConfig(cfg *v1alpha1.EducatesLocalConfig) ([]byte, error) {
 	body, err := yaml.Marshal(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("marshal the local config: %w", err)
 	}
-	if listenAddressIsHostIP {
-		body = commentListenAddress(body, hostIPListenAddressComment)
-	}
 	return append([]byte(DefaultLocalConfigModeline+"\n"), body...), nil
-}
-
-// commentListenAddress returns body, an EducatesLocalConfig as
-// yaml.Marshal writes it, with comment above the line of its
-// cluster.listenAddress.
-func commentListenAddress(body []byte, comment string) []byte {
-	lines := strings.SplitAfter(string(body), "\n")
-	inCluster := false
-	for i, line := range lines {
-		switch {
-		case line == "cluster:\n":
-			inCluster = true
-		case inCluster && strings.HasPrefix(line, "  listenAddress:"):
-			return []byte(strings.Join(lines[:i], "") + comment + strings.Join(lines[i:], ""))
-		case !strings.HasPrefix(line, " "):
-			inCluster = false
-		}
-	}
-	return body
 }
 
 // LocalConfigPath is the path of the local config in the data home

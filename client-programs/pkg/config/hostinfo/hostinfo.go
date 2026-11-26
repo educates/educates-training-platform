@@ -1,6 +1,6 @@
 // Package hostinfo derives runtime host information used by laptop-mode
-// CLI defaulting (e.g. the host's IP address as a local cluster's
-// cluster.listenAddress).
+// CLI defaulting (e.g. the host's IP address as the router address every
+// local cluster is served on).
 //
 // Kept separate from the translator so the translator stays deterministic
 // and unit-testable: anything host-derived flows in via call sites that

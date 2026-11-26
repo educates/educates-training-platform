@@ -195,10 +195,10 @@ func TestLocalRouterUpdateWithAnAddressSaysWhichClustersToDeployAgain(t *testing
 	dataHome := t.TempDir()
 	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "config.yaml"),
-		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\n")
+		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n")
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-			"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: test2.educates.test\n")
+			"ingress:\n  domain: test2.educates.test\n")
 	nodes := append(slices.Clone(runningDefaultCluster),
 		localclusters.NodeContainer{Name: "educates-test2-control-plane", KindCluster: "educates-test2", Role: "control-plane", Running: true})
 	f := &fakeRouterContainer{}

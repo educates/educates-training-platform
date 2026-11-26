@@ -21,11 +21,11 @@ func twoClusterDataHome(t *testing.T) (string, localclusters.Inventory) {
 	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-			"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"+
+			"ingress:\n  domain: educates.test\n"+
 			"resolver:\n  extraDomains:\n  - example.test\n  - workshops.lab.test\n")
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-			"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n")
+			"ingress:\n  domain: test2.educates.test\n")
 	writeLocalClusterListFile(t, filepath.Join(config.DnsmasqIncludeDir(dataHome), "vm.conf"),
 		"# The lab VM\naddress=/vm.lab.test/192.168.64.5\n")
 	inventory := localclusters.NewInventory(localclusters.Observed{

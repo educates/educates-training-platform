@@ -2,7 +2,6 @@ apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
 
 cluster:
-  listenAddress: 192.168.1.10
   registryListenAddress: 192.168.1.10
   apiServer:
     address: 192.168.1.10

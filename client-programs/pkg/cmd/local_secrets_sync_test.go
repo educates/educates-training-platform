@@ -10,7 +10,7 @@ import (
 )
 
 func TestSecretsSync_BuildsThePlanFromTheSelectedLocalClustersConfig(t *testing.T) {
-	const defaultConfig = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: workshop.test\n"
+	const defaultConfig = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ningress:\n  domain: workshop.test\n"
 	cases := []struct {
 		name          string
 		defaultConfig string
@@ -39,7 +39,7 @@ func TestSecretsSync_BuildsThePlanFromTheSelectedLocalClustersConfig(t *testing.
 			defaultConfig: defaultConfig,
 			cluster:       "test2",
 			namedConfig: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
-				"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n",
+				"ingress:\n  domain: test2.educates.test\n",
 			want: []string{"test-ca", "test2.educates.test-ca-key-pair"},
 		},
 	}

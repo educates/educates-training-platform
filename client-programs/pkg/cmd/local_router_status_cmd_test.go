@@ -21,11 +21,11 @@ func routerStatusInventory(t *testing.T, router *localclusters.RouterContainer) 
 	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-			"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"+
+			"ingress:\n  domain: educates.test\n"+
 			"resolver:\n  extraDomains:\n  - example.test\n")
 	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
 		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-			"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: test2.educates.test\n")
+			"ingress:\n  domain: test2.educates.test\n")
 	return updateInventory(dataHome, []localclusters.NodeContainer{
 		{Name: "educates-control-plane", KindCluster: "educates", Role: "control-plane", Running: true},
 		{Name: "educates-test2-control-plane", KindCluster: "educates-test2", Role: "control-plane"},

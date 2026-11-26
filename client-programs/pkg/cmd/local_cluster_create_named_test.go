@@ -332,12 +332,49 @@ func TestLoadLocalConfig_DefaultCluster_WritesTheDomainGiven(t *testing.T) {
 	}
 
 	written := declaredConfig(t, id.ConfigPath)
-	if !created || written.Cluster.ListenAddress != "" || written.Ingress.Domain != "educates.test" {
-		t.Errorf("created %t, wrote cluster.listenAddress %q, ingress.domain %q; want true, none, educates.test",
-			created, written.Cluster.ListenAddress, written.Ingress.Domain)
+	if !created || written.Ingress.Domain != "educates.test" {
+		t.Errorf("created %t, wrote ingress.domain %q; want true, educates.test", created, written.Ingress.Domain)
 	}
 	if got := cfg.(*v1alpha1.EducatesLocalConfig).Ingress.Domain; got != "educates.test" {
 		t.Errorf("ingress.domain = %q, want educates.test", got)
+	}
+}
+
+// The default config of a 4.0 pre-release declares the address its
+// cluster was served on, which becomes the router address before create
+// would write the host's IP address there, whichever local cluster is
+// created.
+func TestLoadLocalConfig_TakesTheRouterAddressFromTheDefaultConfigsListenAddress(t *testing.T) {
+	for _, cluster := range []string{"", "test2"} {
+		t.Run("cluster "+cluster, func(t *testing.T) {
+			stubHostIP(t, "192.168.50.151")
+			dataHome, id := defaultClusterForTest(t)
+			writeLocalClusterListFile(t, config.LocalConfigPath(dataHome),
+				"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\n")
+			wantDomain := "10-10-10-1.nip.io"
+			if cluster != "" {
+				var err error
+				if id, err = localclusters.Named(cluster, dataHome); err != nil {
+					t.Fatal(err)
+				}
+				wantDomain = cluster + "." + wantDomain
+			}
+
+			cfg, _, _, err := loadLocalConfig(io.Discard, &LocalClusterCreateOptions{}, id)
+			if err != nil {
+				t.Fatalf("loadLocalConfig: %v", err)
+			}
+
+			if router, err := config.LoadLocalRouter(dataHome); err != nil || router.Address != "10.10.10.1" {
+				t.Errorf("router.yaml declares %+v, %v, want the default config's listen address 10.10.10.1", router, err)
+			}
+			if got := cfg.(*v1alpha1.EducatesLocalConfig).Ingress.Domain; got != wantDomain {
+				t.Errorf("ingress.domain = %q, want %q", got, wantDomain)
+			}
+			if body, _ := os.ReadFile(config.LocalConfigPath(dataHome)); strings.Contains(string(body), "listenAddress") {
+				t.Errorf("the default config still declares a listen address:\n%s", body)
+			}
+		})
 	}
 }
 
@@ -345,7 +382,7 @@ func TestLoadLocalConfig_DefaultCluster_KeepsAnExistingConfig(t *testing.T) {
 	stubHostIP(t, "192.168.50.151")
 	_, id := defaultClusterForTest(t)
 	existing := "# hand-edited config\napiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
-		"cluster:\n  listenAddress: 10.10.10.1\n"
+		"ingress:\n  domain: educates.test\n"
 	writeNamedConfig(t, id, existing)
 
 	_, _, created, err := loadLocalConfig(io.Discard, &LocalClusterCreateOptions{}, id)

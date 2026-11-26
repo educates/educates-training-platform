@@ -80,22 +80,6 @@ func TestLoadConfigFileOfANamedClusterFallsBackToItsNameUnderTheNipDomainOfTheRo
 	}
 }
 
-// A listen address no longer serves a local cluster, so a config that
-// still declares one loads whatever it is, and takes no name from it.
-func TestLoadConfigFileOfANamedClusterIgnoresAListenAddress(t *testing.T) {
-	for _, address := range []string{"10.10.10.2", "0.0.0.0", "127.0.0.1", "localhost"} {
-		t.Run(address, func(t *testing.T) {
-			path := writeConfig(t, localConfigHeader+"cluster:\n  listenAddress: '"+address+"'\n")
-
-			c := loadLocal(t, path)
-
-			if got, want := c.Ingress.Domain, "test2.10-10-10-1.nip.io"; got != want {
-				t.Errorf("ingress.domain = %q, want %q", got, want)
-			}
-		})
-	}
-}
-
 func TestLoadConfigFileOfANamedClusterNeedsADomainForAnIPv6RouterAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	routerFile(t, dataHome, routerHeader+"address: 'fd00::1'\n")
@@ -135,7 +119,7 @@ const escapeConfigHeader = "apiVersion: cli.educates.dev/v1alpha1\nkind: Educate
 
 func TestLoadConfigFileOfANamedClusterTakesAnEducatesConfigForKindWithoutAFallback(t *testing.T) {
 	path := writeConfig(t, escapeConfigHeader+
-		"target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.2\n"+
+		"target:\n  provider: kind\n  cluster:\n    apiServer:\n      port: 6443\n"+
 		"educatesClusterConfig:\n  mode: Managed\n")
 
 	cfg, err := LoadConfigFile(namedID(t, "test2", t.TempDir()), path)
@@ -150,22 +134,17 @@ func TestLoadConfigFileOfANamedClusterTakesAnEducatesConfigForKindWithoutAFallba
 	if got := escape.IngressDomain(); got != "" {
 		t.Errorf("ingress domain = %q, want none: an EducatesConfig gets no nip.io fallback", got)
 	}
-	if got, want := escape.Target.Cluster.ListenAddress, "10.10.10.2"; got != want {
-		t.Errorf("target.cluster.listenAddress = %q, want %q", got, want)
+	if got, want := escape.Target.Cluster.ApiServer.Port, 6443; got != want {
+		t.Errorf("target.cluster.apiServer.port = %d, want %d", got, want)
 	}
 }
 
-// An EducatesConfig takes no nip.io name, so it needs neither a listen
-// address nor the router file.
-func TestLoadConfigFileOfANamedClusterTakesAnEducatesConfigWithoutAListenAddress(t *testing.T) {
-	for _, cluster := range []string{"{}", "{listenAddress: 0.0.0.0}", "{listenAddress: 127.0.0.1}"} {
-		t.Run(cluster, func(t *testing.T) {
-			path := writeConfig(t, escapeConfigHeader+"target:\n  provider: kind\n  cluster: "+cluster+"\n")
+// An EducatesConfig takes no nip.io name, so it needs no router file.
+func TestLoadConfigFileOfANamedClusterTakesAnEducatesConfigWithoutTheRouterFile(t *testing.T) {
+	path := writeConfig(t, escapeConfigHeader+"target:\n  provider: kind\n  cluster: {}\n")
 
-			if _, err := LoadConfigFile(namedID(t, "test2", t.TempDir()), path); err != nil {
-				t.Errorf("LoadConfigFile: %v", err)
-			}
-		})
+	if _, err := LoadConfigFile(namedID(t, "test2", t.TempDir()), path); err != nil {
+		t.Errorf("LoadConfigFile: %v", err)
 	}
 }
 
@@ -177,7 +156,7 @@ func TestLoadConfigFileOfANamedClusterRefusesOtherConfigs(t *testing.T) {
 		{name: "EducatesConfig without a target", body: escapeConfigHeader},
 		{
 			name: "EducatesConfig without a provider",
-			body: escapeConfigHeader + "target:\n  cluster:\n    listenAddress: 10.10.10.2\n",
+			body: escapeConfigHeader + "target:\n  cluster:\n    apiServer:\n      port: 6443\n",
 		},
 		{
 			name: "a remote cluster kind",
@@ -198,7 +177,6 @@ func TestLoadConfigFileOfANamedClusterRefusesOtherConfigs(t *testing.T) {
 
 func TestLoadConfigFileOfANamedClusterKeepsADeclaredDomain(t *testing.T) {
 	path := writeConfig(t, localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.2\n"+
 		"ingress:\n  domain: test2.educates.test\n")
 
 	c := loadLocal(t, path)
@@ -261,7 +239,7 @@ func TestCheckConfigRefusesMoreThanOneControlPlaneNode(t *testing.T) {
 			name: "EducatesLocalConfig of the default cluster",
 			id:   Default(t.TempDir()),
 			body: localConfigHeader +
-				"cluster:\n  listenAddress: 10.10.10.2\n" +
+				"cluster:\n" +
 				"  nodes:\n  - role: control-plane\n  - role: worker\n  - role: control-plane\n",
 			field: "cluster.nodes",
 		},
@@ -269,7 +247,7 @@ func TestCheckConfigRefusesMoreThanOneControlPlaneNode(t *testing.T) {
 			name: "EducatesConfig for kind of a named cluster",
 			id:   namedID(t, "test2", t.TempDir()),
 			body: escapeConfigHeader +
-				"target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.2\n" +
+				"target:\n  provider: kind\n  cluster:\n" +
 				"    nodes:\n    - role: control-plane\n    - role: worker\n    - role: control-plane\n" +
 				"educatesClusterConfig:\n  mode: Managed\n",
 			field: "target.cluster.nodes",

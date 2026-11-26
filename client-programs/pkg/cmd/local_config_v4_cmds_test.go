@@ -32,7 +32,7 @@ func TestLocalConfigInit_WritesDefault(t *testing.T) {
 
 // init writes a config with no address: every local cluster is served on
 // the router address, in router.yaml, which it writes beside it.
-func TestLocalConfigInit_WritesNoListenAddress(t *testing.T) {
+func TestLocalConfigInit_WritesTheMinimalConfigAndTheRouterFile(t *testing.T) {
 	stubHostIP(t, "192.168.50.151")
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
@@ -79,9 +79,6 @@ func TestLocalConfigInit_Defaults_WritesTheNipDomainOfTheRouterAddress(t *testin
 		if !strings.Contains(string(body), want) {
 			t.Errorf("init --defaults output missing %q:\n%s", want, body)
 		}
-	}
-	if strings.Contains(string(body), "listenAddress") {
-		t.Errorf("init --defaults wrote a listen address:\n%s", body)
 	}
 }
 
@@ -167,7 +164,7 @@ func TestLocalConfigSet_PreservesModelineAndOrder(t *testing.T) {
 	original := "# yaml-language-server: $schema=https://schemas.educates.dev/cli/v1alpha1/EducatesLocalConfig.json\n" +
 		"apiVersion: cli.educates.dev/v1alpha1\n" +
 		"kind: EducatesLocalConfig\n" +
-		"cluster:\n  listenAddress: 10.10.10.1\n" +
+		"cluster:\n  apiServer:\n    port: 6443\n" +
 		"ingress:\n  domain: insecure.educates.test\n" +
 		"operator:\n  logLevel: debug\n"
 	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(original), 0o644); err != nil {
@@ -208,7 +205,7 @@ func TestLocalConfigSet_MovesRegistryMirrorsFirst(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	original := minimalLocalConfigYAML +
-		"cluster:\n  listenAddress: 10.10.10.1\n  registryMirrors:\n    - mirror: ghcr.io\n"
+		"cluster:\n  apiServer:\n    port: 6443\n  registryMirrors:\n    - mirror: ghcr.io\n"
 	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(original), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +214,7 @@ func TestLocalConfigSet_MovesRegistryMirrorsFirst(t *testing.T) {
 		t.Fatalf("set: %v", err)
 	}
 
-	want := minimalLocalConfigYAML + "cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: workshop.test\n"
+	want := minimalLocalConfigYAML + "cluster:\n  apiServer:\n    port: 6443\ningress:\n  domain: workshop.test\n"
 	if got, _ := os.ReadFile(filepath.Join(dataHome, "config.yaml")); string(got) != want {
 		t.Errorf("config.yaml =\n%s\nwant\n%s", got, want)
 	}
@@ -259,17 +256,19 @@ func TestLocalConfigSet_SchemaViolation_Errors(t *testing.T) {
 	}
 }
 
-// A listen address is no longer checked: a config that still declares
-// one, whatever it is, is set and loads.
-func TestLocalConfigSet_DefaultCluster_TakesAnyListenAddress(t *testing.T) {
-	for _, address := range []string{"0.0.0.0", "127.0.0.1"} {
-		t.Run(address, func(t *testing.T) {
-			stageInitConfig(t)
+// A local cluster has no address of its own, so set refuses a listen
+// address, saying where the router address is set, and leaves the config
+// as it was.
+func TestLocalConfigSet_DefaultCluster_RefusesAListenAddress(t *testing.T) {
+	dataHome := stageInitConfig(t)
+	path := filepath.Join(dataHome, "config.yaml")
+	before, _ := os.ReadFile(path)
 
-			if err := runLocalConfigSet(io.Discard, defaultLocalCluster(), "cluster.listenAddress", address); err != nil {
-				t.Errorf("set cluster.listenAddress %s: %v", address, err)
-			}
-		})
+	err := runLocalConfigSet(io.Discard, defaultLocalCluster(), "cluster.listenAddress", "10.10.10.1")
+
+	wantError(t, err, "cluster.listenAddress", "router.yaml", "educates local router update --address")
+	if after, _ := os.ReadFile(path); string(after) != string(before) {
+		t.Errorf("config.yaml was changed to:\n%s", after)
 	}
 }
 

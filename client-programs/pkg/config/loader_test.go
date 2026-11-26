@@ -23,9 +23,6 @@ func TestLoad_EmptyLocalConfig_AppliesDefaults(t *testing.T) {
 		t.Fatalf("expected *EducatesLocalConfig, got %T", cfg)
 	}
 
-	if got := local.Cluster.ListenAddress; got != "" {
-		t.Errorf("ListenAddress = %q, want none: a local cluster declares its own", got)
-	}
 	if local.ClusterAdmin == nil || *local.ClusterAdmin != true {
 		t.Errorf("ClusterAdmin = %v, want true", local.ClusterAdmin)
 	}
@@ -50,9 +47,6 @@ func TestLoad_FullLocalConfig_RoundTripsAllFields(t *testing.T) {
 	}
 	local := cfg.(*v1alpha1.EducatesLocalConfig)
 
-	if got, want := local.Cluster.ListenAddress, "192.168.1.10"; got != want {
-		t.Errorf("ListenAddress = %q, want %q", got, want)
-	}
 	if got, want := local.Cluster.ApiServer.Port, 6443; got != want {
 		t.Errorf("ApiServer.Port = %d, want %d", got, want)
 	}
@@ -717,6 +711,69 @@ func TestLoad_ClusterRegistryMirrors_SayTheyMovedToMirrorsYAML(t *testing.T) {
 	}
 }
 
+// A config outside the data home that still declares a listen address in
+// its cluster block fails to load, and is left as it is, with an error
+// saying that every local cluster is served on the router address in
+// router.yaml in the data home, and showing the command that sets it, in
+// place of the schema's generic error, or of the EducatesConfig's loose
+// decode dropping the field.
+func TestLoad_ClusterListenAddress_SaysItMovedToRouterYAML(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	cases := []struct {
+		name, body, field, command string
+	}{
+		{
+			name: "an EducatesLocalConfig",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
+				"cluster:\n  listenAddress: 10.10.10.1\n",
+			field:   "cluster.listenAddress",
+			command: "educates local router update --address 10.10.10.1",
+		},
+		{
+			name: "an EducatesConfig",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesConfig\n" +
+				"target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.2\n",
+			field:   "target.cluster.listenAddress",
+			command: "educates local router update --address 10.10.10.2",
+		},
+		{
+			name: "an address that can't be the router address",
+			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
+				"cluster:\n  listenAddress: 0.0.0.0\n",
+			field:   "cluster.listenAddress",
+			command: "educates local router update --address <ip>",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			must(t, os.WriteFile(path, []byte(tc.body), 0o644))
+
+			_, err := Load(path)
+
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			for _, want := range []string{path + ": ", tc.field + " was removed", "every local cluster",
+				"router address", filepath.Join(dataHome, "router.yaml"), tc.command, "Remove " + tc.field} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+			if strings.Contains(err.Error(), "schema validation") {
+				t.Errorf("error %q still reports the schema's generic error", err)
+			}
+			if got := string(readFile(t, path)); got != tc.body {
+				t.Errorf("config was rewritten:\n%s", got)
+			}
+			if _, err := os.Stat(filepath.Join(dataHome, "router.yaml")); !os.IsNotExist(err) {
+				t.Errorf("router.yaml was written: %v", err)
+			}
+		})
+	}
+}
+
 // indent returns lines, YAML lines each ending in a newline, each with
 // prefix in front.
 func indent(lines, prefix string) string {
@@ -736,24 +793,21 @@ func TestLoad_ResolverTargetAddress_SaysItWasRemoved(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	cases := []struct {
-		name          string
-		body          string
-		field         string
-		listenAddress string
+		name  string
+		body  string
+		field string
 	}{
 		{
 			name: "an EducatesLocalConfig",
 			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
 				"resolver:\n  targetAddress: 10.10.10.1\n  extraDomains:\n  - example.test\n",
-			field:         "resolver.targetAddress",
-			listenAddress: "cluster.listenAddress",
+			field: "resolver.targetAddress",
 		},
 		{
 			name: "an EducatesConfig",
 			body: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesConfig\n" +
 				"target:\n  provider: kind\n  resolver:\n    targetAddress: 10.10.10.1\n",
-			field:         "target.resolver.targetAddress",
-			listenAddress: "target.cluster.listenAddress",
+			field: "target.resolver.targetAddress",
 		},
 	}
 	for _, tc := range cases {
@@ -762,7 +816,8 @@ func TestLoad_ResolverTargetAddress_SaysItWasRemoved(t *testing.T) {
 			if err == nil {
 				t.Fatal("LoadBytes: expected error, got nil")
 			}
-			for _, want := range []string{"config.yaml: ", tc.field + " was removed", tc.listenAddress,
+			for _, want := range []string{"config.yaml: ", tc.field + " was removed",
+				"router address in " + filepath.Join(dataHome, "router.yaml"),
 				filepath.Join(dataHome, "dnsmasq.d", "*.conf")} {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("error %q does not contain %q", err, want)

@@ -40,8 +40,6 @@ func TestDefaultResolverConfig_EscapeConfig_ServesItsIngressDomain(t *testing.T)
 kind: EducatesConfig
 target:
   provider: kind
-  cluster:
-    listenAddress: 192.168.50.50
   resolver:
     extraDomains:
     - extra.example.test
@@ -71,7 +69,7 @@ func TestDefaultResolverConfig_Domain_OverridesTheDataHomeConfigDomain(t *testin
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(
-		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n"), 0o644); err != nil {
+		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ningress:\n  domain: educates.test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

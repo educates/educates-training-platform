@@ -14,12 +14,6 @@ import (
 // Names of the flags of the commands that write a local cluster's missing
 // config.
 const (
-	// ListenAddressFlagName names the --listen-address flag, which the
-	// commands still take, and ignore with a warning: every local cluster
-	// is served on the router address, and a cluster has no address of
-	// its own.
-	ListenAddressFlagName = "listen-address"
-
 	// DomainFlagName names the --domain flag, from which a local cluster's
 	// missing config is written.
 	DomainFlagName = "domain"
@@ -81,7 +75,7 @@ func ConfigFromFlags(flags ConfigFlags) *v1alpha1.EducatesLocalConfig {
 // written: one without a domain takes it from the router address, which
 // the router file of the data home must then declare.
 func ConfigYAML(id Identity, flags ConfigFlags) ([]byte, error) {
-	body, err := config.MarshalLocalConfig(ConfigFromFlags(flags), false)
+	body, err := config.MarshalLocalConfig(ConfigFromFlags(flags))
 	if err != nil {
 		return nil, err
 	}

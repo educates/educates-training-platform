@@ -25,7 +25,6 @@ type EducatesLocalConfig struct {
 }
 
 type LocalClusterConfig struct {
-	ListenAddress         string           `yaml:"listenAddress,omitempty"`
 	RegistryListenAddress string           `yaml:"registryListenAddress,omitempty"`
 	ApiServer             ApiServerConfig  `yaml:"apiServer,omitempty"`
 	Networking            NetworkingConfig `yaml:"networking,omitempty"`

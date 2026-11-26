@@ -43,7 +43,7 @@ func inlineECCSpec(cfg *v1alpha1.EducatesInlineConfig) map[string]interface{} {
 	if cfg.ExternalTLSTermination {
 		// TLS terminates outside the cluster: no in-cluster wildcard
 		// certificate, but the public URLs are still https.
-		ingress["protocol"] = "https"
+		ingress["protocol"] = string(IngressProtocolHTTPS)
 	} else {
 		ingress["wildcardCertificateSecretRef"] = map[string]interface{}{
 			"name": cfg.WildcardCertificateSecret,

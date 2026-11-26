@@ -144,12 +144,12 @@ func localECCSpec(cfg *v1alpha1.EducatesLocalConfig, certificates map[string]int
 	}
 	switch {
 	case cfg.Ingress.Insecure:
-		ingress["protocol"] = "http"
+		ingress["protocol"] = string(IngressProtocolHTTP)
 	case cfg.Ingress.ExternalTLSTermination:
 		// TLS ends at the router, which forwards plain HTTP to the
 		// cluster: the cluster issues no certificate, but its URLs are
 		// still https.
-		ingress["protocol"] = "https"
+		ingress["protocol"] = string(IngressProtocolHTTPS)
 	}
 	if cfg.Ingress.Domain != "" {
 		ingress["domain"] = cfg.Ingress.Domain

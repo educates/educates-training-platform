@@ -40,7 +40,7 @@ func gkeECCSpec(cfg *v1alpha1.EducatesGKEConfig) map[string]interface{} {
 		// TLS terminates at the cloud load balancer: Educates issues no
 		// certificate, but the public URLs are still https.
 		ingress["certificates"] = map[string]interface{}{"provider": string(CertificatesProviderNone)}
-		ingress["protocol"] = "https"
+		ingress["protocol"] = string(IngressProtocolHTTPS)
 	} else {
 		cloudDNS := map[string]interface{}{
 			"project":                        cfg.GCP.Project,

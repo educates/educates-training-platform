@@ -53,6 +53,15 @@ const (
 	CertificatesProviderStaticCertificate  CertificatesProvider = "StaticCertificate"
 )
 
+// IngressProtocol is a value of EducatesClusterConfig ingress.protocol the
+// translators emit.
+type IngressProtocol string
+
+const (
+	IngressProtocolHTTP  IngressProtocol = "http"
+	IngressProtocolHTTPS IngressProtocol = "https"
+)
+
 // SecretRef names a Secret. An empty Namespace means the operator
 // namespace.
 type SecretRef struct {

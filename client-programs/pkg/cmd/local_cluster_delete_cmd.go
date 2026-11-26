@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/translator"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localcerts"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
@@ -207,7 +208,7 @@ func clusterCAKeyPairs(ctx context.Context, id localclusters.Identity, readClust
 func tlsEndsOutsideCluster(clusterConfig *unstructured.Unstructured) bool {
 	provider, _, _ := unstructured.NestedString(clusterConfig.Object, "spec", "ingress", "certificates", "provider")
 	protocol, _, _ := unstructured.NestedString(clusterConfig.Object, "spec", "ingress", "protocol")
-	return provider == "None" && protocol == "https"
+	return provider == string(translator.CertificatesProviderNone) && protocol == string(translator.IngressProtocolHTTPS)
 }
 
 // removeUnusedCAKeyPairs removes from the local secrets cache the CA key

@@ -58,10 +58,10 @@ func customCAConfig(obj *configv1alpha1.EducatesClusterConfig) *configv1alpha1.C
 }
 
 // noneCertificatesConfig returns the Managed-mode None provider's
-// configuration, or nil when the spec selects another provider or sets
-// no none block.
+// configuration, or nil when the spec is not in Managed mode, selects
+// another provider or sets no none block.
 func noneCertificatesConfig(obj *configv1alpha1.EducatesClusterConfig) *configv1alpha1.NoneCertificatesConfig {
-	if obj.Spec.Ingress == nil {
+	if obj.Spec.Mode != configv1alpha1.ClusterConfigModeManaged || obj.Spec.Ingress == nil {
 		return nil
 	}
 	certs := obj.Spec.Ingress.Certificates

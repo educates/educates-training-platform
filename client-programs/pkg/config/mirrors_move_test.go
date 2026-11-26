@@ -102,6 +102,38 @@ func TestLoadMovesTheRegistryMirrorsOfAConfigInTheDataHome(t *testing.T) {
 	}
 }
 
+// A config of the data home whose registry mirrors can't be recorded in
+// mirrors.yaml fails to load with an error naming the config once, and is
+// left as it is.
+func TestLoadNamesTheConfigWhenItsRegistryMirrorsCantBeRecorded(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes to a folder without write permission")
+	}
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	path := writeDataHomeFile(t, dataHome, "config.yaml", configWithMirrors)
+	must(t, os.Chmod(dataHome, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(dataHome, 0o755) })
+
+	_, err := Load(path)
+
+	if err == nil {
+		t.Fatal("Load() = nil, want an error")
+	}
+	mirrorsPath := filepath.Join(dataHome, "mirrors.yaml")
+	for _, want := range []string{path + ": cluster.registryMirrors was removed", mirrorsPath} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+	if got := strings.Count(err.Error(), path); got != 1 {
+		t.Errorf("error names %s %d times, want once: %q", path, got, err)
+	}
+	if got := string(readFile(t, path)); got != configWithMirrors {
+		t.Errorf("config.yaml was rewritten:\n%s", got)
+	}
+}
+
 func TestMoveClusterRegistryMirrorsOfANamedClusterConfigAndAnEducatesConfig(t *testing.T) {
 	cases := []struct {
 		name, body, field string

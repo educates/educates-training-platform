@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,6 +72,53 @@ func TestLocalConfigView_Raw(t *testing.T) {
 	}
 	if got := buf.String(); got != raw {
 		t.Errorf("--raw should print the file verbatim.\n got: %q\nwant: %q", got, raw)
+	}
+}
+
+// TestLocalConfigView_LoadError_NamesConfigFileOnce asserts that a config
+// that fails to load fails view, with or without --raw, with an error
+// naming the config file once.
+func TestLocalConfigView_LoadError_NamesConfigFileOnce(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "a removed field",
+			body: localWithListenAddress + "resolver:\n  targetAddress: 10.10.10.1\n",
+			want: "resolver.targetAddress was removed",
+		},
+		{
+			name: "a field the schema doesn't know",
+			body: localWithListenAddress + "unknownField: true\n",
+			want: "schema validation failed",
+		},
+	}
+	for _, tc := range cases {
+		for _, raw := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s, raw %t", tc.name, raw), func(t *testing.T) {
+				dataHome := t.TempDir()
+				cfgPath := filepath.Join(dataHome, "config.yaml")
+				if err := os.WriteFile(cfgPath, []byte(tc.body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+
+				p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
+				var buf bytes.Buffer
+				err := p.runLocalConfigView(&LocalConfigViewOptions{Raw: raw}, defaultLocalCluster(), &buf)
+				if err == nil {
+					t.Fatalf("runLocalConfigView: expected an error, got none, and printed:\n%s", buf.String())
+				}
+				if !strings.Contains(err.Error(), tc.want) {
+					t.Errorf("error %q does not contain %q", err, tc.want)
+				}
+				if got := strings.Count(err.Error(), cfgPath); got != 1 {
+					t.Errorf("error names %s %d times, want once: %q", cfgPath, got, err)
+				}
+			})
+		}
 	}
 }
 

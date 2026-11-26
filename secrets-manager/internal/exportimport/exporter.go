@@ -202,7 +202,7 @@ func exportRule(ctx context.Context, converger *copyrules.Converger, exporter *s
 			Rule:        secretsv1beta1.CopierRule(secretsv1beta1.SecretExporterKind, exporter.Name),
 			Labels:      rule.TargetSecret.Labels,
 			Annotations: rule.TargetSecret.Annotations,
-			Keys:        rule.TargetSecret.Keys,
+			Keys:        rule.SourceKeys(),
 		},
 		Owner: func(importer *secretsv1beta1.SecretImporter) *copyengine.Owner {
 			return &copyengine.Owner{

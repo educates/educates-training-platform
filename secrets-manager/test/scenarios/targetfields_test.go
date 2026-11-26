@@ -9,11 +9,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// usernameKey is a key of a scenario's source that targetSecret.keys
+// usernameKey is a key of a scenario's source that sourceSecret.keys
 // selects.
 const usernameKey = "username"
 
-var _ = Describe("targetSecret.annotations and targetSecret.keys", Label(areaTargetFields), func() {
+var _ = Describe("targetSecret.annotations and sourceSecret.keys", Label(areaTargetFields), func() {
 	It("copies every key when the rule lists no keys", func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)
@@ -97,21 +97,21 @@ var _ = Describe("targetSecret.annotations and targetSecret.keys", Label(areaTar
 			})
 		})
 
-	It("copies only the keys targetSecret.keys lists that the source has", Label(expectedDifference), func() {
+	It("copies only the keys sourceSecret.keys lists that the source has", Label(expectedDifference), func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)
 		targetNS := s.namespace("a", nil)
 		src := s.secret(sourceNS.Name, "credentials", data(usernameKey, "user", "password", "secret", "ca.crt", "ca"))
 
 		s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS),
-			shaped(copyShape{Keys: []string{"ca.crt", usernameKey, "missing"}})))
+			copying(src, "ca.crt", usernameKey, "missing")))
 
 		eventually(func(g Gomega) {
 			g.Expect(secretIn(g, targetNS.Name, src.Name).Data).To(Equal(data("ca.crt", "ca", usernameKey, "user")))
 		})
 	})
 
-	It("removes keys outside targetSecret.keys from existing copies", Label(expectedDifference), func() {
+	It("removes keys outside sourceSecret.keys from existing copies", Label(expectedDifference), func() {
 		s := newScenario()
 		sourceNS := s.namespace("src", nil)
 		targetNS := s.namespace("a", nil)
@@ -122,7 +122,7 @@ var _ = Describe("targetSecret.annotations and targetSecret.keys", Label(areaTar
 		})
 
 		s.update(copier, func() {
-			setRules(copier, copierRule(src, inNamespaces(targetNS), shaped(copyShape{Keys: []string{usernameKey}})))
+			setRules(copier, copierRule(src, inNamespaces(targetNS), copying(src, usernameKey)))
 		})
 
 		eventually(func(g Gomega) {
@@ -130,14 +130,14 @@ var _ = Describe("targetSecret.annotations and targetSecret.keys", Label(areaTar
 		})
 	})
 
-	It("applies targetSecret.annotations and targetSecret.keys on SecretExporter rules",
+	It("applies targetSecret.annotations and sourceSecret.keys on SecretExporter rules",
 		Label(expectedDifference), func() {
 			s := newScenario()
 			sourceNS := s.namespace("src", nil)
 			targetNS := s.namespace("a", nil)
 			src := s.secret(sourceNS.Name, "exported", data(usernameKey, "user", "password", "secret"))
 			exporter := s.secretExporter(sourceNS.Name, src.Name, exporterRule(inNamespaces(targetNS),
-				shaped(copyShape{Annotations: map[string]string{"example.com/note": "exported"}, Keys: []string{usernameKey}})))
+				shaped(copyShape{Annotations: map[string]string{"example.com/note": "exported"}}), exporting(usernameKey)))
 
 			s.secretImporter(targetNS.Name, src.Name, sharedSecret(uidOf(exporter)))
 
@@ -158,7 +158,7 @@ var _ = Describe("targetSecret.annotations and targetSecret.keys", Label(areaTar
 		other := s.secret(sourceNS.Name, "credentials", data("token", "t0"))
 
 		copier := s.secretCopier(s.name("copier"),
-			copierRule(tls, inNamespaces(rejected), shaped(copyShape{Keys: []string{"ca.crt"}})),
+			copierRule(tls, inNamespaces(rejected), copying(tls, "ca.crt")),
 			copierRule(other, inNamespaces(rejected, healthy)))
 
 		eventually(func(g Gomega) {
@@ -229,11 +229,16 @@ var _ = Describe("Admission", Label(areaAdmission), func() {
 			}
 			return []object{exporterRule(byName(s.name("none")), shaped(copyShape{Annotations: annotations}))}
 		}),
-		Entry("a SecretCopier rule with an empty targetSecret.keys", kindSecretCopier, func(s *scenario) []object {
-			return []object{unmatchedCopierRule(s, noKeys())}
+		Entry("a SecretCopier rule with an empty sourceSecret.keys", kindSecretCopier, func(s *scenario) []object {
+			src := unmatchedSource(s)
+			return []object{copierRule(src, byName(s.name("none")),
+				object{"sourceSecret": object{"name": src.Name, "namespace": src.Namespace, "keys": []string{}}})}
 		}),
-		Entry("a SecretExporter rule with an empty targetSecret.keys", kindSecretExporter, func(s *scenario) []object {
-			return []object{exporterRule(byName(s.name("none")), noKeys())}
+		Entry("a SecretExporter rule with an empty sourceSecret.keys", kindSecretExporter, func(s *scenario) []object {
+			return []object{exporterRule(byName(s.name("none")), object{"sourceSecret": object{"keys": []string{}}})}
+		}),
+		Entry("a SecretExporter rule whose sourceSecret has no keys", kindSecretExporter, func(s *scenario) []object {
+			return []object{exporterRule(byName(s.name("none")), object{"sourceSecret": object{}})}
 		}),
 		Entry("a SecretCopier with 101 rules", kindSecretCopier, func(s *scenario) []object {
 			rules := make([]object, 0, 101)
@@ -252,14 +257,13 @@ var _ = Describe("Admission", Label(areaAdmission), func() {
 	)
 })
 
-// noKeys is the targetSecret of a rule that lists keys, but none.
-func noKeys() object {
-	return object{"targetSecret": object{"keys": []string{}}}
+// unmatchedCopierRule is a SecretCopier rule copying unmatchedSource into a
+// namespace that does not exist, with the other fields of extra.
+func unmatchedCopierRule(s *scenario, extra ...object) object {
+	return copierRule(unmatchedSource(s), byName(s.name("none")), extra...)
 }
 
-// unmatchedCopierRule is a SecretCopier rule copying a Secret of the
-// scenario into a namespace that does not exist, with the other fields of
-// extra.
-func unmatchedCopierRule(s *scenario, extra ...object) object {
-	return copierRule(newSecret(s.name("src"), "credentials", nil), byName(s.name("none")), extra...)
+// unmatchedSource is a Secret of the scenario that is never created.
+func unmatchedSource(s *scenario) *corev1.Secret {
+	return newSecret(s.name("src"), "credentials", nil)
 }

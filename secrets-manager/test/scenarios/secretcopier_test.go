@@ -549,7 +549,7 @@ var _ = Describe("SecretCopier copying", Label(areaCopying), func() {
 			targetNS := s.namespace("a", nil)
 			src := s.secret(sourceNS.Name, s.name("ingress"), data("ca.crt", "ca", "tls.crt", "cert", "tls.key", "key"))
 			copier := s.secretCopier(s.name("copier"),
-				copierRule(src, inNamespaces(targetNS), shaped(copyShape{Keys: []string{"ca.crt"}})))
+				copierRule(src, inNamespaces(targetNS), copying(src, "ca.crt")))
 			var before *corev1.Secret
 			eventually(func(g Gomega) {
 				before = secretIn(g, targetNS.Name, src.Name)

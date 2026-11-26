@@ -139,7 +139,7 @@ Annotation keys starting with ``secrets.educates.dev/`` are reserved for the ann
 Selecting the keys copied
 -------------------------
 
-A copy holds every key of the secret exported. To copy only some of the keys, list them in ``targetSecret.keys``.
+A copy holds every key of the secret exported. To copy only some of the keys, list them in ``sourceSecret.keys``. The name and namespace of the ``SecretExporter`` name the secret exported, so the ``sourceSecret`` of a rule holds only ``keys``.
 
 ```yaml
 apiVersion: secrets.educates.dev/v1beta1
@@ -149,19 +149,19 @@ metadata:
   namespace: databases
 spec:
   rules:
-  - targetNamespaces:
+  - sourceSecret:
+      keys:
+      - username
+      - password
+    targetNamespaces:
       nameSelector:
         matchNames:
         - "*"
     copyAuthorization:
       sharedSecret: my-shared-secret
-    targetSecret:
-      keys:
-      - username
-      - password
 ```
 
-A listed key which the secret exported does not hold is not copied. When ``keys`` is set it must list at least one key, and a ``SecretExporter`` with an empty ``keys`` list is rejected when it is created or updated. To copy every key, leave ``keys`` out.
+A listed key which the secret exported does not hold is not copied. When ``sourceSecret`` is set, its ``keys`` must list at least one key, and a ``SecretExporter`` with a ``sourceSecret`` that has no ``keys``, or an empty ``keys`` list, is rejected when it is created or updated. To copy every key, leave ``sourceSecret`` out.
 
 The data of a copy always equals what the rule selects from the secret exported. A key which the secret exported drops, or which is no longer listed, is removed from the copies, and so is a key which anything else adds to a copy.
 
@@ -379,7 +379,7 @@ The ``rules`` property is a list, so rules for more than one set of target names
 Overlapping rules for target secret
 -----------------------------------
 
-A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. A ``SecretExporter`` and a ``SecretCopier`` which copy the same secret under the same name into a namespace agree: the one which created the copy keeps it and decides what it holds, and the other counts the copy as in sync. A rule which would copy another secret under the name of the copy leaves the copy untouched and reports a ``Conflict``, as a rule does for a secret the secrets manager did not create. A copy stays with the resource whose rule created it only while one of that resource's rules still targets the copy, which for a ``SecretExporter`` also needs the ``SecretImporter`` to still accept the rule, and while that resource is not being deleted. Once none does, such as when the rule no longer selects the namespace of the copy, was removed, or is no longer accepted by the ``SecretImporter``, another rule which targets the copy takes it over within seconds.
+A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. A ``SecretExporter`` and a ``SecretCopier`` which copy the same secret under the same name into a namespace agree, whatever keys their rules select: the one which created the copy keeps it and decides what it holds, and the other counts the copy as in sync. A rule which would copy another secret under the name of the copy leaves the copy untouched and reports a ``Conflict``, as a rule does for a secret the secrets manager did not create. A copy stays with the resource whose rule created it only while one of that resource's rules still targets the copy, which for a ``SecretExporter`` also needs the ``SecretImporter`` to still accept the rule, and while that resource is not being deleted. Once none does, such as when the rule no longer selects the namespace of the copy, was removed, or is no longer accepted by the ``SecretImporter``, another rule which targets the copy takes it over within seconds.
 
 The page for the ``SecretCopier`` custom resource describes overlapping rules in full.
 
@@ -399,7 +399,7 @@ Changes to a copy
 
 A copy which is deleted is created again within seconds. A copy whose data, or whose labels or annotations set by its rule, are changed by someone else, is restored within seconds.
 
-When the secret exported is replaced by one of a different ``type``, its copies are deleted and created again with the new type, since Kubernetes does not let the type of a secret change. A copy is deleted only once Kubernetes has said it would accept the new one. Where it would not, such as when ``targetSecret.keys`` leaves out a key the new type requires, the copy is kept as it is and the rule reports a failure for that namespace. A copy which someone else has marked with ``immutable: true`` is never deleted: when its data or type must change, the rule reports a failure for that namespace, retried until someone deletes the copy, as Kubernetes never lets the data of an immutable secret change, and the rule then creates it again. The message of the ``Ready`` condition says that the copy is immutable and was not updated, and the secrets manager records a ``Warning`` Event with reason ``CopyNotUpdated``, described below.
+When the secret exported is replaced by one of a different ``type``, its copies are deleted and created again with the new type, since Kubernetes does not let the type of a secret change. A copy is deleted only once Kubernetes has said it would accept the new one. Where it would not, such as when ``sourceSecret.keys`` leaves out a key the new type requires, the copy is kept as it is and the rule reports a failure for that namespace. A copy which someone else has marked with ``immutable: true`` is never deleted: when its data or type must change, the rule reports a failure for that namespace, retried until someone deletes the copy, as Kubernetes never lets the data of an immutable secret change, and the rule then creates it again. The message of the ``Ready`` condition says that the copy is immutable and was not updated, and the secrets manager records a ``Warning`` Event with reason ``CopyNotUpdated``, described below.
 
 Tracking the source of a secret
 -------------------------------

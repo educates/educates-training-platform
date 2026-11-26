@@ -181,7 +181,7 @@ func (r *Reconciler) reconcileRule(ctx context.Context, converger *copyrules.Con
 			Rule:        secretsv1beta1.CopierRule(secretsv1beta1.SecretCopierKind, copier.Name),
 			Labels:      rule.TargetSecret.Labels,
 			Annotations: rule.TargetSecret.Annotations,
-			Keys:        rule.TargetSecret.Keys,
+			Keys:        rule.SourceSecret.Keys,
 		},
 		Owner: func(*secretsv1beta1.SecretImporter) *copyengine.Owner { return owner(copier, rule) },
 	}, namespaces)

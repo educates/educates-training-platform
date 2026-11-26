@@ -15,9 +15,23 @@ type ExporterCopyAuthorization struct {
 	SharedSecret string `json:"sharedSecret"`
 }
 
+// ExporterSourceSecret selects the keys of the exported Secret that the
+// copies of a SecretExporter rule hold. The SecretExporter's name and
+// namespace name the Secret.
+type ExporterSourceSecret struct {
+	// keys limits the copies to these keys of the exported Secret, those the
+	// Secret has. It lists at least one key.
+	Keys []string `json:"keys"`
+}
+
 // SecretExporterRule offers the exported Secret to the namespaces it
 // selects.
 type SecretExporterRule struct {
+	// sourceSecret selects the keys of the exported Secret copied. The
+	// copies hold every key of the Secret when it is not set.
+	// +optional
+	SourceSecret *ExporterSourceSecret `json:"sourceSecret,omitempty"`
+
 	// targetNamespaces selects the namespaces the Secret is offered to.
 	TargetNamespaces TargetNamespaces `json:"targetNamespaces"`
 
@@ -39,6 +53,15 @@ func (r *SecretExporterRule) CopyName(exporter string) string {
 		return r.TargetSecret.Name
 	}
 	return exporter
+}
+
+// SourceKeys is the keys of the exported Secret the rule's copies hold, none
+// when the rule selects no keys and the copies hold every key.
+func (r *SecretExporterRule) SourceKeys() []string {
+	if r.SourceSecret == nil {
+		return nil
+	}
+	return r.SourceSecret.Keys
 }
 
 // SecretExporterSpec holds the rules of a SecretExporter.

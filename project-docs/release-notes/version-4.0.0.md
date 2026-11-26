@@ -708,11 +708,15 @@ New Features
   32 annotations, and keys starting with ``secrets.educates.dev/`` are
   rejected, as described under Features Changed.
 
-* ``SecretCopier`` and ``SecretExporter`` rules accept ``targetSecret.keys``,
-  the keys of the source secret to copy. A copy then holds only those of the
-  listed keys which the source secret has, and a key no longer listed is
-  removed from the copies. When ``keys`` is set it must list at least one key,
-  and a resource with an empty ``keys`` list is rejected. Without ``keys``,
+* ``SecretCopier`` and ``SecretExporter`` rules accept ``sourceSecret.keys``,
+  the keys of the source secret to copy. In a ``SecretCopier`` rule they sit
+  beside the name and namespace of the source secret. A ``SecretExporter``
+  rule gains a ``sourceSecret`` which holds only ``keys``, since the
+  ``SecretExporter`` names the secret it exports. A copy then holds only those
+  of the listed keys which the source secret has, and a key no longer listed
+  is removed from the copies. When ``keys`` is set it must list at least one
+  key, and a resource with an empty ``keys`` list, or with a ``SecretExporter``
+  rule whose ``sourceSecret`` has no ``keys``, is rejected. Without ``keys``,
   every key is copied, as before. Kubernetes requires a copy of a
   ``kubernetes.io/tls`` secret to keep ``tls.crt`` and ``tls.key``, so a rule
   whose ``keys`` leave either out fails for each namespace it copies such a
@@ -1839,7 +1843,7 @@ Features Changed
   annotations tracking copies. The limits keep the check of the reserved
   prefix within the cost Kubernetes allows for validating a resource. They and
   the reserved prefix are the only changes to the custom resource definitions
-  which reject a resource that worked before. The new ``targetSecret.keys``
+  which reject a resource that worked before. The new ``sourceSecret.keys``
   must list at least one key when it is set, and the selectors new to
   ``SecretInjector`` rules must be well formed, but these fields did nothing
   before, so no resource which relied on them exists. The session manager turns the ``environment.secrets`` list of a

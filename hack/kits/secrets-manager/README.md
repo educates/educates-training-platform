@@ -46,7 +46,7 @@ and `delete` removes it all.
 | 07-immutable | copier `kit-secrets-manager-immutable` | `True InSync 1/1`, the copy holds `v1` | the copy is made immutable and the source moves to `v2`: `False TargetErrors`, the copy is kept at `v1`, one Warning `CopyNotUpdated` | the frozen copy is deleted: `InSync 1/1`, recreated with `v2` |
 | 08-export-import | exporter `export`, importers `export` in both targets and `nobody-exports` in target-b | exporter `False AwaitingAuthorization 1/2`; importers `Imported`, `AwaitingAuthorization` (`SharedSecretMismatch`) and `NoMatchingExporter` | | the target-b importer gets the right shared secret: exporter `InSync 2/2`, that importer `Imported`; `nobody-exports` stays as it is, on purpose |
 | 09-injector | injectors `kit-secrets-manager-injector` and `kit-secrets-manager-injector-empty` | `True InSync 1/1`, the pull secret in target-a's `default` service account; `False InvalidSelector` for the empty source selector | | the empty injector names the pull secret: `InSync 1/1` |
-| 10-rejected-at-admission | two copiers, never created | admission refuses an empty `targetSecret.keys`, and an annotation key under `secrets.educates.dev/` | | |
+| 10-rejected-at-admission | two copiers, never created | admission refuses an empty `sourceSecret.keys`, and an annotation key under `secrets.educates.dev/` | | |
 
 Every resource that is not Ready gets a Warning `NotReady` once it has not
 been Ready for 60 seconds, while its status shows the problem at once, so a

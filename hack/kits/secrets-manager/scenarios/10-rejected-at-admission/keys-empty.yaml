@@ -1,4 +1,4 @@
-# Refused at admission: targetSecret.keys must list at least one key.
+# Refused at admission: sourceSecret.keys must list at least one key.
 apiVersion: secrets.educates.dev/v1beta1
 kind: SecretCopier
 metadata:
@@ -8,9 +8,8 @@ spec:
   - sourceSecret:
       name: healthy
       namespace: kit-secrets-manager-source
+      keys: []
     targetNamespaces:
       nameSelector:
         matchNames:
         - kit-secrets-manager-target-a
-    targetSecret:
-      keys: []

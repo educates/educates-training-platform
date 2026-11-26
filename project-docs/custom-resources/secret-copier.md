@@ -102,7 +102,7 @@ Annotation keys starting with ``secrets.educates.dev/`` are reserved for the ann
 Selecting the keys copied
 -------------------------
 
-A copy holds every key of its source secret. To copy only some of the keys, list them in ``targetSecret.keys``.
+A copy holds every key of its source secret. To copy only some of the keys, list them in ``sourceSecret.keys``, beside the name and namespace of the source secret.
 
 ```yaml
 apiVersion: secrets.educates.dev/v1beta1
@@ -114,7 +114,6 @@ spec:
   - sourceSecret:
       name: database-credentials
       namespace: databases
-    targetSecret:
       keys:
       - username
       - password
@@ -332,7 +331,7 @@ Overlapping rules for target secret
 
 A copy is managed by the rule which created it, or took it over, which records itself in the copy's tracking annotations, described below. When rules of several ``SecretCopier`` or ``SecretExporter`` resources, or several rules of the same one, target the same secret name in a namespace:
 
-* Rules which copy the same source secret agree. The resource whose rule created the copy keeps it, and the ``targetSecret`` labels, annotations and keys of that rule decide what the copy holds, even where those of the other rules differ. Where several rules of that resource copy the source secret under the name, the first of them in ``spec.rules`` decides. The other rules count the copy as in sync and write nothing.
+* Rules which copy the same source secret agree, whatever keys they select. The resource whose rule created the copy keeps it, and the ``targetSecret`` labels and annotations and the ``sourceSecret`` keys of that rule decide what the copy holds, even where those of the other rules differ. Where several rules of that resource copy the source secret under the name, the first of them in ``spec.rules`` decides. The other rules count the copy as in sync and write nothing.
 
 * A rule which copies a different source secret leaves the copy untouched, and reports a ``Conflict`` for that namespace.
 
@@ -371,7 +370,7 @@ Changes to a copy
 
 A copy which is deleted is created again within seconds. A copy whose data, or whose labels or annotations set by its rule, are changed by someone else, is restored within seconds.
 
-When the source secret is replaced by one of a different ``type``, its copies are deleted and created again with the new type, since Kubernetes does not let the type of a secret change. A copy is deleted only once Kubernetes has said it would accept the new one. Where it would not, such as when ``targetSecret.keys`` leaves out a key the new type requires, the copy is kept as it is and the rule reports a failure for that namespace.
+When the source secret is replaced by one of a different ``type``, its copies are deleted and created again with the new type, since Kubernetes does not let the type of a secret change. A copy is deleted only once Kubernetes has said it would accept the new one. Where it would not, such as when ``sourceSecret.keys`` leaves out a key the new type requires, the copy is kept as it is and the rule reports a failure for that namespace.
 
 A copy which someone else has marked with ``immutable: true`` is never deleted. When its data or type must change to follow its source secret, the rule reports a failure for that namespace, retried until someone deletes the copy, as Kubernetes never lets the data of an immutable secret change, and the rule then creates it again. The message of the ``Ready`` condition says that the copy is immutable and was not updated, and the secrets manager records a ``Warning`` Event with reason ``CopyNotUpdated``, described below.
 
@@ -425,7 +424,7 @@ The ``Ready`` condition is ``True``, with reason ``InSync``, when every target n
 
 * ``AwaitingAuthorization``: in some namespaces no ``SecretImporter`` accepts the copy. Either a rule with ``copyAuthorization`` finds no ``SecretImporter`` there holding its shared secret, or the ``SecretImporter`` named after the copy does not admit the namespace of the source secret.
 
-The message of the condition names up to five of the namespaces affected, and what failed where a copy could not be written. The ``status.summary`` counts, for all the rules together, the ``targetNamespaces`` selected and, of them, those whose copy is ``inSync``, those in ``conflicts``, those ``awaitingAuthorization`` and the ``failures``. Its ``inSyncRatio`` is the ``In Sync`` column. The ``status.rules`` list gives the same counts for each rule, in the order of ``spec.rules``, with its ``sourceSecret`` and whether that secret exists, as ``sourceExists``.
+The message of the condition names up to five of the namespaces affected, and what failed where a copy could not be written. The ``status.summary`` counts, for all the rules together, the ``targetNamespaces`` selected and, of them, those whose copy is ``inSync``, those in ``conflicts``, those ``awaitingAuthorization`` and the ``failures``. Its ``inSyncRatio`` is the ``In Sync`` column. The ``status.rules`` list gives the same counts for each rule, in the order of ``spec.rules``, with the name and namespace of its source secret, as ``sourceSecret``, and whether that secret exists, as ``sourceExists``.
 
 ```yaml
 status:

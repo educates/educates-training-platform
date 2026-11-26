@@ -118,23 +118,36 @@ func namespaceOwner(owner *corev1.Namespace) object {
 	return ownerOf("v1", "Namespace", owner.Name, owner.UID)
 }
 
-// copierRule is a SecretCopier rule copying src into the namespaces targets
-// selects, with the other fields of extra.
+// copierRule is a SecretCopier rule copying every key of src into the
+// namespaces targets selects, with the other fields of extra.
 func copierRule(src *corev1.Secret, targets object, extra ...object) object {
-	source := object{"sourceSecret": secretReference{Name: src.Name, Namespace: src.Namespace}}
-	return merged(append([]object{targeting(targets), source}, extra...)...)
+	return merged(append([]object{targeting(targets), copying(src)}, extra...)...)
 }
 
-// secretReference is the sourceSecret of a SecretCopier rule.
-type secretReference struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
+// copying is the sourceSecret of a SecretCopier rule copying the keys of src
+// that keys lists, or every key of src when keys lists none. Passed to
+// copierRule as extra, it replaces the sourceSecret copying every key.
+func copying(src *corev1.Secret, keys ...string) object {
+	return object{"sourceSecret": sourceSecret{Name: src.Name, Namespace: src.Namespace, Keys: keys}}
+}
+
+// sourceSecret is the sourceSecret of a SecretCopier rule.
+type sourceSecret struct {
+	Name      string   `json:"name"`
+	Namespace string   `json:"namespace"`
+	Keys      []string `json:"keys,omitempty"`
 }
 
 // exporterRule is a SecretExporter rule offering its Secret to the
 // namespaces targets selects, with the other fields of extra.
 func exporterRule(targets object, extra ...object) object {
 	return merged(append([]object{targeting(targets)}, extra...)...)
+}
+
+// exporting is the sourceSecret of a SecretExporter rule copying the keys of
+// the exported Secret that keys lists.
+func exporting(keys ...string) object {
+	return object{"sourceSecret": object{"keys": keys}}
 }
 
 // injectorRule is a SecretInjector rule injecting the Secrets sources
@@ -164,7 +177,6 @@ type copyShape struct {
 	Name        string            `json:"name,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
-	Keys        []string          `json:"keys,omitempty"`
 }
 
 // shaped sets the targetSecret of a rule.

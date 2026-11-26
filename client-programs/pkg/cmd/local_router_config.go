@@ -131,8 +131,8 @@ func (rc routerChange) ensureRouter(ctx context.Context, rep progress.Reporter, 
 	var notes []string
 	defer func() { noteAll(rep, notes) }()
 	err = runStep(rep, label, "running", func(s progress.Step) error {
-		if plan.Why != "" {
-			s.Update(plan.Why + ", which drops every connection through it")
+		if plan.RecreateReason != "" {
+			s.Update(plan.RecreateReason + ", which drops every connection through it")
 		}
 		routes, leftOut, err := inventory.RouterRoutes()
 		if err != nil {

@@ -164,8 +164,8 @@ type RouterPlan struct {
 	// re-created.
 	Address string
 
-	// Why says why the router is re-created, empty otherwise.
-	Why string
+	// RecreateReason says why the router is re-created, empty otherwise.
+	RecreateReason string
 }
 
 // PlanRouter returns what local cluster create and start do to the router
@@ -194,7 +194,7 @@ func (inv Inventory) PlanRouter(image string) (RouterPlan, error) {
 	case router == nil:
 		plan.Action = RouterCreate
 	default:
-		if plan.Why = router.recreateReason(image, address); plan.Why == "" {
+		if plan.RecreateReason = router.recreateReason(image, address); plan.RecreateReason == "" {
 			return plan, nil
 		}
 		plan.Action = RouterRecreate

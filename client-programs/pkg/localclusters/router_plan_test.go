@@ -52,7 +52,7 @@ func TestPlanRouterOnlyReloadsARunningRouterOnThePinnedImageAndTheRouterAddress(
 		t.Fatalf("PlanRouter: %v", err)
 	}
 
-	if plan.Action != RouterReload || plan.Address != "10.10.10.1" || plan.Why != "" {
+	if plan.Action != RouterReload || plan.Address != "10.10.10.1" || plan.RecreateReason != "" {
 		t.Errorf("PlanRouter() = %+v, want to reload the router on 10.10.10.1", plan)
 	}
 }
@@ -89,8 +89,8 @@ func TestPlanRouterRecreatesARouterThatRunsAnotherImageListensElsewhereOrHasStop
 				t.Errorf("PlanRouter() = %+v, want to re-create the router on 10.10.10.1", plan)
 			}
 			for _, part := range tc.why {
-				if !strings.Contains(plan.Why, part) {
-					t.Errorf("Why %q does not mention %q", plan.Why, part)
+				if !strings.Contains(plan.RecreateReason, part) {
+					t.Errorf("RecreateReason %q does not mention %q", plan.RecreateReason, part)
 				}
 			}
 		})
@@ -167,7 +167,7 @@ func TestPlanRouterRecreatesARouterOnAnotherImageHoweverDockerReportsIt(t *testi
 				t.Fatalf("PlanRouter: %v", err)
 			}
 
-			if plan.Action != RouterRecreate || !strings.Contains(plan.Why, tc.image) {
+			if plan.Action != RouterRecreate || !strings.Contains(plan.RecreateReason, tc.image) {
 				t.Errorf("PlanRouter() = %+v, want to re-create the router, naming the image %s", plan, tc.image)
 			}
 		})

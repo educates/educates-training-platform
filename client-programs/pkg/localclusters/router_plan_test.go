@@ -263,3 +263,33 @@ func TestRouterStartErrorCarriesDockersErrorWithTheAddressAndPorts(t *testing.T)
 		t.Errorf("error %q does not wrap Docker's error", err)
 	}
 }
+
+// The router container runs as a user that can read the keys of the
+// router folder, which only the CLI's user may read.
+func TestRouterUser(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		securityOptions []string
+		uid, gid        int
+		want            string
+	}{
+		{name: "Docker Desktop", securityOptions: []string{"name=seccomp,profile=unconfined", "name=cgroupns"},
+			uid: 501, gid: 20, want: "501:20"},
+		{name: "a Linux engine run by root", securityOptions: []string{"name=apparmor", "name=seccomp,profile=builtin"},
+			uid: 1000, gid: 1000, want: "1000:1000"},
+		// Only root in the container maps to the host user who runs a
+		// rootless engine, and who owns the keys.
+		{name: "a rootless Linux engine", securityOptions: []string{"name=seccomp,profile=builtin", "name=rootless", "name=cgroupns"},
+			uid: 1000, gid: 1000, want: "0:0"},
+		{name: "no security options", uid: 1000, gid: 1000, want: "1000:1000"},
+		// A host with no user IDs, as Windows has none, leaves the
+		// image's own user.
+		{name: "Windows", securityOptions: []string{"name=seccomp,profile=unconfined"}, uid: -1, gid: -1, want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RouterUser(tc.securityOptions, tc.uid, tc.gid); got != tc.want {
+				t.Errorf("RouterUser(%q, %d, %d) = %q, want %q", tc.securityOptions, tc.uid, tc.gid, got, tc.want)
+			}
+		})
+	}
+}

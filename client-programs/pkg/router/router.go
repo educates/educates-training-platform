@@ -136,9 +136,14 @@ func Create(ctx context.Context, address, dir string) (adopted bool, err error) 
 	if err := registry.EnsureEducatesNetwork(ctx, cli); err != nil {
 		return false, err
 	}
+	engine, err := cli.Info(ctx, client.InfoOptions{})
+	if err != nil {
+		return false, errors.Wrap(err, "unable to read the Docker engine's information")
+	}
+	user := localclusters.RouterUser(engine.Info.SecurityOptions, os.Getuid(), os.Getgid())
 
 	for attempt := 0; ; attempt++ {
-		err := createContainer(ctx, cli, hostIP, dir)
+		err := createContainer(ctx, cli, hostIP, dir, user)
 		if err == nil {
 			break
 		}
@@ -188,10 +193,11 @@ func pullImage(ctx context.Context, cli *client.Client) error {
 }
 
 // createContainer creates the router container, without starting it,
-// publishing ports 80 and 443 on hostIP and mounting the router folder
-// dir. A router container that exists already fails it with Docker's
-// conflict error.
-func createContainer(ctx context.Context, cli *client.Client, hostIP netip.Addr, dir string) error {
+// publishing ports 80 and 443 on hostIP, mounting the router folder dir,
+// and running HAProxy as user, as localclusters.RouterUser chooses it. A
+// router container that exists already fails it with Docker's conflict
+// error.
+func createContainer(ctx context.Context, cli *client.Client, hostIP netip.Addr, dir, user string) error {
 	exposed := network.PortSet{}
 	bindings := network.PortMap{}
 	for _, port := range []string{"80", "443"} {
@@ -208,13 +214,14 @@ func createContainer(ctx context.Context, cli *client.Client, hostIP netip.Addr,
 				constants.EducatesContainersAppLabelKey:  constants.EducatesContainersAppLabel,
 				constants.EducatesContainersRoleLabelKey: constants.EducatesContainersRouterRoleLabel,
 			},
-			User: containerUser(),
+			User: user,
 		},
 		HostConfig: &container.HostConfig{
 			NetworkMode:  container.NetworkMode(registry.EducatesNetworkName),
 			PortBindings: bindings,
-			// HAProxy runs as a user that is not root, which binds ports
-			// below 1024 only with this setting.
+			// HAProxy runs as a user that is not root, except on a
+			// rootless engine, and such a user binds ports below 1024 only
+			// with this setting.
 			Sysctls: map[string]string{"net.ipv4.ip_unprivileged_port_start": "0"},
 			Mounts: []mount.Mount{{
 				Type:     mount.TypeBind,
@@ -230,20 +237,6 @@ func createContainer(ctx context.Context, cli *client.Client, hostIP netip.Addr,
 		Name: ContainerName,
 	})
 	return err
-}
-
-// containerUser is the user the router container runs HAProxy as: the
-// CLI's own user and group, by their IDs, so that HAProxy reads the keys
-// of the router folder, which only that user may read, on a Linux engine,
-// whose bind mounts keep the host's owners, as well as on Docker Desktop.
-// Where the host has no such IDs, as on Windows, it is empty, and the
-// image's own user, haproxy, runs it.
-func containerUser() string {
-	uid, gid := os.Getuid(), os.Getgid()
-	if uid < 0 || gid < 0 {
-		return ""
-	}
-	return fmt.Sprintf("%d:%d", uid, gid)
 }
 
 // waitForStart waits for the router container another command creates to

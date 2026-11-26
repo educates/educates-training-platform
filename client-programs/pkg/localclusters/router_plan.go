@@ -31,6 +31,32 @@ type RouterContainer struct {
 	PortBindings []PortBinding
 }
 
+// RouterUser returns the user, as uid:gid, the router container runs
+// HAProxy as on a Docker engine whose security options, as Docker's system
+// information reports them, are securityOptions, given uid and gid, the
+// IDs of the CLI's own user and group. HAProxy must read the keys of the
+// router folder, which only the CLI's user may read:
+//
+//   - on a rootless engine, whose security options include name=rootless,
+//     only root in a container maps to the host user who runs the engine
+//     and owns the keys, so it is 0:0;
+//   - on any other engine it is the CLI's own uid and gid, since a Linux
+//     engine's bind mounts keep the host's owners, and Docker Desktop
+//     serves the folder as the CLI's user;
+//   - where the host has no such IDs, as on Windows, it is empty, and the
+//     image's own user, haproxy, runs it.
+func RouterUser(securityOptions []string, uid, gid int) string {
+	for _, option := range securityOptions {
+		if slices.Contains(strings.Split(option, ","), "name=rootless") {
+			return "0:0"
+		}
+	}
+	if uid < 0 || gid < 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d:%d", uid, gid)
+}
+
 // Router returns the router container observed, and reports whether there
 // is one.
 func (inv Inventory) Router() (RouterContainer, bool) {

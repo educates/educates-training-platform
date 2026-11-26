@@ -106,7 +106,7 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 		return registry.DeleteRegistryMirrors(s)
 	})
 	_ = stepOnStdout(false, "delete router", "deleted", func(progress.Step) error {
-		return dockerRouterChange(utils.GetEducatesHomeDir(), os.Stderr).removeRouter(ctx)
+		return dockerRouterOperations(utils.GetEducatesHomeDir(), os.Stderr).removeRouter(ctx)
 	})
 
 	return err
@@ -262,7 +262,7 @@ func removeUnusedCAKeyPairs(ctx context.Context, w io.Writer, id localclusters.I
 // other clusters' open connections.
 func refreshRouterAfterDelete(ctx context.Context) {
 	rep := progress.New(os.Stdout, 0, isStdoutTTY(os.Stdout))
-	dockerRouterChange(utils.GetEducatesHomeDir(), os.Stderr).refreshAfterDelete(ctx, rep, localClusterInventory)
+	dockerRouterOperations(utils.GetEducatesHomeDir(), os.Stderr).refreshAfterDelete(ctx, rep, localClusterInventory)
 }
 
 // refreshResolverAfterDelete refreshes a running local DNS resolver once a

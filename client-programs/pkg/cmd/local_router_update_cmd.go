@@ -71,7 +71,7 @@ func (o *LocalRouterUpdateOptions) Run(ctx context.Context, w, errW io.Writer) e
 	if err != nil {
 		return err
 	}
-	return dockerRouterChange(utils.GetEducatesHomeDir(), errW).update(ctx, w, progress.New(w, 0, isStdoutTTY(w)), inventory,
+	return dockerRouterOperations(utils.GetEducatesHomeDir(), errW).update(ctx, w, progress.New(w, 0, isStdoutTTY(w)), inventory,
 		o.Address, func(rep progress.Reporter) {
 			refreshLocalResolver(rep, func() ([]byte, []error, error) { return observedResolverConfig(ctx) })
 		})
@@ -89,7 +89,7 @@ func (o *LocalRouterUpdateOptions) Run(ctx context.Context, w, errW io.Writer) e
 // reloads it. Unlike refreshRouter, a reload that fails is an error.
 // Last, it names each cluster whose domain changed with the router
 // address, which is deployed again for its portals to answer on it.
-func (rc routerChange) update(ctx context.Context, w io.Writer, rep progress.Reporter, inventory localclusters.Inventory,
+func (ops routerOperations) update(ctx context.Context, w io.Writer, rep progress.Reporter, inventory localclusters.Inventory,
 	address string, refreshResolver func(progress.Reporter)) error {
 	var before []localclusters.ListRow
 	if address != "" {
@@ -102,7 +102,7 @@ func (rc routerChange) update(ctx context.Context, w io.Writer, rep progress.Rep
 		if err != nil {
 			return err
 		}
-		path := config.LocalRouterPath(rc.dataHome)
+		path := config.LocalRouterPath(ops.dataHome)
 		switch previous {
 		case current:
 			fmt.Fprintf(w, "The router address in %s is %s already.\n", path, current)
@@ -116,7 +116,7 @@ func (rc routerChange) update(ctx context.Context, w io.Writer, rep progress.Rep
 		}
 	}
 
-	if err := rc.updateRouter(ctx, w, rep, inventory); err != nil {
+	if err := ops.updateRouter(ctx, w, rep, inventory); err != nil {
 		return err
 	}
 
@@ -129,20 +129,20 @@ func (rc routerChange) update(ctx context.Context, w io.Writer, rep progress.Rep
 // updateRouter creates, re-creates or reloads the router as update says,
 // as steps of rep. With no router and no local cluster, it says so on w,
 // and creates nothing.
-func (rc routerChange) updateRouter(ctx context.Context, w io.Writer, rep progress.Reporter, inventory localclusters.Inventory) error {
+func (ops routerOperations) updateRouter(ctx context.Context, w io.Writer, rep progress.Reporter, inventory localclusters.Inventory) error {
 	if _, exists := inventory.Router(); !exists && len(inventory.Clusters()) == 0 {
 		fmt.Fprintln(w, "There is no local cluster, so the router is not created: 'educates local cluster create' "+
 			"creates it with the first local cluster.")
 		return nil
 	}
-	changed, err := rc.ensureRouter(ctx, rep, inventory)
+	changed, err := ops.ensureRouter(ctx, rep, inventory)
 	if err != nil || changed {
 		return err
 	}
 	var notes []string
 	defer func() { noteAll(rep, notes) }()
 	return runStep(rep, "reloading router", "reloaded", func(s progress.Step) error {
-		notes, err = rc.serveRoutes(ctx, s, inventory, true)
+		notes, err = ops.serveRoutes(ctx, s, inventory, true)
 		return err
 	})
 }

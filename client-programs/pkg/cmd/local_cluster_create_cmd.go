@@ -256,8 +256,8 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	// Creating it checks the router address and Docker Desktop's
 	// privileged port setting first. A router that needs neither is
 	// refreshed once the cluster exists.
-	routerChange := dockerRouterChange(utils.GetEducatesHomeDir(), w)
-	if _, err := routerChange.ensureRouter(ctx, rep, inventory); err != nil {
+	routerOps := dockerRouterOperations(utils.GetEducatesHomeDir(), w)
+	if _, err := routerOps.ensureRouter(ctx, rep, inventory); err != nil {
 		return err
 	}
 
@@ -292,7 +292,7 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	// over the kind network kind has just made, which it joins. As for
 	// the resolver, it renders every local cluster again, and a router it
 	// can't refresh is only a warning.
-	routerChange.refreshRouter(ctx, rep, localClusterInventory, resolverInput.LoadedConfig)
+	routerOps.refreshRouter(ctx, rep, localClusterInventory, resolverInput.LoadedConfig)
 	// The registry, loopback and mirror steps talk to the cluster just
 	// created, through its own context in the kubeconfig kind wrote it in.
 	client, err := clusterConfig.Config.GetClient()

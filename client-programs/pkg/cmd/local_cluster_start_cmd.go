@@ -105,13 +105,13 @@ func runLocalClusterStart(ctx context.Context, w, errW io.Writer, id localcluste
 	// route, so a node that comes back on another address is reached
 	// there.
 	rep := progress.New(w, 0, isStdoutTTY(w))
-	routerChange := dockerRouterChange(utils.GetEducatesHomeDir(), errW)
-	changed, err := routerChange.ensureRouter(ctx, rep, inventory)
+	routerOps := dockerRouterOperations(utils.GetEducatesHomeDir(), errW)
+	changed, err := routerOps.ensureRouter(ctx, rep, inventory)
 	if err != nil {
 		return err
 	}
 	if !changed {
-		routerChange.refreshRouter(ctx, rep, func(context.Context) (localclusters.Inventory, error) {
+		routerOps.refreshRouter(ctx, rep, func(context.Context) (localclusters.Inventory, error) {
 			return inventory, nil
 		})
 	}

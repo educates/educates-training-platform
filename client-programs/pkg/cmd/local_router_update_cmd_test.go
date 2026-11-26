@@ -55,7 +55,7 @@ type routerUpdateResult struct {
 func updateRouterForTest(f *fakeRouterContainer, dataHome string, inv localclusters.Inventory, address string) routerUpdateResult {
 	var out bytes.Buffer
 	var result routerUpdateResult
-	result.err = routerChangeForTest(f, dataHome, nil).update(context.Background(), &out, progress.New(&out, 0, false), inv, address,
+	result.err = routerOperationsForTest(f, dataHome, nil).update(context.Background(), &out, progress.New(&out, 0, false), inv, address,
 		func(progress.Reporter) { result.resolverRefreshed = true })
 	result.out = out.String()
 	return result

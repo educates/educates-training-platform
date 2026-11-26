@@ -99,10 +99,10 @@ func routerOn(image string, running bool) *localclusters.RouterContainer {
 	}
 }
 
-// routerChangeForTest is the router change of the fake container f
+// routerOperationsForTest are the router operations on the fake container f
 // serving dataHome, whose privileged port check returns checkErr.
-func routerChangeForTest(f *fakeRouterContainer, dataHome string, checkErr error) routerChange {
-	return routerChange{
+func routerOperationsForTest(f *fakeRouterContainer, dataHome string, checkErr error) routerOperations {
+	return routerOperations{
 		container:            f.container(dataHome),
 		dataHome:             dataHome,
 		checkPrivilegedPorts: func(context.Context) error { return checkErr },
@@ -114,7 +114,7 @@ func TestEnsureRouterCreatesAMissingRouterServingTheRenderedFolder(t *testing.T)
 	f := &fakeRouterContainer{}
 	var out bytes.Buffer
 
-	changed, err := routerChangeForTest(f, dataHome, nil).ensureRouter(context.Background(), progress.New(&out, 0, false),
+	changed, err := routerOperationsForTest(f, dataHome, nil).ensureRouter(context.Background(), progress.New(&out, 0, false),
 		routerInventory(dataHome, nil, nil))
 	if err != nil {
 		t.Fatalf("ensureRouter: %v", err)
@@ -133,7 +133,7 @@ func TestEnsureRouterRecreatesARouterOnAnotherImage(t *testing.T) {
 	f := &fakeRouterContainer{}
 	var out bytes.Buffer
 
-	changed, err := routerChangeForTest(f, dataHome, nil).ensureRouter(context.Background(), progress.New(&out, 0, false),
+	changed, err := routerOperationsForTest(f, dataHome, nil).ensureRouter(context.Background(), progress.New(&out, 0, false),
 		routerInventory(dataHome, nil, routerOn("haproxy:3.4.7-alpine", true)))
 	if err != nil {
 		t.Fatalf("ensureRouter: %v", err)
@@ -154,7 +154,7 @@ func TestEnsureRouterLeavesARunningRouterToTheRefresh(t *testing.T) {
 	f := &fakeRouterContainer{}
 	var out bytes.Buffer
 
-	changed, err := routerChangeForTest(f, dataHome, errors.New("setting off")).ensureRouter(context.Background(),
+	changed, err := routerOperationsForTest(f, dataHome, errors.New("setting off")).ensureRouter(context.Background(),
 		progress.New(&out, 0, false), routerInventory(dataHome, nil, routerOn(router.Image, true)))
 	if err != nil {
 		t.Fatalf("ensureRouter: %v", err)
@@ -171,7 +171,7 @@ func TestEnsureRouterRefusesWhenDockerDesktopCannotServeThePorts(t *testing.T) {
 	settingOff := errors.New(`"Allow privileged port forwarding to external machines" is off`)
 	var out bytes.Buffer
 
-	_, err := routerChangeForTest(f, dataHome, settingOff).ensureRouter(context.Background(), progress.New(&out, 0, false),
+	_, err := routerOperationsForTest(f, dataHome, settingOff).ensureRouter(context.Background(), progress.New(&out, 0, false),
 		routerInventory(dataHome, nil, nil))
 
 	if !errors.Is(err, settingOff) || len(f.calls) != 0 {
@@ -190,7 +190,7 @@ func TestEnsureRouterNamesAClusterMadeByAnEarlierCLIWhenTheRouterCannotStart(t *
 	}}
 	var out bytes.Buffer
 
-	_, err := routerChangeForTest(f, dataHome, nil).ensureRouter(context.Background(), progress.New(&out, 0, false),
+	_, err := routerOperationsForTest(f, dataHome, nil).ensureRouter(context.Background(), progress.New(&out, 0, false),
 		routerInventory(dataHome, earlier, nil))
 
 	if err == nil || !errors.Is(err, dockerErr) {
@@ -209,7 +209,7 @@ func TestEnsureRouterReloadsARouterAnotherCommandCreated(t *testing.T) {
 	f := &fakeRouterContainer{adopted: true}
 	var out bytes.Buffer
 
-	if _, err := routerChangeForTest(f, dataHome, nil).ensureRouter(context.Background(), progress.New(&out, 0, false),
+	if _, err := routerOperationsForTest(f, dataHome, nil).ensureRouter(context.Background(), progress.New(&out, 0, false),
 		routerInventory(dataHome, nil, nil)); err != nil {
 		t.Fatalf("ensureRouter: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestEnsureRouterReloadsARouterAnotherCommandCreated(t *testing.T) {
 // with the inventory inv, and returns what the refresh reported.
 func refreshRouterForTest(f *fakeRouterContainer, dataHome string, inv localclusters.Inventory, given ...localclusters.LoadedConfig) string {
 	var out bytes.Buffer
-	routerChangeForTest(f, dataHome, nil).refreshRouter(context.Background(), progress.New(&out, 0, false),
+	routerOperationsForTest(f, dataHome, nil).refreshRouter(context.Background(), progress.New(&out, 0, false),
 		func(context.Context) (localclusters.Inventory, error) { return inv, nil }, given...)
 	return out.String()
 }
@@ -320,7 +320,7 @@ func TestRemoveRouterRemovesTheContainerAndTheFolderButKeepsTheRouterFile(t *tes
 	}
 	f := &fakeRouterContainer{}
 
-	if err := routerChangeForTest(f, dataHome, nil).removeRouter(context.Background()); err != nil {
+	if err := routerOperationsForTest(f, dataHome, nil).removeRouter(context.Background()); err != nil {
 		t.Fatalf("removeRouter: %v", err)
 	}
 

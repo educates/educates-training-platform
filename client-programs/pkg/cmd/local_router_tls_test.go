@@ -60,9 +60,9 @@ func tlsEndedDataHome(t *testing.T) (string, localclusters.Inventory) {
 // reported.
 func refreshRouterWithCertificates(f *fakeRouterContainer, certs *fakeRouterCertificates, dataHome string, inv localclusters.Inventory) string {
 	var out bytes.Buffer
-	rc := routerChangeForTest(f, dataHome, nil)
-	rc.certificate = certs.certificate
-	rc.refreshRouter(context.Background(), progress.New(&out, 0, false),
+	ops := routerOperationsForTest(f, dataHome, nil)
+	ops.certificate = certs.certificate
+	ops.refreshRouter(context.Background(), progress.New(&out, 0, false),
 		func(context.Context) (localclusters.Inventory, error) { return inv, nil })
 	return out.String()
 }
@@ -133,7 +133,7 @@ func TestRefreshRouterAfterDeleteRemovesTheDeletedClustersCertificateWithNoRoute
 	f := &fakeRouterContainer{}
 	var out bytes.Buffer
 
-	routerChangeForTest(f, dataHome, nil).refreshAfterDelete(context.Background(), progress.New(&out, 0, false),
+	routerOperationsForTest(f, dataHome, nil).refreshAfterDelete(context.Background(), progress.New(&out, 0, false),
 		func(context.Context) (localclusters.Inventory, error) { return deleted, nil })
 
 	certsDir := filepath.Join(config.LocalRouterDir(dataHome), "certs")

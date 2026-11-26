@@ -163,11 +163,8 @@ func writeRedeployNotes(w io.Writer, before, after []localclusters.ListRow) {
 		if !listed || previous == "" || r.Domain == "" || previous == r.Domain {
 			continue
 		}
-		selection := ""
-		if !r.Identity.IsDefault() {
-			selection = " --" + localclusters.SelectionFlagName + " " + r.Identity.Name
-		}
 		fmt.Fprintf(w, "Note: the domain of %s is now %s, in place of %s. Deploy it again for its portals to answer on it:\n\n"+
-			"  educates admin platform deploy --local-config%s\n\n", r.Identity.Description(), r.Domain, previous, selection)
+			"  educates admin platform deploy --local-config%s\n\n", r.Identity.Description(), r.Domain, previous,
+			localClusterFlagArg(r.Identity))
 	}
 }

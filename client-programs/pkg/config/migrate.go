@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"io"
+	"maps"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -288,7 +289,172 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		}
 	}
 
+	// sessionManager. clusterAdmin is carried over although a local
+	// cluster does not apply it, which its notice line says.
+	if clusterAdmin, isBool := asMap(v3["sessionManager"])["clusterAdmin"].(bool); isBool {
+		cfg.ClusterAdmin = &clusterAdmin
+		notes = append(notes, fmt.Sprintf("carried sessionManager.clusterAdmin over to clusterAdmin: %t; a local "+
+			"cluster does not apply clusterAdmin yet, and does not bind its session manager to the cluster-admin "+
+			"ClusterRole", clusterAdmin))
+	}
+
+	// lookupService. Only a set switch is carried over: v3 left the lookup
+	// service off by default, and a local cluster runs it by default. A
+	// local cluster serves it under the prefix lookup, so a dropped
+	// ingressPrefix is noted with the dropped settings.
+	lookupService := asMap(v3["lookupService"])
+	if enabled, isBool := lookupService["enabled"].(bool); isBool {
+		cfg.LookupService = &enabled
+		note := fmt.Sprintf("carried lookupService.enabled over to lookupService: %t", enabled)
+		if enabled && isEmptyV3Value(lookupService["ingressPrefix"]) {
+			note += "; a local cluster serves it under the prefix lookup, where version 3 used educates-api"
+		}
+		notes = append(notes, note)
+	}
+
+	notes = append(notes, droppedV3SettingNotes(v3)...)
+
 	return cfg, listenAddressIsHostIP, notes
+}
+
+// v3CarriedSettings are the top-level settings of a v3 values.yaml that
+// the migration carries over, each with the settings under it that it
+// carries, or nil when it carries the whole setting, noting itself what
+// it carries over in a changed form or drops.
+var v3CarriedSettings = map[string][]string{
+	"clusterInfrastructure": {"provider"},
+	"clusterIngress":        {"domain", "protocol"},
+	"localKindCluster":      nil,
+	"localDNSResolver":      nil,
+	"imageVersions":         nil,
+	"imagePuller":           nil,
+	"websiteStyling":        {"defaultTheme", "themeDataRefs"},
+	"secretPropagation":     nil,
+	"sessionManager":        {"clusterAdmin"},
+	"lookupService":         {"enabled"},
+}
+
+// v3DroppedSettings says where the version 4 equivalent of each setting
+// of a v3 values.yaml that the migration drops lives, or that it has
+// none, for the line of the migration notice that notes it. A setting it
+// does not hold is not a version 3 setting the migration knows.
+var v3DroppedSettings = map[string]string{
+	"debug": "it has no version 4 equivalent; 'educates admin platform render --local-config' prints what a " +
+		"deploy applies",
+	"clusterPackages": "a local cluster always installs Contour and Kyverno, and cert-manager when it issues the " +
+		"ingress certificate from a cached root CA; declare the cluster services otherwise in " +
+		"educatesClusterConfig in an EducatesConfig",
+	"imageRegistry": "set educatesClusterConfig.imageRegistry.prefix in an EducatesConfig, under which each image " +
+		"keeps its upstream repository path",
+	"version":        "image versions follow the release of the CLI; imageVersions overrides single images",
+	"clusterRuntime": "it has no version 4 equivalent",
+	"sessionCookies": "set sessionManager.sessionCookieDomain in an EducatesConfig",
+	"clusterStorage": "set sessionManager.storage, its storageClass, storageUser and storageGroup, in an " +
+		"EducatesConfig",
+	"clusterSecrets": "name docker-registry Secrets you create in the operator namespace in " +
+		"educatesClusterConfig.imageRegistry.pullSecrets in an EducatesConfig",
+	"clusterSecurity": "a local cluster enforces cluster policy with Kyverno; an EducatesConfig turns it off with " +
+		"educatesClusterConfig.policyEnforcement.clusterPolicy.engine None",
+	"workshopSecurity": "a local cluster enforces workshop policy with Kyverno; an EducatesConfig turns it off " +
+		"with educatesClusterConfig.policyEnforcement.workshopPolicy.engine None",
+	"trainingPortal": "set the credentials of each training portal in spec.portal.credentials and " +
+		"spec.portal.clients of its TrainingPortal; without them each portal gets credentials of its own",
+	"dockerDaemon": "set sessionManager.network.packetSize in an EducatesConfig for networkMTU; proxyCache, rootless " +
+		"and privileged have no version 4 equivalent",
+	"clusterNetwork": "a local cluster blocks sessions from the cloud metadata addresses 169.254.169.254/32 and " +
+		"fd00:ec2::254/128; set sessionManager.network.blockedCidrs in an EducatesConfig to block others",
+	"workshopAnalytics": "set sessionManager.tracking, its googleAnalytics, clarity, amplitude and webhook, in an " +
+		"EducatesConfig",
+
+	"clusterInfrastructure.aws":              "it applies to EKS clusters, which an EducatesEKSConfig declares",
+	"clusterInfrastructure.gcp":              "it applies to GKE clusters, which an EducatesGKEConfig declares",
+	"clusterInfrastructure.caCertificateRef": v3RootCANote,
+	"clusterIngress.class": "a local cluster's ingress class is Contour's contour; set " +
+		"educatesClusterConfig.ingress.ingressClassName in an EducatesConfig for another",
+	"clusterIngress.tlsCertificate":    v3TLSCertificateNote,
+	"clusterIngress.tlsCertificateRef": v3TLSCertificateNote,
+	"clusterIngress.caCertificate":     v3CACertificateNote,
+	"clusterIngress.caCertificateRef":  v3CACertificateNote,
+	"clusterIngress.caNodeInjector": "a local cluster installs the node CA injector whenever its ingress has a CA; " +
+		"set sessionManager.nodeCATrust.mode in an EducatesConfig to change that",
+	"websiteStyling.workshopDashboard":    v3StylingNote,
+	"websiteStyling.workshopInstructions": v3StylingNote,
+	"websiteStyling.workshopStarted":      v3StylingNote,
+	"websiteStyling.workshopFinished":     v3StylingNote,
+	"websiteStyling.trainingPortal":       v3StylingNote,
+	"websiteStyling.frameAncestors":       "set sessionManager.allowedEmbeddingHosts in an EducatesConfig",
+	"lookupService.ingressPrefix": "a local cluster serves the lookup service under the prefix lookup; set " +
+		"lookupService.ingress.prefix in an EducatesConfig for another",
+}
+
+// The lines of the migration notice that several dropped v3 settings
+// share.
+const (
+	v3RootCANote = "register the root CA with 'educates local secrets add ca <name> --cert ROOT.pem --key " +
+		"ROOT-KEY.pem', from which deploys mint a CA for the ingress domain"
+	v3TLSCertificateNote = "cache the wildcard certificate with 'educates local secrets add tls <name> --cert FILE " +
+		"--key FILE', which deploys serve for the domains of its wildcard DNS names"
+	v3CACertificateNote = "cache the CA certificate for trust with 'educates local secrets add ca <name> --cert FILE'"
+	v3StylingNote       = "put the content in a theme Secret, named in websiteStyling.themeDataRefs and " +
+		"websiteStyling.defaultTheme"
+)
+
+// droppedV3SettingNotes returns a line of the migration notice for each
+// setting of the v3 values map v3 that the migration drops, saying where
+// its version 4 equivalent lives: each top-level setting it does not
+// carry over, and each setting under one it carries only in part. A
+// setting that holds no value drops nothing.
+func droppedV3SettingNotes(v3 map[string]interface{}) []string {
+	var notes []string
+	for _, key := range slices.Sorted(maps.Keys(v3)) {
+		carried, isCarried := v3CarriedSettings[key]
+		switch {
+		case isEmptyV3Value(v3[key]):
+		case !isCarried:
+			notes = append(notes, droppedV3SettingNote(key))
+		case carried != nil:
+			block := asMap(v3[key])
+			for _, sub := range slices.Sorted(maps.Keys(block)) {
+				if !slices.Contains(carried, sub) && !isEmptyV3Value(block[sub]) {
+					notes = append(notes, droppedV3SettingNote(key+"."+sub))
+				}
+			}
+		}
+	}
+	return notes
+}
+
+// isEmptyV3Value reports whether v, a value of a v3 values map, holds no
+// value: it is null, an empty string or list, or a map whose values all
+// hold none.
+func isEmptyV3Value(v interface{}) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case string:
+		return x == ""
+	case []interface{}:
+		return len(x) == 0
+	}
+	if m := asMap(v); m != nil {
+		for _, val := range m {
+			if !isEmptyV3Value(val) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// droppedV3SettingNote is the line of the migration notice for the v3
+// setting path, which the migration drops.
+func droppedV3SettingNote(path string) string {
+	where, known := v3DroppedSettings[path]
+	if !known {
+		where = "it is not a version 3 setting the migration knows"
+	}
+	return fmt.Sprintf("dropped %s: %s", path, where)
 }
 
 // dropV3NipDomain leaves the ingress.domain of cfg, a migrated v3 config,

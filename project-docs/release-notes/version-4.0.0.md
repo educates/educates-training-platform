@@ -1145,7 +1145,14 @@ Features Changed
   been renamed, including ``localKindCluster`` to ``cluster``,
   ``localDNSResolver`` to ``resolver``, and the kind cluster networking
   fields ``podCIDR`` and ``serviceCIDR`` to ``podSubnet`` and
-  ``serviceSubnet``.
+  ``serviceSubnet``. The migration carries ``sessionManager.clusterAdmin``
+  over to ``clusterAdmin``, which a local cluster does not apply yet, and a
+  set ``lookupService.enabled`` over to ``lookupService``. Its notice names
+  every setting it drops, each top-level setting it does not carry over and
+  each setting dropped from a block it carries in part, and says where the
+  setting's version 4 equivalent lives, often a field of an
+  ``EducatesConfig``. See [laptop installs migrate
+  automatically](laptop-installs-migrate-automatically).
 
 * Workshop sessions are served over HTTPS when the cluster configuration
   provides certificate settings, which is a wildcard certificate, a

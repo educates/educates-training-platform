@@ -1157,7 +1157,7 @@ Features Changed
   domain is cached, and prints the commands that generate a root CA,
   register the root CA of ``mkcert``, or cache a ``mkcert`` wildcard
   certificate. A local configuration with no ingress domain set instead
-  defaults to a plain HTTP install on the ``nip.io`` name of its listen
+  defaults to a plain HTTP install on the ``nip.io`` name of the router
   address and needs no CA, since that address cannot obtain a trusted
   certificate. Set
   ``ingress.insecure`` to request plain HTTP explicitly for a custom domain.
@@ -1263,9 +1263,9 @@ Features Changed
   than a local cluster, such as a virtual machine, go in ``*.conf`` files of
   your own in the ``dnsmasq.d`` folder of the CLI data home, which the
   resolver reads. The CLI's first-run migration of a version 3
-  ``values.yaml`` drops ``localDNSResolver.targetAddress``, without setting
-  ``cluster.listenAddress`` from it, and its notice says how to keep
-  resolving the cluster at that address. A version 4 configuration that
+  ``values.yaml`` drops ``localDNSResolver.targetAddress``, without making
+  it the router address, and its notice says how to keep resolving the
+  cluster at that address. A version 4 configuration that
   still sets ``resolver.targetAddress``, or ``target.resolver.targetAddress``
   in an ``EducatesConfig``, fails to load with an error saying what
   replaces it. See [local DNS resolver](local-dns-resolver).
@@ -1344,11 +1344,25 @@ Features Changed
   delete`` does, reload it, which keeps open terminals.
   ``educates local cluster delete --all`` removes it, with the last local
   cluster, keeping ``router.yaml``. A cluster has no host address of its
-  own, so its configuration no longer needs ``cluster.listenAddress``,
-  which is ignored where a configuration still declares it, and the
+  own, so ``cluster.listenAddress`` is gone from ``EducatesLocalConfig``
+  and from the ``target.cluster`` of an ``EducatesConfig``, and so is the
   ``--listen-address`` option of ``educates local config init`` and
-  ``educates local cluster create`` is ignored with a warning. Clusters created by an earlier release of the CLI publish ports 80 and
-  443 from their node and can't run beside the router: creating the router
+  ``educates local cluster create``. A configuration in the CLI data home,
+  the default cluster's or a named one's, that still declares
+  ``cluster.listenAddress`` is moved once, the first time a command reads
+  it: the default cluster's address becomes the router address in
+  ``router.yaml`` when that file is missing and the address is a specific
+  IP address, a named cluster's address is dropped, the previous
+  configuration is kept as a backup beside it, and a note says so. A
+  configuration elsewhere, such as one given with ``--config``, that
+  declares it is never rewritten, and fails to load with an error naming
+  ``router.yaml`` and ``educates local router update --address``. The CLI's
+  first-run migration of a version 3 ``values.yaml`` writes a specific
+  ``localKindCluster.listenAddress`` to ``router.yaml``, and the host's IP
+  address for a missing, ``0.0.0.0`` or loopback one, with a line of its
+  notice saying so. Clusters created by an earlier release of the CLI
+  publish ports 80 and 443 from their node and can't run beside the
+  router: creating the router
   fails while one exists, naming it, so delete such a cluster and create it
   again. On Docker Desktop 4.97 or later, creating the router refuses to run
   while "Allow privileged port forwarding to external machines", under

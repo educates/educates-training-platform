@@ -241,6 +241,13 @@ const haproxyHeader = `# Rendered by the educates CLI from the local clusters of
 
 global
     log stdout format raw local0 notice
+    # Without maxconn HAProxy sizes it from the container's file descriptor
+    # limit, 1048576 on Docker Desktop, to over 500000 connections, and each
+    # worker reserves some 87 MiB for them. 4096 is far more than a laptop's
+    # local clusters open, and keeps a worker at a few MiB, which matters
+    # because a worker that a reload leaves holding open connections lives
+    # on beside the new one.
+    maxconn 4096
     # No hard-stop-after: after a reload the previous worker keeps its open
     # connections, such as terminals, until they close. mworker-max-reloads
     # (default 50) bounds how many reloads an old worker survives.

@@ -81,6 +81,14 @@ func TestRenderRouterRoutesAClusterDomainToItsControlPlaneNodeOnPort80(t *testin
 	}
 }
 
+func TestRenderRouterCapsTheConnectionsEachWorkerReservesMemoryFor(t *testing.T) {
+	global := configSection(t, RenderRouter(nil), "global")
+
+	if !strings.Contains(global, "\n    maxconn 4096\n") {
+		t.Errorf("global section sets no maxconn 4096:\n%s", global)
+	}
+}
+
 func TestRenderRouterOrdersTheMostSpecificDomainFirstAcrossClusters(t *testing.T) {
 	dataHome := t.TempDir()
 	test2 := namedID(t, "test2", dataHome)

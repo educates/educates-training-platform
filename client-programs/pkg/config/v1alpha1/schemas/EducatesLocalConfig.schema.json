@@ -51,7 +51,7 @@
         },
         "nodes": {
           "type": "array",
-          "description": "Nodes of the Kind cluster. Leave empty for the default single control-plane cluster; when set, the list fully declares the cluster's nodes and must include exactly one control-plane node, which publishes ports 80 and 443 on the listen address; the others are workers.",
+          "description": "Nodes of the Kind cluster. Leave empty for the default single control-plane cluster; when set, the list fully declares the cluster's nodes and must include exactly one control-plane node, which publishes ports 80 and 443 on the listen address and declares no taints; the others are workers.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -61,7 +61,7 @@
               "labels": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Kubernetes node labels applied to this node, usable for pod nodeSelectors and affinity." },
               "taints": {
                 "type": "array",
-                "description": "Kubernetes node taints registered on this node (applies to worker nodes).",
+                "description": "Kubernetes node taints registered on this worker node when it joins the cluster. The control-plane node can't have taints, since Envoy serves ports 80 and 443 from it; in a cluster with workers, Kind already keeps other workloads off the control-plane node.",
                 "items": {
                   "type": "object",
                   "additionalProperties": false,

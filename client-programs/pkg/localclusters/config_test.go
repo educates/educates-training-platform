@@ -207,10 +207,14 @@ func TestLoadConfigFileOfANamedClusterKeepsADeclaredDomain(t *testing.T) {
 
 // TestValidateClusterNodes checks that a declared node list has exactly one
 // control-plane node, as only one node can publish ports 80 and 443 on the
-// listen address, and uses only the roles kind understands.
+// listen address, that the control-plane node declares no taints, and that
+// the list uses only the roles kind understands.
 func TestValidateClusterNodes(t *testing.T) {
 	controlPlane := v1alpha1.ClusterNode{Role: "control-plane"}
 	worker := v1alpha1.ClusterNode{Role: "worker"}
+	taint := v1alpha1.ClusterNodeTaint{Key: "workshops", Effect: "NoSchedule"}
+	taintedControlPlane := v1alpha1.ClusterNode{Role: "control-plane", Taints: []v1alpha1.ClusterNodeTaint{taint}}
+	taintedWorker := v1alpha1.ClusterNode{Role: "worker", Taints: []v1alpha1.ClusterNodeTaint{taint}}
 
 	cases := []struct {
 		name    string
@@ -223,6 +227,9 @@ func TestValidateClusterNodes(t *testing.T) {
 		{"workers only", []v1alpha1.ClusterNode{worker, worker}, `one node must have role "control-plane"`},
 		{"two control-planes", []v1alpha1.ClusterNode{controlPlane, worker, controlPlane}, `2 nodes have role "control-plane"`},
 		{"unknown role", []v1alpha1.ClusterNode{controlPlane, {Role: "infra"}}, `invalid node role "infra"`},
+		{"tainted workers", []v1alpha1.ClusterNode{controlPlane, taintedWorker, taintedWorker}, ""},
+		{"tainted control-plane", []v1alpha1.ClusterNode{taintedControlPlane, worker}, `the node with role "control-plane" can't have taints`},
+		{"tainted single control-plane", []v1alpha1.ClusterNode{taintedControlPlane}, `the node with role "control-plane" can't have taints`},
 	}
 
 	for _, tc := range cases {
@@ -276,6 +283,61 @@ func TestCheckConfigRefusesMoreThanOneControlPlaneNode(t *testing.T) {
 
 			wantErrorMentioning(t, err, "config.yaml", tc.field, `2 nodes have role "control-plane"`)
 		})
+	}
+}
+
+// TestCheckConfigRefusesTaintsOnTheControlPlaneNode checks that the rules
+// local config edit and set apply refuse taints declared on the
+// control-plane node, which the kind config could not register without
+// risking Envoy's place on it, in the field each config kind declares the
+// nodes in.
+func TestCheckConfigRefusesTaintsOnTheControlPlaneNode(t *testing.T) {
+	cases := []struct {
+		name  string
+		id    Identity
+		body  string
+		field string
+	}{
+		{
+			name: "EducatesLocalConfig of the default cluster",
+			id:   Default(t.TempDir()),
+			body: localConfigHeader +
+				"cluster:\n  listenAddress: 10.10.10.2\n" +
+				"  nodes:\n  - role: control-plane\n    taints:\n    - key: workshops\n      effect: NoSchedule\n" +
+				"  - role: worker\n",
+			field: "cluster.nodes",
+		},
+		{
+			name: "EducatesConfig for kind of a named cluster",
+			id:   namedID(t, "test2", t.TempDir()),
+			body: escapeConfigHeader +
+				"target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.2\n" +
+				"    nodes:\n    - role: control-plane\n      taints:\n      - key: workshops\n        value: \"true\"\n        effect: NoExecute\n" +
+				"educatesClusterConfig:\n  mode: Managed\n",
+			field: "target.cluster.nodes",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := CheckConfig(tc.id, []byte(tc.body), "config.yaml")
+
+			wantErrorMentioning(t, err, "config.yaml", tc.field, `the node with role "control-plane" can't have taints`,
+				`declare taints on nodes with role "worker"`)
+		})
+	}
+}
+
+// TestCheckConfigTakesTaintsOnWorkerNodes checks that taints declared on
+// worker nodes pass the rules.
+func TestCheckConfigTakesTaintsOnWorkerNodes(t *testing.T) {
+	body := localConfigHeader +
+		"cluster:\n  listenAddress: 10.10.10.2\n" +
+		"  nodes:\n  - role: control-plane\n    labels:\n      pool: system\n" +
+		"  - role: worker\n    taints:\n    - key: workshops\n      effect: NoSchedule\n"
+
+	if err := CheckConfig(Default(t.TempDir()), []byte(body), "config.yaml"); err != nil {
+		t.Fatalf("CheckConfig: %v", err)
 	}
 }
 

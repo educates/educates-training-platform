@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"strings"
 	"testing"
 
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -156,6 +157,27 @@ func TestRenderKindConfigOfDeclaredNodes(t *testing.T) {
 		if len(cfg.Nodes[i].ExtraPortMappings) != 0 || len(cfg.Nodes[i].ExtraMounts) != 0 {
 			t.Errorf("worker %d publishes ports %+v and mounts %+v, want neither",
 				i, cfg.Nodes[i].ExtraPortMappings, cfg.Nodes[i].ExtraMounts)
+		}
+	}
+}
+
+// TestRenderKindConfigRefusesTaintsOnTheControlPlaneNode checks that taints
+// on the control-plane node, which the kind config has no place for, fail
+// the render instead of being left out of it.
+func TestRenderKindConfigRefusesTaintsOnTheControlPlaneNode(t *testing.T) {
+	_, err := RenderKindConfig(&KindBootstrapInput{
+		ListenAddress: "10.10.10.2",
+		Nodes: []KindNode{
+			{Role: "control-plane", Taints: []KindNodeTaint{{Key: "workshops", Effect: "NoSchedule"}}},
+			{Role: "worker"},
+		},
+	})
+	if err == nil {
+		t.Fatal("RenderKindConfig: got no error, want one refusing the control-plane node's taints")
+	}
+	for _, part := range []string{`role "control-plane"`, "taints"} {
+		if !strings.Contains(err.Error(), part) {
+			t.Errorf("error %q does not mention %q", err, part)
 		}
 	}
 }

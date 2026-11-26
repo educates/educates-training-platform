@@ -1159,8 +1159,13 @@ Features Changed
   address and needs no CA, since that address cannot obtain a trusted
   certificate. Set
   ``ingress.insecure`` to request plain HTTP explicitly for a custom domain.
-  See the New Features entry on installing without in-cluster TLS for the
-  full picture.
+  The CLI's first-run migration of a version 3 ``values.yaml`` leaves a
+  ``clusterIngress.domain`` that is the ``nip.io`` name of an IPv4 address,
+  such as ``10.10.10.1.nip.io``, to this default when no wildcard
+  certificate for it is cached and ``clusterIngress.protocol`` is not
+  ``http``, since version 3 served it over plain HTTP, and its notice says
+  how to keep the domain. See the New Features entry on installing without
+  in-cluster TLS for the full picture.
 
 * The local secrets cache stores certificate authorities in a new shape,
   and ``educates local secrets add ca`` and ``educates local secrets add tls``

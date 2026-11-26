@@ -3,14 +3,20 @@ package config
 import (
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v2"
+	apiv1 "k8s.io/api/core/v1"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
+	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 )
 
 // MaybeMigrateV3 attempts to translate a v3 values.yaml in dataHome
@@ -84,6 +90,9 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 	}
 
 	cfg, listenAddressIsHostIP, notes := translateV3ToV4(v3raw)
+	if note := dropV3NipDomain(cfg, filepath.Join(dataHome, "secrets")); note != "" {
+		notes = append(notes, note)
+	}
 	// v4 declares registry mirrors for every local cluster in a file of
 	// their own, written before the config, so a mirror is never lost: a
 	// migration that fails here leaves the v3 values.yaml in place.
@@ -280,6 +289,80 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 	}
 
 	return cfg, listenAddressIsHostIP, notes
+}
+
+// dropV3NipDomain leaves the ingress.domain of cfg, a migrated v3 config,
+// to the version 4 default when it is the nip.io name of an IPv4 address
+// that the local secrets cache in secretsDir holds no wildcard TLS
+// certificate for, and returns the line of the migration notice that says
+// so, empty when it keeps the domain. Version 3 served such a domain over
+// plain HTTP, where a local cluster serves a domain it is given over
+// HTTPS, which needs a root CA, and gives a config without one the nip.io
+// name of its cluster.listenAddress, served over plain HTTP. A domain the
+// config already serves over plain HTTP, as v3 clusterIngress.protocol
+// http asked, is kept.
+func dropV3NipDomain(cfg *v1alpha1.EducatesLocalConfig, secretsDir string) string {
+	domain := cfg.Ingress.Domain
+	if cfg.Ingress.Insecure || !isNipDomain(domain) || cachedWildcardCertificateCovers(secretsDir, domain) {
+		return ""
+	}
+	cfg.Ingress.Domain = ""
+	takes := "the nip.io name of its cluster.listenAddress"
+	if ip, err := netip.ParseAddr(cfg.Cluster.ListenAddress); err == nil && ip.Is4() {
+		takes += ", " + hostinfo.NipDomain(cfg.Cluster.ListenAddress)
+	}
+	return fmt.Sprintf("dropped clusterIngress.domain %[1]s: no wildcard TLS certificate for it is cached, and a local "+
+		"cluster serves a domain it is given over HTTPS, which needs a root CA, so the cluster takes %[2]s, served "+
+		"over plain HTTP as version 3 served %[1]s; to keep %[1]s, set ingress.domain to it and ingress.insecure to true",
+		domain, takes)
+}
+
+// cachedWildcardCertificateCovers reports whether the local secrets cache
+// in secretsDir holds an unexpired TLS certificate with a wildcard DNS
+// name for domain, which a deploy serves for it. Best-effort: a cache or
+// cached file that can't be read holds none.
+func cachedWildcardCertificateCovers(secretsDir, domain string) bool {
+	entries, err := os.ReadDir(secretsDir)
+	if err != nil {
+		return false
+	}
+	domain = strings.ToLower(strings.TrimSuffix(domain, "."))
+	for _, e := range entries {
+		name, isYAML := strings.CutSuffix(e.Name(), ".yaml")
+		if e.IsDir() || !isYAML {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(secretsDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var s apiv1.Secret
+		if err := sigsyaml.Unmarshal(body, &s); err != nil {
+			continue
+		}
+		role, _ := secrets.ClassifyCachedSecret(name, &s)
+		if role != secrets.TLSCertificateRole {
+			continue
+		}
+		domains, _ := secrets.CachedSecretDomains(name, role, &s)
+		if cert := secrets.CachedSecretCertificate(role, &s); cert != nil &&
+			time.Now().Before(cert.NotAfter) && slices.Contains(domains, domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// isNipDomain reports whether domain is the nip.io name of an IPv4
+// address, with dots or with dashes, as 10.10.10.1.nip.io or
+// 10-10-10-1.nip.io are.
+func isNipDomain(domain string) bool {
+	host, ok := strings.CutSuffix(strings.ToLower(strings.TrimSuffix(domain, ".")), ".nip.io")
+	if !ok {
+		return false
+	}
+	ip, err := netip.ParseAddr(strings.ReplaceAll(host, "-", "."))
+	return err == nil && ip.Is4()
 }
 
 // translateV3RegistryMirrors returns the registry mirrors of a v3 values

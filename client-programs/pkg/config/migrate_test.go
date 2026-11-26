@@ -9,9 +9,13 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/educates/educates-training-platform/client-programs/internal/testpki"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
+	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 const v3KindValues = `
@@ -267,7 +271,13 @@ func TestEnsureLocalConfigFile_NoMigrationNeeded_SurfacesMissingError(t *testing
 // configuration, the written file and the migration's notice.
 func migrateV3Values(t *testing.T, values string) (*v1alpha1.EducatesLocalConfig, string, string) {
 	t.Helper()
-	dataHome := t.TempDir()
+	return migrateV3ValuesIn(t, t.TempDir(), values)
+}
+
+// migrateV3ValuesIn is migrateV3Values in the data home dataHome, which
+// may already hold a local secrets cache.
+func migrateV3ValuesIn(t *testing.T, dataHome, values string) (*v1alpha1.EducatesLocalConfig, string, string) {
+	t.Helper()
 	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte(values), 0o644))
 
 	var notice bytes.Buffer
@@ -632,6 +642,70 @@ func TestMaybeMigrateV3_SpecificListenAddress_IsKeptWithoutANote(t *testing.T) {
 	}
 	if strings.Contains(notice, "listenAddress") {
 		t.Errorf("notice mentions the listen address it kept:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_NipDomainWithNoCachedCertificate_IsDroppedForTheV4Default(t *testing.T) {
+	for _, domain := range []string{"10.10.10.1.nip.io", "10-10-10-1.nip.io"} {
+		t.Run(domain, func(t *testing.T) {
+			cfg, written, notice := migrateV3Values(t,
+				"clusterIngress:\n  domain: "+domain+"\nlocalKindCluster:\n  listenAddress: 10.10.10.2\n")
+
+			if cfg.Ingress.Domain != "" || strings.Contains(written, "domain:") {
+				t.Errorf("migrated file keeps ingress.domain %s, want it left to the nip.io default:\n%s", domain, written)
+			}
+			for _, want := range []string{"dropped clusterIngress.domain " + domain,
+				"no wildcard TLS certificate for it is cached", "10-10-10-2.nip.io", "plain HTTP",
+				"to keep " + domain + ", set ingress.domain to it and ingress.insecure to true"} {
+				if !strings.Contains(notice, want) {
+					t.Errorf("notice does not mention %q:\n%s", want, notice)
+				}
+			}
+		})
+	}
+}
+
+func TestMaybeMigrateV3_NipDomainWithACachedCertificate_IsKept(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv(utils.EducatesCLIDataHomeEnv, dataHome)
+	leaf := testpki.NewRootCA().NewLeaf(testpki.WithDNSNames("*.10.10.10.1.nip.io"))
+	must(t, secrets.WriteCachedSecret(secrets.NewTLSSecret("nip-tls", leaf.ChainPEM(), leaf.KeyPEM)))
+
+	cfg, _, notice := migrateV3ValuesIn(t, dataHome, "clusterIngress:\n  domain: 10.10.10.1.nip.io\n")
+
+	if got, want := cfg.Ingress.Domain, "10.10.10.1.nip.io"; got != want {
+		t.Errorf("Ingress.Domain = %q, want %q, which the cached wildcard certificate serves", got, want)
+	}
+	if strings.Contains(notice, "clusterIngress.domain") {
+		t.Errorf("notice mentions the domain it kept:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_NipDomainWithAnExpiredCachedCertificate_IsDropped(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv(utils.EducatesCLIDataHomeEnv, dataHome)
+	leaf := testpki.NewRootCA().NewLeaf(testpki.WithDNSNames("*.10.10.10.1.nip.io"),
+		testpki.WithValidity(time.Now().Add(-48*time.Hour), time.Now().Add(-24*time.Hour)))
+	must(t, secrets.WriteCachedSecret(secrets.NewTLSSecret("nip-tls", leaf.ChainPEM(), leaf.KeyPEM)))
+
+	cfg, _, notice := migrateV3ValuesIn(t, dataHome, "clusterIngress:\n  domain: 10.10.10.1.nip.io\n")
+
+	if cfg.Ingress.Domain != "" {
+		t.Errorf("Ingress.Domain = %q, want it left to the nip.io default, since no deploy serves an expired certificate", cfg.Ingress.Domain)
+	}
+	if !strings.Contains(notice, "dropped clusterIngress.domain 10.10.10.1.nip.io") {
+		t.Errorf("notice does not say the domain was dropped:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_NipDomainOverPlainHTTP_IsKept(t *testing.T) {
+	cfg, _, notice := migrateV3Values(t, "clusterIngress:\n  domain: 10.10.10.1.nip.io\n  protocol: http\n")
+
+	if got, want := cfg.Ingress.Domain, "10.10.10.1.nip.io"; got != want || !cfg.Ingress.Insecure {
+		t.Errorf("Ingress = %+v, want domain %q served over plain HTTP, as version 3 served it", cfg.Ingress, want)
+	}
+	if strings.Contains(notice, "clusterIngress.domain") {
+		t.Errorf("notice mentions the domain it kept:\n%s", notice)
 	}
 }
 

@@ -1,9 +1,32 @@
 package cluster
 
 import (
+	"bytes"
+	_ "embed"
+	"html/template"
 	"sort"
 	"strings"
+
+	"github.com/pkg/errors"
 )
+
+//go:embed kindclusterconfig.yaml.tpl
+var kindConfigTemplateData string
+
+// RenderKindConfig renders the kind cluster config of input, the file
+// kind creates the local cluster's kind cluster from.
+func RenderKindConfig(input *KindBootstrapInput) ([]byte, error) {
+	kindConfigTemplate, err := template.New("kind-cluster-config").Parse(kindConfigTemplateData)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse cluster config template")
+	}
+
+	var kindConfig bytes.Buffer
+	if err := kindConfigTemplate.Execute(&kindConfig, input); err != nil {
+		return nil, errors.Wrap(err, "failed to generate cluster config")
+	}
+	return kindConfig.Bytes(), nil
+}
 
 // KindBootstrapInput is the focused payload the kind-cluster template
 // reads from. Decouples cluster-bootstrap rendering from any specific

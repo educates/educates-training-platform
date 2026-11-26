@@ -2478,6 +2478,20 @@ Bugs Fixed
   validates any CA secret named in the ``EducatesClusterConfig`` resource,
   and reports a missing or invalid secret in the status of that resource.
 
+* ``educates admin platform render`` and ``educates admin platform deploy``
+  gave the operator chart no image for an ``EducatesGKEConfig``,
+  ``EducatesEKSConfig`` or ``EducatesInlineConfig`` configuration that left
+  ``operator.image`` unset. The operator image then came from the chart
+  embedded in the CLI, not from the CLI itself as the help of ``render``
+  said and as it does for an ``EducatesLocalConfig`` configuration. A
+  released CLI deployed the same operator image either way, but a CLI built
+  from source deployed the default operator image of the chart in place of
+  the one built with it. Both commands now default
+  ``operator.image.repository`` and ``operator.image.tag`` from the image
+  registry and version of the CLI for these kinds too, so the rendered chart
+  values name the operator image. An ``EducatesConfig`` configuration is
+  still used as declared.
+
 * Deleting an ``EducatesClusterConfig`` in ``Managed`` mode, which
   ``educates admin platform delete`` does, uninstalled the Helm releases named
   ``cert-manager``, ``contour``, ``external-dns`` and ``kyverno`` and deleted

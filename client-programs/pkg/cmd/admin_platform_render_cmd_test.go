@@ -152,6 +152,50 @@ ingress:
 	}
 }
 
+func TestRender_Config_ScenarioKinds_CLIDefaultsTheOperatorImage(t *testing.T) {
+	for kind, cfgYAML := range map[string]string{
+		"EducatesGKEConfig": `apiVersion: cli.educates.dev/v1alpha1
+kind: EducatesGKEConfig
+gcp:
+  project: my-gcp-project
+domain: workshops.example.com
+acme:
+  email: ops@example.com
+`,
+		"EducatesEKSConfig": `apiVersion: cli.educates.dev/v1alpha1
+kind: EducatesEKSConfig
+aws:
+  accountId: "123456789012"
+  region: us-east-1
+  route53HostedZoneId: Z0123456789ABCDEF
+domain: workshops.example.com
+acme:
+  email: ops@example.com
+`,
+		"EducatesInlineConfig": `apiVersion: cli.educates.dev/v1alpha1
+kind: EducatesInlineConfig
+domain: workshop.test
+ingressClassName: contour
+wildcardCertificateSecret: educates-wildcard-tls
+`,
+	} {
+		t.Run(kind, func(t *testing.T) {
+			p := ProjectInfo{Version: "v9.9.9-test", ImageRepository: "ghcr.io/custom"}
+			o := &PlatformRenderOptions{Config: writeFixture(t, cfgYAML)}
+
+			var buf bytes.Buffer
+			if err := p.runRender(&buf, o); err != nil {
+				t.Fatalf("runRender: %v", err)
+			}
+			s := buf.String()
+			want := "image:\n  repository: ghcr.io/custom/educates-operator\n  tag: v9.9.9-test\n"
+			if !strings.Contains(s, want) {
+				t.Errorf("output missing %q:\n%s", want, s)
+			}
+		})
+	}
+}
+
 func TestRender_LocalConfig_NipDomainOfTheListenAddress_DefaultsInsecure(t *testing.T) {
 	// Point --local-config at a temp data home so the test doesn't touch
 	// the user's actual data home.

@@ -108,7 +108,7 @@ func (c *EducatesInlineConfig) WithDefaults() *EducatesInlineConfig {
 }
 
 // ApplyCLIDefaults mirrors EducatesLocalConfig's CLI-binary defaulting
-// for operator.image.
+// of operator.image.repository and operator.image.tag.
 func (c *EducatesInlineConfig) ApplyCLIDefaults(projectVersion, imageRepository string) *EducatesInlineConfig {
 	if c.Operator.Image.Repository == "" && imageRepository != "" {
 		c.Operator.Image.Repository = imageRepository + "/educates-operator"

@@ -55,9 +55,10 @@ Output is a single YAML stream with two sections, in deploy order:
 
 Defaulting is flag-driven:
   --config <file>   Explicit / GitOps mode. operator.image defaults from
-                    this CLI binary; ingress.domain MUST be set in the
-                    config. Render is deterministic for a given (input,
-                    CLI version) pair.
+                    this CLI binary, for every kind but EducatesConfig,
+                    which is rendered as declared. An EducatesLocalConfig
+                    MUST set ingress.domain. Render is deterministic for a
+                    given (input, CLI version) pair.
   --local-config    Laptop convenience mode. Same defaults, plus the
                     rules of a local cluster's config: a specific
                     cluster.listenAddress, and its nip.io name as the
@@ -90,11 +91,12 @@ func (p *ProjectInfo) runRender(w io.Writer, o *PlatformRenderOptions) error {
 		return err
 	}
 
+	p.applyCLIDefaults(cfg)
+
 	header := ""
 	opts := translator.Options{}
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
-		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
 		// The local cluster rules of --local-config have already given
 		// an empty ingress.domain the nip.io name of the listen address.
 		if !o.LocalConfig && c.Ingress.Domain == "" {
@@ -127,6 +129,24 @@ name of cluster.listenAddress.`, path)
 	}
 
 	return writeRender(w, out, header)
+}
+
+// applyCLIDefaults gives cfg the defaults that come from this CLI binary,
+// its version and image repository, such as the operator image, for every
+// kind but EducatesConfig, which render and deploy pass through as
+// declared. Render and deploy both call it, so the two install the same
+// operator image for the same config.
+func (p *ProjectInfo) applyCLIDefaults(cfg v1alpha1.Config) {
+	switch c := cfg.(type) {
+	case *v1alpha1.EducatesLocalConfig:
+		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
+	case *v1alpha1.EducatesGKEConfig:
+		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
+	case *v1alpha1.EducatesEKSConfig:
+		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
+	case *v1alpha1.EducatesInlineConfig:
+		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
+	}
 }
 
 // yamlComments is a localcerts.Reporter that collects each reported line

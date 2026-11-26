@@ -110,7 +110,8 @@ func (c *EducatesGKEConfig) WithDefaults() *EducatesGKEConfig {
 	return c
 }
 
-// ApplyCLIDefaults mirrors EducatesLocalConfig's CLI-binary defaulting.
+// ApplyCLIDefaults mirrors EducatesLocalConfig's CLI-binary defaulting
+// of operator.image.repository and operator.image.tag.
 func (c *EducatesGKEConfig) ApplyCLIDefaults(projectVersion, imageRepository string) *EducatesGKEConfig {
 	if c.Operator.Image.Repository == "" && imageRepository != "" {
 		c.Operator.Image.Repository = imageRepository + "/educates-operator"

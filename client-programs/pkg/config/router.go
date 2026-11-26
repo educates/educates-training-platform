@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -20,8 +21,9 @@ import (
 // the CLI writes it when missing rather than taking an address for it.
 //
 // The address is loaded as the file declares it. The rules an address
-// must follow to serve local clusters, which depend on the host's network
-// interfaces, are the local-cluster inventory module's.
+// must follow to serve local clusters are CheckSpecificRouterAddress's and
+// the local-cluster inventory module's, whose rule depends on the host's
+// network interfaces.
 func LoadLocalRouter(dataHome string) (*v1alpha1.EducatesLocalRouter, error) {
 	path := LocalRouterPath(dataHome)
 	data, err := os.ReadFile(path)
@@ -29,6 +31,44 @@ func LoadLocalRouter(dataHome string) (*v1alpha1.EducatesLocalRouter, error) {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	return loadLocalRouterBytes(data, path)
+}
+
+// whyRouterAddressResolves is why the router address must be one the
+// host is reached at from inside a cluster.
+const whyRouterAddressResolves = "pods and the nodes' containerd resolve every local cluster's names to the router address"
+
+// CheckSpecificRouterAddress returns the router address address as an IP
+// address, an IPv4-mapped IPv6 address as its IPv4 address, when it is a
+// specific one, which some host can be reached at, and otherwise an error
+// saying why it is not:
+//
+//   - not set, or not an IP address;
+//   - the unspecified address, 0.0.0.0 or ::, which names no address to
+//     reach;
+//   - a loopback address, 127.0.0.0/8 or ::1, at which pods and nodes
+//     would reach themselves instead of the host.
+//
+// These are the router address rules that need no host interface. The
+// local-cluster inventory module adds that the address must be one of the
+// host's network interfaces.
+func CheckSpecificRouterAddress(address string) (netip.Addr, error) {
+	if address == "" {
+		return netip.Addr{}, fmt.Errorf("the router address must be set to an IP address of a network interface of this host")
+	}
+	ip, err := netip.ParseAddr(address)
+	if err != nil {
+		return netip.Addr{}, fmt.Errorf("the router address %q is not an IP address", address)
+	}
+	ip = ip.Unmap()
+	if ip.IsUnspecified() {
+		return netip.Addr{}, fmt.Errorf("the router address %s is the unspecified address, which names no host to reach: "+
+			"%s, so it must be a specific IP address of this host", address, whyRouterAddressResolves)
+	}
+	if ip.IsLoopback() {
+		return netip.Addr{}, fmt.Errorf("the router address %s is a loopback address: %s, and at a loopback address "+
+			"they reach themselves instead of this host", address, whyRouterAddressResolves)
+	}
+	return ip, nil
 }
 
 // hostIPRouterAddressComment is the comment above a router address the

@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"io"
-	"net/netip"
 	"path/filepath"
 	"strings"
 
@@ -85,15 +84,10 @@ func (c *dataHomeConfig) removeEmptyClusterBlock() {
 }
 
 // isSpecificAddress reports whether address is an IP address that can be
-// the router address of some host: neither unspecified, as 0.0.0.0 is,
-// nor loopback, at which pods reach themselves instead of the host.
+// the router address of some host, as CheckSpecificRouterAddress decides.
 func isSpecificAddress(address string) bool {
-	ip, err := netip.ParseAddr(address)
-	if err != nil {
-		return false
-	}
-	ip = ip.Unmap()
-	return !ip.IsUnspecified() && !ip.IsLoopback()
+	_, err := CheckSpecificRouterAddress(address)
+	return err == nil
 }
 
 // listenAddressMoveNote is the note MoveClusterListenAddress writes after

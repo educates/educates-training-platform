@@ -13,10 +13,6 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
-// whyRouterAddressResolves is why the router address must be one the
-// host is reached at from inside a cluster.
-const whyRouterAddressResolves = "pods and the nodes' containerd resolve every local cluster's names to the router address"
-
 // setRouterAddressCommand is the command that sets the router address.
 const setRouterAddressCommand = "educates local router update --address <ip>"
 
@@ -43,8 +39,9 @@ func LoadRouterAddress(dataHome string, interfaces []netip.Addr) (string, error)
 
 // configuredRouterAddress returns the router address the router file of
 // the data home dataHome, router.yaml, declares, in its canonical form,
-// once it passes the rules of CheckRouterAddress that need no host
-// interface: the address every local cluster's names resolve to. A file
+// once it passes config.CheckSpecificRouterAddress, the rules of
+// CheckRouterAddress that need no host interface: the address every local
+// cluster's names resolve to. A file
 // that doesn't load is that error, and an address the rules refuse an
 // error naming the file and why. A missing file is the error
 // config.LoadLocalRouter returns, wrapping fs.ErrNotExist.
@@ -57,7 +54,7 @@ func configuredRouterAddress(dataHome string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ip, err := checkSpecificRouterAddress(router.Address)
+	ip, err := config.CheckSpecificRouterAddress(router.Address)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w. Set another in it, or with:\n\n  %s",
 			config.LocalRouterPath(dataHome), err, setRouterAddressCommand)
@@ -126,7 +123,7 @@ func EnsureRouterFile(dataHome string) (string, error) {
 	}
 	ip, err := hostinfo.DetectHostIP()
 	if err == nil {
-		_, err = checkSpecificRouterAddress(ip)
+		_, err = config.CheckSpecificRouterAddress(ip)
 	}
 	if err != nil {
 		return "", fmt.Errorf("%s is missing, and no IP address of this host was detected to write in it (%v). "+
@@ -187,19 +184,15 @@ func (inv Inventory) SetRouterAddress(address string) (string, error) {
 
 // CheckRouterAddress returns the router address address in its canonical
 // form when it can serve local clusters, and otherwise an error saying
-// why it can't. The router address must be a specific IP address of a
-// network interface of the host, one of interfaces:
-//
-//   - not the unspecified address, 0.0.0.0 or ::, which names no address
-//     to reach;
-//   - not a loopback address, 127.0.0.0/8 or ::1, at which pods and nodes
-//     would reach themselves instead of the host;
-//   - the address of one of the host's interfaces, since an address on
-//     none reaches nothing.
+// why it can't. The router address must be a specific IP address, as
+// config.CheckSpecificRouterAddress decides, neither the unspecified
+// address nor a loopback address, and the address of one of the host's
+// network interfaces, one of interfaces, since an address on none reaches
+// nothing.
 //
 // An IPv4 address written as IPv4-mapped IPv6 is its IPv4 address.
 func CheckRouterAddress(address string, interfaces []netip.Addr) (string, error) {
-	ip, err := checkSpecificRouterAddress(address)
+	ip, err := config.CheckSpecificRouterAddress(address)
 	if err != nil {
 		return "", err
 	}
@@ -208,28 +201,4 @@ func CheckRouterAddress(address string, interfaces []netip.Addr) (string, error)
 			"no interface reaches nothing: add it to one first, as an alias, or use an address one has", address)
 	}
 	return ip.String(), nil
-}
-
-// checkSpecificRouterAddress returns the router address address as an IP
-// address when it is a specific one, by the rules of CheckRouterAddress
-// that need no host interface, and otherwise an error saying why it is
-// not.
-func checkSpecificRouterAddress(address string) (netip.Addr, error) {
-	if address == "" {
-		return netip.Addr{}, fmt.Errorf("the router address must be set to an IP address of a network interface of this host")
-	}
-	ip, err := netip.ParseAddr(address)
-	if err != nil {
-		return netip.Addr{}, fmt.Errorf("the router address %q is not an IP address", address)
-	}
-	ip = ip.Unmap()
-	if ip.IsUnspecified() {
-		return netip.Addr{}, fmt.Errorf("the router address %s is the unspecified address, which names no host to reach: "+
-			"%s, so it must be a specific IP address of this host", address, whyRouterAddressResolves)
-	}
-	if ip.IsLoopback() {
-		return netip.Addr{}, fmt.Errorf("the router address %s is a loopback address: %s, and at a loopback address "+
-			"they reach themselves instead of this host", address, whyRouterAddressResolves)
-	}
-	return ip, nil
 }

@@ -53,3 +53,38 @@ func (e *Engine) read(ctx context.Context, source *Source) error {
 	source.Unstructured, source.read = live, true
 	return nil
 }
+
+// MissingKeys returns those of keys that no keyed field of source holds, in
+// the order of keys and each once. It has source hold the object as the API
+// server has it, when it does not already, and reads nothing when keys is
+// empty.
+func (e *Engine) MissingKeys(ctx context.Context, source *Source, keys []string) ([]string, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	if err := e.read(ctx, source); err != nil {
+		return nil, err
+	}
+	var missing []string
+	seen := map[string]bool{}
+	for _, key := range keys {
+		if seen[key] || e.holds(source, key) {
+			continue
+		}
+		seen[key] = true
+		missing = append(missing, key)
+	}
+	return missing, nil
+}
+
+// holds reports whether a keyed field of source holds key.
+func (e *Engine) holds(source *Source, key string) bool {
+	for _, field := range e.kind.KeyedFields {
+		if entries, ok := source.Object[field].(map[string]any); ok {
+			if _, ok := entries[key]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}

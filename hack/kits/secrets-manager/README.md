@@ -47,6 +47,7 @@ and `delete` removes it all.
 | 08-export-import | exporter `export`, importers `export` in both targets and `nobody-exports` in target-b | exporter `False AwaitingAuthorization 1/2`; importers `Imported`, `AwaitingAuthorization` (`SharedSecretMismatch`) and `NoMatchingExporter` | | the target-b importer gets the right shared secret: exporter `InSync 2/2`, that importer `Imported`; `nobody-exports` stays as it is, on purpose |
 | 09-injector | injectors `kit-secrets-manager-injector` and `kit-secrets-manager-injector-empty` | `True InSync 1/1`, the pull secret in target-a's `default` service account; `False InvalidSelector` for the empty source selector | | the empty injector names the pull secret: `InSync 1/1` |
 | 10-rejected-at-admission | two copiers, never created | admission refuses an empty `sourceSecret.keys`, and an annotation key under `secrets.educates.dev/` | | |
+| 11-source-keys-missing | copier `kit-secrets-manager-source-keys-missing` | `False SourceKeysMissing 1/1`: the message names `password`, which the source lacks; the copy holds `username` only; Warning `NotReady` after 60 s | | the source gains `password`: `InSync 1/1`, the copy holds both keys; Normal `Recovered` |
 
 Every resource that is not Ready gets a Warning `NotReady` once it has not
 been Ready for 60 seconds, while its status shows the problem at once, so a

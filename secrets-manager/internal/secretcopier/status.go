@@ -74,6 +74,10 @@ func ruleStatus(findings *feedback.Findings, index int, report *ruleReport) secr
 	if missing != "" {
 		findings.Add(secretsv1beta1.ReasonSourceMissing, "", missing)
 	}
+	if len(report.missingKeys) > 0 {
+		findings.Add(secretsv1beta1.ReasonSourceKeysMissing, "", fmt.Sprintf("rules[%d]: source Secret %s %s",
+			index, report.source, feedback.Lacks(report.missingKeys)))
+	}
 	rule.TargetCounts = copyrules.Count(findings, report.targets, missing != "")
 	return rule
 }

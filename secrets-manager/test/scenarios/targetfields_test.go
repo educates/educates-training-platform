@@ -130,6 +130,63 @@ var _ = Describe("targetSecret.annotations and sourceSecret.keys", Label(areaTar
 		})
 	})
 
+	It("reports the keys sourceSecret.keys lists that the source lacks, and copies the others",
+		Label(expectedDifference), func() {
+			s := newScenario()
+			sourceNS := s.namespace("src", nil)
+			targetNS := s.namespace("a", nil)
+			src := s.secret(sourceNS.Name, "credentials", data(usernameKey, "user"))
+
+			// A key listed twice is reported once.
+			copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS),
+				copying(src, usernameKey, "password", "password")))
+
+			eventually(func(g Gomega) {
+				g.Expect(secretIn(g, targetNS.Name, src.Name).Data).To(Equal(data(usernameKey, "user")))
+				ready := expectReady(g, copier, "False", "SourceKeysMissing")
+				g.Expect(ready["message"]).To(ContainSubstring(
+					fmt.Sprintf("rules[0]: source Secret %s/%s lacks key password", src.Namespace, src.Name)))
+				expectCounts(g, summaryOf(g, copier), map[string]int64{countTargetNamespaces: 1, countInSync: 1})
+			})
+		})
+
+	It("reports a copier in sync once its source gains the keys it lacked", Label(expectedDifference), func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, "credentials", data(usernameKey, "user"))
+		copier := s.secretCopier(s.name("copier"), copierRule(src, inNamespaces(targetNS),
+			copying(src, usernameKey, "password")))
+		eventually(func(g Gomega) {
+			expectReady(g, copier, "False", "SourceKeysMissing")
+		})
+
+		s.update(src, func() { src.Data["password"] = []byte("secret") })
+
+		eventually(func(g Gomega) {
+			g.Expect(secretIn(g, targetNS.Name, src.Name).Data).To(Equal(data(usernameKey, "user", "password", "secret")))
+			expectReady(g, copier, "True", "InSync")
+		})
+	})
+
+	It("reports the keys a SecretExporter rule lists that the exported Secret lacks", Label(expectedDifference), func() {
+		s := newScenario()
+		sourceNS := s.namespace("src", nil)
+		targetNS := s.namespace("a", nil)
+		src := s.secret(sourceNS.Name, "exported", data(usernameKey, "user"))
+		exporter := s.secretExporter(sourceNS.Name, src.Name, exporterRule(inNamespaces(targetNS),
+			exporting(usernameKey, "password", "token")))
+
+		s.secretImporter(targetNS.Name, src.Name, sharedSecret(uidOf(exporter)))
+
+		eventually(func(g Gomega) {
+			g.Expect(secretIn(g, targetNS.Name, src.Name).Data).To(Equal(data(usernameKey, "user")))
+			ready := expectReady(g, exporter, "False", "SourceKeysMissing")
+			g.Expect(ready["message"]).To(ContainSubstring(
+				fmt.Sprintf("rules[0]: exported Secret %s/%s lacks keys password, token", src.Namespace, src.Name)))
+		})
+	})
+
 	It("applies targetSecret.annotations and sourceSecret.keys on SecretExporter rules",
 		Label(expectedDifference), func() {
 			s := newScenario()

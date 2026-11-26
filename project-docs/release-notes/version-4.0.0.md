@@ -714,7 +714,10 @@ New Features
   rule gains a ``sourceSecret`` which holds only ``keys``, since the
   ``SecretExporter`` names the secret it exports. A copy then holds only those
   of the listed keys which the source secret has, and a key no longer listed
-  is removed from the copies. When ``keys`` is set it must list at least one
+  is removed from the copies. A listed key which the source secret lacks is
+  reported: the resource's ``Ready`` condition is ``False``, with reason
+  ``SourceKeysMissing``, naming the keys, while its copies hold the other
+  listed keys. When ``keys`` is set it must list at least one
   key, and a resource with an empty ``keys`` list, or with a ``SecretExporter``
   rule whose ``sourceSecret`` has no ``keys``, is rejected. Without ``keys``,
   every key is copied, as before. Kubernetes requires a copy of a
@@ -736,7 +739,7 @@ New Features
   says whether a resource is in sync, with a reason naming the problem when it
   is not: ``InvalidSelector``, ``SourceMissing``, ``TargetErrors``,
   ``Conflict`` or ``AwaitingAuthorization`` for a copier, exporter or
-  injector, and ``AwaitingCopy``, ``AwaitingAuthorization`` or
+  injector, and also ``SourceKeysMissing`` for a copier or exporter, and ``AwaitingCopy``, ``AwaitingAuthorization`` or
   ``NoMatchingExporter`` for an importer which has not ``Imported`` its
   secret. The message of the condition names up to five of the namespaces
   affected. A copier or exporter counts, in total and for each rule, the

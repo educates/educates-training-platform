@@ -119,7 +119,7 @@ spec:
       - password
 ```
 
-A listed key which the source secret does not hold is not copied. When ``keys`` is set it must list at least one key, and a ``SecretCopier`` with an empty ``keys`` list is rejected when it is created or updated. To copy every key, leave ``keys`` out.
+A listed key which the source secret does not hold is not copied, and the ``SecretCopier`` reports it: its ``Ready`` condition is ``False``, with reason ``SourceKeysMissing``, and its message names the rule, the source secret and the keys it lacks. The copies still hold the listed keys which the source secret has, and count as in sync, and once the source secret holds every listed key, the ``SecretCopier`` is ``Ready`` again. When ``keys`` is set it must list at least one key, and a ``SecretCopier`` with an empty ``keys`` list is rejected when it is created or updated. To copy every key, leave ``keys`` out.
 
 The data of a copy always equals what the rule selects from its source secret. A key which the source secret drops, or which is no longer listed, is removed from the copies, and so is a key which anything else adds to a copy.
 
@@ -412,11 +412,13 @@ registry-credentials   True    InSync          4/4       5m
 theme-credentials      False   SourceMissing   0/2       30s
 ```
 
-The ``Ready`` condition is ``True``, with reason ``InSync``, when every target namespace each rule selects holds a copy in sync with its source secret, or a copy another rule copying the same source secret keeps. Otherwise it is ``False``, with the reason of the first of these problems which applies:
+The ``Ready`` condition is ``True``, with reason ``InSync``, when every target namespace each rule selects holds a copy in sync with its source secret, or a copy another rule copying the same source secret keeps, and each source secret holds every key its rule lists. Otherwise it is ``False``, with the reason of the first of these problems which applies:
 
 * ``InvalidSelector``: a rule's ``targetNamespaces`` is not valid, so the rule selects no namespace.
 
 * ``SourceMissing``: a rule's source secret does not exist, or is in a namespace which is being deleted, so it is not copied.
+
+* ``SourceKeysMissing``: a rule's source secret lacks keys its ``sourceSecret.keys`` lists. The copies hold the listed keys it has, and count as in sync.
 
 * ``TargetErrors``: a copy could not be written in some namespaces, and is retried.
 
@@ -424,7 +426,7 @@ The ``Ready`` condition is ``True``, with reason ``InSync``, when every target n
 
 * ``AwaitingAuthorization``: in some namespaces no ``SecretImporter`` accepts the copy. Either a rule with ``copyAuthorization`` finds no ``SecretImporter`` there holding its shared secret, or the ``SecretImporter`` named after the copy does not admit the namespace of the source secret.
 
-The message of the condition names up to five of the namespaces affected, and what failed where a copy could not be written. The ``status.summary`` counts, for all the rules together, the ``targetNamespaces`` selected and, of them, those whose copy is ``inSync``, those in ``conflicts``, those ``awaitingAuthorization`` and the ``failures``. Its ``inSyncRatio`` is the ``In Sync`` column. The ``status.rules`` list gives the same counts for each rule, in the order of ``spec.rules``, with the name and namespace of its source secret, as ``sourceSecret``, and whether that secret exists, as ``sourceExists``.
+The message of the condition names up to five of the namespaces affected, what failed where a copy could not be written, and the keys a source secret lacks. The ``status.summary`` counts, for all the rules together, the ``targetNamespaces`` selected and, of them, those whose copy is ``inSync``, those in ``conflicts``, those ``awaitingAuthorization`` and the ``failures``. Its ``inSyncRatio`` is the ``In Sync`` column. The ``status.rules`` list gives the same counts for each rule, in the order of ``spec.rules``, with the name and namespace of its source secret, as ``sourceSecret``, and whether that secret exists, as ``sourceExists``.
 
 ```yaml
 status:

@@ -107,6 +107,10 @@ type ruleReport struct {
 	// Nothing is copied into them when the exported Secret does not exist or
 	// its namespace is being deleted.
 	targets []copyrules.Target
+
+	// missingKeys are the keys the rule's sourceSecret.keys lists that the
+	// exported Secret lacks, when the Secret is copied.
+	missingKeys []string
 }
 
 // Reconcile copies the Secret the SecretExporter req names exports into
@@ -166,8 +170,21 @@ func (r *ExporterReconciler) export(ctx context.Context, converger *copyrules.Co
 
 	report.rules = make([]ruleReport, 0, len(exporter.Spec.Rules))
 	for i := range exporter.Spec.Rules {
-		report.rules = append(report.rules,
-			exportRule(ctx, converger, exporter, &exporter.Spec.Rules[i], src, namespaces.Items))
+		rule := &exporter.Spec.Rules[i]
+		ruleReport := exportRule(ctx, converger, exporter, rule, src, namespaces.Items)
+		if src != nil && ruleReport.invalidSelector == nil && report.err == nil {
+			missing, err := r.engine.MissingKeys(ctx, src, rule.SourceKeys())
+			switch {
+			case apierrors.IsNotFound(err):
+				log.V(1).Info("The exported Secret was deleted while being copied")
+			case err != nil:
+				report.err = fmt.Errorf("reading the exported Secret %s: %w", report.source, err)
+				converger.Fail(report.err)
+			default:
+				ruleReport.missingKeys = missing
+			}
+		}
+		report.rules = append(report.rules, ruleReport)
 	}
 	for i := range report.rules {
 		converger.Settle(secretsv1beta1.CopierRule(secretsv1beta1.SecretExporterKind, exporter.Name),

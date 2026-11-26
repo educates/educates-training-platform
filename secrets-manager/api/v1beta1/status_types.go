@@ -18,6 +18,10 @@ const (
 	// namespace being deleted, so it is not copied.
 	ReasonSourceMissing = "SourceMissing"
 
+	// ReasonSourceKeysMissing means a source Secret lacks keys a rule's
+	// sourceSecret.keys lists. The copies hold the listed keys it has.
+	ReasonSourceKeysMissing = "SourceKeysMissing"
+
 	// ReasonTargetErrors means some targets failed, and are retried.
 	ReasonTargetErrors = "TargetErrors"
 

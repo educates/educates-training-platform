@@ -161,7 +161,7 @@ spec:
       sharedSecret: my-shared-secret
 ```
 
-A listed key which the secret exported does not hold is not copied. When ``sourceSecret`` is set, its ``keys`` must list at least one key, and a ``SecretExporter`` with a ``sourceSecret`` that has no ``keys``, or an empty ``keys`` list, is rejected when it is created or updated. To copy every key, leave ``sourceSecret`` out.
+A listed key which the secret exported does not hold is not copied, and the ``SecretExporter`` reports it: its ``Ready`` condition is ``False``, with reason ``SourceKeysMissing``, and its message names the rule, the secret exported and the keys it lacks. The copies still hold the listed keys which the secret exported has, and count as in sync, and once the secret exported holds every listed key, the ``SecretExporter`` is ``Ready`` again. When ``sourceSecret`` is set, its ``keys`` must list at least one key, and a ``SecretExporter`` with a ``sourceSecret`` that has no ``keys``, or an empty ``keys`` list, is rejected when it is created or updated. To copy every key, leave ``sourceSecret`` out.
 
 The data of a copy always equals what the rule selects from the secret exported. A key which the secret exported drops, or which is no longer listed, is removed from the copies, and so is a key which anything else adds to a copy.
 
@@ -438,11 +438,13 @@ NAME                   READY   REASON                  IN SYNC   AGE
 registry-credentials   False   AwaitingAuthorization   2/3       5m
 ```
 
-The ``Ready`` condition is ``True``, with reason ``InSync``, when every target namespace each rule selects holds a copy in sync with the secret exported. Otherwise it is ``False``, with the reason of the first of these problems which applies:
+The ``Ready`` condition is ``True``, with reason ``InSync``, when every target namespace each rule selects holds a copy in sync with the secret exported, and the secret exported holds every key each rule lists. Otherwise it is ``False``, with the reason of the first of these problems which applies:
 
 * ``InvalidSelector``: a rule's ``targetNamespaces`` is not valid, so the rule selects no namespace.
 
 * ``SourceMissing``: the secret exported does not exist, or its namespace is being deleted, so it is not copied.
+
+* ``SourceKeysMissing``: the secret exported lacks keys a rule's ``sourceSecret.keys`` lists. The copies hold the listed keys it has, and count as in sync.
 
 * ``TargetErrors``: a copy could not be written in some namespaces, and is retried.
 
@@ -450,7 +452,7 @@ The ``Ready`` condition is ``True``, with reason ``InSync``, when every target n
 
 * ``AwaitingAuthorization``: in some namespaces no ``SecretImporter`` accepts the copy, as none is named after the copy, or the one named after it holds another shared secret or does not admit the namespace of the ``SecretExporter``.
 
-The message of the condition names up to five of the namespaces affected, and what failed where a copy could not be written. ``status.sourceExists`` says whether the secret exported exists. The ``status.summary`` counts, for all the rules together, the ``targetNamespaces`` selected and, of them, those whose copy is ``inSync``, those in ``conflicts``, those ``awaitingAuthorization`` and the ``failures``. Its ``inSyncRatio`` is the ``In Sync`` column. The ``status.rules`` list gives the same counts for each rule, in the order of ``spec.rules``.
+The message of the condition names up to five of the namespaces affected, what failed where a copy could not be written, and the keys the secret exported lacks. ``status.sourceExists`` says whether the secret exported exists. The ``status.summary`` counts, for all the rules together, the ``targetNamespaces`` selected and, of them, those whose copy is ``inSync``, those in ``conflicts``, those ``awaitingAuthorization`` and the ``failures``. Its ``inSyncRatio`` is the ``In Sync`` column. The ``status.rules`` list gives the same counts for each rule, in the order of ``spec.rules``.
 
 A copy which cannot be written in one namespace never stops copies into the other namespaces. It is retried with an increasing delay, at most 5 minutes apart. Every ``SecretExporter`` is also checked again 5 minutes after it was last checked, which repairs any copy a missed change left out of sync.
 

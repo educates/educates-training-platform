@@ -248,7 +248,14 @@ New Features
   ``EducatesGKEConfig``, ``EducatesEKSConfig`` and
   ``EducatesInlineConfig`` kinds, ``externalTLSTermination`` now maps to
   this provider, so no unused in-cluster certificate is issued when TLS is
-  handled by an external load balancer or proxy.
+  handled by an external load balancer or proxy. With the ``None`` provider
+  and ``ingress.protocol: https``, the bundled Contour trusts that load
+  balancer or proxy as one hop to set ``X-Forwarded-Proto`` and
+  ``X-Forwarded-For``, so workloads see ``X-Forwarded-Proto: https``
+  instead of the ``http`` Envoy otherwise writes, and a session registry
+  hands out ``https`` upload URLs that ``docker push`` can follow. The
+  load balancer or proxy must set both headers itself, replacing any a
+  client sent.
 
 * With the ``None`` certificates provider, ``EducatesClusterConfig`` now
   accepts a CA trust Secret for the certificate a load balancer or proxy

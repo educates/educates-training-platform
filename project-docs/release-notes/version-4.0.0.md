@@ -2856,6 +2856,19 @@ Bugs Fixed
   file ``--output`` writes is now readable by its owner only, since the
   kubeconfig holds the token.
 
+* ``educates admin lookup kubeconfig`` left out the ``tls-server-name`` of
+  the kube context it read the token through, so a kubeconfig for an API
+  server whose certificate does not name the address of the kube context,
+  as behind a gateway that routes several clusters by server name, failed
+  TLS verification. When the kubeconfig names the kube context's own
+  server, without ``--server``, it now gives the kube context's
+  ``tls-server-name``, and the new ``--tls-server-name`` option names it for
+  any server. The new
+  ``--proxy-url`` option names an ``http``, ``https`` or ``socks5`` proxy
+  the lookup service reaches the API server through. The proxy of the kube
+  context is never copied, since a lookup service seldom reaches it, and
+  the command says so when it leaves one out.
+
 * A workshop environment with a capacity of 0 no longer receives sessions.
   The lookup service treated a capacity of 0 as no limit, so it sent session
   requests to such a workshop environment, and preferred it to one which was

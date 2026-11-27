@@ -88,10 +88,16 @@ The kubeconfig names the API server at the address of the Kubernetes context the
 educates admin lookup kubeconfig --context cluster-1 --server https://api.cluster-1.example.com:6443 --output kubeconfig-cluster-1.yaml
 ```
 
-The generated kubeconfig gives no ``tls-server-name``, even when the Kubernetes context the command uses has one. When the certificate of the API server does not name the address in the kubeconfig, add the name it does carry to the kubeconfig's cluster, which is named ``training-platform``:
+When the kubeconfig names the address of the Kubernetes context, it also gives the ``tls-server-name`` of the context, if the context has one. With the ``--server`` option, or for a local cluster, it gives none, since the certificate of the API server may name that address itself. When the certificate does not name the address in the kubeconfig, name a server name the certificate does carry with the ``--tls-server-name`` option, which sets it in every case:
 
 ```
-kubectl config set-cluster training-platform --tls-server-name api.cluster-1.internal --kubeconfig kubeconfig-cluster-1.yaml
+educates admin lookup kubeconfig --context cluster-1 --server https://10.0.0.5:6443 --tls-server-name api.cluster-1.internal --output kubeconfig-cluster-1.yaml
+```
+
+The kubeconfig never gives the proxy the Kubernetes context reaches the API server through, since that proxy, such as a tunnel on the loopback address of your machine, is seldom one the lookup service reaches, and the command says so on its error output when it leaves the proxy out. When the lookup service reaches the API server through a proxy, name that proxy with the ``--proxy-url`` option, as an ``http``, ``https`` or ``socks5`` URL:
+
+```
+educates admin lookup kubeconfig --context cluster-1 --proxy-url http://proxy.example.com:3128 --output kubeconfig-cluster-1.yaml
 ```
 
 For a local cluster created with ``educates local cluster create``, whose context reaches the API server at a port on the loopback address of your machine, the kubeconfig names instead the address at which the pods of the other local clusters reach it: the control plane container of the cluster on Docker's ``kind`` network, ``https://educates-control-plane:6443`` for the default local cluster and ``https://educates-<name>-control-plane:6443`` for the local cluster ``<name>``. A lookup service on another local cluster can use the kubeconfig as it is:

@@ -2044,7 +2044,9 @@ Features Changed
 * The operator logs at ``info`` by default, where it logged at ``debug``,
   whether installed with the CLI or with Helm. ``operator.logLevel`` of a CLI
   configuration, or the ``logLevel`` value of the ``educates-installer``
-  chart, sets it.
+  chart, sets it. The output of the Helm SDK, which the operator installs
+  charts with, follows it too, where it was always logged at ``debug``: set
+  ``debug`` to see Helm's detail, such as why an uninstall failed.
 
 * ``clusterAdmin`` of an ``EducatesLocalConfig`` defaults to ``false``, as in
   the other configuration kinds, where a version 3 local cluster bound the

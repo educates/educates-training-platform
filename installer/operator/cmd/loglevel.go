@@ -13,6 +13,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 
 	"go.uber.org/zap/zapcore"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -56,4 +57,27 @@ func flagPassed(fs *flag.FlagSet, name string) bool {
 		}
 	})
 	return passed
+}
+
+// helmLogLevel returns the slog level the Helm SDK logs at for the
+// operator's logger options opts, so that its output follows the
+// operator's own level, whichever of --log-level and an explicit
+// --zap-log-level set it: debug and any numeric verbosity beyond it give
+// the SDK's debug output, and info, warn and error the SDK's own level of
+// that name.
+func helmLogLevel(opts zap.Options) slog.Level {
+	if opts.Level == nil {
+		// zap's development mode logs at debug when no level is set.
+		return slog.LevelDebug
+	}
+	switch {
+	case opts.Level.Enabled(zapcore.DebugLevel):
+		return slog.LevelDebug
+	case opts.Level.Enabled(zapcore.InfoLevel):
+		return slog.LevelInfo
+	case opts.Level.Enabled(zapcore.WarnLevel):
+		return slog.LevelWarn
+	default:
+		return slog.LevelError
+	}
 }

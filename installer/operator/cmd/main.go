@@ -115,6 +115,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
+	// The Helm SDK logs through slog beside the operator's logger, at the
+	// same level.
+	helmLevel := helmLogLevel(opts)
 
 	// Wrap the zap logger with filteringLogSink so controller-runtime's
 	// internal/source/kind.go retry-loop ERRORs (emitted whenever a
@@ -329,7 +332,7 @@ func main() {
 		OperatorNamespace:      operatorNamespace,
 		CachedSecretNamespaces: cachedSecretNSSet,
 		HelmClientFor: func(ns string) (*helm.Client, error) {
-			return helm.NewClient(restCfg, ns)
+			return helm.NewClient(restCfg, ns, helmLevel)
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "config-educatesclusterconfig")
@@ -340,7 +343,7 @@ func main() {
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),
 		HelmClientFor: func(ns string) (*helm.Client, error) {
-			return helm.NewClient(restCfg, ns)
+			return helm.NewClient(restCfg, ns, helmLevel)
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "platform-secretsmanager")
@@ -351,7 +354,7 @@ func main() {
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),
 		HelmClientFor: func(ns string) (*helm.Client, error) {
-			return helm.NewClient(restCfg, ns)
+			return helm.NewClient(restCfg, ns, helmLevel)
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "platform-lookupservice")
@@ -363,7 +366,7 @@ func main() {
 		Scheme:            mgr.GetScheme(),
 		OperatorNamespace: operatorNamespace,
 		HelmClientFor: func(ns string) (*helm.Client, error) {
-			return helm.NewClient(restCfg, ns)
+			return helm.NewClient(restCfg, ns, helmLevel)
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "platform-sessionmanager")

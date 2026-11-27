@@ -11,6 +11,7 @@ You may obtain a copy of the License at
 package main
 
 import (
+	"log/slog"
 	"testing"
 
 	"go.uber.org/zap/zapcore"
@@ -63,5 +64,27 @@ func TestApplyLogLevel_RefusesAnUnknownName(t *testing.T) {
 	opts := zap.Options{}
 	if err := applyLogLevel(&opts, "verbose", false); err == nil {
 		t.Fatal("applyLogLevel accepted an unknown level")
+	}
+}
+
+func TestHelmLogLevel_FollowsTheOperatorLevel(t *testing.T) {
+	cases := []struct {
+		name  string
+		level zapcore.Level
+		want  slog.Level
+	}{
+		{"debug", zapcore.DebugLevel, slog.LevelDebug},
+		{"info", zapcore.InfoLevel, slog.LevelInfo},
+		{"warn", zapcore.WarnLevel, slog.LevelWarn},
+		{"error", zapcore.ErrorLevel, slog.LevelError},
+		// --zap-log-level=2, a numeric verbosity beyond debug.
+		{"numeric verbosity", zapcore.Level(-2), slog.LevelDebug},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := helmLogLevel(zap.Options{Level: c.level}); got != c.want {
+				t.Errorf("helmLogLevel(%s) = %s, want %s", c.level, got, c.want)
+			}
+		})
 	}
 }

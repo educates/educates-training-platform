@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"io"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -17,7 +18,8 @@ kind: EducatesConfig
 target:
   provider: kind
   cluster:
-    listenAddress: 10.10.10.1
+    apiServer:
+      port: 6443
 educatesClusterConfig:
   mode: Managed
   ingress:
@@ -34,12 +36,14 @@ secretsManager: {}
 sessionManager: {}
 `
 
-// prepareForTest loads the config at path as local cluster create does
-// and prepares it, with a developer-built CLI's project info so that any
-// CLI defaulting would show in the result.
+// prepareForTest loads the config at path as local cluster create does,
+// in a temporary data home, and prepares it, with a developer-built CLI's
+// project info so that any CLI defaulting would show in the result.
 func prepareForTest(t *testing.T, path string) *localCreateInputs {
 	t.Helper()
-	cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
+	stubHostIP(t, "192.168.50.151")
+	t.Setenv("EDUCATES_CLI_DATA_HOME", t.TempDir())
+	cfg, _, _, err := loadLocalConfig(io.Discard, &LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
 	if err != nil {
 		t.Fatalf("loadLocalConfig: %v", err)
 	}
@@ -79,8 +83,8 @@ func TestPrepareLocalCreate_EscapeConfig_DeploysItsCustomResources(t *testing.T)
 	if got, want := in.Domain, "workshops.example.test"; got != want {
 		t.Errorf("Domain = %q, want %q", got, want)
 	}
-	if got, want := in.Cluster.ListenAddress, "10.10.10.1"; got != want {
-		t.Errorf("Cluster.ListenAddress = %q, want %q", got, want)
+	if got, want := in.Cluster.ApiServer.Port, 6443; got != want {
+		t.Errorf("Cluster.ApiServer.Port = %d, want %d", got, want)
 	}
 
 	out := translateForTest(t, in)
@@ -133,7 +137,7 @@ func TestLoadLocalConfig_EscapeTargetProvider(t *testing.T) {
 		target  string
 		wantErr string
 	}{
-		{name: "kind", target: "target:\n  provider: kind\n  cluster:\n    listenAddress: 10.10.10.1\n"},
+		{name: "kind", target: "target:\n  provider: kind\n  cluster: {}\n"},
 		{name: "other spelling", target: "target:\n  provider: Kind\n", wantErr: "schema validation failed"},
 		{name: "other provider", target: "target:\n  provider: gke\n", wantErr: "schema validation failed"},
 		{name: "no provider", target: "target:\n  cluster: {}\n", wantErr: "target.provider=kind"},
@@ -141,8 +145,10 @@ func TestLoadLocalConfig_EscapeTargetProvider(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			stubHostIP(t, "192.168.50.151")
+			t.Setenv("EDUCATES_CLI_DATA_HOME", t.TempDir())
 			path := writeFixture(t, escapeMinimal+tc.target)
-			cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
+			cfg, _, _, err := loadLocalConfig(io.Discard, &LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("err = %v, want an error containing %q", err, tc.wantErr)
@@ -163,7 +169,6 @@ func TestKindBootstrapFromConfig_CarriesTemplateFields(t *testing.T) {
 	tr := true
 	cfg := &v1alpha1.EducatesLocalConfig{
 		Cluster: v1alpha1.LocalClusterConfig{
-			ListenAddress: "192.168.50.50",
 			ApiServer: v1alpha1.ApiServerConfig{
 				Address: "192.168.50.50",
 				Port:    6443,
@@ -179,9 +184,6 @@ func TestKindBootstrapFromConfig_CarriesTemplateFields(t *testing.T) {
 	}
 	in := kindBootstrapFromConfig(cfg.Cluster)
 
-	if got, want := in.ListenAddress, "192.168.50.50"; got != want {
-		t.Errorf("ListenAddress = %q, want %q", got, want)
-	}
 	if got, want := in.ApiServer.Port, 6443; got != want {
 		t.Errorf("ApiServer.Port = %d, want %d", got, want)
 	}
@@ -228,8 +230,6 @@ func TestKindBootstrapFromConfig_Empty_NoCrash(t *testing.T) {
 // HTTPS, which needs a certificate source in the local secrets cache.
 const localSecureDomain = `apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
-cluster:
-  listenAddress: 10.10.10.1
 ingress:
   domain: secure.educates.test
 `
@@ -239,12 +239,13 @@ ingress:
 // secrets cache has no certificate for, while a create with
 // --cluster-only, which deploys nothing, takes it.
 func TestPrepareLocalCreate_ClusterOnlyNeedsNoCertificate(t *testing.T) {
+	stubHostIP(t, "192.168.50.151")
 	t.Setenv("EDUCATES_CLI_DATA_HOME", t.TempDir())
 	path := writeFixture(t, localSecureDomain)
 	p := &ProjectInfo{Version: "latest", ImageRepository: "localhost:5001"}
 
 	prepare := func(deploy bool) (*localCreateInputs, error) {
-		cfg, _, _, err := loadLocalConfig(&LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
+		cfg, _, _, err := loadLocalConfig(io.Discard, &LocalClusterCreateOptions{Config: path}, defaultLocalCluster())
 		if err != nil {
 			t.Fatalf("loadLocalConfig: %v", err)
 		}
@@ -266,8 +267,5 @@ func TestPrepareLocalCreate_ClusterOnlyNeedsNoCertificate(t *testing.T) {
 	}
 	if got, want := in.Domain, "secure.educates.test"; got != want {
 		t.Errorf("Domain = %q, want %q", got, want)
-	}
-	if got, want := in.Cluster.ListenAddress, "10.10.10.1"; got != want {
-		t.Errorf("Cluster.ListenAddress = %q, want %q", got, want)
 	}
 }

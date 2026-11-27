@@ -389,6 +389,70 @@ ingress:
 	}
 }
 
+// TestTranslateLocal_ExternalTLSTermination_NoneProviderHTTPSWithCATrust
+// asserts that a local config whose TLS ends at the router, with the None
+// certificates decision and the CA trust Secret of the CA that verifies
+// the router's certificate, produces the None provider with that CA trust
+// Secret as none.caCertificateSecretRef and https protocol, as the cloud
+// kinds' externalTLSTermination does, and no cert-manager configuration.
+func TestTranslateLocal_ExternalTLSTermination_NoneProviderHTTPSWithCATrust(t *testing.T) {
+	cfg, err := config.LoadBytes([]byte(`
+apiVersion: cli.educates.dev/v1alpha1
+kind: EducatesLocalConfig
+ingress:
+  domain: test2.educates.test
+  externalTLSTermination: true
+`), "inline-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Translate(cfg, Options{LocalCertificates: LocalCertificates{
+		Provider: CertificatesProviderNone,
+		None: &LocalNoneCertificates{
+			CACertificateSecretRef: &SecretRef{Name: "educates-ca", Namespace: "educates-secrets"},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("translate: %v", err)
+	}
+	spec := out.EducatesClusterConfig["spec"].(map[string]interface{})
+	for path, want := range map[string]interface{}{
+		"ingress.certificates.provider":                              "None",
+		"ingress.certificates.none.caCertificateSecretRef.name":      "educates-ca",
+		"ingress.certificates.none.caCertificateSecretRef.namespace": "educates-secrets",
+		"ingress.protocol": "https",
+		"ingress.domain":   "test2.educates.test",
+	} {
+		if got, _ := getNested(spec, path); got != want {
+			t.Errorf("EducatesClusterConfig.spec.%s = %v, want %v", path, got, want)
+		}
+	}
+	for _, path := range []string{"ingress.certificates.bundledCertManager", "ingress.certificates.staticCertificate"} {
+		if got, found := getNested(spec, path); found {
+			t.Errorf("%s emitted for a cluster whose TLS ends at the router: %v", path, got)
+		}
+	}
+}
+
+// TestTranslateLocal_ExternalTLSTermination_NeedsTheNoneDecision asserts
+// that a local config whose TLS ends at the router is refused with a
+// certificates decision that has the cluster issue its own certificates.
+func TestTranslateLocal_ExternalTLSTermination_NeedsTheNoneDecision(t *testing.T) {
+	cfg, err := config.LoadBytes([]byte(`
+apiVersion: cli.educates.dev/v1alpha1
+kind: EducatesLocalConfig
+ingress:
+  domain: test2.educates.test
+  externalTLSTermination: true
+`), "inline-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Translate(cfg, testOpts()); err == nil || !strings.Contains(err.Error(), "externalTLSTermination") {
+		t.Errorf("Translate with a BundledCertManager decision = %v, want an error naming externalTLSTermination", err)
+	}
+}
+
 func TestTranslateLocal_EmptyConfig_AppliesBundledKyvernoInvariant(t *testing.T) {
 	cfg := loadCfg(t, "local-empty.yaml")
 	out, err := Translate(cfg, testOpts())

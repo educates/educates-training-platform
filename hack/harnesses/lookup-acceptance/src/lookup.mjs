@@ -5,14 +5,16 @@ import http from "node:http";
 import https from "node:https";
 
 // ingressRequest sends a request to a URL a local cluster's ingress serves.
-// It connects to the cluster's listen address, the only address the cluster
-// publishes on, whatever the host name resolves to, and verifies the
-// certificate against the cluster's ingress CA. It never follows redirects.
+// It connects to the router address, where the router serves every local
+// cluster, whatever the host name resolves to. The router sends the request
+// to the cluster by its Host header on port 80, and by the server name of
+// its TLS handshake on port 443, and the certificate is verified against
+// the cluster's ingress CA. It never follows redirects.
 export function ingressRequest(cluster, url, { method = "GET", headers = {}, body, timeout = 30_000 } = {}) {
   const u = new URL(url);
   const secure = u.protocol === "https:";
   const options = {
-    host: cluster.listenAddress,
+    host: cluster.routerAddress,
     port: u.port || (secure ? 443 : 80),
     path: `${u.pathname}${u.search}`,
     method,

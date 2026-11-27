@@ -22,15 +22,8 @@ const (
 	emptyLocal = `apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
 `
-	localWithListenAddress = `apiVersion: cli.educates.dev/v1alpha1
-kind: EducatesLocalConfig
-cluster:
-  listenAddress: 10.10.10.1
-`
 	localWithDomain = `apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
-cluster:
-  listenAddress: 10.10.10.1
 ingress:
   domain: workshop.test
 operator:
@@ -203,15 +196,16 @@ func TestRender_Config_ScenarioKinds_CLIDefaultsTheOperatorImage(t *testing.T) {
 	}
 }
 
-func TestRender_LocalConfig_NipDomainOfTheListenAddress_DefaultsInsecure(t *testing.T) {
+func TestRender_LocalConfig_NipDomainOfTheRouterAddress_DefaultsInsecure(t *testing.T) {
 	// Point --local-config at a temp data home so the test doesn't touch
 	// the user's actual data home.
 	dataHome := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(localWithListenAddress), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(emptyLocal), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	// No CA is staged: a local config with no domain falls back to the
-	// nip.io name of its listen address, which defaults to an insecure
+	// nip.io name of the router address, which defaults to an insecure
 	// plain-HTTP install needing no CA.
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 
@@ -230,8 +224,9 @@ func TestRender_LocalConfig_NipDomainOfTheListenAddress_DefaultsInsecure(t *test
 	}
 }
 
-func TestRender_LocalConfig_RefusesADefaultConfigWithoutAListenAddress(t *testing.T) {
-	stubHostIP(t, "192.168.50.151")
+// A config without a domain takes it from the router address, so with no
+// router file render says how to set the router address.
+func TestRender_LocalConfig_RefusesADefaultConfigWithoutADomainOrARouterFile(t *testing.T) {
 	dataHome := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(emptyLocal), 0o644); err != nil {
 		t.Fatal(err)
@@ -241,8 +236,7 @@ func TestRender_LocalConfig_RefusesADefaultConfigWithoutAListenAddress(t *testin
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
 	err := p.runRender(&bytes.Buffer{}, &PlatformRenderOptions{LocalConfig: true})
 
-	wantError(t, err, "cluster.listenAddress", "must be set",
-		"educates local config set cluster.listenAddress 192.168.50.151")
+	wantError(t, err, "router.yaml", "educates local router update --address <ip>")
 }
 
 func TestRender_RootCA_ReferencesTheDomainCAKeyPairWithoutWritingIt(t *testing.T) {

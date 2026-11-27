@@ -27,7 +27,7 @@ function signalledWhileLaunched(signal) {
     }, { log: () => {} });
     launchBrowser({
       chrome: ${JSON.stringify(chrome)},
-      cluster: { domain: "example.test", listenAddress: "127.0.0.1" },
+      cluster: { domain: "example.test", routerAddress: "127.0.0.1" },
       profileDir: ${JSON.stringify(path.join(dir, "profile"))},
       headful: false,
     }).catch(() => {});

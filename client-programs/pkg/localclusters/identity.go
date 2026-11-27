@@ -3,12 +3,15 @@
 // called in kind, in Docker, in the kubeconfig and in the data home, what
 // a named local cluster's config must declare, and, from an observed
 // state of the host, which Educates clusters exist, whether they clash
-// with one another, and what the local DNS resolver serves for them.
+// with one another, and what the local DNS resolver and the router serve
+// for them.
 //
 // It takes everything as plain values, the data home and the observed
 // state included. Besides the cluster configs and folders of the data
-// home, it reads neither files, the environment nor Docker, so callers
-// decide where the inputs come from.
+// home, the files every local cluster shares there, such as the router
+// file, and the router folder it renders the router's configuration into,
+// it reads and writes neither files, the environment nor Docker, so
+// callers decide where the inputs come from.
 package localclusters
 
 import (
@@ -76,6 +79,11 @@ type Identity struct {
 	// KindConfigPath is the path of the kind config file the cluster is
 	// created from.
 	KindConfigPath string
+
+	// DataHome is the data home the cluster belongs to, which holds its
+	// config and the files every local cluster shares, such as the router
+	// file.
+	DataHome string
 }
 
 // Default returns the identity of the default local cluster of the data
@@ -87,6 +95,7 @@ func Default(dataHome string) Identity {
 		Context:        "kind-" + defaultKindName,
 		ConfigPath:     config.LocalConfigPath(dataHome),
 		KindConfigPath: filepath.Join(dataHome, kindConfigFileName),
+		DataHome:       dataHome,
 	}
 }
 
@@ -106,6 +115,7 @@ func Named(name, dataHome string) (Identity, error) {
 		Context:        "kind-" + kindName,
 		ConfigPath:     filepath.Join(dir, "config.yaml"),
 		KindConfigPath: filepath.Join(dir, kindConfigFileName),
+		DataHome:       dataHome,
 	}, nil
 }
 
@@ -127,14 +137,6 @@ func (id Identity) Description() string {
 // cluster's first control-plane node.
 func (id Identity) ControlPlaneNode() string {
 	return id.KindName + "-" + ControlPlaneRole
-}
-
-// PortCheckContainer is the name of the probe container local cluster
-// create starts to check that the cluster's listen address has ports 80
-// and 443 free. Each local cluster has its own, so creates of different
-// local clusters can run at the same time.
-func (id Identity) PortCheckContainer() string {
-	return id.KindName + "-port-availability-check"
 }
 
 // NodeNames returns the names of the node containers kind creates for the

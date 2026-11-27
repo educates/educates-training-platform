@@ -16,12 +16,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/translator"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localcerts"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
 	"github.com/educates/educates-training-platform/client-programs/pkg/resolver"
 	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 var localClusterDeleteExample = `
@@ -31,8 +33,8 @@ var localClusterDeleteExample = `
   # Delete the named local cluster test2, keeping its config:
   educates local cluster delete --local-cluster test2
 
-  # Delete the local cluster along with the registry, resolver, and mirrors,
-  # which are kept while another local cluster still uses them:
+  # Delete the local cluster along with the registry, resolver, mirrors and
+  # router, which are kept while another local cluster still uses them:
   educates local cluster delete --all
 `
 
@@ -50,16 +52,16 @@ type LocalClusterDeleteOptions struct {
 // later deploy of the kept config mints a new one from the root CA.
 //
 // With AllComponents it then deletes the host infrastructure every local
-// cluster shares, the local registry, the DNS resolver and the registry
-// mirrors, but only when no other Educates cluster remains to use them;
-// otherwise it keeps them and names the clusters still using them. It
-// does so even when the kind cluster was already gone, and still reports
-// that.
+// cluster shares, the local registry, the DNS resolver, the registry
+// mirrors and the router, with the router folder of the data home but not
+// the router file, router.yaml, which holds the router address. It does so
+// only when no other Educates cluster remains to use them; otherwise it
+// keeps them and names the clusters still using them. It does so even
+// when the kind cluster was already gone, and still reports that.
 //
-// A DNS resolver that keeps running is refreshed once the kind cluster is
-// gone, so it stops serving a named cluster's domains. A resolver that
-// can't be refreshed is only a warning, since the cluster is gone by
-// then.
+// A DNS resolver and a router that keep running are refreshed once the
+// kind cluster is gone, so they stop serving its domains. One that can't
+// be refreshed is only a warning, since the cluster is gone by then.
 func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Identity) error {
 	c := cluster.NewKindClusterConfig("", id)
 
@@ -74,6 +76,7 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 		}
 		removeUnusedCAKeyPairs(ctx, os.Stdout, id, keyPairs)
 		refreshResolverAfterDelete(ctx)
+		refreshRouterAfterDelete(ctx)
 		return nil
 	}
 	if err != nil && !cluster.IsNotFound(err) {
@@ -87,9 +90,10 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 		return inventoryErr
 	}
 	if users := inventory.SharedInfrastructureUsers(id); len(users) > 0 {
-		fmt.Printf("Skipped deleting the local registry, DNS resolver and registry mirrors: still in use by %s.\n",
+		fmt.Printf("Skipped deleting the local registry, DNS resolver, registry mirrors and router: still in use by %s.\n",
 			localclusters.DescribeClusters(users))
 		refreshResolverAfterDelete(ctx)
+		refreshRouterAfterDelete(ctx)
 		return err
 	}
 
@@ -101,6 +105,9 @@ func (o *LocalClusterDeleteOptions) Run(ctx context.Context, id localclusters.Id
 	resolver.DeleteResolver()
 	_ = stepOnStdout(false, "delete registry mirrors", "deleted", func(s progress.Step) error {
 		return registry.DeleteRegistryMirrors(s)
+	})
+	_ = stepOnStdout(false, "delete router", "deleted", func(progress.Step) error {
+		return dockerRouterOperations(utils.GetEducatesHomeDir(), os.Stderr).removeRouter(ctx)
 	})
 
 	return err
@@ -143,8 +150,10 @@ func readLocalClusterConfig(ctx context.Context, id localclusters.Identity) (*un
 // pairs in the local secrets cache.
 //
 // While its cluster answers with an EducatesClusterConfig, that is the CA
-// key pair the EducatesClusterConfig references, or none when it
-// references none, as for a TLS certificate of the user's or plain HTTP.
+// key pair the EducatesClusterConfig references; for a cluster whose TLS
+// ends at the router, which references none, the CA key pair of its
+// domain, which the router's certificate is issued from; and otherwise
+// none, as for a TLS certificate of the user's or plain HTTP.
 // When the cluster does not answer, as a stopped one does not, or has no
 // EducatesClusterConfig, as one created with --cluster-only has none, it
 // is the CA key pair for the ingress domain of the cluster's config in the
@@ -158,6 +167,13 @@ func clusterCAKeyPairs(ctx context.Context, id localclusters.Identity, readClust
 		result.Known = true
 		name, _, _ := unstructured.NestedString(clusterConfig.Object,
 			"spec", "ingress", "certificates", "bundledCertManager", "customCA", "caKeyPairSecretRef", "name")
+		if name == "" && tlsEndsOutsideCluster(clusterConfig) {
+			// The router ends TLS for the cluster, with a certificate
+			// issued from the CA key pair of its domain.
+			if domain, _, _ := unstructured.NestedString(clusterConfig.Object, "spec", "ingress", "domain"); domain != "" {
+				name = secrets.CAKeyPairName(domain)
+			}
+		}
 		if name != "" {
 			result.Names = []string{name}
 		}
@@ -183,6 +199,16 @@ func clusterCAKeyPairs(ctx context.Context, id localclusters.Identity, readClust
 	}
 
 	return result
+}
+
+// tlsEndsOutsideCluster reports whether the EducatesClusterConfig
+// clusterConfig serves https with no certificate of the cluster's own:
+// the None certificates provider with ingress.protocol https, which a
+// local cluster has when its TLS ends at the router.
+func tlsEndsOutsideCluster(clusterConfig *unstructured.Unstructured) bool {
+	provider, _, _ := unstructured.NestedString(clusterConfig.Object, "spec", "ingress", "certificates", "provider")
+	protocol, _, _ := unstructured.NestedString(clusterConfig.Object, "spec", "ingress", "protocol")
+	return provider == string(translator.CertificatesProviderNone) && protocol == string(translator.IngressProtocolHTTPS)
 }
 
 // removeUnusedCAKeyPairs removes from the local secrets cache the CA key
@@ -230,6 +256,16 @@ func removeUnusedCAKeyPairs(ctx context.Context, w io.Writer, id localclusters.I
 	}
 }
 
+// refreshRouterAfterDelete refreshes the router once a local cluster's
+// kind cluster is gone, so it stops serving the cluster's domains, and
+// removes the cluster's certificate and key from the router folder,
+// whatever the router's state, warning when it can't. The reload keeps the
+// other clusters' open connections.
+func refreshRouterAfterDelete(ctx context.Context) {
+	rep := progress.New(os.Stdout, 0, isStdoutTTY(os.Stdout))
+	dockerRouterOperations(utils.GetEducatesHomeDir(), os.Stderr).refreshAfterDelete(ctx, rep, localClusterInventory)
+}
+
 // refreshResolverAfterDelete refreshes a running local DNS resolver once a
 // local cluster's kind cluster is gone, so it stops serving the domains
 // of a named cluster, warning when it can't.
@@ -256,8 +292,16 @@ running or stopped, uses it. The root CA and any TLS certificate you
 cached are never removed, and creating the cluster again mints a new CA
 key pair from the root CA.
 
-With --all it also deletes the local image registry, the DNS resolver and
-the registry mirrors, unless another local cluster still uses them.`,
+The router, which serves every local cluster, is refreshed so it no
+longer routes the cluster's names, keeping the other clusters' open
+connections. The certificate and key the router ended the cluster's TLS
+with, if any, are removed from the router folder of the data home, even
+when the router container is missing.
+
+With --all it also deletes the local image registry, the DNS resolver, the
+registry mirrors and the router, with the router folder of the data home,
+unless another local cluster still uses them. The router file,
+<data-home>/router.yaml, which holds the router address, is kept.`,
 		Example: localClusterDeleteExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			id, err := selectedEducatesCluster(cmd)
@@ -272,7 +316,7 @@ the registry mirrors, unless another local cluster still uses them.`,
 		&o.AllComponents,
 		"all",
 		false,
-		"also delete the image registry, resolver and registry mirrors, unless another local cluster still uses them",
+		"also delete the image registry, resolver, registry mirrors and router, unless another local cluster still uses them",
 	)
 	addLocalClusterFlag(c)
 

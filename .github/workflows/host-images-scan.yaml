@@ -1,0 +1,106 @@
+name: Host Images Scan
+
+# Every week, scan the container images the educates CLI runs as shared
+# host services (hack/list-host-images.sh) for vulnerabilities that have a
+# fix, and keep one issue open while an image has one of High or Critical
+# severity. See "Updating the Host Images" in
+# developer-docs/release-procedures.md.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-images-scan
+
+jobs:
+  scan:
+    name: Scan the host images
+    # Scheduled runs happen in the canonical repository only, so a fork
+    # opens no issue of its own unless someone runs it there by hand.
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'educates/educates-training-platform'
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.scan.outputs.result }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # The script runs the pinned scanner image and exits 0 when no image
+      # has a fixable vulnerability of High or above, 1 when one has, and
+      # 2 when an image could not be scanned, which fails this job.
+      - name: Scan
+        id: scan
+        run: |
+          set +e
+          hack/scan-host-images.sh > report.md
+          status=$?
+          set -e
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+          case $status in
+            0) echo "result=clean" >> "$GITHUB_OUTPUT" ;;
+            1) echo "result=flagged" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Not every host image could be scanned; the job summary has the report."
+               exit "$status" ;;
+          esac
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: host-images-report
+          path: report.md
+
+  issue:
+    name: Open, update or close the issue
+    needs: scan
+    runs-on: ubuntu-latest
+    # Only this job can write issues, and it runs no third-party code, so
+    # the scanner never holds a token that can.
+    permissions:
+      issues: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: host-images-report
+
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULT: ${{ needs.scan.outputs.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Fixable vulnerabilities in the CLI's host container images"
+          number=$(gh issue list --state open --limit 500 --json number,title \
+            | jq -r --arg title "$title" 'map(select(.title == $title)) | .[0].number // empty')
+
+          if [ "$RESULT" = "clean" ]; then
+            if [ -n "$number" ]; then
+              gh issue close "$number" --comment "The scan of $(date -u +%Y-%m-%d) found no fixable vulnerability of High or Critical severity in the host images: $RUN_URL"
+            fi
+            exit 0
+          fi
+
+          # An issue body holds at most 65536 characters.
+          {
+            head -c 60000 report.md
+            if [ "$(wc -c < report.md)" -gt 60000 ]; then
+              echo
+              echo
+              echo "The report is cut short here."
+            fi
+            echo
+            echo "Report of $RUN_URL. This issue is updated by each weekly scan and closed by the first one that finds no fixable vulnerability of High or Critical severity."
+          } > body.md
+
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file body.md
+          else
+            gh issue create --title "$title" --body-file body.md
+          fi

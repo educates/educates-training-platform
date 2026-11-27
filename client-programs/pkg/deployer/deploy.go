@@ -366,7 +366,7 @@ func installStep(ctx context.Context, opts Options, applier *apply.Client, waite
 // ingress domain the ready EducatesClusterConfig publishes in
 // status.ingress.domain. The service is otherwise fixed when the cluster
 // is created, so a deploy with another domain, or with the nip.io domain
-// of a listen address that has since changed, would leave it
+// of a router address that has since changed, would leave it
 // resolving the old one. A cluster without the service is left alone.
 // Educates is installed by the time this runs, so a failure is reported
 // as a warning and does not fail the deploy.

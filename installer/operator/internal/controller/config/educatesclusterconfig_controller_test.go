@@ -406,6 +406,44 @@ var _ = Describe("EducatesClusterConfig CRD validation", func() {
 		Expect(err.Error()).To(ContainSubstring("ingress.protocol http is only valid"))
 	})
 
+	It("accepts a certificates.none block with the None certificates provider", func() {
+		ingress := ingressWithCertificatesProvider(configv1alpha1.CertificatesProviderNone)
+		ingress.Protocol = configv1alpha1.IngressProtocolHTTPS
+		ingress.Certificates.None = &configv1alpha1.NoneCertificatesConfig{
+			CACertificateSecretRef: &configv1alpha1.SecretReference{Name: "terminator-ca"},
+		}
+		obj := &configv1alpha1.EducatesClusterConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+			Spec: configv1alpha1.EducatesClusterConfigSpec{
+				Mode:    configv1alpha1.ClusterConfigModeManaged,
+				Ingress: ingress,
+			},
+		}
+		Expect(k8sClient.Create(ctx, obj)).To(Succeed())
+	})
+
+	DescribeTable("rejects a certificates.none block with any other certificates provider (certificates CEL)",
+		func(provider configv1alpha1.CertificatesProvider) {
+			ingress := ingressWithCertificatesProvider(provider)
+			ingress.Certificates.None = &configv1alpha1.NoneCertificatesConfig{
+				CACertificateSecretRef: &configv1alpha1.SecretReference{Name: "terminator-ca"},
+			}
+			obj := &configv1alpha1.EducatesClusterConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+				Spec: configv1alpha1.EducatesClusterConfigSpec{
+					Mode:    configv1alpha1.ClusterConfigModeManaged,
+					Ingress: ingress,
+				},
+			}
+			err := k8sClient.Create(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("certificates.none is only valid when certificates.provider is None"))
+		},
+		Entry("BundledCertManager", configv1alpha1.CertificatesProviderBundledCertManager),
+		Entry("ExternalCertManager", configv1alpha1.CertificatesProviderExternalCertManager),
+		Entry("StaticCertificate", configv1alpha1.CertificatesProviderStaticCertificate),
+	)
+
 	It("rejects Managed-mode fields when mode is Inline (exclusivity CEL)", func() {
 		obj := &configv1alpha1.EducatesClusterConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: "cluster"},

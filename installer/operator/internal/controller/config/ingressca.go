@@ -38,6 +38,7 @@ const (
 	customCAKeyPairField = "spec.ingress.certificates.bundledCertManager.customCA.caKeyPairSecretRef"
 	customCATrustField   = "spec.ingress.certificates.bundledCertManager.customCA.caCertificateSecretRef"
 	staticCATrustField   = "spec.ingress.certificates.staticCertificate.caCertificateSecretRef"
+	noneCATrustField     = "spec.ingress.certificates.none.caCertificateSecretRef"
 	inlineCATrustField   = "spec.inline.ingress.caCertificateSecretRef"
 )
 
@@ -56,6 +57,20 @@ func customCAConfig(obj *configv1alpha1.EducatesClusterConfig) *configv1alpha1.C
 	return certs.BundledCertManager.CustomCA
 }
 
+// noneCertificatesConfig returns the Managed-mode None provider's
+// configuration, or nil when the spec is not in Managed mode, selects
+// another provider or sets no none block.
+func noneCertificatesConfig(obj *configv1alpha1.EducatesClusterConfig) *configv1alpha1.NoneCertificatesConfig {
+	if obj.Spec.Mode != configv1alpha1.ClusterConfigModeManaged || obj.Spec.Ingress == nil {
+		return nil
+	}
+	certs := obj.Spec.Ingress.Certificates
+	if certs.Provider != configv1alpha1.CertificatesProviderNone {
+		return nil
+	}
+	return certs.None
+}
+
 // secretRefNamespace resolves a SecretReference's namespace, where empty
 // means the operator namespace.
 func (r *EducatesClusterConfigReconciler) secretRefNamespace(ref configv1alpha1.SecretReference) string {
@@ -68,9 +83,9 @@ func (r *EducatesClusterConfigReconciler) secretRefNamespace(ref configv1alpha1.
 // ingressCASource returns the Secret the ingress CA trust is derived
 // from, the field that names it, and false when no CA is configured. A
 // referenced CA trust Secret is the source: in Inline mode, for the
-// StaticCertificate provider, and for a custom CA, where it wins over
-// the CA key pair. A custom CA without one derives the CA trust from
-// its CA key pair.
+// StaticCertificate and None providers, and for a custom CA, where it
+// wins over the CA key pair. A custom CA without one derives the CA
+// trust from its CA key pair.
 func (r *EducatesClusterConfigReconciler) ingressCASource(obj *configv1alpha1.EducatesClusterConfig) (pki.CASource, string, bool) {
 	var keyPair *referencedSecret
 	for _, s := range referencedSecrets(obj) {

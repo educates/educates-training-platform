@@ -6,7 +6,7 @@
 // serialises Output to YAML.
 //
 // Defaulting of environment-dependent fields (e.g. ingress.domain from
-// cluster.listenAddress, operator.image.tag from CLI binary version) does NOT happen
+// the router address, operator.image.tag from CLI binary version) does NOT happen
 // here. Translate consumes whatever the loader produced + any caller-side
 // pre-translate defaulting. This keeps the translator deterministic and
 // unit-testable.
@@ -53,6 +53,15 @@ const (
 	CertificatesProviderStaticCertificate  CertificatesProvider = "StaticCertificate"
 )
 
+// IngressProtocol is a value of EducatesClusterConfig ingress.protocol the
+// translators emit.
+type IngressProtocol string
+
+const (
+	IngressProtocolHTTP  IngressProtocol = "http"
+	IngressProtocolHTTPS IngressProtocol = "https"
+)
+
 // SecretRef names a Secret. An empty Namespace means the operator
 // namespace.
 type SecretRef struct {
@@ -74,6 +83,11 @@ type LocalCertificates struct {
 	// cluster serves this wildcard certificate and installs no
 	// cert-manager.
 	StaticCertificate *LocalStaticCertificate
+
+	// None is optionally set when Provider is None: the cluster issues no
+	// certificate, and trusts the CA of a certificate presented outside
+	// it, such as the router's for a cluster whose TLS ends at the router.
+	None *LocalNoneCertificates
 }
 
 // LocalCustomCA holds the Secret references of a BundledCertManager
@@ -99,6 +113,16 @@ type LocalStaticCertificate struct {
 	// CACertificateSecretRef optionally names the CA trust Secret
 	// (ca.crt) holding the CA the wildcard certificate verifies against,
 	// which Educates components trust. When nil no CA is configured.
+	CACertificateSecretRef *SecretRef
+}
+
+// LocalNoneCertificates holds the Secret reference of a None install
+// whose TLS ends outside the cluster.
+type LocalNoneCertificates struct {
+	// CACertificateSecretRef optionally names the CA trust Secret
+	// (ca.crt) holding the CA the certificate presented outside the
+	// cluster verifies against, which Educates components and nodes
+	// trust. When nil no CA is configured.
 	CACertificateSecretRef *SecretRef
 }
 

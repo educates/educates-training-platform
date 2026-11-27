@@ -24,15 +24,13 @@ The argument is a dotted field path; with no argument the top-level fields are l
 EducatesLocalConfig
 -------------------
 
-The laptop scenario: a local kind cluster with operator-managed cluster services and a self-signed CA. This is the only kind that lives at a fixed location (`<data-home>/config.yaml` for the default local cluster, and `<data-home>/clusters/<name>/config.yaml` for a named local cluster, where `<data-home>` is `$XDG_DATA_HOME/educates`, overridable via `EDUCATES_CLI_DATA_HOME`) and is managed with the `educates local config` commands rather than edited as a project file. Every local cluster's `cluster.listenAddress`, the default cluster's included, must be a specific IP address of the host, as described in [listen address](local-cluster-listen-address). See [local environment](local-environment).
+The laptop scenario: a local kind cluster with operator-managed cluster services and a self-signed CA. This is the only kind that lives at a fixed location (`<data-home>/config.yaml` for the default local cluster, and `<data-home>/clusters/<name>/config.yaml` for a named local cluster, where `<data-home>` is `$XDG_DATA_HOME/educates`, overridable via `EDUCATES_CLI_DATA_HOME`) and is managed with the `educates local config` commands rather than edited as a project file. A local cluster has no host address of its own: every local cluster is served through one router on the router address, kept in `router.yaml` in the data home, as described in [router address](local-router-address). See [local environment](local-environment).
 
 ```yaml
 apiVersion: cli.educates.dev/v1alpha1
 kind: EducatesLocalConfig
 ingress:
-  domain: workshops.educates.test    # empty = nip.io name of cluster.listenAddress
-cluster:
-  listenAddress: 10.10.10.1          # required: a specific IP address of the host
+  domain: workshops.educates.test    # empty = nip.io name of the router address
 lookupService: true                  # default true
 clusterAdmin: true                   # default true
 imagePrePuller:
@@ -41,10 +39,12 @@ operator:
   logLevel: info
 ```
 
-Key fields (all optional but `cluster.listenAddress`: an `apiVersion` + `kind` stub validates against the schema, but a local cluster can't use it until `cluster.listenAddress` is set, which `educates local config init` writes):
+Key fields (all optional: an `apiVersion` + `kind` stub, which `educates local config init` writes, is a configuration a local cluster can use):
 
-* `ingress.domain`: wildcard ingress domain. When empty, for a local cluster's configuration, the CLI falls back to the `nip.io` name of `cluster.listenAddress`, such as `10-10-10-1.nip.io`.
-* `cluster.listenAddress`: the specific IP address of the host the cluster publishes its ports 80 and 443 on: neither `0.0.0.0` nor a loopback address. `educates local config init` writes the IP address of the host.
+* `ingress.domain`: wildcard ingress domain. When empty, for a local cluster's configuration, the CLI falls back to the `nip.io` name of the router address for the default local cluster, such as `10-10-10-1.nip.io`, and to the cluster's name under it for a named one, such as `test2.10-10-10-1.nip.io`.
+* `ingress.insecure`: serves the cluster over plain HTTP, with no CA or certificate. The CLI sets it for a `nip.io` domain it falls back to, unless `ingress.externalTLSTermination` is set.
+* `ingress.externalTLSTermination`: ends TLS for the cluster's ingress domain at the router, which forwards plain HTTP to the cluster, as a load balancer does in front of a cloud cluster with the other kinds' `externalTLSTermination`. The cluster gets the `None` certificates provider with `ingress.protocol: https`, and trusts the CA that verifies the router's certificate through `none.caCertificateSecretRef`. It can't be combined with `ingress.insecure`. See [TLS ended at the router](local-router-tls-termination).
+* `cluster.listenAddress`: removed. A local cluster has no host address of its own, since the router publishes ports 80 and 443 for every local cluster on the router address in `router.yaml`, which `educates local router update --address <ip>` sets. A configuration in the data home that still has the field, the default local cluster's or a named one's, has it removed the first time a command reads it, keeping the previous configuration as a backup beside it. When `router.yaml` is missing, the default local cluster's address becomes the router address, provided it is a specific IP address, neither `0.0.0.0` nor a loopback address. A command that needs the router address while `router.yaml` is missing moves the default local cluster's address first, whichever local cluster it acts on, so a named cluster's configuration without `ingress.domain` takes its `nip.io` name from that address. A configuration elsewhere with the field, or an `EducatesConfig` with `target.cluster.listenAddress`, fails to load with an error naming `router.yaml` and the command that sets the router address, and is left as it is.
 * `cluster.*`: kind cluster shape: API server overrides, pod/service subnets, host volume mounts. Registry pull-through mirrors are not declared here but once for every local cluster, in `mirrors.yaml` in the CLI data home, as [declaring mirrors for every cluster](local-mirrors-file) describes. `educates local mirror deploy` records a mirror there and `educates local mirror delete` removes it. A configuration in the data home that still has `cluster.registryMirrors` has its mirrors moved there the first time a command reads it, keeping the previous configuration as a backup beside it, and a configuration elsewhere with it fails to load, showing the `educates local mirror deploy` commands that record its mirrors, as [mirrors in a cluster's configuration](local-mirrors-move) describes.
 * `resolver.*` — local DNS resolver settings (macOS `*.educates.test` style resolution).
 * `clusterAdmin`, `lookupService` — component toggles (both default `true`).
@@ -190,7 +190,7 @@ lookupService:              # omit the block entirely to not deploy the componen
 sessionManager: {}
 ```
 
-The `target` block only drives side effects of the CLI, and `kind` is its only `provider`. With `provider: kind`, `educates local cluster create --config <file>` creates the local kind cluster from `target.cluster`, which takes the same fields as the `cluster` block of `EducatesLocalConfig`, so `target.cluster.listenAddress` must be a specific IP address of the host, and then deploys the custom resources as the file declares them. None of the defaults of `EducatesLocalConfig` apply to the custom resources: the ingress domain is not derived from the listen address, no certificate is chosen from the local secrets cache, and the lookup service is deployed only when the `lookupService` block is present, which must then set `ingress.prefix`, as the other kinds do with `lookup`. The loopback service that `educates serve-workshop` relies on resolves under the ingress domain of the `educatesClusterConfig` block. `target.resolver` takes the same fields as the `resolver` block of `EducatesLocalConfig`, and `educates local resolver deploy --config <file>` sets up the local DNS resolver for that same ingress domain. The cluster gets the registry mirrors `mirrors.yaml` in the CLI data home declares, as every local cluster does, so `target.cluster` takes no `registryMirrors`.
+The `target` block only drives side effects of the CLI, and `kind` is its only `provider`. With `provider: kind`, `educates local cluster create --config <file>` creates the local kind cluster from `target.cluster`, which takes the same fields as the `cluster` block of `EducatesLocalConfig`, and then deploys the custom resources as the file declares them. None of the defaults of `EducatesLocalConfig` apply to the custom resources: the ingress domain is not derived from the router address, no certificate is chosen from the local secrets cache, and the lookup service is deployed only when the `lookupService` block is present, which must then set `ingress.prefix`, as the other kinds do with `lookup`. The loopback service that `educates serve-workshop` relies on resolves under the ingress domain of the `educatesClusterConfig` block. `target.resolver` takes the same fields as the `resolver` block of `EducatesLocalConfig`, and `educates local resolver deploy --config <file>` sets up the local DNS resolver for that same ingress domain. The cluster gets the registry mirrors `mirrors.yaml` in the CLI data home declares, as every local cluster does, so `target.cluster` takes no `registryMirrors`.
 
 The CLI copies no Secrets from its local secrets cache into the cluster for an `EducatesConfig`, so you create any Secret the custom resources reference, such as a CA key pair or a wildcard certificate, in the cluster yourself. To create them before Educates is deployed, run `educates local cluster create --cluster-only --config <file>`, create the Secrets, and then run `educates admin platform deploy --config <file>`.
 
@@ -216,6 +216,25 @@ educatesClusterConfig:
 ```
 
 See [secure HTTP connections](secure-http-connections) for how the operator checks and serves the certificate.
+
+When a load balancer or proxy in front of the cluster terminates TLS and forwards plain HTTP inward, the `None` certificates provider with `ingress.protocol: https` describes it, as the configuration kinds' `externalTLSTermination` does. When the certificate it presents was issued by a CA that is not publicly trusted, name a CA trust Secret holding that CA's certificate under `ca.crt` in `none.caCertificateSecretRef`, which the other configuration kinds do not offer, so Educates components and the cluster nodes trust it. The `none` block is accepted only with the `None` provider.
+
+```yaml
+educatesClusterConfig:
+  mode: Managed
+  ingress:
+    domain: workshops.example.com
+    ingressClassName: contour
+    protocol: https
+    controller:
+      provider: BundledContour
+    certificates:
+      provider: None
+      none:
+        caCertificateSecretRef:     # optional, ca.crt of the CA that issued the proxy's certificate
+          name: proxy-ca
+          namespace: educates-secrets
+```
 
 In `Managed` mode, `educatesClusterConfig.policyEnforcement` is required. Workshop security is enforced by Kyverno, and both the `clusterPolicy` and the `workshopPolicy` engines default to `Kyverno`, so whenever either engine is `Kyverno` the `kyverno` block must say how Kyverno is provided: `Bundled` has the operator install it, and `External` uses a Kyverno already installed in the cluster. Setting both engines to `None` runs Educates without workshop security, which is only acceptable for trusted users (see [cluster requirements](cluster-requirements)). A spec that leaves out either block fails validation before any cluster service is installed, with the `ValidationSucceeded` condition of the `EducatesClusterConfig` naming the missing field.
 
@@ -299,7 +318,7 @@ Runtime behavior settings live on the `SessionManager` custom resource spec, rea
   every node ahead of time. It is off unless ``enabled`` is ``true``. See
   [pre-pulling workshop images](pre-pulling-workshop-images).
 * `imagePullSecretPropagation.sessionNamespaces`: whether workshop session namespaces get copies of the cluster configuration's image pull secrets, `true` unless set. Workshop users can read the secrets there, so `false` keeps the credentials from them; the namespace of a session's vcluster gets them either way. See [air-gapped installation](airgapped-installation) for what then pulls images there.
-* `nodeCATrust`, `remoteAccess`: node-level CA trust injection and cross-cluster CLI access. With `nodeCATrust.mode` at its default, `Auto`, the node CA injector is installed whenever the cluster publishes a CA, which includes every Managed mode install with a custom CA, every `StaticCertificate` install that names a CA trust Secret, and every Inline mode install that names a CA Secret, and also whenever `ingressOverrides.caCertificateSecretRef` is set. Nodes trust the CA the session manager uses: the override's `educates-session-manager-ingress-ca` when one is set, otherwise the cluster's `educates-ingress-ca`. With `Enabled`, the `SessionManager` reports `Ready` as `False` only when neither the cluster nor an override provides a CA. Set it to `Disabled` to keep the privileged node CA injector DaemonSet off. With `remoteAccess.mode` at its default, `Auto`, remote access is installed whenever a `LookupService` exists. The lookup service monitors the cluster it runs on through remote access, so with `Disabled` it still starts but does not monitor that cluster, as [Cluster Monitoring](../lookup-service/cluster-monitoring) describes.
+* `nodeCATrust`, `remoteAccess`: node-level CA trust injection and cross-cluster CLI access. With `nodeCATrust.mode` at its default, `Auto`, the node CA injector is installed whenever the cluster publishes a CA, which includes every Managed mode install with a custom CA, every `StaticCertificate` or `None` provider install that names a CA trust Secret, and every Inline mode install that names a CA Secret, and also whenever `ingressOverrides.caCertificateSecretRef` is set. Nodes trust the CA the session manager uses: the override's `educates-session-manager-ingress-ca` when one is set, otherwise the cluster's `educates-ingress-ca`. With `Enabled`, the `SessionManager` reports `Ready` as `False` only when neither the cluster nor an override provides a CA. Set it to `Disabled` to keep the privileged node CA injector DaemonSet off. With `remoteAccess.mode` at its default, `Auto`, remote access is installed whenever a `LookupService` exists. The lookup service monitors the cluster it runs on through remote access, so with `Disabled` it still starts but does not monitor that cluster, as [Cluster Monitoring](../lookup-service/cluster-monitoring) describes.
 
 Use `kubectl explain sessionmanager.spec` for the full schema. A few spec blocks (`defaultAccessCredentials`, `registryMirrors`, and ConfigMap/URL-sourced themes) are reserved in the CRD but rejected as not yet supported in this release.
 

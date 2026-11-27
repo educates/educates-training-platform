@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v2"
 
@@ -21,45 +20,19 @@ const DefaultLocalConfigModeline = `# yaml-language-server: $schema=` + v1alpha1
 // mirrors file for completion and validation.
 const LocalMirrorsModeline = `# yaml-language-server: $schema=` + v1alpha1.SchemaBaseURL + v1alpha1.KindEducatesLocalMirrors + `.json`
 
-// hostIPListenAddressComment is the comment above a cluster.listenAddress
-// the CLI wrote from the host's detected IP address.
-const hostIPListenAddressComment = `  # This host's IP address when this file was written. An alias such as
-  # 10.10.10.1, added to a network interface, survives network changes.
-`
+// LocalRouterModeline is the yaml-language-server modeline that points
+// editors at the published EducatesLocalRouter schema of the router file
+// for completion and validation.
+const LocalRouterModeline = `# yaml-language-server: $schema=` + v1alpha1.SchemaBaseURL + v1alpha1.KindEducatesLocalRouter + `.json`
 
 // MarshalLocalConfig returns cfg as the CLI writes an EducatesLocalConfig
-// into the data home: the yaml-language-server modeline, then cfg. When
-// listenAddressIsHostIP is set, cfg's cluster.listenAddress is the host's
-// IP address the CLI detected, and a comment above it says so, and that
-// an alias such as 10.10.10.1 survives network changes.
-func MarshalLocalConfig(cfg *v1alpha1.EducatesLocalConfig, listenAddressIsHostIP bool) ([]byte, error) {
+// into the data home: the yaml-language-server modeline, then cfg.
+func MarshalLocalConfig(cfg *v1alpha1.EducatesLocalConfig) ([]byte, error) {
 	body, err := yaml.Marshal(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("marshal the local config: %w", err)
 	}
-	if listenAddressIsHostIP {
-		body = commentListenAddress(body, hostIPListenAddressComment)
-	}
 	return append([]byte(DefaultLocalConfigModeline+"\n"), body...), nil
-}
-
-// commentListenAddress returns body, an EducatesLocalConfig as
-// yaml.Marshal writes it, with comment above the line of its
-// cluster.listenAddress.
-func commentListenAddress(body []byte, comment string) []byte {
-	lines := strings.SplitAfter(string(body), "\n")
-	inCluster := false
-	for i, line := range lines {
-		switch {
-		case line == "cluster:\n":
-			inCluster = true
-		case inCluster && strings.HasPrefix(line, "  listenAddress:"):
-			return []byte(strings.Join(lines[:i], "") + comment + strings.Join(lines[i:], ""))
-		case !strings.HasPrefix(line, " "):
-			inCluster = false
-		}
-	}
-	return body
 }
 
 // LocalConfigPath is the path of the local config in the data home
@@ -119,6 +92,26 @@ func DnsmasqIncludeDir(dataHome string) string {
 // the rest of the file as the user wrote it.
 func LocalMirrorsPath(dataHome string) string {
 	return filepath.Join(dataHome, "mirrors.yaml")
+}
+
+// LocalRouterPath is the path of the router file in the data home
+// dataHome: <data-home>/router.yaml. It declares, as an
+// EducatesLocalRouter, the router address, the one host address every
+// local cluster is served on. LoadLocalRouter loads it, and
+// CreateLocalRouter and SetLocalRouterAddress write it, keeping the rest
+// of the file as the user wrote it.
+func LocalRouterPath(dataHome string) string {
+	return filepath.Join(dataHome, "router.yaml")
+}
+
+// LocalRouterDir is the path of the router folder in the data home
+// dataHome: <data-home>/router. It holds the router's configuration, which
+// the CLI renders from every local cluster's config, and the router
+// container mounts it read-only. It is the CLI's alone: the CLI rewrites
+// it as local clusters are created, started and deleted, and removes it
+// with the router, keeping router.yaml.
+func LocalRouterDir(dataHome string) string {
+	return filepath.Join(dataHome, "router")
 }
 
 // LoadLocalConfigIfPresent loads the local config of the data home

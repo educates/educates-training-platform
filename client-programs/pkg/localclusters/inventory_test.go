@@ -104,10 +104,11 @@ func writeClusterConfig(t *testing.T, dataHome, name, body string) {
 
 func TestListRows(t *testing.T) {
 	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: educates.test\n")
-	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.2\n")
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader)
 	writeClusterConfig(t, dataHome, "test3", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.3\ningress:\n  domain: test3.educates.test\n")
+		"ingress:\n  domain: test3.educates.test\n")
 	observed := Observed{Nodes: []NodeContainer{
 		withKubernetesVersion(controlPlane("educates", "10.10.10.1", true), "v1.36.4"),
 		withKubernetesVersion(controlPlane("educates-test2", "10.10.10.2", false), "v1.35.8"),
@@ -120,15 +121,15 @@ func TestListRows(t *testing.T) {
 	rows := NewInventory(observed, dataHome).List()
 
 	want := []struct {
-		name, state             string
-		nodes                   int
-		version                 string
-		listen, domain, context string
-		isDefault               bool
+		name, state     string
+		nodes           int
+		version         string
+		domain, context string
+		isDefault       bool
 	}{
-		{"", "running", 1, "v1.36.4", "10.10.10.1", "educates.test", "kind-educates", true},
-		{"test2", "stopped", 2, "v1.35.8", "10.10.10.2", "10-10-10-2.nip.io", "kind-educates-test2", false},
-		{"test3", "partly running", 2, "", "10.10.10.3", "test3.educates.test", "kind-educates-test3", false},
+		{"", "running", 1, "v1.36.4", "educates.test", "kind-educates", true},
+		{"test2", "stopped", 2, "v1.35.8", "test2.10-10-10-1.nip.io", "kind-educates-test2", false},
+		{"test3", "partly running", 2, "", "test3.educates.test", "kind-educates-test3", false},
 	}
 	if len(rows) != len(want) {
 		t.Fatalf("List() returned %d rows, want %d: %+v", len(rows), len(want), rows)
@@ -136,10 +137,10 @@ func TestListRows(t *testing.T) {
 	for i, w := range want {
 		r := rows[i]
 		if r.Identity.Name != w.name || r.Identity.IsDefault() != w.isDefault || string(r.State) != w.state ||
-			r.Nodes != w.nodes || r.KubernetesVersion != w.version || r.ListenAddress != w.listen ||
+			r.Nodes != w.nodes || r.KubernetesVersion != w.version ||
 			r.Domain != w.domain || r.Identity.Context != w.context {
-			t.Errorf("row %d = {name %q, default %t, state %q, nodes %d, version %q, listen %q, domain %q, context %q}, want %+v",
-				i, r.Identity.Name, r.Identity.IsDefault(), r.State, r.Nodes, r.KubernetesVersion, r.ListenAddress,
+			t.Errorf("row %d = {name %q, default %t, state %q, nodes %d, version %q, domain %q, context %q}, want %+v",
+				i, r.Identity.Name, r.Identity.IsDefault(), r.State, r.Nodes, r.KubernetesVersion,
 				r.Domain, r.Identity.Context, w)
 		}
 		if r.ConfigError != nil {
@@ -150,16 +151,20 @@ func TestListRows(t *testing.T) {
 
 func TestListRowsShowTheDomainTheResolverServes(t *testing.T) {
 	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n")
-	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.2\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader)
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader)
 	inv := NewInventory(Observed{Nodes: []NodeContainer{
 		controlPlane("educates", "10.10.10.1", true),
 		controlPlane("educates-test2", "10.10.10.2", true),
 	}}, dataHome)
 
+	if err := writeRouterFileUnlessPresent(dataHome, "10.10.10.1"); err != nil {
+		t.Fatal(err)
+	}
+
 	rows := inv.List()
 
-	for i, want := range []string{"10-10-10-1.nip.io", "10-10-10-2.nip.io"} {
+	for i, want := range []string{"10-10-10-1.nip.io", "test2.10-10-10-1.nip.io"} {
 		if got := rows[i].Domain; got != want {
 			t.Errorf("%s's domain = %q, want %q", rows[i].Identity.Description(), got, want)
 		}
@@ -175,18 +180,16 @@ func TestListRowsShowTheDomainTheResolverServes(t *testing.T) {
 	}
 }
 
-func TestListRowsReportADefaultConfigWithoutASpecificListenAddress(t *testing.T) {
-	stubHostIP(t, "192.168.50.151")
+func TestListRowsReportAConfigWithoutADomainOrARouterFile(t *testing.T) {
 	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader)
 
-	rows := NewInventory(Observed{Nodes: []NodeContainer{controlPlane("educates", "127.0.0.1", true)}}, dataHome).List()
+	rows := NewInventory(Observed{Nodes: []NodeContainer{kindControlPlane("educates", true)}}, dataHome).List()
 
 	if rows[0].Domain != "" {
 		t.Errorf("domain = %q, want none for a config that does not load", rows[0].Domain)
 	}
-	wantErrorMentioning(t, rows[0].ConfigError, "cluster.listenAddress", "must be set",
-		"educates local config set cluster.listenAddress 192.168.50.151")
+	wantErrorMentioning(t, rows[0].ConfigError, "router.yaml", "educates local router update --address <ip>")
 }
 
 func TestListRowsOfClustersWithoutAConfig(t *testing.T) {
@@ -207,14 +210,11 @@ func TestListRowsOfClustersWithoutAConfig(t *testing.T) {
 			t.Errorf("row of %s: domain %q, config error %v; want no domain and no error", r.Identity.KindName, r.Domain, r.ConfigError)
 		}
 	}
-	if rows[0].ListenAddress != "0.0.0.0" {
-		t.Errorf("listen address of the default cluster = %q, want 0.0.0.0", rows[0].ListenAddress)
-	}
 }
 
 func TestListRowsReportAConfigThatDoesNotLoad(t *testing.T) {
 	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
+	writeClusterConfig(t, dataHome, "test2", twoControlPlanesConfig)
 	observed := Observed{Nodes: []NodeContainer{controlPlane("educates-test2", "10.10.10.2", true)}}
 
 	rows := NewInventory(observed, dataHome).List()
@@ -225,7 +225,7 @@ func TestListRowsReportAConfigThatDoesNotLoad(t *testing.T) {
 	if rows[0].Domain != "" {
 		t.Errorf("domain = %q, want none", rows[0].Domain)
 	}
-	wantErrorMentioning(t, rows[0].ConfigError, "loopback")
+	wantErrorMentioning(t, rows[0].ConfigError, twoControlPlanes)
 }
 
 func TestListRowsCountTheKubernetesNodesAlone(t *testing.T) {
@@ -264,19 +264,6 @@ func TestListRowsTakeTheKubernetesVersionOfTheFirstControlPlane(t *testing.T) {
 	}
 }
 
-func TestListRowsLeaveTheListenAddressEmptyWithNoIngressBinding(t *testing.T) {
-	dataHome := t.TempDir()
-	observed := Observed{Nodes: []NodeContainer{
-		{Name: "educates-control-plane", KindCluster: "educates", Role: "control-plane"},
-	}}
-
-	rows := NewInventory(observed, dataHome).List()
-
-	if len(rows) != 1 || rows[0].ListenAddress != "" {
-		t.Errorf("List() = %+v, want one row with no listen address", rows)
-	}
-}
-
 // hostInterfaces are the interface addresses of a host with the default
 // cluster's and two more host IPs added.
 var hostInterfaces = []netip.Addr{
@@ -298,226 +285,6 @@ func namedForTest(t *testing.T, dataHome, name string) Identity {
 		t.Fatal(err)
 	}
 	return id
-}
-
-func TestCheckCreateRefusesAnIPAnotherClusterBinds(t *testing.T) {
-	cases := []struct {
-		name  string
-		other NodeContainer
-		state string
-	}{
-		{name: "running", other: controlPlane("educates-test2", "10.10.10.2", true), state: "running"},
-		{name: "stopped", other: controlPlane("educates-test2", "10.10.10.2", false), state: "stopped"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dataHome := t.TempDir()
-			namedForTest(t, dataHome, "test2")
-			test3 := namedForTest(t, dataHome, "test3")
-			inv := NewInventory(Observed{Nodes: []NodeContainer{tc.other}, InterfaceAddresses: hostInterfaces}, dataHome)
-
-			err := inv.CheckCreate(test3, "10.10.10.2")
-
-			wantErrorMentioning(t, err, `local cluster "test3"`, `local cluster "test2"`, tc.state, "10.10.10.2", "host IP of its own")
-		})
-	}
-}
-
-func TestCheckCreateRefusesTheDefaultClustersIPForANamedCluster(t *testing.T) {
-	dataHome := t.TempDir()
-	test2 := namedForTest(t, dataHome, "test2")
-	inv := NewInventory(Observed{
-		Nodes:              []NodeContainer{controlPlane("educates", "10.10.10.1", true)},
-		InterfaceAddresses: hostInterfaces,
-	}, dataHome)
-
-	err := inv.CheckCreate(test2, "10.10.10.1")
-
-	wantErrorMentioning(t, err, `local cluster "test2"`, "the default local cluster", "10.10.10.1")
-}
-
-func TestCheckCreateRefusesANamedClusterBesideADefaultClusterOnEveryAddress(t *testing.T) {
-	for _, bound := range []string{"0.0.0.0", "::"} {
-		t.Run(bound, func(t *testing.T) {
-			dataHome := t.TempDir()
-			test2 := namedForTest(t, dataHome, "test2")
-			inv := NewInventory(Observed{
-				Nodes:              []NodeContainer{controlPlane("educates", bound, true)},
-				InterfaceAddresses: hostInterfaces,
-			}, dataHome)
-
-			err := inv.CheckCreate(test2, "10.10.10.2")
-
-			wantErrorMentioning(t, err, `local cluster "test2"`, "the default local cluster", bound,
-				"every host address", "Re-create the default local cluster on a specific IP")
-		})
-	}
-}
-
-func TestCheckCreateRefusesTheDefaultClusterOnEveryAddressBesideANamedCluster(t *testing.T) {
-	dataHome := t.TempDir()
-	namedForTest(t, dataHome, "test2")
-	inv := NewInventory(Observed{
-		Nodes:              []NodeContainer{controlPlane("educates-test2", "10.10.10.2", false)},
-		InterfaceAddresses: hostInterfaces,
-	}, dataHome)
-
-	err := inv.CheckCreate(Default(dataHome), "0.0.0.0")
-
-	wantErrorMentioning(t, err, "the default local cluster", `local cluster "test2"`, "stopped", "10.10.10.2",
-		"every host address", "cluster.listenAddress", "specific IP")
-}
-
-func TestCheckCreateAllowsClustersOnIPsOfTheirOwn(t *testing.T) {
-	dataHome := t.TempDir()
-	namedForTest(t, dataHome, "test2")
-	test3 := namedForTest(t, dataHome, "test3")
-	observed := Observed{
-		Nodes: []NodeContainer{
-			controlPlane("educates", "127.0.0.1", true),
-			controlPlane("educates-test2", "10.10.10.2", false),
-		},
-		InterfaceAddresses: hostInterfaces,
-	}
-	inv := NewInventory(observed, dataHome)
-
-	if err := inv.CheckCreate(test3, "10.10.10.3"); err != nil {
-		t.Errorf("CheckCreate(test3, 10.10.10.3) = %v, want no error", err)
-	}
-	if err := inv.CheckCreate(Default(dataHome), "10.10.10.1"); err != nil {
-		t.Errorf("CheckCreate(default, 10.10.10.1) = %v, want no error", err)
-	}
-}
-
-func TestCheckCreateIgnoresKindClustersThatAreNotEducatesClusters(t *testing.T) {
-	dataHome := t.TempDir()
-	test2 := namedForTest(t, dataHome, "test2")
-	observed := Observed{
-		Nodes: []NodeContainer{
-			controlPlane("educates-x", "10.10.10.2", true),
-			controlPlane("kind", "0.0.0.0", true),
-		},
-		InterfaceAddresses: hostInterfaces,
-	}
-
-	if err := NewInventory(observed, dataHome).CheckCreate(test2, "10.10.10.2"); err != nil {
-		t.Errorf("CheckCreate = %v, want no error", err)
-	}
-}
-
-func TestCheckCreateRefusesAnAddressOnNoHostInterface(t *testing.T) {
-	dataHome := t.TempDir()
-	test4 := namedForTest(t, dataHome, "test4")
-	inv := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, dataHome)
-
-	err := inv.CheckCreate(test4, "10.10.10.4")
-
-	wantErrorMentioning(t, err, `local cluster "test4"`, "10.10.10.4", "no network interface")
-}
-
-func TestCheckCreateAllowsEveryAddressWithNoOtherCluster(t *testing.T) {
-	inv := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, t.TempDir())
-
-	if err := inv.CheckCreate(Default(t.TempDir()), "0.0.0.0"); err != nil {
-		t.Errorf("CheckCreate(default, 0.0.0.0) = %v, want no error", err)
-	}
-}
-
-func TestCheckCreateReportsAClashBeforeAMissingInterface(t *testing.T) {
-	dataHome := t.TempDir()
-	namedForTest(t, dataHome, "test2")
-	test3 := namedForTest(t, dataHome, "test3")
-	inv := NewInventory(Observed{
-		Nodes:              []NodeContainer{controlPlane("educates-test2", "10.10.10.9", false)},
-		InterfaceAddresses: hostInterfaces,
-	}, dataHome)
-
-	err := inv.CheckCreate(test3, "10.10.10.9")
-
-	wantErrorMentioning(t, err, `local cluster "test2"`, "host IP of its own")
-}
-
-func TestCheckCreateRefusesAnAddressThatIsNotAnIP(t *testing.T) {
-	dataHome := t.TempDir()
-	inv := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, dataHome)
-
-	err := inv.CheckCreate(Default(dataHome), "localhost")
-
-	wantErrorMentioning(t, err, "localhost", "not an IP address")
-}
-
-func TestCheckStartRefusesAnIPAnotherClusterBinds(t *testing.T) {
-	dataHome := t.TempDir()
-	test2 := namedForTest(t, dataHome, "test2")
-	namedForTest(t, dataHome, "test3")
-	inv := NewInventory(Observed{
-		Nodes: []NodeContainer{
-			controlPlane("educates-test2", "10.10.10.2", false),
-			controlPlane("educates-test3", "10.10.10.2", true),
-		},
-		InterfaceAddresses: hostInterfaces,
-	}, dataHome)
-
-	err := inv.CheckStart(test2)
-
-	wantErrorMentioning(t, err, `local cluster "test2"`, `local cluster "test3"`, "running", "10.10.10.2")
-}
-
-func TestCheckStartTellsADefaultClusterOnEveryAddressToBeRecreated(t *testing.T) {
-	dataHome := t.TempDir()
-	namedForTest(t, dataHome, "test2")
-	inv := NewInventory(Observed{
-		Nodes: []NodeContainer{
-			controlPlane("educates", "0.0.0.0", false),
-			controlPlane("educates-test2", "10.10.10.2", true),
-		},
-		InterfaceAddresses: hostInterfaces,
-	}, dataHome)
-
-	err := inv.CheckStart(Default(dataHome))
-
-	wantErrorMentioning(t, err, "the default local cluster", `local cluster "test2"`, "0.0.0.0",
-		"Re-create the default local cluster on a specific IP")
-}
-
-func TestCheckStartAllowsAClusterOnAnIPOfItsOwn(t *testing.T) {
-	dataHome := t.TempDir()
-	test2 := namedForTest(t, dataHome, "test2")
-	inv := NewInventory(Observed{
-		Nodes: []NodeContainer{
-			controlPlane("educates", "10.10.10.1", true),
-			controlPlane("educates-test2", "10.10.10.2", false),
-			{Name: "educates-test2-worker", KindCluster: "educates-test2", Role: "worker"},
-		},
-		InterfaceAddresses: hostInterfaces,
-	}, dataHome)
-
-	if err := inv.CheckStart(test2); err != nil {
-		t.Errorf("CheckStart(test2) = %v, want no error", err)
-	}
-}
-
-func TestCheckStartRefusesAnAddressOnNoHostInterface(t *testing.T) {
-	dataHome := t.TempDir()
-	test2 := namedForTest(t, dataHome, "test2")
-	inv := NewInventory(Observed{
-		Nodes:              []NodeContainer{controlPlane("educates-test2", "10.10.10.7", false)},
-		InterfaceAddresses: hostInterfaces,
-	}, dataHome)
-
-	err := inv.CheckStart(test2)
-
-	wantErrorMentioning(t, err, `local cluster "test2"`, "10.10.10.7", "no network interface")
-}
-
-func TestCheckStartLeavesAClusterWithNoNodesToTheStart(t *testing.T) {
-	dataHome := t.TempDir()
-	test2 := namedForTest(t, dataHome, "test2")
-	inv := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, dataHome)
-
-	if err := inv.CheckStart(test2); err != nil {
-		t.Errorf("CheckStart(test2) = %v, want no error", err)
-	}
 }
 
 func TestCheckEducatesClusterRefusesANamedClusterWithoutAFolder(t *testing.T) {
@@ -652,36 +419,5 @@ func TestClusterOfContext(t *testing.T) {
 				t.Errorf("ClusterOfContext(%q) is the cluster of context %q", tc.context, id.Context)
 			}
 		})
-	}
-}
-
-func TestConfiguredWithListenAddress(t *testing.T) {
-	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.3\n")
-	writeClusterConfig(t, dataHome, "race-a", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.3\n")
-	writeClusterConfig(t, dataHome, "race-b", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.3\n")
-	writeClusterConfig(t, dataHome, "elsewhere", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.4\n")
-	writeClusterConfig(t, dataHome, "broken", "kind: [\n")
-	addClusterFolder(t, dataHome, "no-config")
-	addClusterFolder(t, dataHome, "Not_A_Name")
-	creating := namedForTest(t, dataHome, "race-b")
-
-	got := ConfiguredWithListenAddress(dataHome, creating, "10.10.10.3")
-
-	var names []string
-	for _, id := range got {
-		names = append(names, id.Description())
-	}
-	want := []string{"the default local cluster", `local cluster "race-a"`}
-	if !slices.Equal(names, want) {
-		t.Errorf("ConfiguredWithListenAddress() = %q, want %q", names, want)
-	}
-}
-
-func TestConfiguredWithListenAddressFindsNoneWithoutConfigs(t *testing.T) {
-	dataHome := t.TempDir()
-
-	if got := ConfiguredWithListenAddress(dataHome, Default(dataHome), "10.10.10.3"); len(got) != 0 {
-		t.Errorf("ConfiguredWithListenAddress() = %v, want none", got)
 	}
 }

@@ -367,8 +367,9 @@ func (r *EducatesClusterConfigReconciler) markManagedReady(obj *configv1alpha1.E
 			Name: wildcardClusterIssuer,
 		}
 	}
-	// A configured CA reaches components only through the key-free
-	// Secret ensureIngressCATrust derived.
+	// A configured CA, the None provider's CA trust for TLS terminated
+	// outside the cluster included, reaches components only through the
+	// key-free Secret ensureIngressCATrust derived.
 	if _, _, ok := r.ingressCASource(obj); ok {
 		status.CACertificateSecretRef = r.ingressCASecretRef()
 	}

@@ -35,7 +35,7 @@ const adminPlatformRenderExample = `
 
   # Render the install for laptop convenience (uses the default local
   # cluster's <data-home>/config.yaml). When ingress.domain is empty, it
-  # falls back to the nip.io name of cluster.listenAddress.
+  # falls back to the nip.io name of the router address.
   educates admin platform render --local-config
 
   # Render the install of the named local cluster test2 from its own config:
@@ -85,9 +85,10 @@ Defaulting is flag-driven:
                     MUST set ingress.domain. Render is deterministic for a
                     given (input, CLI version) pair.
   --local-config    Laptop convenience mode. Same defaults, plus the
-                    rules of a local cluster's config: a specific
-                    cluster.listenAddress, and its nip.io name as the
-                    ingress.domain fallback when empty.
+                    rules of a local cluster's config: the nip.io name
+                    of the router address, with a named local cluster's
+                    name under it, as the ingress.domain fallback when
+                    empty.
 
 --local-config reads the config of the local cluster that --local-cluster
 or EDUCATES_LOCAL_CLUSTER selects: <data-home>/config.yaml for the default
@@ -131,11 +132,11 @@ func (p *ProjectInfo) runRender(w io.Writer, o *PlatformRenderOptions) error {
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
 		// The local cluster rules of --local-config have already given
-		// an empty ingress.domain the nip.io name of the listen address.
+		// an empty ingress.domain a nip.io name.
 		if !o.LocalConfig && c.Ingress.Domain == "" {
 			return fmt.Errorf(`ingress.domain is required when using --config.
 Set it explicitly in %s, or use --local-config to fall back to the nip.io
-name of cluster.listenAddress.`, path)
+name of the router address.`, path)
 		}
 		// The certificates come from the local certificate resolution
 		// step. Failing here (before any rendering) gives the user a

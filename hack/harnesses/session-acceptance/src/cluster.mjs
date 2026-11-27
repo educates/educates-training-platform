@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { parseClusterList } from "../../lib/local-cluster-list.mjs";
+import { routerAddressFor } from "../../lib/local-router-status.mjs";
 
 // run runs a command and resolves with its exit code and output. It never
 // rejects on a non-zero exit, so callers decide what a failure means.
@@ -48,7 +49,7 @@ export class LocalCluster {
     // The CLI writes every local cluster's context into this file, whatever
     // KUBECONFIG says, so kubectl reads it from there too.
     this.kubeconfig = path.join(os.homedir(), ".kube", "config");
-    this.listenAddress = null;
+    this.routerAddress = null;
     this.domain = null;
     this.protocol = null;
   }
@@ -57,9 +58,11 @@ export class LocalCluster {
     return this.name ? `local cluster ${this.name}` : "the default local cluster";
   }
 
-  // resolve reads the cluster's listen address from the CLI's list of local
-  // clusters, and its ingress domain and protocol from the cluster's
-  // EducatesClusterConfig status.
+  // resolve reads the cluster's state from the CLI's list of local clusters,
+  // its ingress domain and protocol from the cluster's EducatesClusterConfig
+  // status, and the router address, where the router serves every local
+  // cluster, from the CLI's router status, which has to show the router
+  // running and sending the domain to this cluster.
   async resolve() {
     const list = await mustRun(this.cli, ["local", "cluster", "list"]);
     const row = parseClusterList(list.stdout).find((r) => r.context === this.context);
@@ -69,7 +72,6 @@ export class LocalCluster {
     if (row.state !== "running") {
       throw new Error(`${this.description} is ${row.state}, not running`);
     }
-    this.listenAddress = row.listenAddress;
     const config = await this.kubectlJson(["get", "educatesclusterconfigs.config.educates.dev", "cluster"]);
     const ingress = config.status?.ingress;
     if (!ingress?.domain || !ingress?.protocol) {
@@ -77,6 +79,8 @@ export class LocalCluster {
     }
     this.domain = ingress.domain;
     this.protocol = ingress.protocol;
+    const status = await mustRun(this.cli, ["local", "router", "status"]);
+    this.routerAddress = routerAddressFor(status.stdout, { name: this.name, domain: this.domain });
     return this;
   }
 

@@ -578,6 +578,33 @@ spec:
                         required:
                         - clusterIssuerRef
                         type: object
+                      none:
+                        description: |-
+                          none configures the None provider. It is only valid when provider
+                          is None.
+                        properties:
+                          caCertificateSecretRef:
+                            description: |-
+                              caCertificateSecretRef optionally references a CA trust Secret
+                              holding the certificate of the CA that issued the certificate
+                              presented outside the cluster, under ca.crt. Set it when that CA is
+                              private, so Educates components and nodes reach the cluster's own
+                              names over https: they trust it through educates-ingress-ca, which
+                              the operator derives from its ca.crt alone, so any other key it
+                              holds, a private key included, is ignored. Namespace defaults to the
+                              operator namespace when empty.
+                            properties:
+                              name:
+                                description: name of the referent.
+                                type: string
+                              namespace:
+                                description: namespace of the referent. Empty means
+                                  the operator namespace.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        type: object
                       provider:
                         description: |-
                           CertificatesProvider selects how the wildcard TLS certificate is
@@ -588,7 +615,8 @@ spec:
                           in-cluster TLS entirely: the operator installs no cert-manager,
                           creates no ClusterIssuer and no wildcard Certificate, and Educates
                           serves plain HTTP unless TLS is terminated outside the cluster (see
-                          ingress.protocol). The provider is immutable: changing it requires
+                          ingress.protocol, and certificates.none for the CA of a certificate
+                          presented there). The provider is immutable: changing it requires
                           deleting and recreating the EducatesClusterConfig.
                         enum:
                         - BundledCertManager
@@ -649,6 +677,10 @@ spec:
                     required:
                     - provider
                     type: object
+                    x-kubernetes-validations:
+                    - message: certificates.none is only valid when certificates.provider
+                        is None
+                      rule: '!has(self.none) || self.provider == ''None'''
                   controller:
                     description: IngressController groups ingress-controller configuration.
                     properties:

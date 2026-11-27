@@ -25,6 +25,7 @@ func (p *ProjectInfo) NewLocalCmdGroup() *cobra.Command {
 				p.NewLocalRegistryCmdGroup(),
 				p.NewLocalMirrorCmdGroup(),
 				p.NewLocalResolverCmdGroup(),
+				p.NewLocalRouterCmdGroup(),
 			},
 		},
 	}

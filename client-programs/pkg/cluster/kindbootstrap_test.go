@@ -63,32 +63,22 @@ func wantKubeadmPatch(t *testing.T, i int, patch kubeadmPatch, kind, labels, tai
 	}
 }
 
-// wantPublishesIngressPorts checks that node publishes ports 80 and 443 on
-// the listen address listenAddress.
-func wantPublishesIngressPorts(t *testing.T, i int, node v1alpha4.Node, listenAddress string) {
+// wantPublishesNoPorts checks that node publishes no host ports: the
+// router serves every local cluster's ports 80 and 443 and reaches the
+// node over Docker's kind network.
+func wantPublishesNoPorts(t *testing.T, i int, node v1alpha4.Node) {
 	t.Helper()
-	want := []v1alpha4.PortMapping{
-		{ContainerPort: 80, HostPort: 80, ListenAddress: listenAddress, Protocol: v1alpha4.PortMappingProtocolTCP},
-		{ContainerPort: 443, HostPort: 443, ListenAddress: listenAddress, Protocol: v1alpha4.PortMappingProtocolTCP},
-	}
-	if len(node.ExtraPortMappings) != len(want) {
-		t.Fatalf("node %d port mappings = %+v, want %+v", i, node.ExtraPortMappings, want)
-	}
-	for j := range want {
-		if node.ExtraPortMappings[j] != want[j] {
-			t.Errorf("node %d port mapping %d = %+v, want %+v", i, j, node.ExtraPortMappings[j], want[j])
-		}
+	if len(node.ExtraPortMappings) != 0 {
+		t.Errorf("node %d port mappings = %+v, want none", i, node.ExtraPortMappings)
 	}
 }
 
 // TestRenderKindConfigOfTheDefaultCluster checks that an input declaring
 // no nodes renders the default single control-plane node, labelled
-// ingress-ready, publishing ports 80 and 443 on the listen address and
-// mounting the volumes.
+// ingress-ready, publishing no host ports and mounting the volumes.
 func TestRenderKindConfigOfTheDefaultCluster(t *testing.T) {
 	cfg := renderAndParseKindConfig(t, &KindBootstrapInput{
-		ListenAddress: "10.10.10.2",
-		VolumeMounts:  []KindVolumeMount{{HostPath: "/host/content", ContainerPath: "/content", HasReadOnly: true, ReadOnly: true}},
+		VolumeMounts: []KindVolumeMount{{HostPath: "/host/content", ContainerPath: "/content", HasReadOnly: true, ReadOnly: true}},
 	})
 
 	if len(cfg.Nodes) != 1 {
@@ -99,7 +89,7 @@ func TestRenderKindConfigOfTheDefaultCluster(t *testing.T) {
 		t.Errorf("node role = %q, want %q", node.Role, v1alpha4.ControlPlaneRole)
 	}
 	wantKubeadmPatch(t, 0, nodePatch(t, cfg, 0), "InitConfiguration", "ingress-ready=true", "")
-	wantPublishesIngressPorts(t, 0, node, "10.10.10.2")
+	wantPublishesNoPorts(t, 0, node)
 	wantMounts := []v1alpha4.Mount{{HostPath: "/host/content", ContainerPath: "/content", Readonly: true}}
 	if len(node.ExtraMounts) != 1 || node.ExtraMounts[0] != wantMounts[0] {
 		t.Errorf("node mounts = %+v, want %+v", node.ExtraMounts, wantMounts)
@@ -108,12 +98,11 @@ func TestRenderKindConfigOfTheDefaultCluster(t *testing.T) {
 
 // TestRenderKindConfigOfDeclaredNodes checks that a declared node list
 // renders a node for each entry: the control-plane node with its labels
-// and ingress-ready, the published ports and the mounts, and each worker
+// and ingress-ready, no published ports and the mounts, and each worker
 // with its labels and taints registered when it joins.
 func TestRenderKindConfigOfDeclaredNodes(t *testing.T) {
 	cfg := renderAndParseKindConfig(t, &KindBootstrapInput{
-		ListenAddress: "10.10.10.3",
-		VolumeMounts:  []KindVolumeMount{{HostPath: "/host/content", ContainerPath: "/content"}},
+		VolumeMounts: []KindVolumeMount{{HostPath: "/host/content", ContainerPath: "/content"}},
 		Nodes: []KindNode{
 			{Role: "control-plane", Labels: map[string]string{"pool": "system"}},
 			{
@@ -140,7 +129,7 @@ func TestRenderKindConfigOfDeclaredNodes(t *testing.T) {
 	}
 
 	wantKubeadmPatch(t, 0, nodePatch(t, cfg, 0), "InitConfiguration", "pool=system,ingress-ready=true", "")
-	wantPublishesIngressPorts(t, 0, cfg.Nodes[0], "10.10.10.3")
+	wantPublishesNoPorts(t, 0, cfg.Nodes[0])
 	wantMount := v1alpha4.Mount{HostPath: "/host/content", ContainerPath: "/content"}
 	if len(cfg.Nodes[0].ExtraMounts) != 1 || cfg.Nodes[0].ExtraMounts[0] != wantMount {
 		t.Errorf("control-plane mounts = %+v, want [%+v]", cfg.Nodes[0].ExtraMounts, wantMount)
@@ -166,7 +155,6 @@ func TestRenderKindConfigOfDeclaredNodes(t *testing.T) {
 // the render instead of being left out of it.
 func TestRenderKindConfigRefusesTaintsOnTheControlPlaneNode(t *testing.T) {
 	_, err := RenderKindConfig(&KindBootstrapInput{
-		ListenAddress: "10.10.10.2",
 		Nodes: []KindNode{
 			{Role: "control-plane", Taints: []KindNodeTaint{{Key: "workshops", Effect: "NoSchedule"}}},
 			{Role: "worker"},

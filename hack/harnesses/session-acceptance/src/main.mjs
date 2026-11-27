@@ -149,7 +149,7 @@ async function main() {
     throw new UsageError(e.message);
   }
   const cliVersion = (await mustRun(cli, ["version", "--full"])).stderr.trim() || "unknown";
-  say(`Driving ${cluster.description} (${cluster.context}): ${cluster.protocol}://*.${cluster.domain} on ${cluster.listenAddress}`);
+  say(`Driving ${cluster.description} (${cluster.context}): ${cluster.protocol}://*.${cluster.domain} through the router on ${cluster.routerAddress}`);
 
   const theme = new WebsiteTheme({ cluster, portal: values.portal, log: say });
   const mirror = new AuthenticatedMirror({ cluster, portal: values.portal, withholdPullSecret: values["withhold-pull-secret"], log: say });

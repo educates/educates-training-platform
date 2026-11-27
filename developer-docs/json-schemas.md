@@ -13,6 +13,10 @@ validation, `local config set` path checks, and editor support.
   config kind: it is the data home's `mirrors.yaml`, which declares the
   registry mirrors every local cluster shares, so it stays out of
   `EducatesAnyConfig` and has its own SchemaStore entry.
+* `EducatesLocalRouter` is maintained by hand too, and is not a cluster
+  config kind either: it is the data home's `router.yaml`, which declares
+  the router address every local cluster shares, so it also stays out of
+  `EducatesAnyConfig` and has its own SchemaStore entry.
 * `EducatesConfig` is generated from the operator CRD OpenAPI schemas —
   regenerate with `make generate-cli-schemas` (CI fails on drift).
 * `EducatesAnyConfig` is a kind-discriminated umbrella (`oneOf` over the
@@ -56,7 +60,9 @@ Two mechanisms:
   Hand-written scenario-kind files can carry the same modeline with their
   kind's URL. The v3 migration writes `mirrors.yaml` with the
   `…/EducatesLocalMirrors.json` modeline, and a hand-written one can carry
-  it too.
+  it too. `educates local config init` and `educates local cluster
+  create` write a missing `router.yaml` with the
+  `…/EducatesLocalRouter.json` modeline.
 * **SchemaStore** — filename-based matching for files without modelines.
   Registration is a one-time PR against
   [SchemaStore/schemastore](https://github.com/SchemaStore/schemastore)
@@ -75,6 +81,12 @@ Two mechanisms:
   "description": "Registry mirrors shared by every Educates local cluster (cli.educates.dev/v1alpha1)",
   "fileMatch": ["**/educates/mirrors.yaml"],
   "url": "https://schemas.educates.dev/cli/v1alpha1/EducatesLocalMirrors.json"
+},
+{
+  "name": "Educates CLI router address",
+  "description": "Router address shared by every Educates local cluster (cli.educates.dev/v1alpha1)",
+  "fileMatch": ["**/educates/router.yaml"],
+  "url": "https://schemas.educates.dev/cli/v1alpha1/EducatesLocalRouter.json"
 }
 ```
 
@@ -83,6 +95,7 @@ config in the CLI data home (`$XDG_DATA_HOME/educates/config.yaml`), and
 `**/educates/clusters/*/config.yaml` a named local cluster's;
 `*.educates.yaml` is the documented naming convention for scenario-kind
 files kept in user repositories. `**/educates/mirrors.yaml` matches the
-data home's registry mirrors file. SchemaStore requires a positive and negative test file
+data home's registry mirrors file, and `**/educates/router.yaml` its
+router file. SchemaStore requires a positive and negative test file
 under `src/test/` — use a minimal `EducatesLocalConfig` (apiVersion +
 kind) as the positive case.

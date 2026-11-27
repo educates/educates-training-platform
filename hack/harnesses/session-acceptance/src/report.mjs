@@ -200,7 +200,7 @@ export function markdownReport(run, results) {
     "# Session acceptance report",
     "",
     `- Cluster: ${run.cluster.description}, kube context ${run.cluster.context}, ` +
-      `${run.cluster.protocol}://*.${run.cluster.domain} on ${run.cluster.listenAddress}`,
+      `${run.cluster.protocol}://*.${run.cluster.domain} through the router on ${run.cluster.routerAddress}`,
     `- CLI: ${run.cli} (${run.cliVersion})`,
     `- Profile: ${run.profileName}, console held ${Math.round(run.profile.holdMs / 1000)}s, probed every ${Math.round(run.profile.probeEvery / 1000)}s`,
     `- Test portal: ${run.portal}; robot credentials from ${run.credentialsSource}`,

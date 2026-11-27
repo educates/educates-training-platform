@@ -3,6 +3,7 @@ package localclusters
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,8 +18,12 @@ func TestLoadConfigOfAMissingNamedConfigSaysHowToWriteOne(t *testing.T) {
 	_, err := LoadConfig(id)
 
 	wantErrorMentioning(t, err, `local cluster "test2" has no config`, id.ConfigPath,
-		"educates local config init --local-cluster test2 --listen-address <ip>",
-		"educates local cluster create --local-cluster test2 --listen-address <ip>")
+		"educates local config init --local-cluster test2\n",
+		"educates local cluster create --local-cluster test2\n",
+		"--domain <domain>", "test2.<router address with dashes>.nip.io")
+	if strings.Contains(err.Error(), "listen") {
+		t.Errorf("error %q names a listen address, which a named cluster no longer needs", err)
+	}
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("errors.Is(%v, fs.ErrNotExist) = false, want true", err)
 	}
@@ -38,8 +43,9 @@ func TestLoadConfigOfAMissingDefaultConfigSaysHowToWriteOne(t *testing.T) {
 func TestLoadConfigMovesTheRegistryMirrorsOfANamedConfig(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
 	writeClusterConfig(t, dataHome, "test2", localConfigHeader+
-		"cluster:\n  listenAddress: 10.10.10.2\n  registryMirrors:\n    - mirror: ghcr.io\n")
+		"cluster:\n  registryMirrors:\n    - mirror: ghcr.io\n")
 
 	if _, err := LoadConfig(namedID(t, "test2", dataHome)); err != nil {
 		t.Fatalf("LoadConfig(test2): %v", err)
@@ -48,11 +54,59 @@ func TestLoadConfigMovesTheRegistryMirrorsOfANamedConfig(t *testing.T) {
 	assertRecordedMirrors(t, dataHome, v1alpha1.RegistryMirror{Mirror: "ghcr.io"})
 }
 
+// alphaDataHome writes a data home as a 4.0 pre-release left it: the
+// default config declares the address its cluster was served on, and
+// there is no router file. It returns the data home.
+func alphaDataHome(t *testing.T) string {
+	t.Helper()
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n")
+	return dataHome
+}
+
+// A named config that declares no domain takes it from the router
+// address, which a pre-release data home still holds in the default
+// config: it is moved to the router file first, whichever config is read.
+func TestLoadConfigOfANamedClusterMovesTheDefaultConfigsListenAddressToTheRouterFileFirst(t *testing.T) {
+	dataHome := alphaDataHome(t)
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader)
+
+	loaded, err := LoadConfig(namedID(t, "test2", dataHome))
+	if err != nil {
+		t.Fatalf("LoadConfig(test2): %v", err)
+	}
+
+	if got := loaded.Domain(); got != "test2.10-10-10-1.nip.io" {
+		t.Errorf("Domain() = %q, want test2.10-10-10-1.nip.io", got)
+	}
+	if got, err := LoadRouterAddress(dataHome, hostInterfaces); err != nil || got != "10.10.10.1" {
+		t.Errorf("LoadRouterAddress() = %q, %v, want the default config's address 10.10.10.1", got, err)
+	}
+	if body, err := os.ReadFile(Default(dataHome).ConfigPath); err != nil || strings.Contains(string(body), "listenAddress") {
+		t.Errorf("default config =\n%s\n(%v), want its listen address moved", body, err)
+	}
+}
+
+// What reads the router address alone, such as the router's status, the
+// list and serve, moves it too.
+func TestRouterAddressMovesTheDefaultConfigsListenAddressToTheRouterFileFirst(t *testing.T) {
+	dataHome := alphaDataHome(t)
+
+	got, err := NewInventory(Observed{InterfaceAddresses: hostInterfaces}, dataHome).RouterAddress()
+
+	if err != nil || got != "10.10.10.1" {
+		t.Errorf("RouterAddress() = %q, %v, want the default config's address 10.10.10.1", got, err)
+	}
+}
+
 func TestLoadConfigAppliesTheRulesOfTheCluster(t *testing.T) {
 	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.1\n")
-	writeClusterConfig(t, dataHome, "test2", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.2\n")
-	writeClusterConfig(t, dataHome, "test3", localConfigHeader+"cluster:\n  listenAddress: 127.0.0.1\n")
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader)
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader)
+	writeClusterConfig(t, dataHome, "test3", localConfigHeader+
+		"cluster:\n  nodes:\n  - role: control-plane\n  - role: control-plane\n")
 
 	def, err := LoadConfig(Default(dataHome))
 	if err != nil {
@@ -64,16 +118,16 @@ func TestLoadConfigAppliesTheRulesOfTheCluster(t *testing.T) {
 	}
 	_, test3Err := LoadConfig(namedID(t, "test3", dataHome))
 
-	if got, want := def.ListenAddress(), "10.10.10.1"; got != want {
-		t.Errorf("default cluster's ListenAddress() = %q, want %q", got, want)
+	if got, want := def.Domain(), "10-10-10-1.nip.io"; got != want {
+		t.Errorf("default cluster's Domain() = %q, want %q", got, want)
 	}
-	if got, want := test2.ListenAddress(), "10.10.10.2"; got != want {
-		t.Errorf("test2's ListenAddress() = %q, want %q", got, want)
+	if got, want := test2.Domain(), "test2.10-10-10-1.nip.io"; got != want {
+		t.Errorf("test2's Domain() = %q, want %q", got, want)
 	}
 	if test2.Source != test2.Identity.ConfigPath {
 		t.Errorf("test2's Source = %q, want its config path %q", test2.Source, test2.Identity.ConfigPath)
 	}
-	wantErrorMentioning(t, test3Err, "loopback")
+	wantErrorMentioning(t, test3Err, "cluster.nodes", `2 nodes have role "control-plane"`)
 }
 
 // stubHostIP makes host IP detection report ip for the rest of the test
@@ -90,69 +144,66 @@ func stubHostIP(t *testing.T, ip string) {
 	}
 }
 
-func TestLoadConfigRefusesADefaultConfigWithoutASpecificListenAddress(t *testing.T) {
-	cases := []struct {
-		name   string
-		body   string
-		reason []string
-	}{
-		{name: "missing", body: localConfigHeader, reason: []string{"must be set"}},
-		{name: "every address", body: localConfigHeader + "cluster:\n  listenAddress: 0.0.0.0\n",
-			reason: []string{"0.0.0.0", "every host address"}},
-		{name: "loopback", body: localConfigHeader + "cluster:\n  listenAddress: 127.0.0.1\n",
-			reason: []string{"127.0.0.1", "loopback", "pods resolve the cluster's ingress domain to it"}},
+// A config in the data home that still declares a listen address, whatever
+// it is, has it moved out when it is loaded, and then loads, served on the
+// router address router.yaml declares.
+func TestLoadConfigMovesTheListenAddressOfADataHomeConfig(t *testing.T) {
+	cases := map[string]string{
+		"a specific address":         localConfigHeader + "cluster:\n  listenAddress: 10.10.10.2\n",
+		"every address":              localConfigHeader + "cluster:\n  listenAddress: 0.0.0.0\n",
+		"loopback":                   localConfigHeader + "cluster:\n  listenAddress: 127.0.0.1\n",
+		"an EducatesConfig with one": escapeConfig("  cluster:\n    listenAddress: 10.10.10.2\n", ""),
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			stubHostIP(t, "192.168.50.151")
-			dataHome := t.TempDir()
-			writeClusterConfig(t, dataHome, "", tc.body)
-			id := Default(dataHome)
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			for _, cluster := range []string{"", "test2"} {
+				dataHome := t.TempDir()
+				t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+				routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+				writeClusterConfig(t, dataHome, cluster, body)
+				id := Default(dataHome)
+				if cluster != "" {
+					id = namedID(t, cluster, dataHome)
+				}
 
-			_, err := LoadConfig(id)
+				loaded, err := LoadConfig(id)
+				if err != nil {
+					t.Fatalf("LoadConfig of %s: %v", id.Description(), err)
+				}
 
-			wantErrorMentioning(t, err, append([]string{id.ConfigPath, "cluster.listenAddress",
-				"educates local config set cluster.listenAddress 192.168.50.151",
-				"An alias such as 10.10.10.1"}, tc.reason...)...)
+				if local, ok := loaded.Config.(*v1alpha1.EducatesLocalConfig); ok {
+					want := "10-10-10-1.nip.io"
+					if cluster != "" {
+						want = cluster + "." + want
+					}
+					if local.Ingress.Domain != want {
+						t.Errorf("ingress.domain of %s = %q, want %q", id.Description(), local.Ingress.Domain, want)
+					}
+				}
+				if body, err := os.ReadFile(id.ConfigPath); err != nil || strings.Contains(string(body), "listenAddress") {
+					t.Errorf("config of %s = %s, %v, want it without its listen address", id.Description(), body, err)
+				}
+			}
 		})
 	}
 }
 
-func TestLoadConfigOfADefaultConfigWithoutAListenAddressSaysWhatToSetWithNoHostIP(t *testing.T) {
-	stubHostIP(t, "")
+// The default config's specific listen address becomes the router address
+// when the data home has no router file, before its domain is taken from
+// the router address.
+func TestLoadConfigOfTheDefaultClusterMovesItsListenAddressToAMissingRouterFile(t *testing.T) {
 	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "", localConfigHeader)
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"cluster:\n  listenAddress: 10.10.10.2\n")
 
-	_, err := LoadConfig(Default(dataHome))
-
-	wantErrorMentioning(t, err, "cluster.listenAddress", "must be set",
-		"educates local config set cluster.listenAddress <ip>")
-}
-
-func TestLoadConfigOfANamedConfigWithoutAListenAddressSaysHowToSetIt(t *testing.T) {
-	stubHostIP(t, "192.168.50.151")
-	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "test2", localConfigHeader)
-
-	_, err := LoadConfig(namedID(t, "test2", dataHome))
-
-	wantErrorMentioning(t, err, "cluster.listenAddress", "must be set",
-		"educates local config set --local-cluster test2 cluster.listenAddress <ip>")
-	if strings.Contains(err.Error(), "192.168.50.151") {
-		t.Errorf("error %q suggests the host's IP address, which the default local cluster uses", err)
+	loaded, err := LoadConfig(Default(dataHome))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
 	}
-}
 
-func TestLoadConfigOfAnEducatesConfigWithoutAListenAddressNamesItsFile(t *testing.T) {
-	stubHostIP(t, "192.168.50.151")
-	dataHome := t.TempDir()
-	writeClusterConfig(t, dataHome, "", escapeConfig("  cluster: {}\n", ""))
-	id := Default(dataHome)
-
-	_, err := LoadConfig(id)
-
-	wantErrorMentioning(t, err, "target.cluster.listenAddress", "must be set",
-		"Set it in "+id.ConfigPath+" to this host's IP address, 192.168.50.151")
+	if got, want := loaded.Domain(), "10-10-10-2.nip.io"; got != want {
+		t.Errorf("Domain() = %q, want %q, the nip.io name of the moved listen address", got, want)
+	}
 }
 
 func TestLoadConfigOfTheDefaultClusterTakesOtherKindsAsTheyAre(t *testing.T) {
@@ -167,23 +218,22 @@ func TestLoadConfigOfTheDefaultClusterTakesOtherKindsAsTheyAre(t *testing.T) {
 
 func TestLoadedConfigDomain(t *testing.T) {
 	dataHome := t.TempDir()
-	const listen = "cluster:\n  listenAddress: 10.10.10.1\n"
-	const targetListen = "  cluster:\n    listenAddress: 10.10.10.1\n"
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.9\n")
 	cases := []struct {
 		name    string
 		cluster string
 		body    string
 		want    string
 	}{
-		{name: "a declared domain", body: localConfigHeader + listen + "ingress:\n  domain: educates.test\n",
+		{name: "a declared domain", body: localConfigHeader + "ingress:\n  domain: educates.test\n",
 			want: "educates.test"},
-		{name: "the default cluster's listen address nip.io domain", body: localConfigHeader + listen,
-			want: "10-10-10-1.nip.io"},
-		{name: "a named cluster's listen address nip.io domain", cluster: "test2",
-			body: localConfigHeader + "cluster:\n  listenAddress: 10.10.10.2\n", want: "10-10-10-2.nip.io"},
-		{name: "the domain an EducatesConfig declares", body: escapeConfig(targetListen, "workshops.example.test"),
+		{name: "the default cluster's router address nip.io domain", body: localConfigHeader,
+			want: "10-10-10-9.nip.io"},
+		{name: "a named cluster's name under the router address nip.io domain", cluster: "test2",
+			body: localConfigHeader, want: "test2.10-10-10-9.nip.io"},
+		{name: "the domain an EducatesConfig declares", body: escapeConfig("", "workshops.example.test"),
 			want: "workshops.example.test"},
-		{name: "no domain for an EducatesConfig that declares none", body: escapeConfig(targetListen, "")},
+		{name: "no domain for an EducatesConfig that declares none", body: escapeConfig("", "")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -201,5 +251,99 @@ func TestLoadedConfigDomain(t *testing.T) {
 				t.Errorf("Domain() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// The default local cluster, declaring no ingress domain, is served at the
+// nip.io name of the router address, the one address every local cluster
+// is served on.
+func TestLoadConfigOfTheDefaultClusterTakesTheNipDomainOfTheRouterAddress(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader)
+
+	loaded, err := LoadConfig(Default(dataHome))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if got, want := loaded.Domain(), "10-10-10-1.nip.io"; got != want {
+		t.Errorf("Domain() = %q, want %q", got, want)
+	}
+	if c := loaded.Config.(*v1alpha1.EducatesLocalConfig); !c.Ingress.Insecure {
+		t.Errorf("ingress.insecure = false, want true for the nip.io domain")
+	}
+}
+
+// A named local cluster declaring no ingress domain is served at its name
+// under the nip.io name of the router address, so under the default local
+// cluster's, and needs no address of its own.
+func TestLoadConfigOfANamedClusterTakesItsNameUnderTheNipDomainOfTheRouterAddress(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader)
+
+	loaded, err := LoadConfig(namedID(t, "test2", dataHome))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if got, want := loaded.Domain(), "test2.10-10-10-1.nip.io"; got != want {
+		t.Errorf("Domain() = %q, want %q", got, want)
+	}
+	if c := loaded.Config.(*v1alpha1.EducatesLocalConfig); !c.Ingress.Insecure {
+		t.Errorf("ingress.insecure = false, want true for the nip.io domain")
+	}
+}
+
+// The default local cluster's domain comes from the router address alone,
+// so with no router file it says how to set the router address.
+func TestLoadConfigOfTheDefaultClusterWithNoRouterFileSaysHowToSetTheRouterAddress(t *testing.T) {
+	dataHome := t.TempDir()
+	writeClusterConfig(t, dataHome, "", localConfigHeader)
+	id := Default(dataHome)
+
+	_, err := LoadConfig(id)
+
+	wantErrorMentioning(t, err, id.ConfigPath, "router.yaml", "educates local router update --address <ip>")
+	if errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("errors.Is(%v, fs.ErrNotExist) = true, want false for a config that exists", err)
+	}
+}
+
+func TestLoadConfigOfTheDefaultClusterRefusesARouterAddressWithNoNipName(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: fd00::20\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader)
+	id := Default(dataHome)
+
+	_, err := LoadConfig(id)
+
+	wantErrorMentioning(t, err, id.ConfigPath, "router address fd00::20", "nip.io", "set ingress.domain")
+}
+
+func TestLoadConfigOfTheDefaultClusterRefusesARouterAddressTheRulesRefuse(t *testing.T) {
+	dataHome := t.TempDir()
+	path := routerFile(t, dataHome, routerHeader+"address: 127.0.0.1\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader)
+
+	_, err := LoadConfig(Default(dataHome))
+
+	wantErrorMentioning(t, err, path, "loopback")
+}
+
+// A declared domain needs no router address.
+func TestLoadConfigOfTheDefaultClusterKeepsADeclaredDomainWhateverTheRouterFile(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 127.0.0.1\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+
+		"ingress:\n  domain: educates.test\n")
+
+	loaded, err := LoadConfig(Default(dataHome))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if got := loaded.Domain(); got != "educates.test" {
+		t.Errorf("Domain() = %q, want educates.test", got)
 	}
 }

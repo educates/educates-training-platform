@@ -100,6 +100,15 @@ var schemaErrorRules = []schemaErrorRule{
 		},
 	},
 	{
+		// EducatesLocalConfig refuses ingress.insecure and
+		// ingress.externalTLSTermination both true, through a not in the
+		// ingress block.
+		field:     regexp.MustCompile(`^ingress$`),
+		errorType: "number_not",
+		line: fieldLine("insecure and externalTLSTermination can't both be true: insecure serves the cluster " +
+			"over plain HTTP, and externalTLSTermination serves it over https with TLS ended at the router; set one of them"),
+	},
+	{
 		// The Inline kind requires wildcardCertificateSecret the same
 		// way.
 		field:     regexp.MustCompile(`^\(root\)$`),

@@ -441,8 +441,31 @@
                   ],
                   "type": "object"
                 },
+                "none": {
+                  "description": "none configures the None provider. It is only valid when provider\nis None.",
+                  "properties": {
+                    "caCertificateSecretRef": {
+                      "description": "caCertificateSecretRef optionally references a CA trust Secret\nholding the certificate of the CA that issued the certificate\npresented outside the cluster, under ca.crt. Set it when that CA is\nprivate, so Educates components and nodes reach the cluster's own\nnames over https: they trust it through educates-ingress-ca, which\nthe operator derives from its ca.crt alone, so any other key it\nholds, a private key included, is ignored. Namespace defaults to the\noperator namespace when empty.",
+                      "properties": {
+                        "name": {
+                          "description": "name of the referent.",
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "description": "namespace of the referent. Empty means the operator namespace.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                },
                 "provider": {
-                  "description": "CertificatesProvider selects how the wildcard TLS certificate is\nprovisioned. BundledCertManager installs cert-manager and issues the\ncertificate from a ClusterIssuer. StaticCertificate serves a wildcard\ncertificate issued outside the cluster, without cert-manager.\nExternalCertManager is reserved and not yet supported. None disables\nin-cluster TLS entirely: the operator installs no cert-manager,\ncreates no ClusterIssuer and no wildcard Certificate, and Educates\nserves plain HTTP unless TLS is terminated outside the cluster (see\ningress.protocol). The provider is immutable: changing it requires\ndeleting and recreating the EducatesClusterConfig.",
+                  "description": "CertificatesProvider selects how the wildcard TLS certificate is\nprovisioned. BundledCertManager installs cert-manager and issues the\ncertificate from a ClusterIssuer. StaticCertificate serves a wildcard\ncertificate issued outside the cluster, without cert-manager.\nExternalCertManager is reserved and not yet supported. None disables\nin-cluster TLS entirely: the operator installs no cert-manager,\ncreates no ClusterIssuer and no wildcard Certificate, and Educates\nserves plain HTTP unless TLS is terminated outside the cluster (see\ningress.protocol, and certificates.none for the CA of a certificate\npresented there). The provider is immutable: changing it requires\ndeleting and recreating the EducatesClusterConfig.",
                   "enum": [
                     "BundledCertManager",
                     "ExternalCertManager",

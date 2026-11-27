@@ -35,7 +35,7 @@ func TestCheckPrivilegedPortForwarding(t *testing.T) {
 
 			if tc.wantRefusal {
 				wantErrorMentioning(t, err, "Settings > Advanced > Allow privileged port forwarding to external machines",
-					"ports 80 and 443", "non-loopback address")
+					"router's ports 80 and 443", "router address", "non-loopback address")
 			} else if err != nil {
 				t.Errorf("CheckPrivilegedPortForwarding refused: %v", err)
 			}

@@ -428,7 +428,7 @@ func TestMaybeMigrateV3_PauseContainerOverride_IsDroppedAndNoted(t *testing.T) {
 
 func TestMaybeMigrateV3_ResolverTargetAddress_IsDroppedAndNoted(t *testing.T) {
 	cfg, written, notice := migrateV3Values(t, `localKindCluster:
-  listenAddress: 127.0.0.1
+  listenAddress: 10.10.10.1
 localDNSResolver:
   targetAddress: 192.168.1.10
   extraDomains:
@@ -438,15 +438,12 @@ localDNSResolver:
 	if strings.Contains(written, "targetAddress") {
 		t.Errorf("migrated file sets targetAddress:\n%s", written)
 	}
-	if got, want := cfg.Cluster.ListenAddress, "127.0.0.1"; got != want {
-		t.Errorf("Cluster.ListenAddress = %q, want the v3 listen address %q", got, want)
-	}
 	if !reflect.DeepEqual(cfg.Resolver.ExtraDomains, []string{"example.test"}) {
 		t.Errorf("Resolver.ExtraDomains = %v, want the v3 extra domains", cfg.Resolver.ExtraDomains)
 	}
-	wantLine := "dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to its " +
-		"cluster.listenAddress; set cluster.listenAddress to 192.168.1.10 to keep resolving the cluster there, " +
-		"or for other names " +
+	wantLine := "dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to the " +
+		"router address; set it with 'educates local router update --address 192.168.1.10' to keep resolving " +
+		"the cluster there, or for other names " +
 		"add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home\n"
 	if !strings.Contains(notice, wantLine) {
 		t.Errorf("notice missing %q in:\n%s", wantLine, notice)
@@ -570,25 +567,42 @@ func stubHostIP(t *testing.T, ip string) {
 	}
 }
 
-func TestMaybeMigrateV3_ListenAddressOnEveryHostAddress_BecomesTheHostIP(t *testing.T) {
+// A v3 cluster that published its ports on every host address, as a
+// missing listen address, 0.0.0.0, did, or on a loopback address, where
+// pods reach themselves, is served on the host's IP address: the
+// migration writes it to router.yaml, with the comment the CLI puts on
+// the host's IP address.
+func TestMaybeMigrateV3_ListenAddressThatIsNotSpecific_WritesTheHostIPToRouterYAML(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		values string
 		was    string
+		why    string
 	}{
-		{name: "missing", values: "clusterIngress:\n  domain: educates.test\n", was: "was not set"},
-		{name: "0.0.0.0", values: "localKindCluster:\n  listenAddress: 0.0.0.0\n", was: "was 0.0.0.0"},
+		{name: "missing", values: "clusterIngress:\n  domain: educates.test\n", was: "was not set",
+			why: "every host address"},
+		{name: "0.0.0.0", values: "localKindCluster:\n  listenAddress: 0.0.0.0\n", was: "was 0.0.0.0",
+			why: "every host address"},
+		{name: "loopback", values: "localKindCluster:\n  listenAddress: 127.0.0.1\n", was: "was 127.0.0.1",
+			why: "not a specific IP address of the host"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stubHostIP(t, "192.168.50.151")
+			dataHome := t.TempDir()
 
-			cfg, _, notice := migrateV3Values(t, tc.values)
+			_, written, notice := migrateV3ValuesIn(t, dataHome, tc.values)
 
-			if got, want := cfg.Cluster.ListenAddress, "192.168.50.151"; got != want {
-				t.Errorf("Cluster.ListenAddress = %q, want the host's IP address %q", got, want)
+			routerPath := filepath.Join(dataHome, "router.yaml")
+			want := routerHeader + "# This host's IP address when this file was written. An alias such as\n" +
+				"# 10.10.10.1, added to a network interface, survives network changes.\naddress: 192.168.50.151\n"
+			if got := string(readFile(t, routerPath)); got != want {
+				t.Errorf("router.yaml =\n%s\nwant\n%s", got, want)
 			}
-			for _, want := range []string{"set cluster.listenAddress to 192.168.50.151, this host's IP address",
-				"localKindCluster.listenAddress " + tc.was, "every host address", "specific IP address",
+			if strings.Contains(written, "listenAddress") {
+				t.Errorf("the migrated config declares a listen address:\n%s", written)
+			}
+			for _, want := range []string{"wrote " + routerPath + " with this host's IP address 192.168.50.151 as " +
+				"the router address", "every local cluster", "localKindCluster.listenAddress " + tc.was, tc.why,
 				"An alias such as 10.10.10.1", "survives network changes"} {
 				if !strings.Contains(notice, want) {
 					t.Errorf("notice does not mention %q:\n%s", want, notice)
@@ -598,50 +612,80 @@ func TestMaybeMigrateV3_ListenAddressOnEveryHostAddress_BecomesTheHostIP(t *test
 	}
 }
 
-func TestMaybeMigrateV3_ListenAddress_IsCommentedOnlyWhenItIsTheHostIP(t *testing.T) {
-	const comment = "cluster:\n" +
-		"  # This host's IP address when this file was written. An alias such as\n" +
-		"  # 10.10.10.1, added to a network interface, survives network changes.\n" +
-		"  listenAddress: 192.168.50.151\n"
-	stubHostIP(t, "192.168.50.151")
-
-	_, written, _ := migrateV3Values(t, "localKindCluster:\n  listenAddress: 0.0.0.0\n")
-	if !strings.Contains(written, comment) {
-		t.Errorf("migrated file does not comment the host's IP address as its listen address:\n%s", written)
-	}
-
-	_, written, _ = migrateV3Values(t, "localKindCluster:\n  listenAddress: 10.10.10.1\n")
-	if strings.Contains(written, "This host's IP address") {
-		t.Errorf("migrated file comments a listen address kept from v3 as the host's IP address:\n%s", written)
-	}
-}
-
-func TestMaybeMigrateV3_ListenAddressOnEveryHostAddress_WithNoHostIP_SaysToSetIt(t *testing.T) {
+func TestMaybeMigrateV3_ListenAddressThatIsNotSpecific_WithNoHostIP_SaysToSetTheRouterAddress(t *testing.T) {
 	stubHostIP(t, "")
+	dataHome := t.TempDir()
 
-	cfg, _, notice := migrateV3Values(t, "clusterIngress:\n  domain: educates.test\n")
+	_, _, notice := migrateV3ValuesIn(t, dataHome, "clusterIngress:\n  domain: educates.test\n")
 
-	if cfg.Cluster.ListenAddress != "" {
-		t.Errorf("Cluster.ListenAddress = %q, want none with no host IP address detected", cfg.Cluster.ListenAddress)
+	if _, err := os.Stat(filepath.Join(dataHome, "router.yaml")); !os.IsNotExist(err) {
+		t.Errorf("router.yaml was written with no host IP address detected: %v", err)
 	}
-	for _, want := range []string{"left cluster.listenAddress unset", "no IP address of this host was detected",
-		"educates local config set cluster.listenAddress <ip>"} {
+	for _, want := range []string{"left the router address unset", "no IP address of this host was detected",
+		"educates local router update --address <ip>"} {
 		if !strings.Contains(notice, want) {
 			t.Errorf("notice does not mention %q:\n%s", want, notice)
 		}
 	}
 }
 
-func TestMaybeMigrateV3_SpecificListenAddress_IsKeptWithoutANote(t *testing.T) {
+func TestMaybeMigrateV3_SpecificListenAddress_IsWrittenToRouterYAML(t *testing.T) {
 	stubHostIP(t, "192.168.50.151")
+	dataHome := t.TempDir()
 
-	cfg, _, notice := migrateV3Values(t, "localKindCluster:\n  listenAddress: 10.10.10.1\n")
+	_, written, notice := migrateV3ValuesIn(t, dataHome, "localKindCluster:\n  listenAddress: 10.10.10.1\n")
 
-	if got, want := cfg.Cluster.ListenAddress, "10.10.10.1"; got != want {
-		t.Errorf("Cluster.ListenAddress = %q, want the v3 listen address %q", got, want)
+	routerPath := filepath.Join(dataHome, "router.yaml")
+	if got, want := string(readFile(t, routerPath)), routerHeader+"address: 10.10.10.1\n"; got != want {
+		t.Errorf("router.yaml =\n%s\nwant\n%s", got, want)
 	}
-	if strings.Contains(notice, "listenAddress") {
-		t.Errorf("notice mentions the listen address it kept:\n%s", notice)
+	if strings.Contains(written, "listenAddress") {
+		t.Errorf("the migrated config declares a listen address:\n%s", written)
+	}
+	for _, want := range []string{"moved localKindCluster.listenAddress 10.10.10.1 to " + routerPath,
+		"router address", "every local cluster"} {
+		if !strings.Contains(notice, want) {
+			t.Errorf("notice does not mention %q:\n%s", want, notice)
+		}
+	}
+}
+
+// An existing router.yaml, which a 4.0 command wrote, is left as it is,
+// and the notice says how to serve every local cluster on the v3 listen
+// address instead.
+func TestMaybeMigrateV3_ListenAddress_WithARouterYAML_LeavesIt(t *testing.T) {
+	for _, tc := range []struct {
+		name, values string
+		wantNotice   []string
+	}{
+		{name: "a specific listen address", values: "localKindCluster:\n  listenAddress: 10.10.10.1\n",
+			wantNotice: []string{"left localKindCluster.listenAddress 10.10.10.1 out", "already exists",
+				"educates local router update --address 10.10.10.1"}},
+		{name: "no listen address", values: "clusterIngress:\n  domain: educates.test\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubHostIP(t, "192.168.50.151")
+			dataHome := t.TempDir()
+			const existing = routerHeader + "address: 10.10.10.9\n"
+			must(t, os.WriteFile(filepath.Join(dataHome, "router.yaml"), []byte(existing), 0o644))
+
+			_, written, notice := migrateV3ValuesIn(t, dataHome, tc.values)
+
+			if got := string(readFile(t, filepath.Join(dataHome, "router.yaml"))); got != existing {
+				t.Errorf("router.yaml was rewritten:\n%s", got)
+			}
+			if strings.Contains(written, "listenAddress") {
+				t.Errorf("the migrated config declares a listen address:\n%s", written)
+			}
+			for _, want := range tc.wantNotice {
+				if !strings.Contains(notice, want) {
+					t.Errorf("notice does not mention %q:\n%s", want, notice)
+				}
+			}
+			if len(tc.wantNotice) == 0 && strings.Contains(notice, "listenAddress") {
+				t.Errorf("notice mentions a listen address the v3 file did not set:\n%s", notice)
+			}
+		})
 	}
 }
 
@@ -655,7 +699,7 @@ func TestMaybeMigrateV3_NipDomainWithNoCachedCertificate_IsDroppedForTheV4Defaul
 				t.Errorf("migrated file keeps ingress.domain %s, want it left to the nip.io default:\n%s", domain, written)
 			}
 			for _, want := range []string{"dropped clusterIngress.domain " + domain,
-				"no wildcard TLS certificate for it is cached", "10-10-10-2.nip.io", "plain HTTP",
+				"no wildcard TLS certificate for it is cached", "the nip.io name of the router address, 10-10-10-2.nip.io", "plain HTTP",
 				"to keep " + domain + ", set ingress.domain to it and ingress.insecure to true"} {
 				if !strings.Contains(notice, want) {
 					t.Errorf("notice does not mention %q:\n%s", want, notice)

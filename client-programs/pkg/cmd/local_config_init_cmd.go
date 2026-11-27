@@ -11,6 +11,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 // localConfigSchemaModeline is the yaml-language-server modeline every
@@ -18,12 +19,11 @@ import (
 const localConfigSchemaModeline = config.DefaultLocalConfigModeline
 
 var localConfigInitExample = `
-  # Write a minimal EducatesLocalConfig, on this host's IP address:
+  # Write a minimal EducatesLocalConfig:
   educates local config init
 
-  # Write it on an alias of a network interface, which survives network
-  # changes:
-  educates local config init --listen-address 10.10.10.1
+  # Write it on a domain of your own:
+  educates local config init --domain educates.test
 
   # Overwrite an existing config file:
   educates local config init --force
@@ -31,19 +31,16 @@ var localConfigInitExample = `
   # Write the fully-defaulted configuration:
   educates local config init --defaults
 
-  # Write the config of the named local cluster test2, on the IP address
-  # 10.10.10.2 of the host:
-  educates local config init --local-cluster test2 --listen-address 10.10.10.2
+  # Write the config of the named local cluster test2:
+  educates local config init --local-cluster test2
 `
 
 type LocalConfigInitOptions struct {
 	Force    bool
 	Defaults bool
 
-	// ListenAddress and Domain are the values of --listen-address and
-	// --domain.
-	ListenAddress string
-	Domain        string
+	// Domain is the value of --domain.
+	Domain string
 }
 
 func (p *ProjectInfo) NewLocalConfigInitCmd() *cobra.Command {
@@ -54,28 +51,31 @@ func (p *ProjectInfo) NewLocalConfigInitCmd() *cobra.Command {
 		Use:   "init",
 		Short: "Write an EducatesLocalConfig to <data-home>/config.yaml",
 		Long: `Creates <data-home>/config.yaml. By default it writes the minimum
-EducatesLocalConfig: apiVersion, kind and cluster.listenAddress, leaving
-every other field to take its default at deploy time. With --defaults it
-instead writes the fully-defaulted configuration, with the static
-defaults, the CLI image registry and version, and the nip.io name of
-cluster.listenAddress as the domain (and the insecure default it
+EducatesLocalConfig: apiVersion and kind, and ingress.domain when --domain
+gives one, leaving every other field to take its default at deploy time.
+With --defaults it instead writes the fully-defaulted configuration, with
+the static defaults, the CLI image registry and version, and the nip.io
+name of the router address as the domain (and the insecure default it
 implies) materialised into the file. Errors if the file already exists
 unless --force.
 
-Every local cluster publishes its ports 80 and 443 on its
-cluster.listenAddress, which must be a specific IP address of the host,
-neither 0.0.0.0 nor a loopback address. --listen-address sets it, and
-without it the default local cluster takes the host's IP address, with a
-comment saying so: an alias such as 10.10.10.1, added to a network
-interface, survives network changes, where the host's IP address may not.
-With no IP address of the host detected, the config is written without
-one, and says what to set. --domain sets ingress.domain, and without it
-the cluster takes the nip.io name of its listen address.
+A local cluster has no address of its own: every local cluster is served
+through the router, on the router address. Without --domain the default
+local cluster takes the nip.io name of the router address, such as
+10-10-10-1.nip.io, and a named one its name under it, such as
+test2.10-10-10-1.nip.io.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, writes the config of
-a named local cluster instead, to <data-home>/clusters/<name>/config.yaml,
-which needs --listen-address. --defaults writes only the default local
-cluster's config.
+a named local cluster instead, to <data-home>/clusters/<name>/config.yaml.
+--defaults writes only the default local cluster's config.
+
+Before the config, init writes <data-home>/router.yaml when it is
+missing: the router address, the one host address every local cluster
+shares, set to the host's IP address, with a comment saying that an
+alias such as 10.10.10.1, added to a network interface, survives network
+changes. An existing router.yaml is left as it is. With no IP address of
+the host detected, init writes nothing, and says how to set the router
+address.
 
 <data-home> is $EDUCATES_CLI_DATA_HOME if set, otherwise
 $XDG_DATA_HOME/educates.`,
@@ -91,28 +91,31 @@ $XDG_DATA_HOME/educates.`,
 	c.Flags().BoolVar(&o.Force, "force", false, "overwrite existing config.yaml")
 	c.Flags().BoolVar(&o.Defaults, "defaults", false, "write the fully-defaulted configuration instead of a minimal file")
 	addLocalClusterFlag(c)
-	c.Flags().StringVar(&o.ListenAddress, localclusters.ListenAddressFlagName, "", "host IP the local cluster publishes ports 80 and 443 on (default: this host's IP address for the default local cluster; required for a named one)")
-	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain of the local cluster (default: the nip.io name of the listen address)")
+	c.Flags().StringVar(&o.Domain, localclusters.DomainFlagName, "", "ingress domain of the local cluster (default: the nip.io name of the router address for the default local cluster, and the cluster's name under it for a named one)")
 	return c
 }
 
 // runLocalConfigInit writes the config of the local cluster id from
-// --listen-address and --domain, as localclusters.WriteConfig does. The
-// default local cluster takes the host's IP address without
-// --listen-address, and with --defaults gets every CLI default written
-// too. A named local cluster's config declares only what the flags give,
-// so it takes no --defaults: 'local config view' shows the defaults it
-// gets.
+// --domain, as localclusters.WriteConfig does. The default local cluster
+// with --defaults gets every CLI default written too. A named local
+// cluster's config declares only what --domain gives, so it takes no
+// --defaults: 'local config view' shows the defaults it gets. A missing
+// router file is written first, as ensureRouterFile writes it.
 func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclusters.Identity, w io.Writer) error {
 	if o.Defaults && !id.IsDefault() {
 		return fmt.Errorf("--defaults writes the default local cluster's config only; a named local cluster's config "+
-			"declares what --%s and --%s give, and 'educates local config view%s' shows the defaults it gets",
-			localclusters.ListenAddressFlagName, localclusters.DomainFlagName, localClusterFlagArg(id))
+			"declares what --%s gives, and 'educates local config view%s' shows the defaults it gets",
+			localclusters.DomainFlagName, localClusterFlagArg(id))
 	}
 	if err := refuseExistingConfig(id.ConfigPath, o.Force); err != nil {
 		return err
 	}
-	flags := localclusters.ConfigFlags{ListenAddress: o.ListenAddress, Domain: o.Domain}
+	// The router file comes first, so that no config is written without
+	// it, and init can be run again once the router address is set.
+	if _, err := ensureRouterFile(w); err != nil {
+		return err
+	}
+	flags := localclusters.ConfigFlags{Domain: o.Domain}
 	write := localclusters.WriteConfig
 	if o.Defaults {
 		write = p.writeDefaultedLocalConfig
@@ -121,13 +124,31 @@ func (p *ProjectInfo) runLocalConfigInit(o *LocalConfigInitOptions, id localclus
 		return err
 	}
 	fmt.Fprintf(w, "wrote %s\n", id.ConfigPath)
-	// The default local cluster's config is written without a listen
-	// address when the host's IP address can't be detected: say what to
-	// set.
-	if _, err := localclusters.LoadConfig(id); err != nil {
-		fmt.Fprintf(w, "note: %v\n", err)
-	}
 	return nil
+}
+
+// ensureRouterFile writes the router file of the data home, router.yaml,
+// when it is missing, with the host's IP address as the router address,
+// as localclusters.EnsureRouterFile writes it, and tells w when it does,
+// reporting whether it did. An existing router file is left as it is.
+//
+// The default local cluster's config, as an earlier release wrote it, may
+// still declare the address its cluster was served on, which becomes the
+// router address in place of the host's IP address, with a note on
+// standard error, whichever local cluster the command is for, as
+// localclusters.EnsureRouterFile moves it.
+func ensureRouterFile(w io.Writer) (written bool, err error) {
+	dataHome := utils.GetEducatesHomeDir()
+	address, err := localclusters.EnsureRouterFile(dataHome)
+	if err != nil {
+		return false, err
+	}
+	if address == "" {
+		return false, nil
+	}
+	fmt.Fprintf(w, "wrote %s, with this host's IP address %s as the router address\n",
+		config.LocalRouterPath(dataHome), address)
+	return true, nil
 }
 
 // refuseExistingConfig returns an error when a config already exists at
@@ -141,16 +162,15 @@ func refuseExistingConfig(path string, force bool) error {
 
 // writeDefaultedLocalConfig writes the config of the local cluster id
 // that localclusters.WriteConfig writes from flags, with every CLI
-// default applied, as applyLocalConfigDefaults applies them.
+// default applied, as applyLocalConfigDefaults applies them. A domain it
+// can't derive, as from a router address with no nip.io name, is an
+// error, and nothing is written.
 func (p *ProjectInfo) writeDefaultedLocalConfig(id localclusters.Identity, flags localclusters.ConfigFlags) error {
-	cfg, isHostIP, err := localclusters.ConfigFromFlags(id, flags)
-	if err != nil {
-		return err
+	cfg := localclusters.ConfigFromFlags(flags)
+	if err := p.applyLocalConfigDefaults(id, cfg); err != nil {
+		return fmt.Errorf("%s: %w", id.ConfigPath, err)
 	}
-	// Only a config with no listen address gets no domain, and
-	// runLocalConfigInit says what to set then.
-	_ = p.applyLocalConfigDefaults(cfg)
-	body, err := config.MarshalLocalConfig(cfg, isHostIP)
+	body, err := config.MarshalLocalConfig(cfg)
 	if err != nil {
 		return err
 	}
@@ -163,13 +183,14 @@ func (p *ProjectInfo) writeDefaultedLocalConfig(id localclusters.Identity, flags
 	return nil
 }
 
-// applyLocalConfigDefaults applies every CLI default to cfg: the static
-// WithDefaults, the CLI image registry and version, and, when no
-// ingress.domain is set, the nip.io name of cluster.listenAddress with
-// ingress.insecure. domainErr says why the domain could not be derived,
-// in which case it is left unset.
-func (p *ProjectInfo) applyLocalConfigDefaults(cfg *v1alpha1.EducatesLocalConfig) (domainErr error) {
+// applyLocalConfigDefaults applies every CLI default to cfg, the config
+// of the local cluster id: the static WithDefaults, the CLI image
+// registry and version, and, when no ingress.domain is set, the nip.io
+// name localclusters.DeriveDomain derives, with ingress.insecure.
+// domainErr says why the domain could not be derived, in which case it is
+// left unset.
+func (p *ProjectInfo) applyLocalConfigDefaults(id localclusters.Identity, cfg *v1alpha1.EducatesLocalConfig) (domainErr error) {
 	cfg.WithDefaults()
 	cfg.ApplyCLIDefaults(p.Version, p.ImageRepository)
-	return localclusters.DeriveDomain(cfg)
+	return localclusters.DeriveDomain(id, cfg)
 }

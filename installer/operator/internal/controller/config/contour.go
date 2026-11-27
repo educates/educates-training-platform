@@ -194,6 +194,9 @@ func (r *EducatesClusterConfigReconciler) reconcileContour(ctx context.Context, 
 //     contour.replicaCount.
 //   - spec.imageRegistry.prefix → global.imageRegistry (chart
 //     supports a global registry override out of the box).
+//   - spec.ingress.certificates.provider None with spec.ingress.protocol
+//     https → configInline.network.num-trusted-hops 1, as described at
+//     tlsEndsInFront.
 //
 // Defaults are conservative: 1 replica unless the user asks for
 // more; ingressClass.create=true + ingressClass.default=true so
@@ -296,6 +299,14 @@ func renderContourValues(obj *configv1alpha1.EducatesClusterConfig) map[string]a
 		"envoy": envoyValues,
 	}
 
+	// The chart merges this into its own configInline defaults, and rolls
+	// the contour Deployment when the rendered configuration changes.
+	if tlsEndsInFront(obj) {
+		values["configInline"] = map[string]any{
+			"network": map[string]any{"num-trusted-hops": 1},
+		}
+	}
+
 	if obj.Spec.ImageRegistry != nil && obj.Spec.ImageRegistry.Prefix != "" {
 		values["global"] = map[string]any{
 			"imageRegistry": obj.Spec.ImageRegistry.Prefix,
@@ -304,6 +315,25 @@ func renderContourValues(obj *configv1alpha1.EducatesClusterConfig) map[string]a
 	setGlobalImagePullSecrets(values, obj)
 
 	return values
+}
+
+// tlsEndsInFront reports whether obj declares that TLS ends at a proxy in
+// front of the cluster: the None certificates provider, so the cluster
+// presents no certificate, with ingress.protocol https, so its URLs are
+// still https. That proxy, such as a cloud load balancer or the router of
+// a local cluster, sends the request on as plain HTTP with
+// X-Forwarded-Proto: https. Envoy trusts no proxy hop by default and then
+// overwrites that header with the scheme it received, http, which breaks
+// backends that build absolute URLs from it, such as a session registry
+// handing out its upload URLs. Trusting one hop keeps the header. When
+// Envoy ends TLS itself, or the cluster serves plain HTTP, a request meets
+// Envoy first, and trusting a hop would let a client set the forwarded
+// headers, so none is trusted.
+func tlsEndsInFront(obj *configv1alpha1.EducatesClusterConfig) bool {
+	ingress := obj.Spec.Ingress
+	return ingress != nil &&
+		ingress.Certificates.Provider == configv1alpha1.CertificatesProviderNone &&
+		ingress.Protocol == configv1alpha1.IngressProtocolHTTPS
 }
 
 // ensureContourReady gates the rest of the pipeline on Contour's

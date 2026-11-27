@@ -118,11 +118,14 @@ For local kind-cluster users, the v4 CLI migrates your configuration on first us
 
 * translates it to a v4 ``config.yaml`` (``EducatesLocalConfig``), starting
   with the schema modeline ``educates local config init`` writes, carrying over
-  the ingress domain, kind cluster settings (listen address, API server,
-  subnets, volume mounts), the local DNS resolver's extra domains, image
-  version overrides, image pre-puller settings, website styling references,
-  image pull secret propagation, the session manager's ``clusterAdmin``
-  switch, and the lookup service switch;
+  the ingress domain, kind cluster settings (API server, subnets, volume
+  mounts), the local DNS resolver's extra domains, image version overrides,
+  image pre-puller settings, website styling references, image pull secret
+  propagation, the session manager's ``clusterAdmin`` switch, and the lookup
+  service switch;
+* writes the router address, from ``localKindCluster.listenAddress``, to
+  ``router.yaml`` (``EducatesLocalRouter``) beside it, unless that file
+  already exists;
 * writes the registry mirrors of ``localKindCluster.registryMirrors`` to
   ``mirrors.yaml`` (``EducatesLocalMirrors``) beside it, unless that file
   already exists;
@@ -172,19 +175,26 @@ remove it. A version 3 file without ``imagePuller`` leaves
 
 Version 3 left a missing ``localKindCluster.listenAddress`` to Kind, which
 published the cluster's ports 80 and 443 on every host address, as ``0.0.0.0``
-does. Every local cluster now publishes them on a specific IP address of the
-host, as described in [listen address](local-cluster-listen-address), so the
-migration sets a missing or ``0.0.0.0`` listen address to your host's IP
-address, with a comment above it and a line of the notice saying so. An alias
-added to a network interface, such as ``10.10.10.1``, survives network
-changes, where the host's IP address may not, so you may want to set
-``cluster.listenAddress`` to one instead. When the host's IP address can't be
-detected, the migration leaves ``cluster.listenAddress`` unset, and the notice
-says to set it. Any other listen address is kept as it was.
+does. Every local cluster is now served through one router, which publishes
+them on the router address, a specific IP address of the host kept in
+``router.yaml`` in the data home, as described in
+[router address](local-router-address). A cluster's configuration has no
+address of its own. The migration writes a specific listen address to
+``router.yaml`` as the router address. A missing or ``0.0.0.0`` listen
+address, or a loopback one such as ``127.0.0.1``, at which pods would reach
+themselves instead of the host, becomes your host's IP address instead, with
+a line of the notice saying so. An alias added to a network interface, such
+as ``10.10.10.1``, survives network changes, where the host's IP address may
+not, so you may want to make one the router address instead, with
+``educates local router update --address 10.10.10.1``. When the host's IP
+address can't be detected, the migration writes no ``router.yaml``, and the
+notice says to set the router address. When ``router.yaml`` already exists,
+the migration leaves it as it is, and for a specific listen address the
+notice shows the command that makes it the router address.
 
 A local cluster serves an ingress domain it is given over HTTPS, which needs
 a root CA or a wildcard certificate for the domain in the local secrets cache,
-and with no ``ingress.domain`` it takes the ``nip.io`` name of its listen
+and with no ``ingress.domain`` it takes the ``nip.io`` name of the router
 address, with dashes, served over plain HTTP. When ``clusterIngress.domain``
 is the ``nip.io`` name of an IPv4 address, such as ``10.10.10.1.nip.io`` or
 ``10-10-10-1.nip.io``, the migration leaves ``ingress.domain`` unset if version
@@ -192,16 +202,16 @@ is the ``nip.io`` name of an IPv4 address, such as ``10.10.10.1.nip.io`` or
 is cached, and the file sets none of ``clusterIngress.tlsCertificate``,
 ``clusterIngress.tlsCertificateRef``, ``clusterInfrastructure.caCertificateRef``
 and ``clusterIngress.protocol``. A line of the notice says so, and the
-cluster's host names then follow its listen address. To keep the version 3
+cluster's host names then follow the router address. To keep the version 3
 domain, set ``ingress.domain`` to it and ``ingress.insecure`` to ``true``.
 
 The migration also drops ``localDNSResolver.targetAddress``. A local cluster's
-names now resolve to its ``cluster.listenAddress``. The migration does not set
-``cluster.listenAddress`` from the target address, since setting it changes
-where Kind publishes the cluster's ports. To keep resolving the cluster at the
-old target address, set ``cluster.listenAddress`` to it and create the cluster
-again. Names that resolve elsewhere go in files of your own in the data home's
-``dnsmasq.d`` folder, as described in [names of your own](local-dns-resolver-own-names).
+names now resolve to the router address, where the router serves every local
+cluster. To keep resolving the cluster at the old target address, make it the
+router address with ``educates local router update --address <address>``, as
+described in [router address](local-router-address). Names that resolve
+elsewhere go in files of your own in the data home's ``dnsmasq.d`` folder, as
+described in [names of your own](local-dns-resolver-own-names).
 
 Version 4 declares registry mirrors once for every local cluster, in
 ``mirrors.yaml`` in the data home, rather than in a cluster's configuration,
@@ -250,13 +260,19 @@ A ``config.yaml`` from a pre-release of version 4 that still has
 it: its mirrors go to ``mirrors.yaml``, the previous configuration is kept
 as ``config.yaml.bak``, and ``cluster.registryMirrors`` is removed from it,
 as described in [mirrors in a cluster's configuration](local-mirrors-move).
+One that still has ``cluster.listenAddress`` is moved the same way: the
+default local cluster's specific address becomes the router address in
+``router.yaml`` when that file is missing, a named local cluster's address
+is dropped, and the field is removed, keeping the previous configuration as
+a backup beside it, as the [configuration settings](configuration-settings)
+describe.
 
 The notice says what was carried over and what was dropped, with lines such
 as:
 
 ```
-set cluster.listenAddress to 192.168.1.20, this host's IP address: localKindCluster.listenAddress was not set, so the cluster published its ports 80 and 443 on every host address, and every local cluster now publishes them on a specific IP address of the host. An alias such as 10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not
-dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to its cluster.listenAddress; set cluster.listenAddress to 192.168.1.10 to keep resolving the cluster there, or for other names add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home
+wrote /Users/me/Library/Application Support/educates/router.yaml with this host's IP address 192.168.1.20 as the router address: localKindCluster.listenAddress was not set, so the cluster published its ports 80 and 443 on every host address, and every local cluster is now served on the router address, a specific IP address of the host. An alias such as 10.10.10.1, added to a network interface, survives network changes, where the host's IP address may not
+dropped localDNSResolver.targetAddress 192.168.1.10: a local cluster's names now resolve to the router address; set it with 'educates local router update --address 192.168.1.10' to keep resolving the cluster there, or for other names add address=/<name>/192.168.1.10 to a *.conf file in the dnsmasq.d folder of the data home
 moved localKindCluster.registryMirrors to /Users/me/Library/Application Support/educates/mirrors.yaml, where the registry mirrors every local cluster needs are declared: docker.io, ghcr.io
 dropped imageVersions entry pause-container: the image pre-puller now runs its own image-puller helper, which a pause container image cannot replace
 carried imagePuller over to imagePrePuller: enabled: true, images: jdk17-environment

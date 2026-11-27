@@ -120,7 +120,7 @@ func (p *ProjectInfo) runDeploy(ctx context.Context, w io.Writer, o *PlatformDep
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
 		// The local cluster rules of --local-config have already given
-		// an empty ingress.domain the nip.io name of the listen address.
+		// an empty ingress.domain a nip.io name.
 		if !o.LocalConfig && c.Ingress.Domain == "" {
 			return fmt.Errorf("ingress.domain is required when using --config (set it in %s)", path)
 		}

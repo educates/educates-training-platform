@@ -4,8 +4,6 @@ import (
 	"archive/tar"
 	"context"
 	"io"
-	"net"
-	"net/netip"
 	"strconv"
 	"strings"
 
@@ -13,9 +11,11 @@ import (
 	"github.com/moby/moby/client"
 	"github.com/pkg/errors"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/docker"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/registry"
+	"github.com/educates/educates-training-platform/client-programs/pkg/router"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
@@ -39,9 +39,9 @@ const maxKindVersionSize = 256
 // local clusters answers from: every kind node container on the Docker
 // host, as ObserveNodeContainers returns them, with the host ports each
 // control-plane node is configured to publish and the Kubernetes version
-// of its node image, the addresses of the host's network interfaces, and
-// the registry mirror containers, as registry.ObserveMirrorContainers
-// returns them.
+// of its node image, the addresses of the host's network interfaces, the
+// registry mirror containers, as registry.ObserveMirrorContainers returns
+// them, and the router container, as router.Observe returns it.
 //
 // The port bindings come from each container's configured host config,
 // not from the ports it publishes now, and the Kubernetes version from
@@ -85,19 +85,9 @@ func ObserveLocalClusters(ctx context.Context) (localclusters.Observed, error) {
 		}
 	}
 
-	addrs, err := net.InterfaceAddrs()
+	interfaces, err := hostinfo.InterfaceAddresses()
 	if err != nil {
-		return localclusters.Observed{}, errors.Wrap(err, "unable to list the addresses of the host's network interfaces")
-	}
-	interfaces := make([]netip.Addr, 0, len(addrs))
-	for _, a := range addrs {
-		ipNet, ok := a.(*net.IPNet)
-		if !ok {
-			continue
-		}
-		if addr, ok := netip.AddrFromSlice(ipNet.IP); ok {
-			interfaces = append(interfaces, addr.Unmap())
-		}
+		return localclusters.Observed{}, err
 	}
 
 	mirrors, err := registry.ObserveMirrorContainers(ctx)
@@ -105,7 +95,17 @@ func ObserveLocalClusters(ctx context.Context) (localclusters.Observed, error) {
 		return localclusters.Observed{}, err
 	}
 
-	return localclusters.Observed{Nodes: nodes, InterfaceAddresses: interfaces, Mirrors: mirrors}, nil
+	routerContainer, err := router.Observe(ctx)
+	if err != nil {
+		return localclusters.Observed{}, err
+	}
+
+	return localclusters.Observed{
+		Nodes:              nodes,
+		InterfaceAddresses: interfaces,
+		Mirrors:            mirrors,
+		Router:             routerContainer,
+	}, nil
 }
 
 // nodeKubernetesVersion returns the Kubernetes version of the node image

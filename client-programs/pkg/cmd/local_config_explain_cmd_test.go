@@ -23,6 +23,8 @@ func TestExplainSchemaForKind(t *testing.T) {
 		{"EducatesConfig", schemas.EducatesConfig},
 		{"mirrors", schemas.EducatesLocalMirrors},
 		{"EducatesLocalMirrors", schemas.EducatesLocalMirrors},
+		{"router", schemas.EducatesLocalRouter},
+		{"EducatesLocalRouter", schemas.EducatesLocalRouter},
 	}
 	for _, tc := range cases {
 		sch, err := explainSchemaForKind(tc.kind)
@@ -65,8 +67,7 @@ func TestLocalConfigExplain_Resolver_ExplainsTheSharedResolver(t *testing.T) {
 		path string
 		want []string
 	}{
-		{"resolver", []string{"every local cluster shares", "cluster.listenAddress", "dnsmasq.d"}},
-		{"cluster.listenAddress", []string{"specific IP address", "0.0.0.0", "loopback", "educates local config init", "10.10.10.1", "Allow privileged port forwarding to external machines"}},
+		{"resolver", []string{"every local cluster shares", "router address", "dnsmasq.d"}},
 		{"resolver.extraDomains", []string{"subdomains", "another local cluster", "error"}},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
@@ -104,6 +105,23 @@ func TestLocalConfigExplain_MirrorsKind_ExplainsTheRegistryMirrors(t *testing.T)
 	for _, want := range []string{"FIELD:    registryMirrors <[]Object>", "every local cluster", "mirror", "password"} {
 		if !bytes.Contains(buf.Bytes(), []byte(want)) {
 			t.Errorf("explain registryMirrors --kind mirrors does not mention %q:\n%s", want, buf.String())
+		}
+	}
+}
+
+// The router file's kind explains the router address.
+func TestLocalConfigExplain_RouterKind_ExplainsTheRouterAddress(t *testing.T) {
+	p := ProjectInfo{}
+	cmd := p.NewLocalConfigExplainCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"address", "--kind", "router"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	for _, want := range []string{"FIELD:    address <string>", "loopback", "10.10.10.1", "Allow privileged port forwarding to external machines"} {
+		if !bytes.Contains(buf.Bytes(), []byte(want)) {
+			t.Errorf("explain address --kind router does not mention %q:\n%s", want, buf.String())
 		}
 	}
 }

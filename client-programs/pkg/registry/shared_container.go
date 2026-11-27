@@ -187,11 +187,11 @@ func containerState(ctx context.Context, cli *client.Client, name string) (conta
 	return info.Container.State.Status, true, nil
 }
 
-// ensureEducatesNetwork creates the educates network unless it exists.
+// EnsureEducatesNetwork creates the educates network unless it exists.
 // Docker creates a network of a given name once, refusing every other
 // create with a conflict, so a network another command creates at the
 // same time counts as created.
-func ensureEducatesNetwork(ctx context.Context, cli *client.Client) error {
+func EnsureEducatesNetwork(ctx context.Context, cli *client.Client) error {
 	if _, err := cli.NetworkInspect(ctx, EducatesNetworkName, client.NetworkInspectOptions{}); err == nil {
 		return nil
 	}

@@ -1,6 +1,6 @@
 // Package hostinfo derives runtime host information used by laptop-mode
-// CLI defaulting (e.g. the host's IP address as a local cluster's
-// cluster.listenAddress).
+// CLI defaulting (e.g. the host's IP address as the router address every
+// local cluster is served on).
 //
 // Kept separate from the translator so the translator stays deterministic
 // and unit-testable: anything host-derived flows in via call sites that
@@ -10,6 +10,7 @@ package hostinfo
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"strings"
 )
 
@@ -36,6 +37,27 @@ func detectHostIP() (string, error) {
 	defer conn.Close()
 	local := conn.LocalAddr().(*net.UDPAddr)
 	return local.IP.String(), nil
+}
+
+// InterfaceAddresses returns every IP address of the host's network
+// interfaces, loopback and link-local ones included, an IPv4-mapped IPv6
+// address as its IPv4 address.
+func InterfaceAddresses() ([]netip.Addr, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, fmt.Errorf("unable to list the addresses of the host's network interfaces: %w", err)
+	}
+	interfaces := make([]netip.Addr, 0, len(addrs))
+	for _, a := range addrs {
+		ipNet, ok := a.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		if addr, ok := netip.AddrFromSlice(ipNet.IP); ok {
+			interfaces = append(interfaces, addr.Unmap())
+		}
+	}
+	return interfaces, nil
 }
 
 // NipDomain converts a dotted-quad IPv4 (e.g. 192.168.1.10) into the

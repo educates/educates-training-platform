@@ -141,7 +141,7 @@ func writeLocalMirrorsDocument(path string, doc *yaml.Node) error {
 	if _, err := loadLocalMirrorsBytes(data, path); err != nil {
 		return fmt.Errorf("refusing to write a registry mirrors file that would not load: %w", err)
 	}
-	return writeFileAtomically(path, data, 0o600)
+	return WriteFileAtomically(path, data, 0o600)
 }
 
 // registryMirrorsNode returns the sequence node of the registryMirrors of

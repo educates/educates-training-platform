@@ -15,8 +15,7 @@
       "additionalProperties": false,
       "description": "Settings for the local Kind cluster the CLI creates.",
       "properties": {
-        "listenAddress":         { "type": "string", "description": "A specific IP address of the host that the cluster publishes its ports 80 and 443 on, and that its names, its ingress domain and resolver.extraDomains, resolve to. Every local cluster needs one of its own: not 0.0.0.0, which means every host address, and not a loopback address such as 127.0.0.1, at which pods reach themselves instead of the host. 'educates local config init' writes the host's IP address. An alias such as 10.10.10.1, added to a network interface, survives network changes. On Docker Desktop 4.97 or later, ports 80 and 443 on it need \"Allow privileged port forwarding to external machines\" on, in Settings > Advanced." },
-        "registryListenAddress": { "type": "string", "description": "Host address the local image registry is published on. Defaults to the cluster listenAddress." },
+        "registryListenAddress": { "type": "string", "description": "Ignored: the local image registry is published on the address 'educates local cluster create --registry-bind-ip' gives, 127.0.0.1 by default." },
         "apiServer": {
           "type": "object",
           "additionalProperties": false,
@@ -51,7 +50,7 @@
         },
         "nodes": {
           "type": "array",
-          "description": "Nodes of the Kind cluster. Leave empty for the default single control-plane cluster; when set, the list fully declares the cluster's nodes and must include exactly one control-plane node, which publishes ports 80 and 443 on the listen address and declares no taints; the others are workers.",
+          "description": "Nodes of the Kind cluster. Leave empty for the default single control-plane cluster; when set, the list fully declares the cluster's nodes and must include exactly one control-plane node, the node the router sends the cluster's names to, which declares no taints; the others are workers.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -82,9 +81,9 @@
     "resolver": {
       "type": "object",
       "additionalProperties": false,
-      "description": "This cluster's entries in the local DNS resolver every local cluster shares, which has no settings of its own. This cluster's names, its ingress domain always plus extraDomains, resolve to its cluster.listenAddress. Names that resolve anywhere else, such as a VM, go in dnsmasq configuration files of your own, <data-home>/dnsmasq.d/*.conf, which the resolver also reads. 'educates local resolver view' shows every name it answers for.",
+      "description": "This cluster's entries in the local DNS resolver every local cluster shares, which has no settings of its own. This cluster's names, its ingress domain always plus extraDomains, resolve to the router address in <data-home>/router.yaml, where the router sends them on to this cluster. Names that resolve anywhere else, such as a VM, go in dnsmasq configuration files of your own, <data-home>/dnsmasq.d/*.conf, which the resolver also reads. 'educates local resolver view' shows every name it answers for.",
       "properties": {
-        "extraDomains":  { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "More names that resolve to this cluster's address, as its ingress domain does, each with its subdomains. A name another local cluster also claims is an error." }
+        "extraDomains":  { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "More names that resolve to this cluster's address, as its ingress domain does, each with its subdomains. A name another local cluster also claims is an error. When the router ends TLS for this cluster, with ingress.externalTLSTermination, it serves these names on port 80 only, since its certificate covers the ingress domain alone." }
       }
     },
 
@@ -93,12 +92,24 @@
       "additionalProperties": false,
       "description": "Ingress domain and TLS settings for the cluster.",
       "properties": {
-        "domain": { "type": "string", "description": "Wildcard ingress domain Educates serves workshops under. When left empty the cluster takes the nip.io name of its cluster.listenAddress, such as 10-10-10-1.nip.io, and is served insecurely over plain HTTP." },
+        "domain": { "type": "string", "description": "Wildcard ingress domain Educates serves workshops under. When left empty the default local cluster takes the nip.io name of the router address in <data-home>/router.yaml, such as 10-10-10-1.nip.io, and a named one its name under it, such as test2.10-10-10-1.nip.io, and is served insecurely over plain HTTP, unless externalTLSTermination is true." },
         "insecure": {
           "type": "boolean",
           "default": false,
-          "description": "Serves the cluster over plain HTTP with no TLS. No CA or certificate is needed, so the one-time 'educates local secrets add ca' step is skipped. Maps to EducatesClusterConfig ingress.protocol http with a None certificates provider."
+          "description": "Serves the cluster over plain HTTP with no TLS. No CA or certificate is needed, so the one-time 'educates local secrets add ca' step is skipped. Maps to EducatesClusterConfig ingress.protocol http with a None certificates provider. Can't be true with externalTLSTermination."
+        },
+        "externalTLSTermination": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ends TLS for the cluster's ingress domain at the router, as a cloud load balancer does for the cloud kinds' externalTLSTermination: the cluster issues no certificate and serves plain HTTP behind the router, while its portal and workshop URLs use https. The router presents the wildcard certificate cached with 'educates local secrets add tls' for the domain, or else a certificate the CLI issues from the domain's CA, minted from the cached root CA, and the cluster trusts the CA that verifies it. Names under resolver.extraDomains are served on port 80 only. Maps to EducatesClusterConfig ingress.protocol https with a None certificates provider and its CA trust Secret. Can't be true with insecure."
         }
+      },
+      "not": {
+        "properties": {
+          "insecure":               { "const": true },
+          "externalTLSTermination": { "const": true }
+        },
+        "required": ["insecure", "externalTLSTermination"]
       }
     },
 

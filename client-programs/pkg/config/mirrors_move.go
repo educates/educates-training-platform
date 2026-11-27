@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -38,44 +39,16 @@ import (
 // since it holds the mirrors' passwords, and the field is removed from
 // the config, keeping the rest of the file, comments included.
 func MoveClusterRegistryMirrors(dataHome, path string, w io.Writer) error {
-	if !IsDataHomeConfig(dataHome, path) {
-		return nil
+	config, err := readDataHomeConfig(dataHome, path)
+	if err != nil || config == nil {
+		return err
 	}
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
-	// A file that doesn't parse, or isn't a config of ours, is left for
-	// the loader to report.
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil || len(doc.Content) == 0 {
-		return nil
-	}
-	root := doc.Content[0]
-	if apiVersion := yamlMappingValue(root, "apiVersion"); apiVersion == nil || apiVersion.Value != v1alpha1.APIVersion {
-		return nil
-	}
-	kind := yamlMappingValue(root, "kind")
-	if kind == nil {
-		return nil
-	}
-	clusterPath := clusterBlockPath(kind.Value)
-	if clusterPath == nil {
-		return nil
-	}
-	cluster := root
-	for _, key := range clusterPath {
-		cluster = yamlMappingValue(cluster, key)
-	}
-	list := yamlMappingValue(cluster, "registryMirrors")
+	list := yamlMappingValue(config.cluster, "registryMirrors")
 	if list == nil {
 		return nil
 	}
 
-	field := strings.Join(append(clusterPath, "registryMirrors"), ".")
+	field := config.field("registryMirrors")
 	mirrorsPath := LocalMirrorsPath(dataHome)
 	mirrors, dropped, err := clusterRegistryMirrors(list, path+": "+field)
 	if err != nil {
@@ -96,20 +69,9 @@ func MoveClusterRegistryMirrors(dataHome, path string, w io.Writer) error {
 		}
 	}
 
-	backup, err := backUpConfig(path, data)
+	removeYAMLMappingKey(config.cluster, "registryMirrors")
+	backup, err := config.rewrite()
 	if err != nil {
-		return err
-	}
-	removeYAMLMappingKey(cluster, "registryMirrors")
-	out, err := encodeYAMLDocument(&doc)
-	if err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	perm := fs.FileMode(0o644)
-	if info, err := os.Stat(path); err == nil {
-		perm = info.Mode().Perm()
-	}
-	if err := writeFileAtomically(path, out, perm); err != nil {
 		return err
 	}
 
@@ -121,9 +83,91 @@ func MoveClusterRegistryMirrors(dataHome, path string, w io.Writer) error {
 	return nil
 }
 
+// dataHomeConfig is a config of a local cluster in the data home, as
+// readDataHomeConfig parsed it, so that a field removed from its cluster
+// block can be moved out of it.
+type dataHomeConfig struct {
+	// path is the config's file, and data its content.
+	path string
+	data []byte
+
+	// doc is the node tree of data, and cluster the cluster block in it,
+	// at clusterPath, or nil when the config declares none.
+	doc         yaml.Node
+	clusterPath []string
+	cluster     *yaml.Node
+}
+
+// readDataHomeConfig reads the config at path when it is the config of a
+// local cluster in the data home dataHome, as IsDataHomeConfig tells, of
+// a kind with a cluster block (clusterBlockPath). It returns nil for any
+// other file, a missing one, and one that doesn't parse or isn't a config
+// of ours, which are left for the loader to report.
+func readDataHomeConfig(dataHome, path string) (*dataHomeConfig, error) {
+	if !IsDataHomeConfig(dataHome, path) {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	c := &dataHomeConfig{path: path, data: data}
+	if err := yaml.Unmarshal(data, &c.doc); err != nil || len(c.doc.Content) == 0 {
+		return nil, nil
+	}
+	root := c.doc.Content[0]
+	if apiVersion := yamlMappingValue(root, "apiVersion"); apiVersion == nil || apiVersion.Value != v1alpha1.APIVersion {
+		return nil, nil
+	}
+	kind := yamlMappingValue(root, "kind")
+	if kind == nil {
+		return nil, nil
+	}
+	if c.clusterPath = clusterBlockPath(kind.Value); c.clusterPath == nil {
+		return nil, nil
+	}
+	c.cluster = root
+	for _, key := range c.clusterPath {
+		c.cluster = yamlMappingValue(c.cluster, key)
+	}
+	return c, nil
+}
+
+// field is the name of the field key of the config's cluster block, such
+// as cluster.registryMirrors or target.cluster.registryMirrors.
+func (c *dataHomeConfig) field(key string) string {
+	return strings.Join(append(slices.Clone(c.clusterPath), key), ".")
+}
+
+// rewrite keeps the config's previous content beside it, as backUpConfig
+// keeps it, then writes its node tree, as edited, over it with the file's
+// own permissions, and returns the backup's path.
+func (c *dataHomeConfig) rewrite() (string, error) {
+	backup, err := backUpConfig(c.path, c.data)
+	if err != nil {
+		return "", err
+	}
+	out, err := encodeYAMLDocument(&c.doc)
+	if err != nil {
+		return "", fmt.Errorf("write %s: %w", c.path, err)
+	}
+	perm := fs.FileMode(0o644)
+	if info, err := os.Stat(c.path); err == nil {
+		perm = info.Mode().Perm()
+	}
+	if err := WriteFileAtomically(c.path, out, perm); err != nil {
+		return "", err
+	}
+	return backup, nil
+}
+
 // clusterBlockPath is the path of the cluster block in a config of kind
-// kind, which declared registry mirrors before they moved to the registry
-// mirrors file, or nil for a kind without one.
+// kind, which declared registry mirrors and a listen address before they
+// moved to the registry mirrors file and the router file, or nil for a
+// kind without one.
 func clusterBlockPath(kind string) []string {
 	switch kind {
 	case v1alpha1.KindEducatesLocalConfig:

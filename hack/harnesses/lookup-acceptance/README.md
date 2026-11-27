@@ -87,10 +87,11 @@ two of them, from the first cluster to the last check, fails the run with
   and pushes its images, the Lookup Service's among them, to the local
   registry under that tag. The harness runs that CLI; the `educates` on your
   `PATH` may be another build.
-- Two addresses of the host that no other local cluster uses, such as
-  aliases added to a network interface, as "Running several local clusters"
-  in the local environment guide describes. The defaults are `10.10.10.18`
-  and `10.10.10.19`.
+- No other local cluster on the two clusters' domains,
+  `<name>.educates.test`: the clusters take no host address of their own,
+  since the router serves every local cluster on the one router address, as
+  "Running several local clusters" in the local environment guide
+  describes, so a domain is the only thing they can clash on.
 - What `educates local cluster create` needs for a cluster served over
   HTTPS: Docker, the local DNS resolver for `*.educates.test`, and the CLI's
   CA root in its secrets cache, as `educates local secrets add ca` arranges.
@@ -116,11 +117,9 @@ make local-build PACKAGE_VERSION=mytag
 hack/harnesses/lookup-acceptance/run.sh --tag mytag
 ```
 
-On a host whose free addresses are other than the defaults, name them:
-
-```
-hack/harnesses/lookup-acceptance/run.sh --tag mytag --lookup-address 10.10.10.6 --remote-address 10.10.10.7
-```
+The harness reaches both clusters through the router, on the router address
+that `educates local router status` shows, and refuses to go on when the
+router does not run or does not send a cluster's domain to that cluster.
 
 A run takes about 15 minutes on a laptop, most of it creating the two
 clusters. It never prompts. It prints its progress and the checks, writes
@@ -143,8 +142,7 @@ hack/harnesses/lookup-acceptance/run.sh --delete
 ```
 
 or run on them with `--reuse`, which uses a cluster created by
-`local-cluster.sh` from the same build tag on the same listen address, and
-creates a missing one. On a cluster it reuses, the run first deletes the
+`local-cluster.sh` from the same build tag, and creates a missing one. On a cluster it reuses, the run first deletes the
 portal an earlier run left, which takes the portal's sessions with it, and
 applies the Lookup Service's configuration again. `--reuse --keep` repeats
 the checks on the same clusters without creating them each time.
@@ -156,9 +154,7 @@ the checks on the same clusters without creating them each time.
 | `--tag <tag>` | The `PACKAGE_VERSION` of the local build to check, `lookup-acceptance` by default. The CLI must be that build's. |
 | `--cli <path>` | The CLI of the build, this checkout's `client-programs/bin/educates-<os>-<arch>` by default. |
 | `--lookup-cluster <name>` | The cluster whose Lookup Service is used, `lookup-acceptance-a` by default. |
-| `--lookup-address <ip>` | Its listen address, `10.10.10.18` by default. |
 | `--remote-cluster <name>` | The cluster the Lookup Service reaches as a remote cluster, `lookup-acceptance-b` by default. |
-| `--remote-address <ip>` | Its listen address, `10.10.10.19` by default. |
 | `--sessions <n>` | The new sessions to request, an even number from 2 to 10, 6 by default. The portal deletes a session that is not activated within 60 seconds of its request, so the whole series has to fit in that window. |
 | `--reuse` | Use the clusters an earlier run left instead of refusing to start. |
 | `--keep` | Leave the clusters, and everything the run made on them, in place. |
@@ -183,15 +179,17 @@ When the Lookup Service never lists the remote cluster's portal, the run
 stops with what it last saw, and the Lookup Service's log says why it could
 not connect to the remote cluster. Its pods reach the remote control plane
 container by name through Docker's DNS, and the remote portal's host name
-through the host's resolver for `*.educates.test`, so both clusters must run
-on the same Docker host, with Docker Desktop's "Allow privileged port
-forwarding to external machines" setting on, as `educates local cluster
-create` requires.
+through the local DNS resolver, which answers it with the router address,
+and the router, which sends it to the remote cluster. So both clusters must
+run on the same Docker host, with Docker Desktop's "Allow privileged port
+forwarding to external machines" setting on, which the router needs and
+`educates local cluster create` checks.
 
 ## Tests
 
-The checks a run is judged by, the kubeconfig rewrite and the detection of
-a sleep have unit tests, which need no cluster. `npm test` also runs the
+The checks a run is judged by, finding each cluster and the router address
+it is reached on, the kubeconfig rewrite and the detection of a sleep have
+unit tests, which need no cluster. `npm test` also runs the
 tests of the modules in [`lib/`](../lib/) that the harness shares with the
 other harnesses:
 

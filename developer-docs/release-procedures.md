@@ -24,6 +24,15 @@ Where changes are non trivial or need further explanation, the release notes sho
 
 Once a `release/*` branch has been cut, release notes and documentation updates for that release count as stabilization work and are made on the `release/*` branch. They reach `develop` through the back-merge when the release is finished.
 
+Updating the Host Images
+------------------------
+
+The `educates` CLI runs three images as shared host services on a developer's Docker: the local registry and its mirrors, the DNS resolver, and the router that serves every local cluster. [hack/list-host-images.sh](../hack/list-host-images.sh) lists them with the Go constants that pin them. No dependency bot reads those constants, so an image rebuilt with security fixes reaches developers only once its pin moves, and a pin moves only by hand.
+
+Before any release, move each pin whose image has a fixable vulnerability or a newer release: run [hack/scan-host-images.sh](../hack/scan-host-images.sh) to see what each pinned image carries, then move the pins and add their release-notes entries. Do it before the first release candidate is tagged, so the rc builds carry the new images; once the `release/*` branch has been cut, a pin moved for a vulnerability is a stabilization fix made there. If you use Claude Code, the `educates-upgrade-host-images` skill shipped in this repository does all of this, including the check that a new HAProxy image accepts the configuration the CLI renders for the router.
+
+Between releases, the *Host Images Scan* workflow ([.github/workflows/host-images-scan.yaml](../.github/workflows/host-images-scan.yaml)) scans the pinned images every week. While an image has a fixable vulnerability of High or Critical severity, it keeps one issue open, titled "Fixable vulnerabilities in the CLI's host container images", with the latest report, and it closes the issue once a scan finds none. An open issue is the signal to move the pin as a security fix, on `develop` and on every maintained line whose CLI pins the same image, as *Propagating Fixes Across Maintained Lines* below describes.
+
 Release Artifacts
 -----------------
 

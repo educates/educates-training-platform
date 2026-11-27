@@ -29,12 +29,12 @@ const privilegedPortSettingPath = "Settings > Advanced > Allow privileged port f
 // platform, followed by its version, as in "Docker Desktop 4.97.0".
 const dockerDesktopPlatform = "Docker Desktop "
 
-// CheckPrivilegedPortForwarding checks that the Docker engine can serve a
-// local cluster's ports 80 and 443 on its listen address, a non-loopback
-// address. platform is the Docker server's platform name, as the Docker
-// API reports it, such as "Docker Desktop 4.97.0", and setting is Docker
-// Desktop's setting "Allow privileged port forwarding to external
-// machines".
+// CheckPrivilegedPortForwarding checks that the Docker engine can serve
+// the router's ports 80 and 443 on the router address, a non-loopback
+// address, for every local cluster. platform is the Docker server's
+// platform name, as the Docker API reports it, such as "Docker Desktop
+// 4.97.0", and setting is Docker Desktop's setting "Allow privileged port
+// forwarding to external machines".
 //
 // Docker Desktop 4.97 and later serves ports below 1024 on loopback
 // addresses only while the setting is off, so it refuses then, naming the
@@ -45,8 +45,8 @@ func CheckPrivilegedPortForwarding(platform string, setting PrivilegedPortForwar
 		return "", nil
 	}
 	why := fmt.Sprintf("%s serves ports below 1024 on loopback addresses only while its setting "+
-		"\"Allow privileged port forwarding to external machines\" is off, and the cluster's ports 80 and 443 "+
-		"on a non-loopback address need it", platform)
+		"\"Allow privileged port forwarding to external machines\" is off, and the router's ports 80 and 443 "+
+		"on the router address, a non-loopback address, need it", platform)
 	switch setting {
 	case PrivilegedPortForwardingOn:
 		return "", nil
@@ -54,7 +54,7 @@ func CheckPrivilegedPortForwarding(platform string, setting PrivilegedPortForwar
 		return "", fmt.Errorf("%s. Turn it on in %s, then run the command again", why, privilegedPortSettingPath)
 	default:
 		return fmt.Sprintf("could not read whether Docker Desktop's setting \"Allow privileged port forwarding to "+
-			"external machines\" is on: %s. If the cluster can't be reached, turn it on in %s",
+			"external machines\" is on: %s. If the local clusters can't be reached, turn it on in %s",
 			why, privilegedPortSettingPath), nil
 	}
 }

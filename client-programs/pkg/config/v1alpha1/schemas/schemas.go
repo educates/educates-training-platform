@@ -23,3 +23,6 @@ var EducatesEKSConfig []byte
 
 //go:embed EducatesLocalMirrors.schema.json
 var EducatesLocalMirrors []byte
+
+//go:embed EducatesLocalRouter.schema.json
+var EducatesLocalRouter []byte

@@ -10,7 +10,7 @@ import (
 )
 
 func TestSecretsSync_BuildsThePlanFromTheSelectedLocalClustersConfig(t *testing.T) {
-	const defaultConfig = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: workshop.test\n"
+	const defaultConfig = "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ningress:\n  domain: workshop.test\n"
 	cases := []struct {
 		name          string
 		defaultConfig string
@@ -31,7 +31,7 @@ func TestSecretsSync_BuildsThePlanFromTheSelectedLocalClustersConfig(t *testing.
 			name:          "a named cluster's nip.io domain served over plain HTTP",
 			defaultConfig: defaultConfig,
 			cluster:       "test2",
-			namedConfig:   "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.2\n",
+			namedConfig:   "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n",
 			want:          []string{"test-ca"},
 		},
 		{
@@ -39,13 +39,14 @@ func TestSecretsSync_BuildsThePlanFromTheSelectedLocalClustersConfig(t *testing.
 			defaultConfig: defaultConfig,
 			cluster:       "test2",
 			namedConfig: "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n" +
-				"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.educates.test\n",
+				"ingress:\n  domain: test2.educates.test\n",
 			want: []string{"test-ca", "test2.educates.test-ca-key-pair"},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dataHome := withRootCA(t)
+			writeRouterFile(t, dataHome, handWrittenRouterFile)
 			if tc.defaultConfig != "" {
 				if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(tc.defaultConfig), 0o644); err != nil {
 					t.Fatal(err)
@@ -76,7 +77,7 @@ func TestSecretsSync_NamedClusterWithoutConfig_SaysHowToWriteOne(t *testing.T) {
 
 	_, err := resolveLocalSecretsSync(id)
 
-	wantError(t, err, `"test2"`, "educates local config init --local-cluster test2 --listen-address <ip>")
+	wantError(t, err, `"test2"`, "educates local config init --local-cluster test2\n")
 }
 
 func TestSecretsSync_InvalidDefaultConfig_NamesIt(t *testing.T) {

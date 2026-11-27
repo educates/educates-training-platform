@@ -9,44 +9,16 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 )
 
-// ValidateListenAddress checks that address can be a local cluster's
-// listen address, the host address its ports 80 and 443 are published
-// on: a specific IP address, neither the unspecified address that means
-// every host address nor a loopback address. An IPv4-mapped IPv6 address
-// is checked as the IPv4 address it maps. The error gives the reason,
-// without naming where the address came from.
-func ValidateListenAddress(address string) error {
-	if address == "" {
-		return fmt.Errorf("must be set to a specific IP address of the host, which the cluster publishes " +
-			"its ports 80 and 443 on")
-	}
-	ip, err := netip.ParseAddr(address)
-	if err != nil {
-		return fmt.Errorf("%q is not an IP address", address)
-	}
-	ip = ip.Unmap()
-	if ip.IsUnspecified() {
-		return fmt.Errorf("%s means every host address, and a local cluster needs a specific IP "+
-			"address of the host of its own to publish its ports 80 and 443 on", address)
-	}
-	if ip.IsLoopback() {
-		return fmt.Errorf("%s is a loopback address, which can't work for a local cluster: "+
-			"pods resolve the cluster's ingress domain to it, and reach their own loopback "+
-			"interface instead of the host", address)
-	}
-	return nil
-}
-
 // validateClusterNodes checks a declared node list: when set, it must
 // contain exactly one control-plane node, which declares no taints, and
 // use only the roles kind understands. kind cannot bootstrap without a
-// control-plane node, and the control-plane node publishes ports 80 and
-// 443 on the listen address, which a second one could not also bind.
-// Envoy serves those ports from the control-plane node and tolerates only
-// the NoSchedule taint kind leaves on it in a cluster with workers, so a
-// taint declared on it could keep Envoy off. An empty list keeps the
-// default single control-plane cluster and needs no validation. The error
-// gives the reason, without naming the field the list came from.
+// control-plane node, and the router sends the cluster's names to its one
+// control-plane node, by its container name. Envoy serves the cluster's
+// ports 80 and 443 from the control-plane node and tolerates only the
+// NoSchedule taint kind leaves on it in a cluster with workers, so a taint
+// declared on it could keep Envoy off. An empty list keeps the default
+// single control-plane cluster and needs no validation. The error gives
+// the reason, without naming the field the list came from.
 func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
 	if len(nodes) == 0 {
 		return nil
@@ -59,7 +31,7 @@ func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
 			controlPlanes++
 			if len(n.Taints) > 0 {
 				return fmt.Errorf("the node with role \"control-plane\" can't have taints, since Envoy serves " +
-					"ports 80 and 443 on the listen address from that node and a taint can keep Envoy off it; " +
+					"ports 80 and 443 from that node, which the router sends the cluster's names to, and a taint can keep Envoy off it; " +
 					"declare taints on nodes with role \"worker\" instead, as kind already keeps other " +
 					"workloads off the control-plane node once the cluster has workers")
 			}
@@ -73,7 +45,7 @@ func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
 	case controlPlanes == 0:
 		return fmt.Errorf("one node must have role \"control-plane\"")
 	case controlPlanes > 1:
-		return fmt.Errorf("%d nodes have role \"control-plane\", but a local cluster has exactly one, as only one node can publish ports 80 and 443 on the listen address; give the other nodes role \"worker\"", controlPlanes)
+		return fmt.Errorf("%d nodes have role \"control-plane\", but a local cluster has exactly one, the node the router sends the cluster's names to; give the other nodes role \"worker\"", controlPlanes)
 	}
 
 	return nil
@@ -87,12 +59,14 @@ func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
 // config may also be of a kind that declares no local cluster, which is
 // taken as it is.
 //
-// A config that declares a local cluster declares a listen address that
-// passes ValidateListenAddress, and a node list, when it declares one,
-// that passes validateClusterNodes. An EducatesLocalConfig that declares no
-// ingress.domain gets the nip.io name of its listen address, with dashes,
-// and ingress.insecure set to true, so it is served over plain HTTP with
-// no CA to manage. It then gets the static defaults config.Load gives it.
+// A config that declares a local cluster declares a node list, when it
+// declares one, that passes validateClusterNodes. It needs no address of
+// its own: every local cluster is served through the router, on the
+// router address. An EducatesLocalConfig that declares no ingress.domain
+// gets a nip.io name of the router address, as DeriveDomain gives it,
+// with ingress.insecure set to true, so it is served over plain HTTP with
+// no CA to manage, unless its TLS ends at the router. It then gets the
+// static defaults config.Load gives it.
 // An EducatesConfig gets no fallback and no defaults: its domain is the
 // one its custom resources declare.
 //
@@ -128,69 +102,70 @@ func parseConfig(id Identity, data []byte, source string) (v1alpha1.Config, erro
 	if !ok {
 		return config.ApplyDefaults(cfg), nil
 	}
-	if err := ValidateListenAddress(declared.listenAddress); err != nil {
-		return nil, fmt.Errorf("%s: %s: %w. %s", source, declared.listenAddressField, err,
-			listenAddressAdvice(id, source, declared.listenAddressField))
-	}
 	if err := validateClusterNodes(declared.nodes); err != nil {
 		return nil, fmt.Errorf("%s: %s: %w", source, declared.nodesField, err)
 	}
 	if c, ok := cfg.(*v1alpha1.EducatesLocalConfig); ok {
-		if err := DeriveDomain(c); err != nil {
+		if err := DeriveDomain(id, c); err != nil {
 			return nil, fmt.Errorf("%s: %w", source, err)
 		}
 	}
 	return config.ApplyDefaults(cfg), nil
 }
 
-// DeriveDomain gives the EducatesLocalConfig c, when it declares no
-// ingress.domain, the nip.io name of its listen address, with dashes, and
-// ingress.insecure set to true, as LoadConfigFile does. It returns why it
-// can't, leaving c as it is: a listen address ValidateListenAddress
-// refuses, or one with no nip.io name.
-func DeriveDomain(c *v1alpha1.EducatesLocalConfig) error {
+// DeriveDomain gives the EducatesLocalConfig c of the local cluster id,
+// when it declares no ingress.domain, the nip.io name derivedDomain gives
+// it from the router address, the one address every local cluster is
+// served on, and ingress.insecure set to true unless c ends TLS at the
+// router, as useDerivedDomain does and LoadConfigFile does:
+// <address>.nip.io for the default local cluster, and
+// <name>.<address>.nip.io for a named one, under the default local
+// cluster's, both with the address's dots as dashes.
+//
+// It returns why it can't, leaving c as it is: a router file, router.yaml
+// in the data home, that is missing or does not load, a router address
+// the router address rules refuse, or one with no nip.io name. A missing
+// router file is not a missing config, so the error never wraps
+// fs.ErrNotExist, which callers take a missing config by.
+func DeriveDomain(id Identity, c *v1alpha1.EducatesLocalConfig) error {
 	if c.Ingress.Domain != "" {
 		return nil
 	}
-	if err := ValidateListenAddress(c.Cluster.ListenAddress); err != nil {
-		return fmt.Errorf("cluster.listenAddress: %w", err)
+	routerAddress, err := configuredRouterAddress(id.DataHome)
+	if err != nil {
+		return fmt.Errorf("ingress.domain is not set, so the cluster takes a nip.io name of the router address: %v", err)
 	}
-	domain, ok := nipDomain(c.Cluster.ListenAddress)
+	domain, ok := derivedDomain(id, routerAddress)
 	if !ok {
-		return fmt.Errorf("cluster.listenAddress %s %s: set ingress.domain to a domain that resolves to it",
-			c.Cluster.ListenAddress, noNipDomain)
+		return fmt.Errorf("the router address %s, in %s, %s: set ingress.domain to a domain that resolves to it",
+			routerAddress, config.LocalRouterPath(id.DataHome), noNipDomain)
 	}
-	c.Ingress.Domain = domain
-	c.Ingress.Insecure = true
+	useDerivedDomain(c, domain)
 	return nil
 }
 
-// listenAddressAdvice says how to give the local cluster id, whose config
-// read from source declares its listen address in the field field, a
-// listen address that passes ValidateListenAddress. The default local
-// cluster is offered the host's IP address, when it is known, and a named
-// one an address of its own, which the default local cluster's would not
-// be. The command that sets it is offered for an EducatesLocalConfig in
-// the data home, which local config set edits.
-func listenAddressAdvice(id Identity, source, field string) string {
-	address, which := "<ip>", "an IP address of this host of the cluster's own"
-	alias := "An alias such as 10.10.10.2, added to a network interface, is one."
-	if id.IsDefault() {
-		which = "an IP address of this host"
-		if ip, err := hostinfo.DetectHostIP(); err == nil && ValidateListenAddress(ip) == nil {
-			address, which = ip, "this host's IP address"
-		}
-		alias = "An alias such as 10.10.10.1, added to a network interface, survives network changes, " +
-			"where the host's IP address may not."
+// useDerivedDomain gives the EducatesLocalConfig c the derived nip.io
+// domain domain, served over plain HTTP with ingress.insecure set to true,
+// unless c ends TLS at the router with ingress.externalTLSTermination, which
+// serves it over https and can't be combined with ingress.insecure.
+func useDerivedDomain(c *v1alpha1.EducatesLocalConfig, domain string) {
+	c.Ingress.Domain = domain
+	if !c.Ingress.ExternalTLSTermination {
+		c.Ingress.Insecure = true
 	}
-	if source != id.ConfigPath || field != "cluster.listenAddress" {
-		if address != "<ip>" {
-			which += ", " + address
-		}
-		return fmt.Sprintf("Set it in %s to %s. %s", source, which, alias)
+}
+
+// derivedDomain returns the nip.io name the local cluster id takes when
+// its config declares no ingress domain, with routerAddress the router
+// address: the nip.io name of the router address, with dashes, for the
+// default local cluster, and the cluster's name under it for a named one.
+// It reports false when the router address has no nip.io name.
+func derivedDomain(id Identity, routerAddress string) (string, bool) {
+	domain, ok := nipDomain(routerAddress)
+	if !ok || id.IsDefault() {
+		return domain, ok
 	}
-	return fmt.Sprintf("Set it to %s with:\n\n  educates local config set%s cluster.listenAddress %s\n\n%s",
-		which, selectionFlagArg(id), address, alias)
+	return id.Name + "." + domain, true
 }
 
 // selectionFlagArg returns the --local-cluster argument, with a leading
@@ -239,7 +214,7 @@ func describeKind(cfg v1alpha1.Config) string {
 // noNipDomain says why an address has no nip.io name.
 const noNipDomain = "has no nip.io name, which nip.io gives only IPv4 addresses"
 
-// nipDomain returns the nip.io name of the listen address address, with
+// nipDomain returns the nip.io name of the IP address address, with
 // dashes. nip.io names only IPv4 addresses, so an IPv6 address has none,
 // and nipDomain reports false.
 func nipDomain(address string) (string, bool) {

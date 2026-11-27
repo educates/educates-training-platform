@@ -25,7 +25,6 @@ type EducatesLocalConfig struct {
 }
 
 type LocalClusterConfig struct {
-	ListenAddress         string           `yaml:"listenAddress,omitempty"`
 	RegistryListenAddress string           `yaml:"registryListenAddress,omitempty"`
 	ApiServer             ApiServerConfig  `yaml:"apiServer,omitempty"`
 	Networking            NetworkingConfig `yaml:"networking,omitempty"`
@@ -73,7 +72,8 @@ type VolumeMount struct {
 
 // LocalResolverConfig is a local cluster's entries in the local DNS
 // resolver every local cluster shares. Its names, the cluster's ingress
-// domain and ExtraDomains, resolve to the cluster's listen address.
+// domain and ExtraDomains, resolve to the router address, where the
+// router sends them to the cluster.
 type LocalResolverConfig struct {
 	ExtraDomains []string `yaml:"extraDomains,omitempty"`
 }
@@ -86,6 +86,18 @@ type LocalIngressConfig struct {
 	// secrets add ca` step is skipped. Translates to the operator's
 	// certificates.provider: None with ingress.protocol: http.
 	Insecure bool `yaml:"insecure,omitempty"`
+
+	// ExternalTLSTermination serves the local cluster over https with TLS
+	// ended outside it, at the router, as a cloud load balancer ends it
+	// for the cloud kinds' externalTLSTermination: the cluster issues no
+	// certificate and serves plain HTTP, while its portal and workshop
+	// URLs use https. The router ends TLS for the cluster's domain with a
+	// certificate from the local secrets cache, and the cluster trusts the
+	// CA that verifies it. Translates to the operator's
+	// certificates.provider: None with ingress.protocol: https and the CA
+	// trust Secret in certificates.none. It can't be combined with
+	// Insecure.
+	ExternalTLSTermination bool `yaml:"externalTLSTermination,omitempty"`
 }
 
 // LocalWebsiteStylingConfig is the narrow subset exposed by EducatesLocalConfig.
@@ -182,9 +194,10 @@ type OperatorImage struct {
 //     to fill operator.image.{repository,tag} when empty. Deterministic
 //     per CLI binary, so safe for GitOps.
 //   - The local cluster rules (localclusters.LoadConfigFile) fill
-//     ingress.domain with the nip.io name of cluster.listenAddress when
-//     it is empty, for the config of a local cluster. Render and deploy
-//     with `--config`, the GitOps mode, don't apply them.
+//     ingress.domain with a nip.io name when it is empty, for the config
+//     of a local cluster: the router address's for the default local
+//     cluster, and a named one's name under it. Render and deploy with
+//     `--config`, the GitOps mode, don't apply them.
 func (c *EducatesLocalConfig) WithDefaults() *EducatesLocalConfig {
 	if c.ClusterAdmin == nil {
 		t := true

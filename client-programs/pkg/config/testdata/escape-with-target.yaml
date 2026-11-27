@@ -4,7 +4,8 @@ kind: EducatesConfig
 target:
   provider: kind
   cluster:
-    listenAddress: 10.10.10.1
+    apiServer:
+      port: 6443
 
 operator:
   image:

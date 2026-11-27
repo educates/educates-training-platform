@@ -31,19 +31,6 @@ nodes:
     nodeRegistration:
       kubeletExtraArgs:
         node-labels: "{{ if .LabelsCSV }}{{ .LabelsCSV }},{{ end }}ingress-ready=true"
-  extraPortMappings:
-  - containerPort: 80
-    {{- if $.ListenAddress }}
-    listenAddress: {{ $.ListenAddress }}
-    {{- end }}
-    hostPort: 80
-    protocol: TCP
-  - containerPort: 443
-    {{- if $.ListenAddress }}
-    listenAddress: {{ $.ListenAddress }}
-    {{- end }}
-    hostPort: 443
-    protocol: TCP
   {{- if $.VolumeMounts }}
   extraMounts:
   {{- range $.VolumeMounts }}
@@ -76,19 +63,6 @@ nodes:
     nodeRegistration:
       kubeletExtraArgs:
         node-labels: "ingress-ready=true"
-  extraPortMappings:
-  - containerPort: 80
-    {{- if .ListenAddress }}
-    listenAddress: {{ .ListenAddress }}
-    {{- end }}
-    hostPort: 80
-    protocol: TCP
-  - containerPort: 443
-    {{- if .ListenAddress }}
-    listenAddress: {{ .ListenAddress }}
-    {{- end }}
-    hostPort: 443
-    protocol: TCP
   {{- if .VolumeMounts }}
   extraMounts:
   {{- range .VolumeMounts }}

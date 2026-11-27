@@ -111,6 +111,34 @@ func TestCollectFromECC_ManagedStaticCertificateNS_Added(t *testing.T) {
 	}
 }
 
+func TestCollectFromECC_ManagedNoneCATrustNS_Added(t *testing.T) {
+	scheme := testScheme(t)
+	ecc := &configv1alpha1.EducatesClusterConfig{}
+	ecc.Name = singletonName
+	ecc.Spec.Mode = configv1alpha1.ClusterConfigModeManaged
+	ecc.Spec.Ingress = &configv1alpha1.Ingress{
+		Certificates: configv1alpha1.Certificates{
+			Provider: configv1alpha1.CertificatesProviderNone,
+			None: &configv1alpha1.NoneCertificatesConfig{
+				CACertificateSecretRef: &configv1alpha1.SecretReference{
+					Name:      "terminator-ca",
+					Namespace: "terminator-trust",
+				},
+			},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ecc).Build()
+
+	got, err := collectFromClient(context.Background(), c, "educates-installer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"educates-installer", "educates-secrets", "terminator-trust"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Managed None CA trust namespace not folded in: got %v, want %v", got, want)
+	}
+}
+
 func TestCollectFromECC_InlineCANS_Added(t *testing.T) {
 	scheme := testScheme(t)
 	ecc := &configv1alpha1.EducatesClusterConfig{}

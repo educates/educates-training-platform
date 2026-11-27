@@ -313,7 +313,9 @@ components knowing the difference.
 - EducatesClusterConfig's structural CEL rules cover the singleton name,
   mode immutability (`oldSelf`), immutability of how each cluster service
   is provided (certificates, ingress controller, DNS and policy
-  enforcement; `oldSelf`), and mode-field exclusivity. Teardown relies on
+  enforcement; `oldSelf`), mode-field exclusivity, and the `None`
+  certificates provider's `none` block (its CA trust Secret) being
+  allowed only with that provider. Teardown relies on
   the provider rules: it removes a cluster service only when the spec says
   the operator installed it. The three platform CRDs have singleton-name
   only.
@@ -458,8 +460,14 @@ components knowing the difference.
 
 **Local dev environment:**
 - Local kind cluster expects port 5001 for the local Docker registry.
+- Every local cluster is served through one router, the HAProxy container
+  `educates-router`, which publishes ports 80 and 443 on the router address
+  in `<data-home>/router.yaml` and routes each name to its cluster's
+  control-plane node over the `kind` network; kind nodes publish no ports.
+  `client-programs/pkg/localclusters` renders its configuration into
+  `<data-home>/router/`, and `client-programs/pkg/router` runs it.
 - macOS users may have an `educates resolver` providing `*.educates.test`
-  resolution to a local IP (typically `10.10.10.1`).
+  resolution to the router address (typically `10.10.10.1`).
 
 ---
 

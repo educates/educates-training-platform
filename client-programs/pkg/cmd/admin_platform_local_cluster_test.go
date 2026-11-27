@@ -20,7 +20,7 @@ func stageLocalClusterConfigs(t *testing.T) string {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
 	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(
-		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ncluster:\n  listenAddress: 10.10.10.1\ningress:\n  domain: default.test\n"), 0o644); err != nil {
+		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ningress:\n  domain: default.test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	test2, err := localclusters.Named("test2", dataHome)
@@ -28,7 +28,7 @@ func stageLocalClusterConfigs(t *testing.T) string {
 		t.Fatal(err)
 	}
 	writeNamedConfig(t, test2, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-		"cluster:\n  listenAddress: 10.10.10.2\ningress:\n  domain: test2.test\n")
+		"ingress:\n  domain: test2.test\n")
 	return dataHome
 }
 
@@ -119,7 +119,7 @@ func TestPlatformConfig_NamedClusterWithoutConfig_SaysHowToWriteOne(t *testing.T
 
 	_, _, err := loadPlatformConfig("", true, localclusters.Selection{Env: "test3"})
 
-	wantError(t, err, `"test3"`, "educates local config init --local-cluster test3 --listen-address <ip>")
+	wantError(t, err, `"test3"`, "educates local config init --local-cluster test3\n")
 }
 
 func TestPlatformConfig_InvalidSelection_Errors(t *testing.T) {
@@ -130,15 +130,15 @@ func TestPlatformConfig_InvalidSelection_Errors(t *testing.T) {
 	wantError(t, err, "EDUCATES_LOCAL_CLUSTER", `"Bad_Name"`, "lowercase DNS label")
 }
 
-func TestRender_LocalConfig_NamedCluster_TakesTheNipDomainOfItsListenAddress(t *testing.T) {
+func TestRender_LocalConfig_NamedCluster_TakesItsNameUnderTheNipDomainOfTheRouterAddress(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
 	test2, err := localclusters.Named("test2", dataHome)
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeNamedConfig(t, test2, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
-		"cluster:\n  listenAddress: 10.10.10.2\n")
+	writeNamedConfig(t, test2, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n")
 
 	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
 	o := &PlatformRenderOptions{LocalConfig: true, LocalCluster: localclusters.Selection{FlagSet: true, Flag: "test2"}}
@@ -148,7 +148,7 @@ func TestRender_LocalConfig_NamedCluster_TakesTheNipDomainOfItsListenAddress(t *
 		t.Fatalf("runRender: %v", err)
 	}
 	s := buf.String()
-	for _, want := range []string{"domain: 10-10-10-2.nip.io", "provider: None", "protocol: http"} {
+	for _, want := range []string{"domain: test2.10-10-10-1.nip.io", "provider: None", "protocol: http"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("render output missing %q:\n%s", want, s)
 		}

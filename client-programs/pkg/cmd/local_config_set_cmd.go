@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
+	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1/schemas"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
@@ -62,10 +63,7 @@ after the change. The write only happens when validation passes, so
 type / enum errors are caught up front with the offending field path. The
 config must also keep following the rules of a local cluster's config,
 such as a cluster.nodes list, when declared, with exactly one
-control-plane node, which declares no taints, and a cluster.listenAddress
-that is a specific IP address of the host: a config without one takes
-'educates local config set cluster.listenAddress <ip>' before any other
-change.
+control-plane node, which declares no taints.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, sets a field in the
 config of a named local cluster instead,
@@ -133,6 +131,11 @@ func runLocalConfigSet(w io.Writer, id localclusters.Identity, path, rawValue st
 	if asMap == nil {
 		asMap = map[string]interface{}{}
 	}
+	// A field that was removed says where its setting went, rather than
+	// that the schema does not allow it.
+	if err := config.CheckNoRemovedFields(asMap, v1alpha1.KindEducatesLocalConfig); err != nil {
+		return fmt.Errorf("set %q rejected: %s: %w", path, cfgPath, err)
+	}
 	if err := validateAgainstLocalSchema(asMap, cfgPath, path); err != nil {
 		return err
 	}
@@ -147,7 +150,7 @@ func runLocalConfigSet(w io.Writer, id localclusters.Identity, path, rawValue st
 		return fmt.Errorf("marshal config: %w", err)
 	}
 	// The config also follows the rules every local cluster's config does,
-	// such as a specific, non-loopback listen address.
+	// such as one control-plane node.
 	if err := localclusters.CheckConfig(id, buf.Bytes(), cfgPath); err != nil {
 		return fmt.Errorf("set %q rejected: %w", path, err)
 	}

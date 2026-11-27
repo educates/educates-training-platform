@@ -17,4 +17,5 @@ const (
 	EducatesContainersRegistryRoleLabel = "registry"
 	EducatesContainersMirrorRoleLabel   = "mirror"
 	EducatesContainersResolverRoleLabel = "resolver"
+	EducatesContainersRouterRoleLabel   = "router"
 )

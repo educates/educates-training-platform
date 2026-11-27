@@ -84,7 +84,8 @@ func TestMoveClusterRegistryMirrorsOfTheDefaultConfig(t *testing.T) {
 }
 
 // Loading a config of the data home moves its registry mirrors first, so
-// it loads.
+// it loads, and its listen address with them, leaving its cluster block
+// empty and so removed.
 func TestLoadMovesTheRegistryMirrorsOfAConfigInTheDataHome(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
@@ -94,11 +95,15 @@ func TestLoadMovesTheRegistryMirrorsOfAConfigInTheDataHome(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	if got := string(readFile(t, path)); got != configWithoutMirrors {
-		t.Errorf("config.yaml =\n%s\nwant\n%s", got, configWithoutMirrors)
+	want := localConfigHeader + "ingress:\n  domain: educates.test # resolved by the local resolver\n"
+	if got := string(readFile(t, path)); got != want {
+		t.Errorf("config.yaml =\n%s\nwant\n%s", got, want)
 	}
 	if mirrors, err := LoadLocalMirrors(dataHome); err != nil || len(mirrors) != 2 {
 		t.Errorf("mirrors.yaml records %+v, %v, want ghcr.io and docker.io", mirrors, err)
+	}
+	if router, err := LoadLocalRouter(dataHome); err != nil || router.Address != "10.10.10.1" {
+		t.Errorf("router.yaml declares %+v, %v, want the address 10.10.10.1", router, err)
 	}
 }
 

@@ -37,3 +37,4 @@ Records
 * [0011 - Educates server components are ported to Go one at a time](0011-server-components-are-ported-to-go-one-at-a-time.md)
 * [0012 - Local clusters are served through one shared router on one host address](0012-local-clusters-are-served-through-one-shared-router.md)
 * [0013 - Local cluster API servers are reached through the router by TLS server name](0013-local-cluster-api-servers-are-reached-through-the-router-by-tls-server-name.md)
+* [0014 - The CLI keeps the Secrets it places in a cluster in the operator namespace](0014-the-cli-keeps-its-secrets-in-the-operator-namespace.md)

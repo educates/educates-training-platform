@@ -160,10 +160,7 @@ func loadLocalConfigForView(id localclusters.Identity) (*v1alpha1.EducatesLocalC
 		return nil, err
 	}
 	// LoadLocal validates against the schema and applies the static
-	// WithDefaults; it errors if the file would not load at deploy time.
-	declared, err := config.LoadLocal(id.ConfigPath)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", id.ConfigPath, err)
-	}
-	return declared, nil
+	// WithDefaults; it errors if the file would not load at deploy time,
+	// with an error that already names the file.
+	return config.LoadLocal(id.ConfigPath)
 }

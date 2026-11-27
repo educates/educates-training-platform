@@ -179,11 +179,7 @@ func (inv Inventory) ingressAddresses(id Identity) []netip.Addr {
 		if !slices.Contains(ingressPorts, b.HostPort) {
 			continue
 		}
-		addr := b.HostIP.Unmap()
-		if !addr.IsValid() {
-			addr = netip.IPv4Unspecified()
-		}
-		if !slices.Contains(addrs, addr) {
+		if addr := b.address(); !slices.Contains(addrs, addr) {
 			addrs = append(addrs, addr)
 		}
 	}

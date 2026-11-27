@@ -81,8 +81,11 @@ cluster before the deploy can become ready.
 Every local cluster is served through the router, the container
 educates-router, which publishes ports 80 and 443 on the router address,
 the one host address every local cluster shares, and sends each request
-to the cluster that owns its name. Kind nodes publish no ports, and a
-cluster has no host address of its own. Before the config loads, create
+to the cluster that owns its name. It also publishes port 6443 there, and
+sends each connection to the API server of the cluster whose control-plane
+node its TLS server name names. Kind nodes publish no ports but their API
+server's, on a loopback port that kind's kube context uses, and a cluster
+has no host address of its own. Before the config loads, create
 writes <data-home>/router.yaml when it is missing, with the host's IP
 address as the router address. An existing router.yaml is left as it is.
 With no ingress.domain the default local cluster takes the nip.io name of
@@ -95,13 +98,16 @@ the optional --domain and nothing else.
 Before kind is touched, create refuses a domain of the cluster, its
 ingress domain or one of its resolver.extraDomains, that another local
 cluster, running or stopped, claims, naming that cluster. A subdomain of
-another cluster's domain is allowed: the most specific domain wins.
+another cluster's domain is allowed: the most specific domain wins. It
+also refuses a cluster.apiServer.port of 6443 on the router address or on
+every host address, which would take the router's port.
 
 Before kind is touched, create creates the router when it is missing, and
 re-creates it when it runs another image than the one this CLI pins,
-publishes on another address than router.yaml's, or has stopped, which
-drops every connection through it. The router's start is the check that
-ports 80 and 443 are free on the router address: it fails naming any
+publishes on another address than router.yaml's, does not publish port
+6443, or has stopped, which drops every connection through it. The
+router's start is the check that ports 80, 443 and 6443 are free on the
+router address: it fails naming any
 local cluster created by an earlier release, which publishes them from
 its node, to delete and create again. On Docker Desktop 4.97 or later,
 creating the router refuses to run while "Allow privileged port
@@ -227,6 +233,12 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	if err := inventory.CheckCreateDomains(resolverInput.LoadedConfig); err != nil {
 		return err
 	}
+	// The router publishes port 6443 on the router address for every
+	// local cluster's API server, so a config asking kind to publish the
+	// API server there is refused before the router or kind is touched.
+	if err := inventory.CheckCreateAPIServerPort(resolverInput.LoadedConfig); err != nil {
+		return err
+	}
 	// The local DNS resolver serves the domains of every local cluster,
 	// the default local cluster's config included when it has no cluster,
 	// so a configuration it can't render is refused here too, whether or
@@ -248,9 +260,9 @@ func (p *ProjectInfo) runLocalClusterCreate(ctx context.Context, w io.Writer, o 
 	// all preserved rather than overwritten.
 	rep := progress.New(w, 0, isStdoutTTY(w) && !o.Verbose)
 
-	// The router publishes ports 80 and 443 on the router address for
-	// every local cluster, so it is created, or re-created on a new image
-	// or address, before kind touches anything: its start is the check
+	// The router publishes ports 80, 443 and 6443 on the router address
+	// for every local cluster, so it is created, or re-created on a new
+	// image or address, before kind touches anything: its start is the check
 	// that the ports are free, and its error names a cluster made by an
 	// earlier release of the CLI that still publishes them from its node.
 	// Creating it checks the router address and Docker Desktop's

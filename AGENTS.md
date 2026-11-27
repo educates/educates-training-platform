@@ -463,7 +463,12 @@ components knowing the difference.
 - Every local cluster is served through one router, the HAProxy container
   `educates-router`, which publishes ports 80 and 443 on the router address
   in `<data-home>/router.yaml` and routes each name to its cluster's
-  control-plane node over the `kind` network; kind nodes publish no ports.
+  control-plane node over the `kind` network. It also publishes port 6443
+  and passes each connection through to the API server of the cluster
+  whose control-plane node container its TLS server name names, which the
+  API server certificate already covers; `educates admin lookup
+  kubeconfig` writes that address with the node as `tls-server-name`.
+  kind nodes publish no ports but the API server's, on a loopback port.
   `client-programs/pkg/localclusters` renders its configuration into
   `<data-home>/router/`, and `client-programs/pkg/router` runs it.
 - macOS users may have an `educates resolver` providing `*.educates.test`

@@ -1,6 +1,11 @@
 Local clusters are served through one shared router on one host address
 =======================================================================
 
+Superseded in part by
+[0013 - Local cluster API servers are reached through the router by TLS server name](0013-local-cluster-api-servers-are-reached-through-the-router-by-tls-server-name.md):
+the router also publishes port 6443 on the router address, for the API
+servers of the local clusters.
+
 Every local cluster is reached through one router, the container
 ``educates-router`` on the ``kind`` Docker network, which the CLI creates with
 the first local cluster and removes with the last. The router publishes ports

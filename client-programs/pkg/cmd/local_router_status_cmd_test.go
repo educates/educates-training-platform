@@ -60,7 +60,7 @@ func TestLocalRouterStatusPrintsTheRouterAndEveryRouteOfTheDefaultAndANamedClust
 
 	want := []string{
 		"Router address: 10.10.10.1",
-		"Router: running (educates-router), publishing ports 80 and 443 on 10.10.10.1",
+		"Router: running (educates-router), publishing ports 80, 443 and 6443 on 10.10.10.1",
 		"Image: " + router.Image,
 		"",
 		"NAME CLUSTER TLS STATE",

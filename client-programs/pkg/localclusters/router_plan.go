@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -66,26 +67,73 @@ func (inv Inventory) Router() (RouterContainer, bool) {
 	return *inv.observed.Router, true
 }
 
+// address returns the host address of the port binding b, the
+// unspecified IPv4 address when it is left unset, which means every host
+// address.
+func (b PortBinding) address() netip.Addr {
+	addr := b.HostIP.Unmap()
+	if !addr.IsValid() {
+		return netip.IPv4Unspecified()
+	}
+	return addr
+}
+
 // publishedAddress returns the host address the router container is
 // configured to publish port 80 or 443 on, the unspecified IPv4 address
 // for every host address, and false when it publishes neither.
 func (r RouterContainer) publishedAddress() (netip.Addr, bool) {
 	for _, b := range r.PortBindings {
-		if !slices.Contains(ingressPorts, b.HostPort) {
-			continue
+		if slices.Contains(ingressPorts, b.HostPort) {
+			return b.address(), true
 		}
-		addr := b.HostIP.Unmap()
-		if !addr.IsValid() {
-			addr = netip.IPv4Unspecified()
-		}
-		return addr, true
 	}
 	return netip.Addr{}, false
 }
 
+// publishedPorts returns the router ports, as RouterPorts gives them,
+// that the router container is configured to publish on the host address
+// addr, in order.
+func (r RouterContainer) publishedPorts(addr netip.Addr) []uint16 {
+	unpublished := r.unpublishedPorts(addr)
+	return slices.DeleteFunc(RouterPorts(), func(port uint16) bool { return slices.Contains(unpublished, port) })
+}
+
+// unpublishedPorts returns the router ports, as RouterPorts gives them,
+// that the router container is not configured to publish on the host
+// address addr, in order: port 6443, for a router created before the
+// router served the local clusters' API servers.
+func (r RouterContainer) unpublishedPorts(addr netip.Addr) []uint16 {
+	var unpublished []uint16
+	for _, port := range RouterPorts() {
+		if !slices.ContainsFunc(r.PortBindings, func(b PortBinding) bool {
+			return b.HostPort == port && b.address() == addr
+		}) {
+			unpublished = append(unpublished, port)
+		}
+	}
+	return unpublished
+}
+
+// DescribePorts names the ports ports in a message, as "port 6443",
+// "ports 443 and 6443" or "ports 80, 443 and 6443", and no ports as "no
+// port".
+func DescribePorts(ports []uint16) string {
+	names := make([]string, len(ports))
+	for i, port := range ports {
+		names[i] = strconv.Itoa(int(port))
+	}
+	switch len(names) {
+	case 0:
+		return "no port"
+	case 1:
+		return "port " + names[0]
+	}
+	return "ports " + strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
 // recreateReason says why the router container has to be re-created to
-// run image and publish ports 80 and 443 on the router address address,
-// and is empty when it needs no re-creating.
+// run image and publish the router ports, as RouterPorts gives them, on
+// the router address address, and is empty when it needs no re-creating.
 func (r RouterContainer) recreateReason(image, address string) string {
 	published, publishes := r.publishedAddress()
 	switch {
@@ -96,6 +144,9 @@ func (r RouterContainer) recreateReason(image, address string) string {
 	case published.String() != address:
 		return fmt.Sprintf("it publishes ports 80 and 443 on %s, not on the router address %s",
 			describeAddress(published), address)
+	case len(r.unpublishedPorts(published)) > 0:
+		return fmt.Sprintf("it does not publish %s on the router address %s, which serves the local clusters' "+
+			"API servers on port %d", DescribePorts(r.unpublishedPorts(published)), address, RouterAPIServerPort)
 	case !r.Running:
 		return "it is not running"
 	default:
@@ -153,13 +204,13 @@ const (
 )
 
 // RouterPlan is what to do to the router container, and where it
-// publishes ports 80 and 443.
+// publishes its ports, 80, 443 and 6443.
 type RouterPlan struct {
 	// Action is what to do to the router container.
 	Action RouterAction
 
 	// Address is the router address, the host address the router
-	// publishes ports 80 and 443 on: in its canonical form, and checked
+	// publishes ports 80, 443 and 6443 on: in its canonical form, and checked
 	// against the router address rules when the router is created or
 	// re-created.
 	Address string
@@ -173,9 +224,10 @@ type RouterPlan struct {
 //
 //   - a missing router is created;
 //   - a router created from another image, configured to publish ports
-//     80 and 443 on another address than the router address, or not
-//     running, is re-created, which drops every open connection through
-//     it;
+//     80 and 443 on another address than the router address, not
+//     publishing port 6443 there, as a router created before the router
+//     served the local clusters' API servers, or not running, is
+//     re-created, which drops every open connection through it;
 //   - any other router is reloaded with the configuration rendered again,
 //     which keeps open connections, such as terminals.
 //
@@ -222,9 +274,9 @@ func (inv Inventory) ClustersPublishingIngressPorts() []Identity {
 }
 
 // RouterStartError returns the error of the router container failing,
-// with err, Docker's error, to start while publishing ports 80 and 443 on
-// the router address address. Its start is the check that the ports are
-// free.
+// with err, Docker's error, to start while publishing ports 80, 443 and
+// 6443 on the router address address. Its start is the check that the
+// ports are free.
 //
 // When Educates clusters made by an earlier release of the CLI are
 // configured to publish port 80 or 443 from their node, as
@@ -232,11 +284,11 @@ func (inv Inventory) ClustersPublishingIngressPorts() []Identity {
 // runs, and the commands that delete it and create it again. Otherwise it
 // says that another process holds the ports. Either way it wraps err.
 func (inv Inventory) RouterStartError(address string, err error) error {
-	failed := fmt.Errorf("the router can't publish ports 80 and 443 on %s: %w", address, err)
+	failed := fmt.Errorf("the router can't publish %s on %s: %w", DescribePorts(RouterPorts()), address, err)
 	publishing := inv.ClustersPublishingIngressPorts()
 	if len(publishing) == 0 {
-		return fmt.Errorf("%w. Another process, such as an ingress controller, a web server or a Docker port forward, "+
-			"holds them: free them, then run the command again", failed)
+		return fmt.Errorf("%w. Another process, such as an ingress controller, a web server, a Kubernetes API "+
+			"server or a Docker port forward, holds one of them: free it, then run the command again", failed)
 	}
 
 	described := make([]string, 0, len(publishing))

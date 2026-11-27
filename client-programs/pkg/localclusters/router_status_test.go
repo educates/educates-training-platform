@@ -61,6 +61,29 @@ func routerStatus(t *testing.T, dataHome string, router *RouterContainer) Router
 	return status
 }
 
+// The status shows the router ports the router publishes. A router
+// created before the router served the local clusters' API servers
+// publishes ports 80 and 443 only, and has to be re-created.
+func TestRouterStatusShowsThePublishedPortsAndAdvisesReCreatingARouterWithoutPort6443(t *testing.T) {
+	dataHome := routerStatusDataHome(t)
+
+	current := routerStatus(t, dataHome, routerContainer(pinnedRouterImage, "10.10.10.1", true))
+	old := routerStatus(t, dataHome, ingressOnlyRouter("10.10.10.1"))
+
+	if want := []uint16{80, 443, 6443}; !reflect.DeepEqual(current.PublishedPorts, want) || current.Advice != "" {
+		t.Errorf("router publishing every port: ports %v, advice %q; want %v and no advice",
+			current.PublishedPorts, current.Advice, want)
+	}
+	if want := []uint16{80, 443}; !reflect.DeepEqual(old.PublishedPorts, want) {
+		t.Errorf("router without port 6443: ports %v, want %v", old.PublishedPorts, want)
+	}
+	for _, part := range []string{"re-created", "port 6443", "educates local router update"} {
+		if !strings.Contains(old.Advice, part) {
+			t.Errorf("advice %q does not mention %q", old.Advice, part)
+		}
+	}
+}
+
 func TestRouterStatusListsEveryNameOfEveryClusterWithTheClusterState(t *testing.T) {
 	dataHome := routerStatusDataHome(t)
 

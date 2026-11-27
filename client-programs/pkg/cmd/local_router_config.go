@@ -19,8 +19,8 @@ type routerContainer struct {
 	// image is the router image the CLI pins.
 	image string
 
-	// create creates the router container publishing ports 80 and 443 on
-	// an address and serving the router folder dir, and starts it, as
+	// create creates the router container publishing ports 80, 443 and
+	// 6443 on an address and serving the router folder dir, and starts it, as
 	// router.Create does.
 	create func(ctx context.Context, address, dir string) (adopted bool, err error)
 
@@ -110,7 +110,7 @@ func noteAll(rep progress.Reporter, notes []string) {
 // Creating or re-creating the router checks the router address rules and
 // Docker Desktop's privileged port setting first, and writes the router
 // folder from the local clusters inventory holds. The router container's
-// start is the check that ports 80 and 443 are free on the router address:
+// start is the check that ports 80, 443 and 6443 are free on the router address:
 // when it fails, the error names any local cluster made by an earlier
 // release of the CLI that still publishes them from its node.
 func (ops routerOperations) ensureRouter(ctx context.Context, rep progress.Reporter, inventory localclusters.Inventory) (bool, error) {

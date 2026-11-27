@@ -88,15 +88,15 @@ func routerInventory(dataHome string, nodes []localclusters.NodeContainer, route
 	}, dataHome)
 }
 
-// routerOn is a router container from image, publishing ports 80 and 443
-// on 10.10.10.1.
+// routerOn is a router container from image, publishing the router
+// ports, 80, 443 and 6443, on 10.10.10.1.
 func routerOn(image string, running bool) *localclusters.RouterContainer {
 	addr := netip.MustParseAddr("10.10.10.1")
-	return &localclusters.RouterContainer{
-		Running:      running,
-		Image:        image,
-		PortBindings: []localclusters.PortBinding{{HostIP: addr, HostPort: 80}, {HostIP: addr, HostPort: 443}},
+	r := &localclusters.RouterContainer{Running: running, Image: image}
+	for _, port := range localclusters.RouterPorts() {
+		r.PortBindings = append(r.PortBindings, localclusters.PortBinding{HostIP: addr, HostPort: port})
 	}
+	return r
 }
 
 // routerOperationsForTest are the router operations on the fake container f

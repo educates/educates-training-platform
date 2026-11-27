@@ -19,7 +19,7 @@ If no local configuration file exists yet, this command creates a default one fo
 Router address
 --------------
 
-Every local cluster is served through one router, the Docker container `educates-router`, which publishes ports 80 and 443 once, on the router address, and sends each request to the local cluster that owns the name it asks for. Kind nodes publish no ports on your host. The router reaches each cluster's ingress on the cluster's control-plane node, over Docker's `kind` network, by the node container's name. Every local cluster's names resolve to the router address, so the router address is the one host address the local environment needs.
+Every local cluster is served through one router, the Docker container `educates-router`, which publishes ports 80 and 443 once, on the router address, and sends each request to the local cluster that owns the name it asks for. It also publishes port 6443 there, for the API servers of the local clusters, as described [below](local-router-api-servers). Kind nodes publish no ports on your host but their API server's, on a loopback port that the cluster's kube context uses. The router reaches each cluster's ingress on the cluster's control-plane node, over Docker's `kind` network, by the node container's name. Every local cluster's names resolve to the router address, so the router address is the one host address the local environment needs.
 
 The router address lives in `router.yaml` in the data home, a file of its own beside the cluster configurations, since it is shared by every cluster:
 
@@ -56,9 +56,21 @@ The router sends HTTPS on port 443 by the server name in the TLS handshake, matc
 
 `educates local cluster create` and `educates local cluster start` create the router when it is missing. They re-create it when it runs another image than the one the command line tool pins, as after an upgrade of the command line tool, when it listens on another address than the one in `router.yaml`, or when it has stopped. Re-creating the router drops every open connection through it, those of every cluster. Otherwise they, and `educates local cluster delete`, render the router's configuration again and reload it, which keeps open connections, such as workshop terminals, on the previous configuration until they close. The router's configuration is rendered into the `router` folder of the data home, which the router container mounts. Stopping a cluster changes nothing in the router. The router runs with Docker's restart policy `always`, so it comes back when Docker restarts, and `educates local cluster delete --all` removes it, with its folder, together with the last local cluster, keeping `router.yaml`.
 
-Creating the router is the check that ports 80 and 443 are free on the router address. When the router can't publish them, the command fails before the Kind cluster is touched, with the error from Docker naming the address and the ports. A cluster created by an earlier release of the command line tool publishes ports 80 and 443 from its own node and can't run beside the router: when one exists, running or stopped, the error names it and gives the commands to delete it and create it again.
+Creating the router is the check that ports 80, 443 and 6443 are free on the router address. When the router can't publish them, the command fails before the Kind cluster is touched, with the error from Docker naming the address and the ports. Port 6443 is where the router serves the clusters' API servers, as described in [API servers through the router](local-router-api-servers), so `educates local cluster create` also refuses a configuration whose `cluster.apiServer.port` is 6443 on the router address or on every host address, as `cluster.apiServer.address: 0.0.0.0` asks, before the router or Kind is touched. Kind publishes the API server on `127.0.0.1` when `cluster.apiServer.address` is not set, which leaves the router address free. A cluster created by an earlier release of the command line tool publishes ports 80 and 443 from its own node and can't run beside the router: when one exists, running or stopped, the error names it and gives the commands to delete it and create it again.
 
 On Docker Desktop 4.97 or later, turn on "Allow privileged port forwarding to external machines", under **Settings > Advanced**. Docker Desktop otherwise serves published ports below 1024 on loopback addresses only, and the router's ports 80 and 443 are on the router address, which is not a loopback address. Wherever the router is created, `educates local cluster create` and `educates local cluster start` refuse to run while the setting is off, and warn when they can't read it.
+
+(local-router-api-servers)=
+API servers through the router
+------------------------------
+
+The router also serves the API server of every local cluster, on port 6443 of the router address. It sends each connection to the cluster whose control plane container the server name in the TLS handshake names, `educates-control-plane` for the default cluster and `educates-<name>-control-plane` for a named one, and passes it through untouched to the cluster's API server, which presents its own certificate. That certificate names the control plane container, so a client that gives the container's name as its TLS server name verifies it as it is, with no change to the cluster, whatever the cluster's ingress domain. A connection that is not TLS, gives no server name, or gives one that names no cluster's control plane container is closed. Your host and the pods of every local cluster reach the router address, so they reach every cluster's API server there alike. The kubeconfig that `educates admin lookup kubeconfig` writes for a local cluster names it this way, as [cluster monitoring](../lookup-service/cluster-monitoring) describes, and so can `kubectl` with the cluster's own kube context:
+
+```
+kubectl --context kind-educates-test2 --server https://10.10.10.1:6443 --tls-server-name educates-test2-control-plane get nodes
+```
+
+The kube context Kind writes for a cluster keeps reaching its API server at a port on the loopback address of your host, which needs neither the router nor the router address.
 
 (local-router-commands)=
 Checking and updating the router
@@ -70,11 +82,11 @@ To see the router and where it sends each name, run:
 educates local router status
 ```
 
-It shows the router address from `router.yaml`, whether the router container runs, the address it publishes ports 80 and 443 on, and its image. A table follows, with a row for each name the router sends to a local cluster: the ingress domain and the `resolver.extraDomains` of every local cluster that exists, running or stopped. Each row names the cluster, shown as `(default)` for the default cluster, says how the router serves the name's HTTPS in the `TLS` column, and gives the cluster's state. In the `TLS` column, `passthrough` sends the connection to the cluster untouched, so the cluster presents its own certificate, `terminated` ends TLS at the router for the ingress domain of a cluster with `ingress.externalTLSTermination`, and `none` serves an extra domain of such a cluster on port 80 only, as described in [TLS ended at the router](local-router-tls-termination):
+It shows the router address from `router.yaml`, whether the router container runs, the address and the ports it publishes, and its image. A table follows, with a row for each name the router sends to a local cluster: the ingress domain and the `resolver.extraDomains` of every local cluster that exists, running or stopped. Each row names the cluster, shown as `(default)` for the default cluster, says how the router serves the name's HTTPS in the `TLS` column, and gives the cluster's state. In the `TLS` column, `passthrough` sends the connection to the cluster untouched, so the cluster presents its own certificate, `terminated` ends TLS at the router for the ingress domain of a cluster with `ingress.externalTLSTermination`, and `none` serves an extra domain of such a cluster on port 80 only, as described in [TLS ended at the router](local-router-tls-termination):
 
 ```
 Router address:   10.10.10.1
-Router:           running (educates-router), publishing ports 80 and 443 on 10.10.10.1
+Router:           running (educates-router), publishing ports 80, 443 and 6443 on 10.10.10.1
 Image:            haproxy:3.4.8-alpine@sha256:...
 
 NAME                  CLUSTER     TLS           STATE
@@ -82,7 +94,7 @@ educates.test         (default)   passthrough   running
 test2.educates.test   test2       passthrough   stopped
 ```
 
-When the router is missing, has stopped, runs another image than the one the command line tool pins, or publishes on another address than the router address, the status says so, and that `educates local router update` creates or re-creates it. A router address that can't serve local clusters, such as an alias no network interface of your host has any more, is reported in a warning.
+When the router is missing, has stopped, runs another image than the one the command line tool pins, publishes on another address than the router address, or does not publish port 6443, the status says so, and that `educates local router update` creates or re-creates it. A router address that can't serve local clusters, such as an alias no network interface of your host has any more, is reported in a warning.
 
 To apply a change to the router without creating or starting a cluster, run:
 
@@ -90,7 +102,7 @@ To apply a change to the router without creating or starting a cluster, run:
 educates local router update
 ```
 
-It renders the router's configuration again, from the configurations of every local cluster, and reloads the router, which keeps open connections, such as workshop terminals. Like `educates local cluster start`, it re-creates the router when it runs another image, publishes on another address than the router address, or has stopped, which drops every connection through it, and it creates the router when it is missing while a local cluster exists. Run it after deploying a changed `ingress.domain` or `resolver.extraDomains` with `educates admin platform deploy --local-config`, which does not update the router.
+It renders the router's configuration again, from the configurations of every local cluster, and reloads the router, which keeps open connections, such as workshop terminals. Like `educates local cluster start`, it re-creates the router when it runs another image, publishes on another address than the router address, does not publish port 6443, or has stopped, which drops every connection through it, and it creates the router when it is missing while a local cluster exists. Run it after deploying a changed `ingress.domain` or `resolver.extraDomains` with `educates admin platform deploy --local-config`, which does not update the router.
 
 To move the router to another address, such as an alias added to a network interface, give the address with `--address`:
 

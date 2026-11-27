@@ -30,12 +30,12 @@ func (p *ProjectInfo) NewLocalClusterStartCmd() *cobra.Command {
 		Long: `Starts the node containers of a stopped local cluster.
 
 Every local cluster is served through the router, the container
-educates-router, which publishes ports 80 and 443 on the router address in
-<data-home>/router.yaml. Start writes router.yaml when it is missing, with
-this host's IP address. Before the nodes start, it creates the router when
-it is missing, and re-creates it when it runs another image than the one
-this CLI pins, publishes on another address than router.yaml's, or has
-stopped, which drops every connection through it. Otherwise it renders the
+educates-router, which publishes ports 80, 443 and 6443 on the router
+address in <data-home>/router.yaml. Start writes router.yaml when it is
+missing, with this host's IP address. Before the nodes start, it creates
+the router when it is missing, and re-creates it when it runs another
+image than the one this CLI pins, publishes on another address than
+router.yaml's, does not publish port 6443, or has stopped, which drops every connection through it. Otherwise it renders the
 router's configuration again and reloads it, which keeps open connections.
 On Docker Desktop 4.97 or later, creating the router refuses to run while
 "Allow privileged port forwarding to external machines" is off, in
@@ -100,7 +100,7 @@ func runLocalClusterStart(ctx context.Context, w, errW io.Writer, id localcluste
 	}
 	// The router serves the cluster's names: it is created, or re-created
 	// on a new image or address, before the nodes start, as the check that
-	// ports 80 and 443 are free on the router address, and otherwise
+	// ports 80, 443 and 6443 are free on the router address, and otherwise
 	// rendered again and reloaded. The router keeps a stopped cluster's
 	// route, so a node that comes back on another address is reached
 	// there.

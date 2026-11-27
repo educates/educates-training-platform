@@ -258,6 +258,66 @@ func TestRenderRouterPassesEachClusterTLSThroughToItsControlPlaneNodeOnPort443(t
 	}
 }
 
+// Port 6443 routes each connection by the server name of its TLS
+// handshake, lowercased, to the cluster whose control-plane node it names
+// exactly, and refuses a connection that is not TLS, that names no server,
+// or that names no cluster's node, such as a cluster's domain.
+func TestRenderRouterRoutesPort6443ByTheNodeTheTLSServerNameNames(t *testing.T) {
+	dataHome := t.TempDir()
+
+	files := RenderRouter([]RouterRoute{
+		{Cluster: Default(dataHome), IngressDomain: "educates.test", Node: "educates-control-plane", State: Running},
+		{Cluster: namedID(t, "test2", dataHome), IngressDomain: "test2.educates.test", Node: "educates-test2-control-plane", State: Running},
+	})
+
+	want := `frontend apiserver
+    mode tcp
+    bind :6443
+    tcp-request inspect-delay 5s
+    tcp-request content reject unless { req.ssl_hello_type 1 }
+    tcp-request content set-var(sess.sni) req.ssl_sni,lower
+    tcp-request content reject unless { var(sess.sni) -m str educates-control-plane educates-test2-control-plane }
+    use_backend api_educates if { var(sess.sni) -m str educates-control-plane }
+    use_backend api_educates-test2 if { var(sess.sni) -m str educates-test2-control-plane }
+`
+	if got := configSection(t, files, "frontend apiserver"); got != want {
+		t.Errorf("6443 frontend:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// A cluster's API server connections pass through the router untouched to
+// its control-plane node's port 6443, where the API server presents its
+// own certificate, whatever the router does with the cluster's ingress
+// TLS: also for a cluster whose TLS ends at the router, and for a stopped
+// one.
+func TestRenderRouterPassesEachAPIServerConnectionThroughToItsControlPlaneNodeOnPort6443(t *testing.T) {
+	dataHome := t.TempDir()
+	tls1 := endingTLS(t, dataHome, "tls1", "tls1.educates.test")
+
+	files := RenderRouter([]RouterRoute{
+		{Cluster: Default(dataHome), IngressDomain: "educates.test", Node: "educates-control-plane", State: Stopped},
+		tls1,
+	}, routerCertificateFor("tls1.educates.test"))
+
+	for header, want := range map[string]string{
+		"backend api_educates":      "backend api_educates\n    mode tcp\n    server node educates-control-plane:6443\n",
+		"backend api_educates-tls1": "backend api_educates-tls1\n    mode tcp\n    server node educates-tls1-control-plane:6443\n",
+	} {
+		if got := configSection(t, files, header); got != want {
+			t.Errorf("backend:\n%s\nwant:\n%s", got, want)
+		}
+	}
+}
+
+// With no route, port 6443 is still served, and closes every connection.
+func TestRenderRouterClosesEveryAPIServerConnectionWithNoRoutes(t *testing.T) {
+	frontend := configSection(t, RenderRouter(nil), "frontend apiserver")
+
+	if !strings.HasSuffix(frontend, "\n    tcp-request content reject\n") || strings.Contains(frontend, "use_backend") {
+		t.Errorf("6443 frontend with no routes:\n%s", frontend)
+	}
+}
+
 // Port 80 routes by the Host header without its port, looked up with a
 // leading dot so a domain matches itself and every name under it, answers
 // a name no route matches with the 404, and never redirects to https.

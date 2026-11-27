@@ -21,7 +21,7 @@ To deploy Educates on your local machine using the Educates command line tool th
 
 * You cannot be running an existing Kubernetes cluster created using Kind.
 
-* You cannot be using port 80 (HTTP) and 443 (HTTPS) on the router address, the IP address of the local machine every local cluster is served on, as the router which sends requests on to the clusters requires them.
+* You cannot be using port 80 (HTTP), 443 (HTTPS) and 6443 (the Kubernetes API server) on the router address, the IP address of the local machine every local cluster is served on, as the router which sends requests on to the clusters requires them.
 
 * You need to have port 53 (DNS) available on the local machine when using macOS if you want to enable a local DNS resolver.
 

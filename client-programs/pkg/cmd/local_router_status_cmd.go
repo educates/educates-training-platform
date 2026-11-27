@@ -23,13 +23,16 @@ func (p *ProjectInfo) NewLocalRouterStatusCmd() *cobra.Command {
 		Short: "Shows the router every local cluster is served through",
 		Long: `Shows the router, the container educates-router that publishes ports 80
 and 443 on the router address for every local cluster, and where it sends
-each name.
+each name. The router also publishes port 6443 there, and sends each
+connection to the API server of the cluster whose control-plane node its
+TLS server name names, such as educates-control-plane for the default
+local cluster.
 
 It shows the router address, from <data-home>/router.yaml, whether the
-router runs, the address it publishes ports 80 and 443 on, and its image.
-When the router is missing, has stopped, or runs another image or on
-another address than this CLI wants, it says so, and that 'educates local
-router update' creates or re-creates it.
+router runs, the address and the ports it publishes, and its image. When
+the router is missing, has stopped, does not publish port 6443, or runs
+another image or on another address than this CLI wants, it says so, and
+that 'educates local router update' creates or re-creates it.
 
 The table has a row for each name the router sends to a local cluster,
 from the configs of every local cluster that exists, running or not: the
@@ -76,7 +79,7 @@ func printLocalRouterStatus(w, errW io.Writer, status localclusters.RouterStatus
 		if status.PublishedAddress == "" {
 			routerState += ", publishing neither port 80 nor port 443"
 		} else {
-			routerState += ", publishing ports 80 and 443 on " + status.PublishedAddress
+			routerState += ", publishing " + localclusters.DescribePorts(status.PublishedPorts) + " on " + status.PublishedAddress
 		}
 	}
 	fmt.Fprintln(w, utils.PrintKeyValuesTable([][]string{

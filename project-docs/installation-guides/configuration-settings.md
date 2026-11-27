@@ -32,7 +32,7 @@ kind: EducatesLocalConfig
 ingress:
   domain: workshops.educates.test    # empty = nip.io name of the router address
 lookupService: true                  # default true
-clusterAdmin: true                   # default true
+clusterAdmin: false                  # default false
 imagePrePuller:
   enabled: true                      # default true
 operator:
@@ -47,16 +47,18 @@ Key fields (all optional: an `apiVersion` + `kind` stub, which `educates local c
 * `cluster.listenAddress`: removed. A local cluster has no host address of its own, since the router publishes ports 80 and 443 for every local cluster on the router address in `router.yaml`, which `educates local router update --address <ip>` sets. A configuration in the data home that still has the field, the default local cluster's or a named one's, has it removed the first time a command reads it, keeping the previous configuration as a backup beside it. When `router.yaml` is missing, the default local cluster's address becomes the router address, provided it is a specific IP address, neither `0.0.0.0` nor a loopback address. A command that needs the router address while `router.yaml` is missing moves the default local cluster's address first, whichever local cluster it acts on, so a named cluster's configuration without `ingress.domain` takes its `nip.io` name from that address. A configuration elsewhere with the field, or an `EducatesConfig` with `target.cluster.listenAddress`, fails to load with an error naming `router.yaml` and the command that sets the router address, and is left as it is.
 * `cluster.*`: kind cluster shape: API server overrides, pod/service subnets, host volume mounts. Registry pull-through mirrors are not declared here but once for every local cluster, in `mirrors.yaml` in the CLI data home, as [declaring mirrors for every cluster](local-mirrors-file) describes. `educates local mirror deploy` records a mirror there and `educates local mirror delete` removes it. A configuration in the data home that still has `cluster.registryMirrors` has its mirrors moved there the first time a command reads it, keeping the previous configuration as a backup beside it, and a configuration elsewhere with it fails to load, showing the `educates local mirror deploy` commands that record its mirrors, as [mirrors in a cluster's configuration](local-mirrors-move) describes.
 * `resolver.*` — local DNS resolver settings (macOS `*.educates.test` style resolution).
-* `clusterAdmin`, `lookupService` — component toggles (both default `true`).
+* `lookupService`: whether the lookup service is installed, `true` by default.
+* `clusterAdmin`: whether the session manager's service account is bound to the `cluster-admin` ClusterRole, `false` by default. The session manager creates a workshop's objects as itself, and can only create what it may create and grant what it holds, so `true` is an escape hatch for workshops whose objects need more than the permissions Educates grants it. Leaving it off keeps a local cluster's session manager to the permissions it has on any other Educates install, so a workshop that needs more fails on the laptop first. A version 3 local cluster bound the session manager to `cluster-admin` by default.
 * ``imagePrePuller``: the image pre-puller, which pulls the training portal
   and workshop base environment images, and any further images you list, onto
   every node ahead of time. It is on by default, as in the
   ``EducatesGKEConfig``, ``EducatesEKSConfig`` and ``EducatesInlineConfig``
   kinds, which take the same block. See
   [pre-pulling workshop images](pre-pulling-workshop-images).
-* `secretPropagation.imagePullSecretNames` — locally cached pull secrets to propagate into the cluster.
+* `imageRegistry.pullSecrets`: image pull secrets for registries that need credentials, such as one holding private workshop images or a mirror of the platform images. Each is a secret of the local secrets cache, cached with `educates local secrets add docker-registry <name>`, which a deploy copies into the operator namespace, `educates-installer`. The operator pod pulls its own image with them, the operator passes them on to every pod it installs, and the session manager passes them on to the training portal, workshop environment and workshop session namespaces, where workshop users can read them. A name that is not a cached registry credential fails the deploy before anything reaches the cluster. This replaces `secretPropagation.imagePullSecretNames`: a configuration in the data home that still has it is moved to `imageRegistry.pullSecrets` the first time a command reads it, keeping the previous configuration as a backup beside it, and a configuration elsewhere with it fails to load, saying what to change.
 * `imageVersions` — per-image reference overrides.
-* `operator.image.*`, `operator.imagePullSecrets`, `operator.logLevel` — operator deployment settings. Image repository and tag default from the CLI binary's own version, so they normally stay unset.
+* `operator.image.*`, `operator.imagePullSecrets`: operator deployment settings. Image repository and tag default from the CLI binary's own version, so they normally stay unset.
+* `operator.logLevel`: the log level of the operator and of the platform components, `debug`, `info`, `warn` or `error`, `info` by default. The operator takes it from the `logLevel` value of the `educates-installer` chart, and each component from the `spec.logLevel` of its resource. Since the components and the operator log through logr, which has no warning level, `warn` logs only errors. The Helm SDK, which the operator installs charts with, logs at the same level, so its detail, such as why an uninstall failed, shows at `debug`.
 
 Settings outside the laptop scenario — DNS providers, ACME, image registry prefixes, alternative ingress — are deliberately rejected by this kind's schema. Use `EducatesConfig` for those.
 
@@ -83,8 +85,13 @@ acme:
 too: the ``lookupService`` and ``clusterAdmin`` component toggles, the
 ``imagePrePuller`` block, which turns the image pre-puller on by default (see
 [pre-pulling workshop images](pre-pulling-workshop-images)),
-``websiteStyling``, ``secretPropagation``, ``imageVersions`` and the
-``operator`` block. When TLS for the ingress domain is terminated outside the
+``websiteStyling``, ``imageRegistry.pullSecrets``, ``imageVersions`` and the
+``operator`` block. Here ``imageRegistry.pullSecrets`` names
+``kubernetes.io/dockerconfigjson`` secrets you create in the operator
+namespace, ``educates-installer``, before deploying:
+``educates admin platform deploy`` checks that each one is there before it
+installs anything, and ``educates admin platform render`` names them in a
+comment above its output. When TLS for the ingress domain is terminated outside the
 cluster, by a cloud load balancer or a proxy forwarding plain HTTP inward, set
 ``externalTLSTermination: true`` so generated portal and workshop URLs use
 ``https``, as [secure HTTP connections](secure-http-connections) explains. The
@@ -137,17 +144,21 @@ policyEnforcement:
   workshopEngine: Kyverno                      # Kyverno | None
 imageRegistry:
   prefix: registry.internal/educates           # optional mirror prefix
+  pullSecrets:                                 # optional, kubernetes.io/dockerconfigjson Secrets
+    - registry-credentials                     # in the operator namespace
 externalTLSTermination: false                  # true when a proxy/LB terminates TLS in front of the cluster
 ```
 
-`domain`, `ingressClassName` and `wildcardCertificateSecret` are required. The referenced Secrets must exist in the operator's namespace before deployment. Educates components never receive the `caCertificateSecret` itself, only a copy of its `ca.crt`. To keep the Secrets in another namespace, use the `EducatesConfig` escape hatch, whose `inline.ingress.wildcardCertificateSecretRef` and `inline.ingress.caCertificateSecretRef` take an optional `namespace`. See [secure HTTP connections](secure-http-connections) for the certificate options across all scenarios.
+`domain`, `ingressClassName` and `wildcardCertificateSecret` are required. The referenced Secrets must exist in the operator's namespace before deployment, the image pull secrets of `imageRegistry.pullSecrets` included, which the operator pod pulls its own image with too, as for the GKE kind. Educates components never receive the `caCertificateSecret` itself, only a copy of its `ca.crt`. To keep the Secrets in another namespace, use the `EducatesConfig` escape hatch, whose `inline.ingress.wildcardCertificateSecretRef` and `inline.ingress.caCertificateSecretRef` take an optional `namespace`. See [secure HTTP connections](secure-http-connections) for the certificate options across all scenarios.
 
 As with the GKE kind, the settings of ``EducatesLocalConfig`` that are not
 about the local cluster are available here too: the ``lookupService`` and
 ``clusterAdmin`` component toggles, the ``imagePrePuller`` block, which turns
 the image pre-puller on by default (see [pre-pulling workshop
 images](pre-pulling-workshop-images)), ``websiteStyling``,
-``secretPropagation``, ``imageVersions`` and the ``operator`` block.
+``imageRegistry.pullSecrets``, ``imageVersions`` and the ``operator`` block,
+with ``imageRegistry.pullSecrets`` naming secrets you create in the operator
+namespace as for the GKE kind.
 
 Note that with `workshopEngine: None` there is no workshop-level security policy enforcement. See the [cluster requirements](cluster-requirements) discussion before serving untrusted users. When either engine is `Kyverno`, the operator checks that the Kyverno you installed serves the policy kinds Educates creates, and the installation does not become ready until it does.
 
@@ -208,11 +219,9 @@ educatesClusterConfig:
       provider: StaticCertificate
       staticCertificate:
         tlsSecretRef:               # tls.crt and tls.key, SANs including *.{domain}
-          name: wildcard-tls
-          namespace: educates-secrets
+          name: wildcard-tls        # in the operator namespace unless a namespace is given
         caCertificateSecretRef:     # optional, ca.crt of a CA that is not publicly trusted
           name: wildcard-ca
-          namespace: educates-secrets
 ```
 
 See [secure HTTP connections](secure-http-connections) for how the operator checks and serves the certificate.
@@ -232,8 +241,7 @@ educatesClusterConfig:
       provider: None
       none:
         caCertificateSecretRef:     # optional, ca.crt of the CA that issued the proxy's certificate
-          name: proxy-ca
-          namespace: educates-secrets
+          name: proxy-ca            # in the operator namespace unless a namespace is given
 ```
 
 In `Managed` mode, `educatesClusterConfig.policyEnforcement` is required. Workshop security is enforced by Kyverno, and both the `clusterPolicy` and the `workshopPolicy` engines default to `Kyverno`, so whenever either engine is `Kyverno` the `kyverno` block must say how Kyverno is provided: `Bundled` has the operator install it, and `External` uses a Kyverno already installed in the cluster. Setting both engines to `None` runs Educates without workshop security, which is only acceptable for trusted users (see [cluster requirements](cluster-requirements)). A spec that leaves out either block fails validation before any cluster service is installed, with the `ValidationSucceeded` condition of the `EducatesClusterConfig` naming the missing field.
@@ -317,6 +325,7 @@ Runtime behavior settings live on the `SessionManager` custom resource spec, rea
   and workshop base environment images, and any further images you list, onto
   every node ahead of time. It is off unless ``enabled`` is ``true``. See
   [pre-pulling workshop images](pre-pulling-workshop-images).
+* `clusterAdmin`: binds the session manager's service account to the `cluster-admin` ClusterRole when `true`, as an escape hatch for workshops whose objects need permissions beyond those of the `educates:session-manager` ClusterRole and the ClusterRoles aggregated into it with the `rbac.educates.dev/extends-workshop-permissions` label. `false` unless set.
 * `imagePullSecretPropagation.sessionNamespaces`: whether workshop session namespaces get copies of the cluster configuration's image pull secrets, `true` unless set. Workshop users can read the secrets there, so `false` keeps the credentials from them; the namespace of a session's vcluster gets them either way. See [air-gapped installation](airgapped-installation) for what then pulls images there.
 * `nodeCATrust`, `remoteAccess`: node-level CA trust injection and cross-cluster CLI access. With `nodeCATrust.mode` at its default, `Auto`, the node CA injector is installed whenever the cluster publishes a CA, which includes every Managed mode install with a custom CA, every `StaticCertificate` or `None` provider install that names a CA trust Secret, and every Inline mode install that names a CA Secret, and also whenever `ingressOverrides.caCertificateSecretRef` is set. Nodes trust the CA the session manager uses: the override's `educates-session-manager-ingress-ca` when one is set, otherwise the cluster's `educates-ingress-ca`. With `Enabled`, the `SessionManager` reports `Ready` as `False` only when neither the cluster nor an override provides a CA. Set it to `Disabled` to keep the privileged node CA injector DaemonSet off. With `remoteAccess.mode` at its default, `Auto`, remote access is installed whenever a `LookupService` exists. The lookup service monitors the cluster it runs on through remote access, so with `Disabled` it still starts but does not monitor that cluster, as [Cluster Monitoring](../lookup-service/cluster-monitoring) describes.
 
@@ -620,7 +629,7 @@ To see what a redeploy would change before running it, add `--diff`:
 educates admin platform deploy --config config.yaml --diff
 ```
 
-It changes nothing, in the cluster or in the local secrets cache, and exits with status 0 whether or not anything would change. It lists the cached Secrets a local configuration would sync into the `educates-secrets` namespace, by name and never with their values, the CRDs, and the operator release with its chart version and a diff of its values. For each platform custom resource it shows a diff against the resource as the API server would leave it after the deploy, defaults included. A change the API server would refuse, such as one to how a cluster service is provided, shows as refused, with the reason. Add `--verbose` for the full diffs of the CRDs and of the other objects of the operator release. What the operator then changes in the components and cluster services it installs is not shown.
+It changes nothing, in the cluster or in the local secrets cache, and exits with status 0 whether or not anything would change. It lists the cached Secrets a local configuration would sync into the operator namespace, `educates-installer`, by name and never with their values, the CRDs, and the operator release with its chart version and a diff of its values. For each platform custom resource it shows a diff against the resource as the API server would leave it after the deploy, defaults included. A change the API server would refuse, such as one to how a cluster service is provided, shows as refused, with the reason. Add `--verbose` for the full diffs of the CRDs and of the other objects of the operator release. What the operator then changes in the components and cluster services it installs is not shown.
 
 To see the configuration a cluster runs, export it:
 

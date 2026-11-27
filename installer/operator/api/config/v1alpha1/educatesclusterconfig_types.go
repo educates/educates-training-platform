@@ -200,11 +200,9 @@ type NamespacedSecretRef struct {
 // operator namespace. Name is required; Namespace is optional and
 // defaults to the operator namespace when empty.
 //
-// The optional namespace lets installs (in particular the CLI's
-// laptop-mode flow) keep certificate material in a dedicated namespace
-// (educates-secrets, by convention) rather than co-locating it with the
-// operator. v3 installations rely on this separation, and the v4 CLI
-// preserves it for compatibility.
+// The optional namespace lets an install keep certificate material in
+// a namespace of its own rather than in the operator namespace, where
+// the CLI keeps the Secrets of its local secrets cache.
 type SecretReference struct {
 	// name of the referent.
 	// +required

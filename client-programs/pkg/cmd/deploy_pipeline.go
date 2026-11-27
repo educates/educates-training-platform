@@ -116,6 +116,7 @@ func translateAndDeploy(
 		deployOpts.SyncLocalSecrets = true
 		deployOpts.LocalSecretNames = plan.SyncSecretNames
 	}
+	deployOpts.OperatorNamespacePullSecrets = pullSecretsToCheck(cfg)
 	if flags.Record != nil {
 		record := *flags.Record
 		record.KubeContext = kubeContext
@@ -168,6 +169,7 @@ func translateAndDiff(
 		diffOpts.LocalSecretNames = plan.SyncSecretNames
 		diffOpts.PendingSecrets = plan.PendingCAKeyPairs()
 	}
+	diffOpts.OperatorNamespacePullSecrets = pullSecretsToCheck(cfg)
 
 	return deployer.Diff(ctx, out, diffOpts)
 }
@@ -342,4 +344,22 @@ func isStdoutTTY(w io.Writer) bool {
 		return false
 	}
 	return info.Mode()&os.ModeCharDevice != 0
+}
+
+// pullSecretsToCheck returns the image pull Secrets of cfg that a deploy
+// must find in the operator namespace before it installs anything: those
+// imageRegistry.pullSecrets names in the GKE, EKS and Inline kinds, which
+// the user creates there. The local kind's come from the local secrets
+// cache, which its plan checks and the deploy syncs, and an EducatesConfig
+// declares its own.
+func pullSecretsToCheck(cfg v1alpha1.Config) []string {
+	switch c := cfg.(type) {
+	case *v1alpha1.EducatesGKEConfig:
+		return c.ImageRegistry.PullSecrets
+	case *v1alpha1.EducatesEKSConfig:
+		return c.ImageRegistry.PullSecrets
+	case *v1alpha1.EducatesInlineConfig:
+		return c.ImageRegistry.PullSecrets
+	}
+	return nil
 }

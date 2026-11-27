@@ -11,6 +11,7 @@ imageRegistry:
   prefix: registry.internal.example.com/educates
   pullSecrets:
     - internal-registry-pull
+    - my-pull-secret
 
 policyEnforcement:
   clusterEngine: PodSecurityStandards
@@ -33,9 +34,6 @@ websiteStyling:
     - namespace: educates
       name: my-theme-data
 
-secretPropagation:
-  imagePullSecretNames:
-    - my-pull-secret
 
 imageVersions:
   - name: base-environment

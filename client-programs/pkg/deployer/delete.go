@@ -15,6 +15,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/helm"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/progress"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/wait"
+	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 )
 
 // DeleteOptions configures a delete run. Mirrors Options but the inputs
@@ -28,10 +29,12 @@ type DeleteOptions struct {
 	Progress progress.Reporter
 
 	// Purge, when true, extends the delete pipeline AFTER helm
-	// uninstall to remove the four CRDs, the operator namespace, and
-	// the 'educates-secrets' namespace. Local <data-home>/config.yaml
-	// + cached CA Secrets are intentionally preserved — they're user
-	// authoring inputs and survive cluster reinstalls.
+	// uninstall to remove the four CRDs, the operator namespace with the
+	// Secrets synced into it, and the namespace earlier releases synced
+	// the local secrets cache into, when it is left. Local
+	// <data-home>/config.yaml and the local secrets cache are
+	// intentionally preserved: they're user authoring inputs and survive
+	// cluster reinstalls, and the next deploy syncs the cache again.
 	Purge bool
 }
 
@@ -56,7 +59,8 @@ func PurgePlan() PurgeTargets {
 		},
 		Namespaces: []string{
 			OperatorNamespace, // educates-installer
-			"educates-secrets",
+			// Where earlier releases synced the local secrets cache.
+			secrets.RetiredSyncNamespace,
 		},
 	}
 }
@@ -80,9 +84,9 @@ func PurgePlan() PurgeTargets {
 //   - CRDs (helm never owns them; would cascade-delete any CR in the
 //     cluster, including ones from other Educates installs).
 //   - The operator namespace itself.
-//   - educates-secrets namespace + the synced CA Secret (so the next
-//     deploy reuses the same CA the user already trusts in their
-//     browser).
+//   - The Secrets synced into the operator namespace from the local
+//     secrets cache, such as the CA key pair (the next deploy syncs the
+//     same CA the user already trusts in their browser).
 func Delete(ctx context.Context, opts DeleteOptions) error {
 	if opts.Out == nil {
 		opts.Out = io.Discard

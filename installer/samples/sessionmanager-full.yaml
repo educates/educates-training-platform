@@ -34,8 +34,7 @@ spec:
       name: sessions-wildcard-tls
     caCertificateSecretRef:
       name: sessions-wildcard-ca
-      # Optional; empty means the operator namespace.
-      namespace: educates-secrets
+      # namespace: optional; empty means the operator namespace.
     protocol: https
 
   # Local override of

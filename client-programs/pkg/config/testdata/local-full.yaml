@@ -22,7 +22,7 @@ resolver:
 ingress:
   domain: workshop.test
 
-clusterAdmin: false
+clusterAdmin: true
 lookupService: false
 imagePrePuller:
   enabled: false
@@ -37,8 +37,8 @@ websiteStyling:
     - namespace: educates
       name: my-theme-data
 
-secretPropagation:
-  imagePullSecretNames:
+imageRegistry:
+  pullSecrets:
     - my-pull-secret
 
 imageVersions:

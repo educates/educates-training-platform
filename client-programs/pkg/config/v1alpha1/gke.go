@@ -46,13 +46,13 @@ type EducatesGKEConfig struct {
 	// Top-level toggles shared with EducatesLocalConfig. Defaults per
 	// the locked design: clusterAdmin=false, lookupService=true,
 	// imagePrePuller.enabled=true.
-	ClusterAdmin      *bool                        `yaml:"clusterAdmin,omitempty"`
-	LookupService     *bool                        `yaml:"lookupService,omitempty"`
-	ImagePrePuller    ImagePrePullerConfig         `yaml:"imagePrePuller,omitempty"`
-	WebsiteStyling    LocalWebsiteStylingConfig    `yaml:"websiteStyling,omitempty"`
-	SecretPropagation LocalSecretPropagationConfig `yaml:"secretPropagation,omitempty"`
-	ImageVersions     []ImageVersion               `yaml:"imageVersions,omitempty"`
-	Operator          LocalOperatorConfig          `yaml:"operator,omitempty"`
+	ClusterAdmin   *bool                     `yaml:"clusterAdmin,omitempty"`
+	LookupService  *bool                     `yaml:"lookupService,omitempty"`
+	ImagePrePuller ImagePrePullerConfig      `yaml:"imagePrePuller,omitempty"`
+	WebsiteStyling LocalWebsiteStylingConfig `yaml:"websiteStyling,omitempty"`
+	ImageRegistry  LocalImageRegistryConfig  `yaml:"imageRegistry,omitempty"`
+	ImageVersions  []ImageVersion            `yaml:"imageVersions,omitempty"`
+	Operator       LocalOperatorConfig       `yaml:"operator,omitempty"`
 }
 
 // GCPConfig is the GCP envelope for EducatesGKEConfig.

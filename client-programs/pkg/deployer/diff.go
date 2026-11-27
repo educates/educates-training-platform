@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/client-go/kubernetes"
 	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/translator"
@@ -59,6 +58,10 @@ type DiffOptions struct {
 	// certificate plan minted, which the preview takes in place of the
 	// cache.
 	PendingSecrets map[string]*corev1.Secret
+
+	// OperatorNamespacePullSecrets are as for Deploy: the preview reports
+	// which of them the operator namespace lacks.
+	OperatorNamespacePullSecrets []string
 }
 
 // The changes the preview reports for an object.
@@ -104,6 +107,12 @@ func Diff(ctx context.Context, out *translator.Output, opts DiffOptions) error {
 
 	if opts.SyncLocalSecrets {
 		if err := r.secretsSection(opts); err != nil {
+			return err
+		}
+	}
+
+	if len(opts.OperatorNamespacePullSecrets) > 0 {
+		if err := r.pullSecretsSection(opts); err != nil {
 			return err
 		}
 	}
@@ -183,13 +192,9 @@ type diffRow struct {
 
 // secretsSection previews the sync of the cached Secrets.
 func (r *diffReport) secretsSection(opts DiffOptions) error {
-	cfg, err := opts.Getter.ToRESTConfig()
+	cs, err := clientsetFor(opts.Getter)
 	if err != nil {
-		return fmt.Errorf("REST config for secrets sync: %w", err)
-	}
-	cs, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return fmt.Errorf("kubernetes client for secrets sync: %w", err)
+		return fmt.Errorf("secrets sync: %w", err)
 	}
 	namespaceCreated, changes, err := secrets.PreviewSyncLocalCachedSecretsToCluster(cs, opts.LocalSecretNames, opts.PendingSecrets)
 	if err != nil {
@@ -207,6 +212,35 @@ func (r *diffReport) secretsSection(opts DiffOptions) error {
 	if len(rows) == 0 {
 		r.indented(2, "none to sync")
 		return nil
+	}
+	r.rows(rows)
+	return nil
+}
+
+// pullSecretsSection reports whether the operator namespace holds each
+// image pull Secret the config names, which a deploy checks before it
+// installs anything.
+func (r *diffReport) pullSecretsSection(opts DiffOptions) error {
+	cs, err := clientsetFor(opts.Getter)
+	if err != nil {
+		return err
+	}
+	problems, err := pullSecretProblems(cs, opts.OperatorNamespacePullSecrets)
+	if err != nil {
+		return err
+	}
+	byName := map[string]string{}
+	for _, p := range problems {
+		byName[p.name] = p.problem
+	}
+	r.section("Image pull secrets in namespace " + OperatorNamespace)
+	rows := make([]diffRow, 0, len(opts.OperatorNamespacePullSecrets))
+	for _, name := range opts.OperatorNamespacePullSecrets {
+		change := "present"
+		if problem, found := byName[name]; found {
+			change = problem + "; the deploy stops until it is created"
+		}
+		rows = append(rows, diffRow{name: name, change: change})
 	}
 	r.rows(rows)
 	return nil

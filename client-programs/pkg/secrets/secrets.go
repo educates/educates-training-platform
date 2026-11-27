@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
@@ -31,13 +32,38 @@ func CachedSecretPath(name string) string {
 }
 
 // LocalSecretsSyncNamespace is the cluster namespace the local secrets
-// cache is synced into.
-const LocalSecretsSyncNamespace = "educates-secrets"
+// cache is synced into: the operator namespace, where the operator pod
+// and the EducatesClusterConfig find the Secrets they name.
+const LocalSecretsSyncNamespace = constants.OperatorNamespace
+
+// RetiredSyncNamespace is the namespace earlier releases synced the local
+// secrets cache into. Nothing in Educates references it any more.
+const RetiredSyncNamespace = "educates-secrets"
+
+// RetiredSyncNamespaceNote returns a note for a cluster that still has the
+// RetiredSyncNamespace namespace, saying that the cache is synced into
+// LocalSecretsSyncNamespace now and how to remove the old namespace, and
+// an empty note for a cluster without it. It never removes the namespace,
+// which may hold Secrets someone else put there.
+func RetiredSyncNamespaceNote(client kubernetes.Interface) (string, error) {
+	_, err := client.CoreV1().Namespaces().Get(context.TODO(), RetiredSyncNamespace, metav1.GetOptions{})
+	if k8serrors.IsNotFound(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", errors.Wrapf(err, "unable to check namespace %q", RetiredSyncNamespace)
+	}
+	return "namespace " + RetiredSyncNamespace + ", where earlier releases synced the local secrets cache, is no " +
+		"longer used: the cache is synced into " + LocalSecretsSyncNamespace + ". Once no workshop copies " +
+		"Secrets from it, remove it with 'kubectl delete namespace " + RetiredSyncNamespace + "'", nil
+}
 
 // SyncLocalCachedSecretsToCluster ensures the LocalSecretsSyncNamespace
 // namespace exists and copies the named Secrets from the local cache into
-// it, creating or updating each one.
-func SyncLocalCachedSecretsToCluster(client *kubernetes.Clientset, names []string) error {
+// it, creating or updating each one. A namespace it creates carries the
+// name label Helm gives a namespace it creates, so it is the namespace
+// the operator chart's install would have made.
+func SyncLocalCachedSecretsToCluster(client kubernetes.Interface, names []string) error {
 	namespacesClient := client.CoreV1().Namespaces()
 
 	_, err := namespacesClient.Get(context.TODO(), LocalSecretsSyncNamespace, metav1.GetOptions{})
@@ -45,14 +71,15 @@ func SyncLocalCachedSecretsToCluster(client *kubernetes.Clientset, names []strin
 	if k8serrors.IsNotFound(err) {
 		namespaceObj := apiv1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: LocalSecretsSyncNamespace,
+				Name:   LocalSecretsSyncNamespace,
+				Labels: map[string]string{"name": LocalSecretsSyncNamespace},
 			},
 		}
 
 		// Surface RBAC / admission / transient errors here rather than
 		// proceeding to write Secrets into a namespace that doesn't
-		// exist — the subsequent secret writes would fail with a
-		// confusing 'namespaces "educates-secrets" not found' that
+		// exist, where the subsequent secret writes would fail with a
+		// confusing 'namespaces "educates-installer" not found' that
 		// masks the real cause (typically: kubeconfig user lacks
 		// 'create namespaces').
 		if _, err := namespacesClient.Create(context.TODO(), &namespaceObj, metav1.CreateOptions{}); err != nil && !k8serrors.IsAlreadyExists(err) {

@@ -17,6 +17,7 @@ limitations under the License.
 package platform
 
 import (
+	"log/slog"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -112,7 +113,7 @@ var _ = Describe("Runtime release first install", func() {
 		ensureNamespace(platformNamespace)
 		chrt := normalisedCRDChart()
 
-		hc, err := helm.NewClient(cfg, platformNamespace)
+		hc, err := helm.NewClient(cfg, platformNamespace, slog.LevelDebug)
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() {
 			Expect(hc.Uninstall(chrt.Name())).To(Succeed())
@@ -177,7 +178,7 @@ var _ = Describe("Runtime release first install", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// The operator builds a Helm client for every reconcile.
-			hc, err := helm.NewClient(cfg, platformNamespace)
+			hc, err := helm.NewClient(cfg, platformNamespace, slog.LevelDebug)
 			Expect(err).NotTo(HaveOccurred())
 			DeferCleanup(func() {
 				Expect(hc.Uninstall(rel.name)).To(Succeed())

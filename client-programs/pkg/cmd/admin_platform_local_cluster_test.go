@@ -9,6 +9,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
+	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 )
 
 // stageLocalClusterConfigs writes, into a fresh data home it returns, the
@@ -155,6 +156,35 @@ func TestRender_LocalConfig_NamedCluster_TakesItsNameUnderTheNipDomainOfTheRoute
 	}
 	if strings.Contains(s, "auto-derived from host IP") {
 		t.Errorf("render of a named cluster emitted the host-IP note:\n%s", s)
+	}
+}
+
+func TestRender_LocalConfig_NamedCluster_NamesItsPullSecretsAndItsSyncCommand(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("EDUCATES_CLI_DATA_HOME", dataHome)
+	writeRouterFile(t, dataHome, handWrittenRouterFile)
+	if err := secrets.WriteCachedSecret(secrets.NewDockerRegistrySecret("mirror", "registry.example.com", "user", "pass", "")); err != nil {
+		t.Fatal(err)
+	}
+	test2, err := localclusters.Named("test2", dataHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeNamedConfig(t, test2, "apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n"+
+		"imageRegistry:\n  pullSecrets: [mirror]\n")
+
+	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
+	o := &PlatformRenderOptions{LocalConfig: true, LocalCluster: localclusters.Selection{FlagSet: true, Flag: "test2"}}
+
+	var buf bytes.Buffer
+	if err := p.runRender(&buf, o); err != nil {
+		t.Fatalf("runRender: %v", err)
+	}
+	want := "# Before 'helm install', run 'educates local secrets sync --local-cluster test2' to copy\n" +
+		"# the cached secrets these resources reference, the image pull secret \"mirror\" among\n" +
+		"# them, into the operator namespace, educates-installer."
+	if s := buf.String(); !strings.Contains(s, want) {
+		t.Errorf("render output missing %q:\n%s", want, s)
 	}
 }
 

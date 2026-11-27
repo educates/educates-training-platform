@@ -220,7 +220,7 @@ func (p *Plan) trustTheRouter(source routerSource, domain string, names []string
 	p.Certificates = translator.LocalCertificates{
 		Provider: translator.CertificatesProviderNone,
 		None: &translator.LocalNoneCertificates{
-			CACertificateSecretRef: &translator.SecretRef{Name: source.caTrust, Namespace: secrets.LocalSecretsSyncNamespace},
+			CACertificateSecretRef: &translator.SecretRef{Name: source.caTrust},
 		},
 	}
 	p.SyncSecretNames = syncSecretNames(names, "")

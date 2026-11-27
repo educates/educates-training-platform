@@ -430,6 +430,17 @@ type SessionManagerSpec struct {
 	// +optional
 	RegistryMirrors []RegistryMirror `json:"registryMirrors,omitempty"`
 
+	// clusterAdmin binds the session manager's service account to the
+	// built-in cluster-admin ClusterRole. It is an escape hatch for
+	// workshops whose objects need permissions beyond what the
+	// educates:session-manager ClusterRole grants, together with the
+	// ClusterRoles aggregated into it through the
+	// rbac.educates.dev/extends-workshop-permissions label: the session
+	// manager can only create what it may create itself, and grant what
+	// it holds. Unset means false.
+	// +optional
+	ClusterAdmin *bool `json:"clusterAdmin,omitempty"`
+
 	// logLevel defaults to info.
 	// +kubebuilder:default=info
 	// +optional

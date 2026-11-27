@@ -726,7 +726,7 @@ New Features
 * ``educates admin platform deploy --diff`` shows what a deploy would change
   in the cluster, and changes nothing, in the cluster or in the local
   secrets cache. It lists the cached Secrets a local configuration would
-  sync into the ``educates-secrets`` namespace, by name and never with their
+  sync into the operator namespace, by name and never with their
   values, the CRDs, and the operator release with its chart version and a
   diff of its values, and shows a diff of each platform custom resource
   against the resource as the API server would leave it, from a server-side
@@ -1235,8 +1235,10 @@ Features Changed
   ``localDNSResolver`` to ``resolver``, and the kind cluster networking
   fields ``podCIDR`` and ``serviceCIDR`` to ``podSubnet`` and
   ``serviceSubnet``. The migration carries ``sessionManager.clusterAdmin``
-  over to ``clusterAdmin``, which a local cluster does not apply yet, and a
-  set ``lookupService.enabled`` over to ``lookupService``. Its notice names
+  over to ``clusterAdmin``, a set ``lookupService.enabled`` over to
+  ``lookupService``, and the ``clusterSecrets.pullSecretRefs`` entries in
+  the ``educates-secrets`` namespace, secrets of the local secrets cache, over
+  to ``imageRegistry.pullSecrets``. Its notice names
   every setting it drops, each top-level setting it does not carry over and
   each setting dropped from a block it carries in part, and says where the
   setting's version 4 equivalent lives, often a field of an
@@ -1281,8 +1283,8 @@ Features Changed
   ``training.educates.dev/root-ca``. A local deploy references the CA key
   pair as ``customCA.caKeyPairSecretRef`` and the root's CA trust Secret as
   ``customCA.caCertificateSecretRef``. A deploy and
-  ``educates local secrets sync`` now copy into the ``educates-secrets``
-  namespace every cached secret except CA root key pairs and any other
+  ``educates local secrets sync`` now copy into the operator namespace
+  every cached secret except CA root key pairs and any other
   secret holding a CA private key, apart from the CA key pair selected for
   the ingress domain. ``educates local secrets sync`` selects that CA key
   pair from the ``ingress.domain`` of the local configuration, minting it
@@ -2020,6 +2022,53 @@ Features Changed
   injected every secret in the namespaces it targeted into the service
   accounts it selected. No Educates chart renders such a rule. Selectors
   under ``targetNamespaces`` and ``serviceAccounts`` are not affected.
+
+* A deploy of a local configuration, and ``educates local secrets sync``,
+  copy the local secrets cache into the operator namespace,
+  ``educates-installer``, creating it before the operator is installed, where
+  earlier releases copied it into an ``educates-secrets`` namespace. The
+  operator pod pulls its own image with the image pull secrets the
+  configuration names, so they have to be in its namespace before it starts,
+  and the ``EducatesClusterConfig`` now references the certificates of a local
+  install there, by name alone. A deploy to a cluster that still has the
+  ``educates-secrets`` namespace leaves it in place and says how to remove it,
+  and ``educates admin platform delete --purge`` removes it. Nothing in
+  Educates uses it any more: a workshop whose ``spec.environment.secrets``
+  copies a secret from it on a local cluster finds nothing there on a new
+  one. Such a workshop can copy one of the cluster's image pull secrets from
+  the ``educates`` namespace instead, where the operator copies them, or name
+  the namespace that holds its secret. The operator no longer watches
+  ``educates-secrets`` unless the ``EducatesClusterConfig`` references a
+  secret there when the operator starts.
+
+* The operator logs at ``info`` by default, where it logged at ``debug``,
+  whether installed with the CLI or with Helm. ``operator.logLevel`` of a CLI
+  configuration, or the ``logLevel`` value of the ``educates-installer``
+  chart, sets it. The output of the Helm SDK, which the operator installs
+  charts with, follows it too, where it was always logged at ``debug``: set
+  ``debug`` to see Helm's detail, such as why an uninstall failed.
+
+* ``clusterAdmin`` of an ``EducatesLocalConfig`` defaults to ``false``, as in
+  the other configuration kinds, where a version 3 local cluster bound the
+  session manager to the ``cluster-admin`` ClusterRole by default. A local
+  cluster gives the session manager the permissions it has on any other
+  install, so a workshop that needs more fails on the laptop first; set
+  ``clusterAdmin: true`` for such a workshop. A configuration that sets
+  ``clusterAdmin: true``, such as one written by
+  ``educates local config init --defaults`` of an earlier release, now binds
+  the session manager to ``cluster-admin``; remove the line, or set it to
+  ``false``, to keep the session manager to the permissions Educates grants
+  it.
+
+* ``imageRegistry.pullSecrets`` replaces
+  ``secretPropagation.imagePullSecretNames`` in every CLI configuration kind,
+  and names the image pull secrets of an install for the operator pod as well
+  as for everything the operator installs. A configuration in the data home
+  that still has ``secretPropagation`` is moved over the first time a command
+  reads it, with the previous configuration kept as a backup beside it, and
+  any other configuration with it fails to load, saying what to change.
+  ``operator.imagePullSecrets`` stays, for a secret only the operator pulls
+  with.
 
 Removed Features
 ----------------
@@ -3108,3 +3157,41 @@ Bugs Fixed
   Kubernetes reserved namespaces unquoted, as ``- !kube-*``, which YAML reads
   as a tag rather than a name, and an example of a ``SecretCopier`` lacked a
   colon. The documentation of the four resources has been corrected.
+
+* ``operator.logLevel`` in a CLI configuration was written into the values of
+  the ``educates-installer`` chart, which had no such value, so the operator
+  always logged at ``debug``, whatever the configuration said, while the
+  platform components took the level from their resources. The chart now has
+  a ``logLevel`` value, ``info`` by default, which the operator takes as its
+  new ``--log-level`` option, so ``operator.logLevel`` sets the log level of
+  the operator as well as of the components. As with the components, ``warn``
+  logs only errors.
+
+* ``clusterAdmin`` in a CLI configuration of any kind was accepted, shown by
+  ``educates local config view`` and documented, but no translation wrote it
+  anywhere, since the ``SessionManager`` resource had no field for it, so the
+  session manager was never bound to the ``cluster-admin`` ClusterRole. The
+  ``SessionManager`` resource now has ``spec.clusterAdmin``, which binds the
+  session manager's service account to ``cluster-admin`` when ``true``, and
+  every configuration kind sets it from ``clusterAdmin``. The schemas
+  described ``clusterAdmin`` as granting workshop sessions cluster-admin
+  access, and now say what it does.
+
+* ``secretPropagation.imagePullSecretNames`` in a CLI configuration of any kind
+  was accepted and documented as making image pull secrets available to
+  workshop sessions, but nothing read it, and a local cluster had no way to
+  pull from a registry that needs credentials, as version 3 laptops could
+  through ``clusterSecrets.pullSecretRefs``. Every configuration kind now takes
+  ``imageRegistry.pullSecrets``, as ``EducatesInlineConfig`` already did, and
+  names its secrets both in the operator chart's ``imagePullSecrets``, so the
+  operator pod pulls its own image with them, and in the
+  ``EducatesClusterConfig``, so everything the operator installs and every
+  workshop does. In an ``EducatesLocalConfig`` they are secrets of the local
+  secrets cache, cached with ``educates local secrets add docker-registry``,
+  which a deploy copies into the operator namespace, and a name that is not a
+  cached registry credential fails the deploy, the render and
+  ``educates local secrets sync`` before anything reaches the cluster. In the
+  other kinds they are secrets you create in the operator namespace, which
+  ``educates admin platform deploy`` checks for before it installs anything,
+  ``--diff`` reports, and ``educates admin platform render`` names in a
+  comment.

@@ -26,9 +26,9 @@ import (
 // pod restart or the 10h relist.
 //
 // The cache scope is set at operator startup (cmd/secretcache.go) from
-// (operatorNamespace ∪ educates-secrets ∪ namespaces referenced by the
-// ECC at boot). A user editing the ECC to point at a fresh namespace
-// post-deploy is the case this warns about.
+// (operatorNamespace ∪ namespaces referenced by the ECC at boot). A user
+// editing the ECC to point at a fresh namespace post-deploy is the case
+// this warns about.
 //
 // Empty CachedSecretNamespaces disables the message, as used by tests
 // that don't populate the field.

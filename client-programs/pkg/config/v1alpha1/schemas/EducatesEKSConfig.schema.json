@@ -54,7 +54,7 @@
       "description": "Asserts TLS for the ingress domain is terminated outside the cluster (external load balancer or proxy forwarding plain HTTP inward). Educates issues no in-cluster certificate and generated portal and workshop URLs use https. Maps to EducatesClusterConfig ingress.protocol https with a None certificates provider; acme is not required when set."
     },
 
-    "clusterAdmin":   { "type": "boolean", "default": false, "description": "Grant workshop sessions cluster-admin access. Disabled by default on production clusters." },
+    "clusterAdmin":   { "type": "boolean", "default": false, "description": "Bind the session manager's service account to the cluster-admin ClusterRole, an escape hatch for workshops whose objects need permissions beyond those the session manager holds. Off by default, so workshops run with the same permissions as on any other Educates install." },
     "lookupService":  { "type": "boolean", "default": true, "description": "Deploy the lookup service used for service discovery across training portals. Enabled by default." },
     "imagePrePuller": {
       "type": "object",
@@ -116,12 +116,12 @@
       }
     },
 
-    "secretPropagation": {
+    "imageRegistry": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Secrets to copy into workshop session namespaces.",
+      "description": "Credentials for images held in registries that need them.",
       "properties": {
-        "imagePullSecretNames": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of image pull Secrets to make available to workshop sessions." }
+        "pullSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of image pull Secrets of type kubernetes.io/dockerconfigjson that you create in the operator namespace, educates-installer, before deploying. The operator pod pulls its own image with them and the operator passes them on to every pod it installs; the session manager passes them on to training portal, workshop environment and workshop session namespaces." }
       }
     },
 

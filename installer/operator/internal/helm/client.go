@@ -107,8 +107,9 @@ func SkipCRDs() InstallOption {
 // NewClient builds a Client backed by the cluster reachable via cfg.
 // Releases are stored as Secrets in the given namespace, matching the
 // Helm CLI default. The namespace also scopes resource installs in the
-// absence of explicit metadata.namespace.
-func NewClient(cfg *rest.Config, namespace string) (*Client, error) {
+// absence of explicit metadata.namespace. The Helm SDK logs at logLevel,
+// the operator's own log level.
+func NewClient(cfg *rest.Config, namespace string, logLevel slog.Level) (*Client, error) {
 	if cfg == nil {
 		return nil, errors.New("rest.Config is required")
 	}
@@ -121,14 +122,14 @@ func NewClient(cfg *rest.Config, namespace string) (*Client, error) {
 	if err := actionCfg.Init(getter, namespace, helmDriver); err != nil {
 		return nil, fmt.Errorf("init helm action config: %w", err)
 	}
-	// Pipe helm SDK's internal slog output to the operator pod's
-	// stderr at Debug level. controller-runtime captures the pod's
-	// stderr alongside its own logs. Helm logs critical paths at
-	// Debug — including the per-resource error detail Uninstall
-	// collapses into the opaque "failed to delete release: <name>"
-	// return value. Without this, a botched uninstall is invisible.
+	// Pipe the Helm SDK's internal slog output to the operator pod's
+	// stderr, beside the operator's own log, at the operator's level.
+	// Helm logs critical paths at Debug, including the per-resource
+	// error detail Uninstall collapses into the opaque "failed to delete
+	// release: <name>" return value, so a botched uninstall needs the
+	// operator at debug to show why.
 	actionCfg.SetLogger(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: logLevel,
 	}))
 	return &Client{cfg: actionCfg, namespace: namespace}, nil
 }

@@ -61,13 +61,12 @@ type EducatesInlineConfig struct {
 	ExternalTLSTermination bool `yaml:"externalTLSTermination,omitempty"`
 
 	// Top-level toggles shared with EducatesLocalConfig.
-	ClusterAdmin      *bool                        `yaml:"clusterAdmin,omitempty"`
-	LookupService     *bool                        `yaml:"lookupService,omitempty"`
-	ImagePrePuller    ImagePrePullerConfig         `yaml:"imagePrePuller,omitempty"`
-	WebsiteStyling    LocalWebsiteStylingConfig    `yaml:"websiteStyling,omitempty"`
-	SecretPropagation LocalSecretPropagationConfig `yaml:"secretPropagation,omitempty"`
-	ImageVersions     []ImageVersion               `yaml:"imageVersions,omitempty"`
-	Operator          LocalOperatorConfig          `yaml:"operator,omitempty"`
+	ClusterAdmin   *bool                     `yaml:"clusterAdmin,omitempty"`
+	LookupService  *bool                     `yaml:"lookupService,omitempty"`
+	ImagePrePuller ImagePrePullerConfig      `yaml:"imagePrePuller,omitempty"`
+	WebsiteStyling LocalWebsiteStylingConfig `yaml:"websiteStyling,omitempty"`
+	ImageVersions  []ImageVersion            `yaml:"imageVersions,omitempty"`
+	Operator       LocalOperatorConfig       `yaml:"operator,omitempty"`
 }
 
 type InlineImageRegistry struct {

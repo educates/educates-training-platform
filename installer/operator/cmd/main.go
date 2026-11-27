@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -83,6 +84,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var logLevel string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -101,11 +103,21 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.StringVar(&logLevel, "log-level", "info",
+		"The log level: debug, info, warn or error. At warn only errors are logged, since logr has no warning "+
+			"level. An explicit --"+zapLogLevelFlag+" takes precedence.")
 	opts := zap.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+	if err := applyLogLevel(&opts, logLevel, flagPassed(flag.CommandLine, zapLogLevelFlag)); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	// The Helm SDK logs through slog beside the operator's logger, at the
+	// same level.
+	helmLevel := helmLogLevel(opts)
 
 	// Wrap the zap logger with filteringLogSink so controller-runtime's
 	// internal/source/kind.go retry-loop ERRORs (emitted whenever a
@@ -214,11 +226,11 @@ func main() {
 	}
 	setupLog.Info("Applied embedded CRDs")
 
-	// Scope the Secret cache to: operator namespace, 'educates-secrets'
-	// (v3 / CLI laptop convention), plus any cross-namespace refs the
-	// current EducatesClusterConfig and SessionManager singletons point
-	// at. APIReader still handles ad-hoc reads from elsewhere; the cache
-	// scope here only affects watch-driven enqueue.
+	// Scope the Secret cache to: the operator namespace, plus any
+	// cross-namespace refs the current EducatesClusterConfig and
+	// SessionManager singletons point at. APIReader still handles ad-hoc
+	// reads from elsewhere; the cache scope here only affects watch-driven
+	// enqueue.
 	//
 	// Boot-time discovery: if the user later edits either singleton to
 	// point at a new namespace, the operator pod needs to restart to pick
@@ -320,7 +332,7 @@ func main() {
 		OperatorNamespace:      operatorNamespace,
 		CachedSecretNamespaces: cachedSecretNSSet,
 		HelmClientFor: func(ns string) (*helm.Client, error) {
-			return helm.NewClient(restCfg, ns)
+			return helm.NewClient(restCfg, ns, helmLevel)
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "config-educatesclusterconfig")
@@ -331,7 +343,7 @@ func main() {
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),
 		HelmClientFor: func(ns string) (*helm.Client, error) {
-			return helm.NewClient(restCfg, ns)
+			return helm.NewClient(restCfg, ns, helmLevel)
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "platform-secretsmanager")
@@ -342,7 +354,7 @@ func main() {
 		APIReader: mgr.GetAPIReader(),
 		Scheme:    mgr.GetScheme(),
 		HelmClientFor: func(ns string) (*helm.Client, error) {
-			return helm.NewClient(restCfg, ns)
+			return helm.NewClient(restCfg, ns, helmLevel)
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "platform-lookupservice")
@@ -354,7 +366,7 @@ func main() {
 		Scheme:            mgr.GetScheme(),
 		OperatorNamespace: operatorNamespace,
 		HelmClientFor: func(ns string) (*helm.Client, error) {
-			return helm.NewClient(restCfg, ns)
+			return helm.NewClient(restCfg, ns, helmLevel)
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "platform-sessionmanager")

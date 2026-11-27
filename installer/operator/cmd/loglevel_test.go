@@ -1,0 +1,90 @@
+/*
+Copyright 2026.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+*/
+
+package main
+
+import (
+	"log/slog"
+	"testing"
+
+	"go.uber.org/zap/zapcore"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+)
+
+func TestApplyLogLevel_SetsTheLevelOfEachName(t *testing.T) {
+	cases := []struct {
+		level       string
+		lowestShown zapcore.Level
+	}{
+		{"debug", zapcore.DebugLevel},
+		{"info", zapcore.InfoLevel},
+		// logr has no warning level: at warn only errors are logged.
+		{"warn", zapcore.WarnLevel},
+		{"error", zapcore.ErrorLevel},
+	}
+	for _, c := range cases {
+		t.Run(c.level, func(t *testing.T) {
+			opts := zap.Options{Development: true}
+			if err := applyLogLevel(&opts, c.level, false); err != nil {
+				t.Fatalf("applyLogLevel(%q): %v", c.level, err)
+			}
+			if opts.Level == nil {
+				t.Fatalf("applyLogLevel(%q) left the level unset", c.level)
+			}
+			if !opts.Level.Enabled(c.lowestShown) {
+				t.Errorf("level %q does not show %s", c.level, c.lowestShown)
+			}
+			if c.lowestShown > zapcore.DebugLevel && opts.Level.Enabled(c.lowestShown-1) {
+				t.Errorf("level %q shows %s", c.level, c.lowestShown-1)
+			}
+		})
+	}
+}
+
+func TestApplyLogLevel_KeepsAnExplicitZapLogLevel(t *testing.T) {
+	explicit := zapcore.Level(-2) // --zap-log-level=2, a numeric verbosity
+	opts := zap.Options{Development: true, Level: explicit}
+
+	if err := applyLogLevel(&opts, "info", true); err != nil {
+		t.Fatalf("applyLogLevel: %v", err)
+	}
+	if !opts.Level.Enabled(explicit) {
+		t.Errorf("an explicit --zap-log-level was overridden by --log-level")
+	}
+}
+
+func TestApplyLogLevel_RefusesAnUnknownName(t *testing.T) {
+	opts := zap.Options{}
+	if err := applyLogLevel(&opts, "verbose", false); err == nil {
+		t.Fatal("applyLogLevel accepted an unknown level")
+	}
+}
+
+func TestHelmLogLevel_FollowsTheOperatorLevel(t *testing.T) {
+	cases := []struct {
+		name  string
+		level zapcore.Level
+		want  slog.Level
+	}{
+		{"debug", zapcore.DebugLevel, slog.LevelDebug},
+		{"info", zapcore.InfoLevel, slog.LevelInfo},
+		{"warn", zapcore.WarnLevel, slog.LevelWarn},
+		{"error", zapcore.ErrorLevel, slog.LevelError},
+		// --zap-log-level=2, a numeric verbosity beyond debug.
+		{"numeric verbosity", zapcore.Level(-2), slog.LevelDebug},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := helmLogLevel(zap.Options{Level: c.level}); got != c.want {
+				t.Errorf("helmLogLevel(%s) = %s, want %s", c.level, got, c.want)
+			}
+		})
+	}
+}

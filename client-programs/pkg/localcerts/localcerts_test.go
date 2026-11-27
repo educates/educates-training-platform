@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -66,6 +67,22 @@ func nested(t *testing.T, root map[string]interface{}, path string) interface{} 
 		cur = v
 	}
 	return cur
+}
+
+// assertInOperatorNamespace checks that each Secret reference at refs
+// names no namespace, which the EducatesClusterConfig reads as the
+// operator namespace, where the deploy syncs the cache.
+func assertInOperatorNamespace(t *testing.T, root map[string]interface{}, refs ...string) {
+	t.Helper()
+	for _, path := range refs {
+		ref, ok := nested(t, root, path).(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s is not a map in %v", path, root)
+		}
+		if namespace, present := ref["namespace"]; present {
+			t.Errorf("%s.namespace = %v, want none: the operator namespace", path, namespace)
+		}
+	}
 }
 
 // withDomainAnnotation records domain on s with the domain annotation, as
@@ -247,8 +264,8 @@ func TestResolve_Root_SelectsTheDomainCAKeyPairAndTheRootTrust(t *testing.T) {
 	want := translator.LocalCertificates{
 		Provider: "BundledCertManager",
 		CustomCA: &translator.LocalCustomCA{
-			CAKeyPairSecretRef:     translator.SecretRef{Name: "workshop.test-ca-key-pair", Namespace: "educates-secrets"},
-			CACertificateSecretRef: &translator.SecretRef{Name: "educates-ca", Namespace: "educates-secrets"},
+			CAKeyPairSecretRef:     translator.SecretRef{Name: "workshop.test-ca-key-pair"},
+			CACertificateSecretRef: &translator.SecretRef{Name: "educates-ca"},
 		},
 	}
 	if !reflect.DeepEqual(plan.Certificates, want) {
@@ -257,17 +274,18 @@ func TestResolve_Root_SelectsTheDomainCAKeyPairAndTheRootTrust(t *testing.T) {
 
 	ingress := translatedIngress(t, cfg, plan)
 	for path, want := range map[string]interface{}{
-		"certificates.provider":                                                     "BundledCertManager",
-		"certificates.bundledCertManager.issuerType":                                "CustomCA",
-		"certificates.bundledCertManager.customCA.caKeyPairSecretRef.name":          "workshop.test-ca-key-pair",
-		"certificates.bundledCertManager.customCA.caKeyPairSecretRef.namespace":     "educates-secrets",
-		"certificates.bundledCertManager.customCA.caCertificateSecretRef.name":      "educates-ca",
-		"certificates.bundledCertManager.customCA.caCertificateSecretRef.namespace": "educates-secrets",
+		"certificates.provider":                                                "BundledCertManager",
+		"certificates.bundledCertManager.issuerType":                           "CustomCA",
+		"certificates.bundledCertManager.customCA.caKeyPairSecretRef.name":     "workshop.test-ca-key-pair",
+		"certificates.bundledCertManager.customCA.caCertificateSecretRef.name": "educates-ca",
 	} {
 		if got := nested(t, ingress, path); got != want {
 			t.Errorf("ingress.%s = %v, want %v", path, got, want)
 		}
 	}
+	assertInOperatorNamespace(t, ingress,
+		"certificates.bundledCertManager.customCA.caKeyPairSecretRef",
+		"certificates.bundledCertManager.customCA.caCertificateSecretRef")
 	if _, present := ingress["protocol"]; present {
 		t.Errorf("ingress.protocol set for a secure install: %v", ingress["protocol"])
 	}
@@ -664,10 +682,10 @@ func wildcardLeaf(ca *testpki.Certificate, domains ...string) *testpki.Certifica
 
 func staticCertificate(tls, ca string) translator.LocalCertificates {
 	static := &translator.LocalStaticCertificate{
-		TLSSecretRef: translator.SecretRef{Name: tls, Namespace: "educates-secrets"},
+		TLSSecretRef: translator.SecretRef{Name: tls},
 	}
 	if ca != "" {
-		static.CACertificateSecretRef = &translator.SecretRef{Name: ca, Namespace: "educates-secrets"}
+		static.CACertificateSecretRef = &translator.SecretRef{Name: ca}
 	}
 	return translator.LocalCertificates{Provider: "StaticCertificate", StaticCertificate: static}
 }
@@ -697,16 +715,17 @@ func TestResolve_OneTLSCertificate_SelectsStaticCertificateWithTheCAThatVerifies
 
 	ingress := translatedIngress(t, cfg, plan)
 	for path, want := range map[string]interface{}{
-		"certificates.provider":                                           "StaticCertificate",
-		"certificates.staticCertificate.tlsSecretRef.name":                "workshop-tls",
-		"certificates.staticCertificate.tlsSecretRef.namespace":           "educates-secrets",
-		"certificates.staticCertificate.caCertificateSecretRef.name":      "mkcert-ca",
-		"certificates.staticCertificate.caCertificateSecretRef.namespace": "educates-secrets",
+		"certificates.provider":                                      "StaticCertificate",
+		"certificates.staticCertificate.tlsSecretRef.name":           "workshop-tls",
+		"certificates.staticCertificate.caCertificateSecretRef.name": "mkcert-ca",
 	} {
 		if got := nested(t, ingress, path); got != want {
 			t.Errorf("ingress.%s = %v, want %v", path, got, want)
 		}
 	}
+	assertInOperatorNamespace(t, ingress,
+		"certificates.staticCertificate.tlsSecretRef",
+		"certificates.staticCertificate.caCertificateSecretRef")
 
 	var r noteRecorder
 	if err := plan.Commit(&r); err != nil {
@@ -1217,4 +1236,56 @@ func keys(m map[string]string) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// pullSecretConfig is an insecure local config, which needs no CA, naming
+// pull Secrets in imageRegistry.pullSecrets.
+func pullSecretConfig(pullSecrets ...string) *v1alpha1.EducatesLocalConfig {
+	cfg := localConfig("workshop.test", true)
+	cfg.ImageRegistry.PullSecrets = pullSecrets
+	return cfg
+}
+
+func TestResolve_PullSecrets_CachedRegistryCredentialsAreSynced(t *testing.T) {
+	withDataHome(t)
+	writeCached(t, secrets.NewDockerRegistrySecret("mirror", "registry.example.com", "user", "pass", ""))
+
+	for name, resolve := range map[string]func(*v1alpha1.EducatesLocalConfig) (*localcerts.Plan, error){
+		"Resolve": localcerts.Resolve, "ResolveSync": localcerts.ResolveSync,
+	} {
+		plan, err := resolve(pullSecretConfig("mirror"))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !slices.Contains(plan.SyncSecretNames, "mirror") {
+			t.Errorf("%s syncs %v, want mirror among them", name, plan.SyncSecretNames)
+		}
+	}
+}
+
+func TestResolve_PullSecrets_RefusesOneThatIsNotACachedRegistryCredential(t *testing.T) {
+	withDataHome(t)
+	writeCached(t, secrets.NewCATrustSecret("not-a-registry-credential", testpki.NewRootCA().CertPEM))
+
+	for _, c := range []struct {
+		name string
+		says []string
+	}{
+		{"missing", []string{`"missing"`, "educates local secrets add docker-registry"}},
+		{"not-a-registry-credential", []string{`"not-a-registry-credential"`, "kubernetes.io/dockerconfigjson"}},
+	} {
+		for name, resolve := range map[string]func(*v1alpha1.EducatesLocalConfig) (*localcerts.Plan, error){
+			"Resolve": localcerts.Resolve, "ResolveSync": localcerts.ResolveSync,
+		} {
+			_, err := resolve(pullSecretConfig(c.name))
+			if err == nil {
+				t.Fatalf("%s accepted pull secret %q", name, c.name)
+			}
+			for _, want := range c.says {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("%s error %q does not mention %s", name, err, want)
+				}
+			}
+		}
+	}
 }

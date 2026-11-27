@@ -30,10 +30,10 @@
     "imageRegistry": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Relocate the images of the Educates components under a mirror registry prefix, and name pull Secrets for it.",
+      "description": "Relocate the images of the Educates components under a mirror registry prefix, and name the image pull Secrets for registries that need credentials.",
       "properties": {
         "prefix":      { "type": "string", "description": "Registry prefix under which each Educates image keeps its upstream repository path, without the upstream registry host: with registry.internal/educates, ghcr.io/educates/educates-session-manager is pulled from registry.internal/educates/educates/educates-session-manager." },
-        "pullSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of image pull Secrets for the mirror registry." }
+        "pullSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of image pull Secrets of type kubernetes.io/dockerconfigjson that you create in the operator namespace, educates-installer, before deploying. The operator pod pulls its own image with them and the operator passes them on to every pod it installs; the session manager passes them on to training portal, workshop environment and workshop session namespaces." }
       }
     },
 
@@ -61,7 +61,7 @@
       "description": "Asserts TLS for the ingress domain is terminated outside the cluster (external load balancer or proxy forwarding plain HTTP inward). No in-cluster wildcard certificate is referenced and generated portal and workshop URLs use https. Maps to EducatesClusterConfig inline ingress.protocol https with no wildcardCertificateSecretRef; wildcardCertificateSecret is not required when set."
     },
 
-    "clusterAdmin":   { "type": "boolean", "default": false, "description": "Grant workshop sessions cluster-admin access. Disabled by default." },
+    "clusterAdmin":   { "type": "boolean", "default": false, "description": "Bind the session manager's service account to the cluster-admin ClusterRole, an escape hatch for workshops whose objects need permissions beyond those the session manager holds. Off by default, so workshops run with the same permissions as on any other Educates install." },
     "lookupService":  { "type": "boolean", "default": true, "description": "Deploy the lookup service used for service discovery across training portals. Enabled by default." },
     "imagePrePuller": {
       "type": "object",
@@ -120,15 +120,6 @@
             }
           }
         }
-      }
-    },
-
-    "secretPropagation": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Secrets to copy into workshop session namespaces.",
-      "properties": {
-        "imagePullSecretNames": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of image pull Secrets to make available to workshop sessions." }
       }
     },
 

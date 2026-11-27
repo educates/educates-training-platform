@@ -113,7 +113,7 @@
       }
     },
 
-    "clusterAdmin":   { "type": "boolean", "default": true, "description": "Grant workshop sessions cluster-admin access. Enabled by default for the local environment so workshops that manage cluster-scoped resources work out of the box." },
+    "clusterAdmin":   { "type": "boolean", "default": false, "description": "Bind the session manager's service account to the cluster-admin ClusterRole, an escape hatch for workshops whose objects need permissions beyond those the session manager holds. Off by default, so workshops run with the same permissions as on any other Educates install." },
     "lookupService":  { "type": "boolean", "default": true, "description": "Deploy the lookup service used for service discovery across training portals. Enabled by default." },
     "imagePrePuller": {
       "type": "object",
@@ -175,16 +175,12 @@
       }
     },
 
-    "secretPropagation": {
+    "imageRegistry": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Secrets from the local cache to copy into workshop session namespaces.",
+      "description": "Credentials for images held in registries that need them.",
       "properties": {
-        "imagePullSecretNames": {
-          "type": "array",
-          "description": "Names of cached image pull Secrets to make available to workshop sessions.",
-          "items": { "type": "string", "minLength": 1 }
-        }
+        "pullSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Names of image pull Secrets in the local secrets cache, of type kubernetes.io/dockerconfigjson, as 'educates local secrets add docker-registry' caches them. A deploy copies them into the operator namespace, educates-installer, where the operator pod pulls its own image with them and the operator passes them on to every pod it installs; the session manager passes them on to training portal, workshop environment and workshop session namespaces." }
       }
     },
 

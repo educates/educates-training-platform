@@ -50,9 +50,10 @@ websiteStyling:
   themeDataRefs:
     - namespace: educates
       name: my-theme-data
-secretPropagation:
-  imagePullSecretNames:
-    - my-pull-secret
+clusterSecrets:
+  pullSecretRefs:
+    - namespace: educates-secrets
+      name: my-pull-secret
 clusterSecurity:
   policyEngine: pod-security-standards
 `
@@ -808,7 +809,6 @@ func TestMaybeMigrateV3_DroppedTopLevelSettings_AreEachNotedWithTheirV4Home(t *t
 		{"clusterRuntime:\n  class: kata\n", []string{"dropped clusterRuntime: it has no version 4 equivalent"}},
 		{"sessionCookies:\n  domain: educates.test\n", []string{"dropped sessionCookies:", "sessionManager.sessionCookieDomain in an EducatesConfig"}},
 		{"clusterStorage:\n  class: fast\n", []string{"dropped clusterStorage:", "sessionManager.storage"}},
-		{"clusterSecrets:\n  pullSecretRefs:\n    - namespace: default\n      name: pull\n", []string{"dropped clusterSecrets:", "educatesClusterConfig.imageRegistry.pullSecrets"}},
 		{"clusterSecurity:\n  policyEngine: none\n", []string{"dropped clusterSecurity: a local cluster enforces cluster policy with Kyverno", "educatesClusterConfig.policyEnforcement.clusterPolicy.engine"}},
 		{"workshopSecurity:\n  rulesEngine: none\n", []string{"dropped workshopSecurity: a local cluster enforces workshop policy with Kyverno", "educatesClusterConfig.policyEnforcement.workshopPolicy.engine"}},
 		{"trainingPortal:\n  credentials:\n    admin:\n      password: secret\n", []string{"dropped trainingPortal:", "spec.portal.credentials"}},
@@ -902,8 +902,41 @@ websiteStyling:
 	}
 }
 
-func TestMaybeMigrateV3_SessionManagerClusterAdmin_IsCarriedOverAndNotedAsNotAppliedYet(t *testing.T) {
-	for _, value := range []string{"true", "false"} {
+func TestMaybeMigrateV3_ClusterSecretsPullSecretRefs_CarriesThoseOfTheCache(t *testing.T) {
+	_, written, notice := migrateV3Values(t, "clusterSecrets:\n  pullSecretRefs:\n"+
+		"    - namespace: educates-secrets\n      name: registry-credentials\n"+
+		"    - namespace: default\n      name: elsewhere\n")
+
+	if !strings.Contains(written, "imageRegistry:\n  pullSecrets:\n  - registry-credentials\n") {
+		t.Errorf("migrated file does not name registry-credentials in imageRegistry.pullSecrets:\n%s", written)
+	}
+	if strings.Contains(written, "elsewhere") {
+		t.Errorf("migrated file names a pull secret outside the cache's namespace:\n%s", written)
+	}
+	carried := lineStartingWith(notice, "carried clusterSecrets.pullSecretRefs over to imageRegistry.pullSecrets")
+	if !strings.Contains(carried, "registry-credentials") {
+		t.Errorf("notice does not say registry-credentials was carried over:\n%s", notice)
+	}
+	dropped := lineStartingWith(notice, "dropped clusterSecrets.pullSecretRefs entry default/elsewhere")
+	for _, want := range []string{"imageRegistry.pullSecrets", "educates local secrets add docker-registry elsewhere"} {
+		if !strings.Contains(dropped, want) {
+			t.Errorf("notice line for default/elsewhere does not mention %q:\n%s", want, notice)
+		}
+	}
+	if strings.Contains(notice, "dropped clusterSecrets:") {
+		t.Errorf("notice says clusterSecrets was dropped as a whole:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_SessionManagerClusterAdmin_IsCarriedOver(t *testing.T) {
+	for _, c := range []struct {
+		value string
+		says  string
+	}{
+		{"true", "binds the session manager's service account to the cluster-admin ClusterRole"},
+		{"false", "the default"},
+	} {
+		value := c.value
 		t.Run(value, func(t *testing.T) {
 			_, written, notice := migrateV3Values(t, "sessionManager:\n  clusterAdmin: "+value+"\n")
 
@@ -911,8 +944,11 @@ func TestMaybeMigrateV3_SessionManagerClusterAdmin_IsCarriedOverAndNotedAsNotApp
 				t.Errorf("migrated file does not set clusterAdmin: %s:\n%s", value, written)
 			}
 			line := lineStartingWith(notice, "carried sessionManager.clusterAdmin over to clusterAdmin: "+value)
-			if !strings.Contains(line, "a local cluster does not apply clusterAdmin yet") {
-				t.Errorf("notice does not say clusterAdmin is carried over and not applied yet:\n%s", notice)
+			if !strings.Contains(line, c.says) {
+				t.Errorf("notice line for clusterAdmin: %s does not say %q:\n%s", value, c.says, notice)
+			}
+			if strings.Contains(line, "does not apply") {
+				t.Errorf("notice still says a local cluster does not apply clusterAdmin:\n%s", notice)
 			}
 			if strings.Contains(notice, "dropped sessionManager") {
 				t.Errorf("notice says sessionManager was dropped:\n%s", notice)

@@ -41,7 +41,9 @@ import (
 // Plan is the outcome of resolving the certificates of a local install.
 type Plan struct {
 	// Certificates is the certificate decision the translator emits as
-	// EducatesClusterConfig ingress.certificates.
+	// EducatesClusterConfig ingress.certificates. Its Secret references
+	// name no namespace, which the EducatesClusterConfig reads as the
+	// operator namespace, where the deploy syncs the cache.
 	Certificates translator.LocalCertificates
 
 	// SyncSecretNames names the cached Secrets a deploy pushes into the
@@ -87,6 +89,9 @@ type Reporter interface {
 func Resolve(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 	names, err := secrets.ListCachedSecretNames()
 	if err != nil {
+		return nil, err
+	}
+	if err := checkCachedPullSecrets(cfg); err != nil {
 		return nil, err
 	}
 	plan := &Plan{}
@@ -151,8 +156,8 @@ func Resolve(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 	plan.Certificates = translator.LocalCertificates{
 		Provider: translator.CertificatesProviderBundledCertManager,
 		CustomCA: &translator.LocalCustomCA{
-			CAKeyPairSecretRef:     translator.SecretRef{Name: keyPair, Namespace: secrets.LocalSecretsSyncNamespace},
-			CACertificateSecretRef: &translator.SecretRef{Name: root.name, Namespace: secrets.LocalSecretsSyncNamespace},
+			CAKeyPairSecretRef:     translator.SecretRef{Name: keyPair},
+			CACertificateSecretRef: &translator.SecretRef{Name: root.name},
 		},
 	}
 	plan.SyncSecretNames = syncSecretNames(names, keyPair)
@@ -176,7 +181,13 @@ func ResolveSync(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 		return nil, err
 	}
 	plan := &Plan{SyncSecretNames: syncSecretNames(names, "")}
-	if cfg == nil || cfg.Ingress.Domain == "" {
+	if cfg == nil {
+		return plan, nil
+	}
+	if err := checkCachedPullSecrets(cfg); err != nil {
+		return nil, err
+	}
+	if cfg.Ingress.Domain == "" {
 		return plan, nil
 	}
 	resolved, err := Resolve(cfg)
@@ -205,6 +216,29 @@ ingress domain. Remove the root CAs you do not use with:
   educates local secrets remove NAME`, secrets.QuoteNames(roots))
 	}
 	return roots, nil
+}
+
+// checkCachedPullSecrets checks that each image pull Secret cfg names in
+// imageRegistry.pullSecrets is a registry credential in the local secrets
+// cache, which a deploy syncs into the operator namespace with the rest of
+// the cache. The EducatesClusterConfig is not Ready until each one exists
+// there with that type, and the operator pod cannot pull without it, so a
+// name that fails is refused before anything reaches the cluster.
+func checkCachedPullSecrets(cfg *v1alpha1.EducatesLocalConfig) error {
+	for _, name := range cfg.ImageRegistry.PullSecrets {
+		secret, err := secrets.LoadCachedSecret(name)
+		if err != nil {
+			return fmt.Errorf("imageRegistry.pullSecrets names %q, which is not a usable secret in the local "+
+				"secrets cache; cache the registry credentials with 'educates local secrets add docker-registry %s': %w",
+				name, name, err)
+		}
+		if secret.Type != apiv1.SecretTypeDockerConfigJson {
+			return fmt.Errorf("imageRegistry.pullSecrets names %q, a secret of type %q in the local secrets cache, "+
+				"where an image pull secret has type %q; cache the registry credentials with "+
+				"'educates local secrets add docker-registry'", name, secret.Type, apiv1.SecretTypeDockerConfigJson)
+		}
+	}
+	return nil
 }
 
 // tlsCertificate is a wildcard TLS certificate in the local secrets
@@ -298,10 +332,10 @@ func loadTLSCertificate(name string) *tlsCertificate {
 // domains c covers, and warns when no cached CA certificate verifies c.
 func (p *Plan) useStaticCertificate(c *tlsCertificate, domain string, names []string) {
 	static := &translator.LocalStaticCertificate{
-		TLSSecretRef: translator.SecretRef{Name: c.name, Namespace: secrets.LocalSecretsSyncNamespace},
+		TLSSecretRef: translator.SecretRef{Name: c.name},
 	}
 	if ca := verifyingCACertificate(names, c); ca != "" {
-		static.CACertificateSecretRef = &translator.SecretRef{Name: ca, Namespace: secrets.LocalSecretsSyncNamespace}
+		static.CACertificateSecretRef = &translator.SecretRef{Name: ca}
 	} else {
 		p.Warnings = append(p.Warnings, fmt.Sprintf(`no CA certificate in the local secrets cache verifies TLS certificate
 %q, so the training portal and workshop sessions will not trust the

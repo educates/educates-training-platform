@@ -25,12 +25,6 @@ import (
 	configcontroller "github.com/educates/educates-training-platform/installer/operator/internal/controller/config"
 )
 
-// defaultExternalSecretsNS is the v3-convention namespace the CLI's
-// laptop flow puts CA Secrets in. Always included in the cache scope so
-// a fresh operator pod (first install, ECC not yet created) still picks
-// up CA changes once the user creates the CR.
-const defaultExternalSecretsNS = "educates-secrets"
-
 // singletonName is the CEL-enforced name of the EducatesClusterConfig
 // and SessionManager singletons.
 const singletonName = "cluster"
@@ -38,11 +32,9 @@ const singletonName = "cluster"
 // discoverCachedSecretNamespaces returns the deduped, sorted set of
 // namespaces the operator should populate informers for, given:
 //
-//   - operatorNamespace (always included — user-supplied Secrets like
-//     TLS, image-pull, CustomCA-in-operator-NS live here)
-//   - defaultExternalSecretsNS (always included — v3 / CLI convention
-//     for cross-namespace CA refs; covers first-install before any CR
-//     exists)
+//   - operatorNamespace (always included: user-supplied Secrets like
+//     TLS, image-pull and CustomCA live here by default, and the CLI
+//     syncs its local secrets cache here)
 //   - any additional namespaces named by the SecretReference fields
 //     the current EducatesClusterConfig singleton uses for its mode and
 //     certificate provider (configcontroller.ReferencedSecretNamespaces,
@@ -76,15 +68,14 @@ func discoverCachedSecretNamespaces(
 // envtest or a real REST config.
 func collectFromClient(ctx context.Context, c client.Reader, operatorNamespace string) ([]string, error) {
 	set := map[string]struct{}{
-		operatorNamespace:        {},
-		defaultExternalSecretsNS: {},
+		operatorNamespace: {},
 	}
 
 	// A missing singleton contributes nothing: the first reconcile after
 	// it is created uses APIReader for the actual Secret fetch; only the
-	// watch-driven enqueue depends on the cache scope, and laptop
-	// installs land in the default 'educates-secrets', which is already
-	// in the set.
+	// watch-driven enqueue depends on the cache scope, and the CLI's
+	// installs reference Secrets in the operator namespace, which is
+	// already in the set.
 	ecc := &configv1alpha1.EducatesClusterConfig{}
 	if err := c.Get(ctx, types.NamespacedName{Name: singletonName}, ecc); err == nil {
 		for _, ns := range configcontroller.ReferencedSecretNamespaces(ecc) {

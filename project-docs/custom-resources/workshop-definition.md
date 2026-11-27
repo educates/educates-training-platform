@@ -628,7 +628,9 @@ package contents are fetched instead, the pull policy is ignored.
 
 Where the image is held in a registry requiring credentials, an optional
 ``pullSecretRef`` names a secret which must also be listed under
-``spec.environment.secrets`` so that it is copied into the workshop namespace:
+``spec.environment.secrets`` so that it is copied into the workshop namespace.
+The operator copies the image pull secrets of the cluster's configuration into
+the ``educates`` namespace, so a workshop can copy one of them from there:
 
 ```yaml
 spec:
@@ -640,7 +642,7 @@ spec:
         name: registry-credentials
   environment:
     secrets:
-    - namespace: educates-secrets
+    - namespace: educates
       name: registry-credentials
 ```
 

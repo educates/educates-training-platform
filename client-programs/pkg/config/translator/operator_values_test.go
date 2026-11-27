@@ -23,7 +23,7 @@ func TestOperatorConfigFromChartValuesInvertsTheTranslation(t *testing.T) {
 	}
 
 	for _, op := range cases {
-		got, unmapped := OperatorConfigFromChartValues(jsonValues(t, operatorChartValuesFor(op)))
+		got, unmapped := OperatorConfigFromChartValues(jsonValues(t, operatorChartValuesFor(op, nil)))
 
 		if !reflect.DeepEqual(got, op) {
 			t.Errorf("OperatorConfigFromChartValues = %+v, want %+v", got, op)

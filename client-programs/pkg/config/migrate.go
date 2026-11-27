@@ -287,20 +287,44 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		})
 	}
 
-	// secretPropagation
-	for _, s := range listV3Path(v3, "secretPropagation", "imagePullSecretNames") {
-		if name, ok := s.(string); ok {
-			cfg.SecretPropagation.ImagePullSecretNames = append(cfg.SecretPropagation.ImagePullSecretNames, name)
+	// clusterSecrets. A version 3 laptop referenced the image pull
+	// secrets of its local secrets cache in educates-secrets, where the
+	// cache was synced, and the cache carries over to version 4, which
+	// names them in imageRegistry.pullSecrets. A secret in any other
+	// namespace is not in the cache.
+	var carriedPullSecrets []string
+	for _, ref := range listV3Path(v3, "clusterSecrets", "pullSecretRefs") {
+		entry := asMap(ref)
+		name, namespace := strMap(entry, "name"), strMap(entry, "namespace")
+		if name == "" {
+			continue
 		}
+		if namespace == v3SecretsSyncNamespace {
+			carriedPullSecrets = append(carriedPullSecrets, name)
+			continue
+		}
+		notes = append(notes, fmt.Sprintf("dropped clusterSecrets.pullSecretRefs entry %s/%s: imageRegistry.pullSecrets "+
+			"names image pull secrets of the local secrets cache, which a deploy copies into the operator namespace; "+
+			"cache the registry credentials with 'educates local secrets add docker-registry %s' and name it there",
+			namespace, name, name))
+	}
+	if len(carriedPullSecrets) > 0 {
+		cfg.ImageRegistry.PullSecrets = carriedPullSecrets
+		notes = append(notes, fmt.Sprintf("carried clusterSecrets.pullSecretRefs over to imageRegistry.pullSecrets: %s, "+
+			"secrets of the local secrets cache, which a deploy copies into the operator namespace and the operator "+
+			"and everything it installs pull with", strings.Join(carriedPullSecrets, ", ")))
 	}
 
-	// sessionManager. clusterAdmin is carried over although a local
-	// cluster does not apply it, which its notice line says.
+	// sessionManager. A set clusterAdmin is carried over; left unset, the
+	// version 4 default, false, applies.
 	if clusterAdmin, isBool := asMap(v3["sessionManager"])["clusterAdmin"].(bool); isBool {
 		cfg.ClusterAdmin = &clusterAdmin
-		notes = append(notes, fmt.Sprintf("carried sessionManager.clusterAdmin over to clusterAdmin: %t; a local "+
-			"cluster does not apply clusterAdmin yet, and does not bind its session manager to the cluster-admin "+
-			"ClusterRole", clusterAdmin))
+		effect := "the default, which leaves the session manager with only the permissions Educates grants it"
+		if clusterAdmin {
+			effect = "which binds the session manager's service account to the cluster-admin ClusterRole"
+		}
+		notes = append(notes, fmt.Sprintf("carried sessionManager.clusterAdmin over to clusterAdmin: %t, %s",
+			clusterAdmin, effect))
 	}
 
 	// lookupService. Only a set switch is carried over: v3 left the lookup
@@ -322,6 +346,11 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 	return cfg, notes
 }
 
+// v3SecretsSyncNamespace is the namespace version 3 synced the local
+// secrets cache into, where a version 3 laptop's values.yaml referenced
+// the cached secrets.
+const v3SecretsSyncNamespace = "educates-secrets"
+
 // v3CarriedSettings are the top-level settings of a v3 values.yaml that
 // the migration carries over, each with the settings under it that it
 // carries, or nil when it carries the whole setting, noting itself what
@@ -334,7 +363,7 @@ var v3CarriedSettings = map[string][]string{
 	"imageVersions":         nil,
 	"imagePuller":           nil,
 	"websiteStyling":        {"defaultTheme", "themeDataRefs"},
-	"secretPropagation":     nil,
+	"clusterSecrets":        {"pullSecretRefs"},
 	"sessionManager":        {"clusterAdmin"},
 	"lookupService":         {"enabled"},
 }
@@ -356,8 +385,6 @@ var v3DroppedSettings = map[string]string{
 	"sessionCookies": "set sessionManager.sessionCookieDomain in an EducatesConfig",
 	"clusterStorage": "set sessionManager.storage, its storageClass, storageUser and storageGroup, in an " +
 		"EducatesConfig",
-	"clusterSecrets": "name docker-registry Secrets you create in the operator namespace in " +
-		"educatesClusterConfig.imageRegistry.pullSecrets in an EducatesConfig",
 	"clusterSecurity": "a local cluster enforces cluster policy with Kyverno; an EducatesConfig turns it off with " +
 		"educatesClusterConfig.policyEnforcement.clusterPolicy.engine None",
 	"workshopSecurity": "a local cluster enforces workshop policy with Kyverno; an EducatesConfig turns it off " +

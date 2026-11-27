@@ -196,6 +196,47 @@ func TestRender_Config_ScenarioKinds_CLIDefaultsTheOperatorImage(t *testing.T) {
 	}
 }
 
+func TestRender_Config_ScenarioKinds_NameThePullSecretsTheOperatorNamespaceNeeds(t *testing.T) {
+	for kind, cfgYAML := range map[string]string{
+		"EducatesGKEConfig":    gkeMinimal,
+		"EducatesEKSConfig":    eksMinimal,
+		"EducatesInlineConfig": inlineMinimal,
+	} {
+		t.Run(kind, func(t *testing.T) {
+			p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
+			o := &PlatformRenderOptions{Config: writeFixture(t, cfgYAML+"\nimageRegistry:\n  pullSecrets: [mirror]\n")}
+
+			var buf bytes.Buffer
+			if err := p.runRender(&buf, o); err != nil {
+				t.Fatalf("runRender: %v", err)
+			}
+			want := "# Before 'helm install', create the image pull secret \"mirror\", of type\n# kubernetes.io/dockerconfigjson, in the operator namespace, educates-installer."
+			if s := buf.String(); !strings.Contains(s, want) {
+				t.Errorf("output missing %q:\n%s", want, s)
+			}
+		})
+	}
+}
+
+// A local config whose TLS ends at the router references the cached CA
+// trust Secret of the router's certificate, so render says to sync it.
+func TestRender_TLSEndedAtTheRouter_SaysToSyncTheCATrust(t *testing.T) {
+	dataHome := withRootCA(t)
+	config := strings.Replace(localWithDomain, "  domain: workshop.test\n", "  domain: workshop.test\n  externalTLSTermination: true\n", 1)
+	if err := os.WriteFile(filepath.Join(dataHome, "config.yaml"), []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := ProjectInfo{Version: "test", ImageRepository: "ghcr.io/educates"}
+	var buf bytes.Buffer
+	if err := p.runRender(&buf, &PlatformRenderOptions{LocalConfig: true}); err != nil {
+		t.Fatalf("runRender: %v", err)
+	}
+	if want := "# Before 'helm install', run 'educates local secrets sync' to copy"; !strings.Contains(buf.String(), want) {
+		t.Errorf("render output missing %q:\n%s", want, buf.String())
+	}
+}
+
 func TestRender_LocalConfig_NipDomainOfTheRouterAddress_DefaultsInsecure(t *testing.T) {
 	// Point --local-config at a temp data home so the test doesn't touch
 	// the user's actual data home.
@@ -254,12 +295,20 @@ func TestRender_RootCA_ReferencesTheDomainCAKeyPairWithoutWritingIt(t *testing.T
 
 	s := buf.String()
 	for _, want := range []string{
-		"caKeyPairSecretRef:\n            name: workshop.test-ca-key-pair\n            namespace: educates-secrets",
-		"caCertificateSecretRef:\n            name: test-ca\n            namespace: educates-secrets",
+		"caKeyPairSecretRef:\n            name: workshop.test-ca-key-pair\n",
+		"caCertificateSecretRef:\n            name: test-ca\n",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("render output missing %q:\n%s", want, s)
 		}
+	}
+	// The references name no namespace: the operator namespace, where
+	// the cache is synced.
+	if strings.Contains(s, "namespace: educates-secrets") {
+		t.Errorf("render output references the retired educates-secrets namespace:\n%s", s)
+	}
+	if want := "# Before 'helm install', run 'educates local secrets sync' to copy\n# the cached secrets these resources reference into the operator namespace, educates-installer."; !strings.Contains(s, want) {
+		t.Errorf("render output missing %q:\n%s", want, s)
 	}
 	if after := cachedSecretNames(t); !reflect.DeepEqual(after, before) {
 		t.Errorf("render changed the local secrets cache from %v to %v", before, after)
@@ -278,13 +327,13 @@ func TestRender_TLSCertificate_ReportsStaticCertificateWithoutWriting(t *testing
 		"with the CA that issued it": {
 			cacheCA: true,
 			want: []string{
-				"tlsSecretRef:\n          name: workshop-tls\n          namespace: educates-secrets",
-				"caCertificateSecretRef:\n          name: mkcert-ca\n          namespace: educates-secrets",
+				"tlsSecretRef:\n          name: workshop-tls\n",
+				"caCertificateSecretRef:\n          name: mkcert-ca\n",
 				"# Serving TLS certificate \"workshop-tls\" for ingress domain \"workshop.test\" with the\n# StaticCertificate provider: cert-manager will not be installed.",
 				"#   educates local secrets remove workshop-tls\n",
 				"# It also serves these other domains, which removing it affects too: other.test.\n",
 			},
-			absent: []string{"warning:", "caKeyPairSecretRef"},
+			absent: []string{"warning:", "caKeyPairSecretRef", "namespace: educates-secrets"},
 		},
 		"without it": {
 			want: []string{

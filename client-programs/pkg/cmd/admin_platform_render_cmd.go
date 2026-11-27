@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/config"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/translator"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
+	"github.com/educates/educates-training-platform/client-programs/pkg/deployer"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localcerts"
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
@@ -127,7 +129,7 @@ func (p *ProjectInfo) runRender(w io.Writer, o *PlatformRenderOptions) error {
 
 	p.applyCLIDefaults(cfg)
 
-	header := ""
+	var notes yamlComments
 	opts := translator.Options{}
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
@@ -148,13 +150,37 @@ name of the router address.`, path)
 			return err
 		}
 		opts = plan.TranslatorOptions()
-		var notes yamlComments
 		plan.Report(&notes)
-		header = notes.String()
+		// The resources reference cached secrets for the cluster's
+		// certificate, for the CA trust of a certificate the router
+		// presents, and for the image pull secrets.
+		routerTrust := plan.Certificates.None != nil && plan.Certificates.None.CACertificateSecretRef != nil
+		if plan.Certificates.Provider != translator.CertificatesProviderNone || routerTrust ||
+			len(c.ImageRegistry.PullSecrets) > 0 {
+			command := "educates local secrets sync"
+			if o.LocalConfig {
+				// The sync resolves its config from the same selection.
+				if id, err := localclusters.Resolve(o.LocalCluster, utils.GetEducatesHomeDir()); err == nil && !id.IsDefault() {
+					command += " --local-cluster " + id.Name
+				}
+			}
+			referenced := "these resources reference"
+			if len(c.ImageRegistry.PullSecrets) > 0 {
+				referenced += ", the image pull " + pullSecretsPhrase(c.ImageRegistry.PullSecrets) + " among\nthem,"
+			}
+			notes.Note(fmt.Sprintf("Before 'helm install', run '%s' to copy\nthe cached secrets %s into the "+
+				"operator namespace, %s.", command, referenced, deployer.OperatorNamespace))
+		}
 	case *v1alpha1.EducatesConfig:
 		// Escape-hatch: pure passthrough. No CLI-side defaults. User owns
 		// the full surface; missing required fields are caught by the
 		// CRD-derived schema at load time or by the apiserver at apply.
+	}
+
+	if names := pullSecretsToCheck(cfg); len(names) > 0 {
+		notes.Note(fmt.Sprintf("Before 'helm install', create the image pull %s, of type\n"+
+			"kubernetes.io/dockerconfigjson, in the operator namespace, %s.", pullSecretsPhrase(names),
+			deployer.OperatorNamespace))
 	}
 
 	out, err := translator.Translate(cfg, opts)
@@ -162,7 +188,20 @@ name of the router address.`, path)
 		return err
 	}
 
-	return writeRender(w, out, header, valuesFile, resourcesFile)
+	return writeRender(w, out, notes.String(), valuesFile, resourcesFile)
+}
+
+// pullSecretsPhrase names the image pull secrets names for a render note:
+// secret "a", or secrets "a", "b".
+func pullSecretsPhrase(names []string) string {
+	quoted := make([]string, len(names))
+	for i, name := range names {
+		quoted[i] = strconv.Quote(name)
+	}
+	if len(names) == 1 {
+		return "secret " + quoted[0]
+	}
+	return "secrets " + strings.Join(quoted, ", ")
 }
 
 // applyCLIDefaults gives cfg the defaults that come from this CLI binary,

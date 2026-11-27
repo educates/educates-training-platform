@@ -82,12 +82,11 @@ spec:
       #     # tls.crt + tls.key; its SANs must include *.<domain>.
       #     tlsSecretRef:
       #       name: wildcard-tls
-      #       namespace: educates-secrets   # empty: operator namespace
+      #       # namespace: optional; empty means the operator namespace
       #     # Optional CA trust Secret (ca.crt only) of the issuing CA;
       #     # the certificate must verify against it.
       #     caCertificateSecretRef:
       #       name: wildcard-ca
-      #       namespace: educates-secrets
       provider: BundledCertManager
       bundledCertManager:
         # CustomCA is the other supported issuerType — see

@@ -299,3 +299,28 @@ func TestRenderSessionManagerValues_KyvernoWhenNoEnginesPublished(t *testing.T) 
 		t.Errorf("engines = (%q, %q), want (Kyverno, Kyverno)", policy, rules)
 	}
 }
+
+func TestRenderSessionManagerValues_ClusterAdmin(t *testing.T) {
+	enabled, disabled := true, false
+	cases := []struct {
+		name         string
+		clusterAdmin *bool
+		want         any
+		wantSet      bool
+	}{
+		{"unset leaves the chart default", nil, nil, false},
+		{"true binds the session manager to cluster-admin", &enabled, true, true},
+		{"false", &disabled, false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sm := &platformv1alpha1.SessionManager{}
+			sm.Spec.ClusterAdmin = c.clusterAdmin
+			values := renderSessionManagerValues(sm, valuesTestClusterConfig(), "educates-installer", testImageRegistryNamespace)
+			got, set := values["clusterAdmin"]
+			if set != c.wantSet || got != c.want {
+				t.Errorf("values[clusterAdmin] = %v (set %t), want %v (set %t)", got, set, c.want, c.wantSet)
+			}
+		})
+	}
+}

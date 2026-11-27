@@ -93,7 +93,7 @@ Each cluster service is removed only when Educates installed it: cert-manager wh
 
 A confirmation prompt lists everything about to be deleted; pass `--yes` to skip it (required in CI and other non-interactive shells).
 
-By default the four CRDs and the operator and `educates-secrets` namespaces are left in place so a subsequent deploy can reuse them. To remove those too:
+By default the four CRDs and the operator namespace, with the secrets a local deploy copied into it from the local secrets cache, are left in place so a subsequent deploy can reuse them. To remove those too, and the `educates-secrets` namespace releases before 4.0.0 copied the cache into, when it is left:
 
 ```shell
 educates admin platform delete --yes --purge

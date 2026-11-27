@@ -60,13 +60,15 @@ func (p *ProjectInfo) NewAdminPlatformDeleteCmd() *cobra.Command {
 
 By default this is idempotent and leaves cluster-shared state alone:
 missing CRs are skipped silently; the four CRDs, the operator
-namespace, the educates-secrets namespace, and any locally-cached
-secrets stay in place so the next deploy reuses them.
+namespace with the secrets synced into it from the local secrets cache,
+and the cache itself stay in place so the next deploy reuses them.
 
 --purge extends the pipeline AFTER helm uninstall to also remove the
-CRDs and the operator + educates-secrets namespaces. Local
-<data-home>/config.yaml + cached CA Secret YAMLs survive — they're
-your authoring inputs, kept across cluster reinstalls.
+CRDs and the operator namespace, and the educates-secrets namespace
+earlier releases synced the local secrets cache into, when it is left.
+Local <data-home>/config.yaml and the local secrets cache survive:
+they're your authoring inputs, kept across cluster reinstalls, and the
+next deploy syncs the cache again.
 
 A confirmation prompt fires when stdout is a TTY; pass --yes to skip
 it (required when running under CI / non-interactive shells without
@@ -92,7 +94,7 @@ on the current context.`,
 	c.Flags().DurationVar(&o.Timeout, "timeout", deployer.DefaultTimeout, "per-CR finalizer-drain wait timeout")
 	c.Flags().BoolVar(&o.Verbose, "verbose", false, "show helm SDK debug output on stderr")
 	c.Flags().BoolVarP(&o.Yes, "yes", "y", false, "skip the confirmation prompt")
-	c.Flags().BoolVar(&o.Purge, "purge", false, "also remove the 4 CRDs + operator namespace + educates-secrets namespace (cluster-shared state)")
+	c.Flags().BoolVar(&o.Purge, "purge", false, "also remove the 4 CRDs and the operator namespace (cluster-shared state), and a leftover educates-secrets namespace")
 
 	return c
 }
@@ -146,7 +148,7 @@ func confirmDelete(w io.Writer, o *PlatformDeleteOptions) error {
 		fmt.Fprintln(w, "  - "+line)
 	}
 	if !o.Purge {
-		fmt.Fprintln(w, "  (CRDs, operator namespace, and educates-secrets namespace stay — pass --purge to remove)")
+		fmt.Fprintln(w, "  (CRDs and the operator namespace stay; pass --purge to remove them)")
 	}
 	fmt.Fprintln(w, "  (Local <data-home>/config.yaml + cached CA Secret YAMLs are never touched)")
 	fmt.Fprint(w, "Type 'yes' to confirm: ")

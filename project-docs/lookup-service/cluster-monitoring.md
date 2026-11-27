@@ -49,6 +49,8 @@ To monitor a remote cluster, the lookup service needs a kubeconfig file that pro
 
 The context of the kubeconfig the lookup service uses, as ``spec.credentials.kubeconfig.context`` of the ``ClusterConfig`` selects it, must authenticate with a bearer token, and its cluster must give the address of the API server and the CA certificate to verify it with, as ``certificate-authority-data``. A context whose user authenticates with an exec plugin, an authentication provider or a client certificate is not supported: the kubeconfig is refused, and the cluster is not connected. Only that context is checked, so the kubeconfig may hold other contexts, whatever they use. The kubeconfig generated as described below meets these requirements.
 
+When the certificate of the API server does not name the host in the cluster's ``server``, as when the lookup service reaches the API server through a gateway that routes several clusters by server name, or at an address or alias the certificate does not list, give a name the certificate does carry as the cluster's ``tls-server-name``. The lookup service sends that name as the TLS server name and verifies the certificate against it, as ``kubectl`` does. A ``tls-server-name`` which is not a string is refused.
+
 The service account used in the kubeconfig should have limited permissions. Specifically, it needs ``list`` and ``watch`` access to the following Educates resource types:
 
 * ``TrainingPortal``
@@ -82,6 +84,12 @@ The kubeconfig names the API server at the address of the Kubernetes context the
 
 ```
 educates admin lookup kubeconfig --context cluster-1 --server https://api.cluster-1.example.com:6443 --output kubeconfig-cluster-1.yaml
+```
+
+The generated kubeconfig gives no ``tls-server-name``, even when the Kubernetes context the command uses has one. When the certificate of the API server does not name the address in the kubeconfig, add the name it does carry to the kubeconfig's cluster, which is named ``training-platform``:
+
+```
+kubectl config set-cluster training-platform --tls-server-name api.cluster-1.internal --kubeconfig kubeconfig-cluster-1.yaml
 ```
 
 For a local cluster created with ``educates local cluster create``, whose context reaches the API server at a port on the loopback address of your machine, the kubeconfig names instead the address at which the pods of the other local clusters reach it: the control plane container of the cluster on Docker's ``kind`` network, ``https://educates-control-plane:6443`` for the default local cluster and ``https://educates-<name>-control-plane:6443`` for the local cluster ``<name>``. A lookup service on another local cluster can use the kubeconfig as it is:

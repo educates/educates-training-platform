@@ -39,6 +39,11 @@ type Cluster struct {
 	// CertificateAuthorityData is the base64 encoding of the PEM encoded
 	// CA certificates the server's certificate is verified against.
 	CertificateAuthorityData string `json:"certificate-authority-data"`
+	// TLSServerName is the name sent as the TLS server name and that the
+	// server's certificate is verified against, in place of the host of
+	// Server, as when the server is reached through a gateway that routes
+	// by server name or at an address its certificate does not name.
+	TLSServerName string `json:"tls-server-name,omitempty"`
 }
 
 // NamedContext is a kubeconfig's context entry.
@@ -86,8 +91,10 @@ type file struct {
 // Select reads a kubeconfig and returns it reduced to the context named
 // context, or to its current context when context is empty, or to its first
 // context when it names no current context. Only the selected context is
-// checked: its cluster must give a server and CA data, and its user a token
-// and no other way to authenticate. Every other entry is ignored.
+// checked, and every other entry is ignored. Its cluster must give a server
+// and CA data, and may give the server name to verify the server's
+// certificate against. Its user must give a token and no other way to
+// authenticate.
 func Select(data []byte, context string) (*Config, error) {
 	var f file
 	if err := yaml.Unmarshal(data, &f); err != nil {
@@ -154,7 +161,19 @@ func selectCluster(f *file, name string) (*NamedCluster, error) {
 		if _, err := base64.StdEncoding.DecodeString(ca); err != nil {
 			return nil, fmt.Errorf("its cluster %q has certificate-authority-data that is not base64: %w", name, err)
 		}
-		return &NamedCluster{Name: name, Cluster: Cluster{Server: server, CertificateAuthorityData: ca}}, nil
+		var serverName string
+		switch value := entry.Cluster["tls-server-name"].(type) {
+		case nil:
+		case string:
+			serverName = value
+		default:
+			return nil, fmt.Errorf("its cluster %q has a tls-server-name that is not a string", name)
+		}
+		return &NamedCluster{Name: name, Cluster: Cluster{
+			Server:                   server,
+			CertificateAuthorityData: ca,
+			TLSServerName:            serverName,
+		}}, nil
 	}
 	return nil, fmt.Errorf("the kubeconfig has no cluster %q", name)
 }
@@ -216,9 +235,12 @@ func (c *Config) RESTConfig() (*rest.Config, error) {
 		return nil, fmt.Errorf("decoding the certificate-authority-data: %w", err)
 	}
 	return &rest.Config{
-		Host:            c.Clusters[0].Cluster.Server,
-		BearerToken:     c.Users[0].User.Token,
-		TLSClientConfig: rest.TLSClientConfig{CAData: ca},
+		Host:        c.Clusters[0].Cluster.Server,
+		BearerToken: c.Users[0].User.Token,
+		TLSClientConfig: rest.TLSClientConfig{
+			CAData:     ca,
+			ServerName: c.Clusters[0].Cluster.TLSServerName,
+		},
 	}, nil
 }
 

@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	lookupv1beta1 "github.com/educates/educates-training-platform/lookup-service/api/v1beta1"
@@ -115,6 +116,11 @@ clusters:
   cluster:
     server: %[1]s
     certificate-authority-data: %[2]s
+- name: numeric-tls-server-name
+  cluster:
+    server: %[1]s
+    certificate-authority-data: %[2]s
+    tls-server-name: 1
 contexts:
 - name: exec
   context: {cluster: cluster-a, user: exec}
@@ -124,6 +130,8 @@ contexts:
   context: {cluster: cluster-a, user: no-token}
 - name: no-ca
   context: {cluster: no-ca, user: token}
+- name: numeric-tls-server-name
+  context: {cluster: numeric-tls-server-name, user: token}
 - name: token
   context: {cluster: cluster-a, user: token}
 current-context: %[4]s
@@ -185,8 +193,39 @@ users:
 				`its user "client-certificate" authenticates with client-certificate-data`),
 			Entry("whose user has no token", "no-token", "token", `its user "no-token" has no token`),
 			Entry("whose cluster has no CA", "no-ca", "token", `its cluster "no-ca" has no certificate-authority-data`),
+			Entry("whose cluster's tls-server-name is not a string", "numeric-tls-server-name", "token",
+				`its cluster "numeric-tls-server-name" has a tls-server-name that is not a string`),
 			Entry("that is the current context and uses an exec plugin", "", "exec", `its user "exec" authenticates with exec`),
 		)
+	})
+
+	It("connect to a cluster at an address its certificate does not name, verifying it by tls-server-name", func() {
+		sc.awaitClusters()
+		gateway := newTLSGateway(clusterB.config, "cluster-b.gateway.test")
+		DeferCleanup(gateway.close)
+
+		By("reaching cluster-b through a gateway whose certificate names no address")
+		updateKubeconfigSecret("config", gateway.kubeconfig(clusterB))
+		Eventually(sc.workshops).WithArguments("tenant-names").WithTimeout(inventoryTimeout).Should(BeEmpty())
+		Eventually(sc.service.logs.Lines).WithTimeout(inventoryTimeout).Should(ContainElement(And(
+			ContainSubstring("Cannot list or watch the cluster's training resources"),
+			ContainSubstring("cluster=cluster-b"),
+			ContainSubstring("x509"))))
+
+		By("naming the gateway's certificate's name as the cluster's tls-server-name")
+		updateKubeconfigSecret("config", gateway.kubeconfigWithServerName(clusterB))
+		Eventually(sc.workshops).WithArguments("tenant-names").WithTimeout(inventoryTimeout).
+			Should(ConsistOf("lab-alpha"))
+
+		By("giving an admin the kubeconfig with its tls-server-name, as kubectl reads it")
+		status, body := apiRequest(sc.service.url, http.MethodGet, "/api/v1/clusters/cluster-b/kubeconfig",
+			sc.adminToken(), "")
+		Expect(status).To(Equal(http.StatusOK), body)
+		given, err := clientcmd.Load([]byte(body))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(given.Clusters).To(HaveKeyWithValue("training-platform", And(
+			HaveField("Server", gateway.url),
+			HaveField("TLSServerName", gateway.serverName))))
 	})
 
 	It("leave out a cluster whose cache does not sync, without holding back the others or readiness", func() {

@@ -113,13 +113,25 @@ func (c *testCluster) createRemoteAccessIdentity() string {
 // kubeconfig returns a kubeconfig reaching the cluster at server as the
 // remote-access identity, as educates admin lookup kubeconfig writes it.
 func (c *testCluster) kubeconfig(server string) string {
+	return c.kubeconfigVerifiedBy(server, c.config.CAData, "")
+}
+
+// kubeconfigVerifiedBy returns a kubeconfig reaching the cluster at server
+// as the remote-access identity, which verifies the server's certificate
+// against the CA certificate ca, and against tlsServerName in place of the
+// host of server when tlsServerName is not empty.
+func (c *testCluster) kubeconfigVerifiedBy(server string, ca []byte, tlsServerName string) string {
+	var serverName string
+	if tlsServerName != "" {
+		serverName = "\n    tls-server-name: " + tlsServerName
+	}
 	return fmt.Sprintf(`apiVersion: v1
 kind: Config
 clusters:
 - name: training-platform
   cluster:
     server: %s
-    certificate-authority-data: %s
+    certificate-authority-data: %s%s
 contexts:
 - name: training-platform
   context:
@@ -130,7 +142,7 @@ users:
 - name: remote-access
   user:
     token: %s
-`, server, base64.StdEncoding.EncodeToString(c.config.CAData), c.token)
+`, server, base64.StdEncoding.EncodeToString(ca), serverName, c.token)
 }
 
 // writeLocalToken mounts cluster-a's remote-access token and CA, as kubelet

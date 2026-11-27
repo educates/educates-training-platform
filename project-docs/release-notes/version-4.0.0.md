@@ -2913,6 +2913,18 @@ Bugs Fixed
   HTTP 500. Such a label now matches as a label whose value is the empty
   string.
 
+* The lookup service ignored the ``tls-server-name`` of the cluster in a
+  ``ClusterConfig``'s kubeconfig, and verified the certificate of the API
+  server against the host of ``server`` instead. A kubeconfig which reaches
+  the API server at an address its certificate does not name, as through a
+  gateway that routes several clusters by server name, therefore failed TLS
+  verification, and nothing said the field was ignored. The lookup service
+  now sends ``tls-server-name`` as the TLS server name and verifies the
+  certificate against it, as ``kubectl`` does, and the kubeconfig the REST
+  API gives an admin for the cluster keeps it. A ``tls-server-name`` which
+  is not a string is refused: the cluster is not connected, and the lookup
+  service logs the reason.
+
 * Updating a ``ClientConfig``, for example to change its roles or tenants,
   made the tokens which its client had revoked by logging out valid again.
   An update which keeps the password now leaves revoked tokens revoked, and

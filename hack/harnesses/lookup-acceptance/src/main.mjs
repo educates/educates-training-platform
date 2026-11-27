@@ -18,10 +18,8 @@ import {
   lookupManifests,
   NAMES,
   newCredentials,
-  remoteServer,
   removePortal,
   waitFor,
-  withServer,
 } from "./scenario.mjs";
 import { SuspensionWatch } from "./suspension.mjs";
 import { judgeAlternation, judgeClusterSessions, judgeReturning } from "./verdict.mjs";
@@ -299,8 +297,10 @@ async function check(run, { lookup, remote, markers, say }) {
   await Promise.all(clusters.map((c) => removePortal(c, say)));
   await Promise.all(clusters.map((c) => deployPortal(c, run.capacity, say)));
 
-  say(`Registering ${lookup.name} and ${remote.name} with the Lookup Service; ${remote.name}'s kubeconfig names ${remoteServer(remote)}`);
-  const kubeconfig = withServer((await remote.educates(["admin", "lookup", "kubeconfig"])).stdout, remoteServer(remote));
+  // For a local cluster the CLI writes the address of its control plane
+  // container on Docker's kind network, which the lookup cluster's pods reach.
+  const kubeconfig = (await remote.educates(["admin", "lookup", "kubeconfig"])).stdout;
+  say(`Registering ${lookup.name} and ${remote.name} with the Lookup Service; ${remote.name}'s kubeconfig names ${kubeconfig.match(/^\s*server:\s*(\S+)/m)?.[1] ?? "no server"}`);
   const credentials = newCredentials();
   await apply(lookup, lookupManifests({ lookup, remote, kubeconfig, credentials }));
 

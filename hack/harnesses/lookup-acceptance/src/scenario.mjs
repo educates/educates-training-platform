@@ -57,25 +57,6 @@ export function portalManifest(capacity) {
   };
 }
 
-// remoteServer is the API server address of a local cluster that pods of
-// another local cluster reach: its control plane container on Docker's kind
-// network, by the name Docker's DNS gives it, which its API server
-// certificate names.
-export function remoteServer(cluster) {
-  return `https://educates-${cluster.name}-control-plane:6443`;
-}
-
-// withServer returns the kubeconfig with its one server address replaced.
-// 'educates admin lookup kubeconfig' writes the address of the caller's kube
-// context, which on kind is a loopback port of the host that no pod reaches.
-export function withServer(kubeconfig, server) {
-  const pattern = /^(\s*server:\s*).*$/gm;
-  const count = (kubeconfig.match(pattern) ?? []).length;
-  if (count === 0) throw new Error("the kubeconfig names no server");
-  if (count > 1) throw new Error(`the kubeconfig names ${count} servers, not one`);
-  return kubeconfig.replace(pattern, (_, prefix) => `${prefix}${server}`);
-}
-
 export function newCredentials() {
   const password = () => randomBytes(18).toString("base64url");
   return {

@@ -21,9 +21,7 @@ This installs the operator and the four CRDs. At this point nothing else has hap
 Applying the platform resources
 -------------------------------
 
-Author the four custom resources for your scenario. Worked examples for each supported scenario live in [installer/samples](https://github.com/educates/educates-training-platform/tree/develop/installer/samples) in the project repository, and the [configuration settings](configuration-settings) documentation describes the specs. If you use the Educates CLI anywhere, `educates admin platform render --config config.yaml` emits ready-to-apply resources for a high-level config file.
-
-Apply them in dependency order:
+Author the four custom resources for your scenario, or render them from a CLI configuration as [rendering from a CLI configuration](helm-based-installation-render) describes. Worked examples for each supported scenario live in [installer/samples](https://github.com/educates/educates-training-platform/tree/develop/installer/samples) in the project repository, and the [configuration settings](configuration-settings) documentation describes the specs. Apply them in dependency order:
 
 ```shell
 kubectl apply -f educates-cluster-config.yaml
@@ -43,6 +41,32 @@ kubectl describe educatesclusterconfig cluster
 ```
 
 Note that any Secrets referenced by name from `EducatesClusterConfig` (for example a wildcard TLS certificate Secret in Inline mode, or a custom CA) must live in the operator's namespace (`educates-installer` above) before the resource can become ready.
+
+(helm-based-installation-render)=
+Rendering from a CLI configuration
+----------------------------------
+
+If you use the Educates CLI anywhere, it can write the chart values and the custom resources for one of its configuration files, each to a file of its own, in place of authoring them by hand:
+
+```shell
+educates admin platform render --config config.yaml \
+  --values-file values.yaml --resources-file resources.yaml
+```
+
+`values.yaml` holds the values of the `educates-installer` chart, such as the operator image, which defaults from the version of the CLI. `resources.yaml` holds the four custom resources in dependency order. Install the operator with the values, then apply the custom resources:
+
+```shell
+helm install educates-installer oci://ghcr.io/educates/charts/educates-installer \
+  --version X.Y.Z \
+  --namespace educates-installer --create-namespace \
+  -f values.yaml
+
+kubectl apply -f resources.yaml
+```
+
+Helm creates the CRDs before it installs the operator, so the custom resources can be applied as soon as `helm install` returns, and applying all four at once converges, as each component waits for its dependencies.
+
+Without the two options, the command prints both parts to standard output as one YAML stream, with the chart values as its first document. Helm reads every document of a values file and merges them, so give Helm the chart values from `--values-file`, never the whole stream. Standard output keeps the part not written to a file, so either part can also be piped to its command with `-f -`.
 
 GitOps
 ------
@@ -77,6 +101,8 @@ spec:
 ```
 
 With ArgoCD, register `ghcr.io/educates/charts` as an OCI Helm repository and create an Application with `chart: educates-installer`. Put the four custom resources in a second Application (or a later sync wave) so they apply after the CRDs exist; from there the operator's own dependency gating handles ordering.
+
+Chart values rendered with `--values-file` go under `spec.values` of the Flux `HelmRelease`, or in a ConfigMap or Secret that its `spec.valuesFrom` names, and under `spec.source.helm.valuesObject` of the ArgoCD Application. The custom resources rendered with `--resources-file` are the four custom resources to commit.
 
 Uninstalling
 ------------

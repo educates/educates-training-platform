@@ -114,10 +114,11 @@ func (p *ProjectInfo) runDeploy(ctx context.Context, w io.Writer, o *PlatformDep
 		return err
 	}
 
+	p.applyCLIDefaults(cfg)
+
 	var plan *localcerts.Plan
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
-		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
 		// The local cluster rules of --local-config have already given
 		// an empty ingress.domain the nip.io name of the listen address.
 		if !o.LocalConfig && c.Ingress.Domain == "" {

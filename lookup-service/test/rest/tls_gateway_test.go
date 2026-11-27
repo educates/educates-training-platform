@@ -65,14 +65,14 @@ func newTLSGateway(target *rest.Config, serverName string) *tlsGateway {
 // kubeconfig returns a kubeconfig reaching cluster through the gateway as
 // the remote-access identity, which gives no tls-server-name.
 func (g *tlsGateway) kubeconfig(cluster *testCluster) string {
-	return cluster.kubeconfigVerifiedBy(g.url, g.caData, "")
+	return cluster.kubeconfigReaching(kubeconfigCluster{server: g.url, ca: g.caData})
 }
 
 // kubeconfigWithServerName returns a kubeconfig reaching cluster through
 // the gateway as the remote-access identity, which gives the name the
 // gateway's certificate names as its cluster's tls-server-name.
 func (g *tlsGateway) kubeconfigWithServerName(cluster *testCluster) string {
-	return cluster.kubeconfigVerifiedBy(g.url, g.caData, g.serverName)
+	return cluster.kubeconfigReaching(kubeconfigCluster{server: g.url, ca: g.caData, tlsServerName: g.serverName})
 }
 
 func (g *tlsGateway) close() {

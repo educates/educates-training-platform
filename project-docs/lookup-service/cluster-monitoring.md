@@ -51,6 +51,8 @@ The context of the kubeconfig the lookup service uses, as ``spec.credentials.kub
 
 When the certificate of the API server does not name the host in the cluster's ``server``, as when the lookup service reaches the API server through a gateway that routes several clusters by server name, or at an address or alias the certificate does not list, give a name the certificate does carry as the cluster's ``tls-server-name``. The lookup service sends that name as the TLS server name and verifies the certificate against it, as ``kubectl`` does. A ``tls-server-name`` which is not a string is refused.
 
+When the lookup service reaches the API server through a proxy, give the proxy as the cluster's ``proxy-url``, an ``http``, ``https`` or ``socks5`` URL with a host, which may hold the credentials of the proxy. The lookup service sends its requests to the API server through that proxy, in place of any proxy its environment names, as ``kubectl`` does. A ``proxy-url`` with another scheme or without a host, or one which is not a string, is refused.
+
 The service account used in the kubeconfig should have limited permissions. Specifically, it needs ``list`` and ``watch`` access to the following Educates resource types:
 
 * ``TrainingPortal``

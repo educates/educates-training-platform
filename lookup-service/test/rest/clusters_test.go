@@ -113,17 +113,31 @@ func (c *testCluster) createRemoteAccessIdentity() string {
 // kubeconfig returns a kubeconfig reaching the cluster at server as the
 // remote-access identity, as educates admin lookup kubeconfig writes it.
 func (c *testCluster) kubeconfig(server string) string {
-	return c.kubeconfigVerifiedBy(server, c.config.CAData, "")
+	return c.kubeconfigReaching(kubeconfigCluster{server: server, ca: c.config.CAData})
 }
 
-// kubeconfigVerifiedBy returns a kubeconfig reaching the cluster at server
-// as the remote-access identity, which verifies the server's certificate
-// against the CA certificate ca, and against tlsServerName in place of the
-// host of server when tlsServerName is not empty.
-func (c *testCluster) kubeconfigVerifiedBy(server string, ca []byte, tlsServerName string) string {
-	var serverName string
-	if tlsServerName != "" {
-		serverName = "\n    tls-server-name: " + tlsServerName
+// kubeconfigCluster is how a kubeconfig's cluster entry reaches a cluster.
+type kubeconfigCluster struct {
+	server string
+	// ca is the PEM encoded CA certificate the server's certificate is
+	// verified against.
+	ca []byte
+	// tlsServerName, when not empty, is the name the server's certificate
+	// is verified against in place of the host of server.
+	tlsServerName string
+	// proxyURL, when not empty, is the proxy the server is reached through.
+	proxyURL string
+}
+
+// kubeconfigReaching returns a kubeconfig reaching the cluster as the
+// remote-access identity, with entry as its cluster entry.
+func (c *testCluster) kubeconfigReaching(entry kubeconfigCluster) string {
+	var optionalFields string
+	if entry.tlsServerName != "" {
+		optionalFields += "\n    tls-server-name: " + entry.tlsServerName
+	}
+	if entry.proxyURL != "" {
+		optionalFields += "\n    proxy-url: " + entry.proxyURL
 	}
 	return fmt.Sprintf(`apiVersion: v1
 kind: Config
@@ -142,7 +156,7 @@ users:
 - name: remote-access
   user:
     token: %s
-`, server, base64.StdEncoding.EncodeToString(ca), serverName, c.token)
+`, entry.server, base64.StdEncoding.EncodeToString(entry.ca), optionalFields, c.token)
 }
 
 // writeLocalToken mounts cluster-a's remote-access token and CA, as kubelet

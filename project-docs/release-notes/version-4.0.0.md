@@ -2925,6 +2925,16 @@ Bugs Fixed
   is not a string is refused: the cluster is not connected, and the lookup
   service logs the reason.
 
+* The lookup service ignored the ``proxy-url`` of the cluster in a
+  ``ClusterConfig``'s kubeconfig, and connected to the API server directly,
+  or through the proxy its environment named, so a cluster reached only
+  through a proxy could not be connected, and nothing said the field was
+  ignored. The lookup service now sends its requests to the API server
+  through the ``proxy-url``, as ``kubectl`` does, and the kubeconfig the
+  REST API gives an admin for the cluster keeps it. A ``proxy-url`` which is
+  not an ``http``, ``https`` or ``socks5`` URL with a host is refused: the
+  cluster is not connected, and the lookup service logs the reason.
+
 * Updating a ``ClientConfig``, for example to change its roles or tenants,
   made the tokens which its client had revoked by logging out valid again.
   An update which keeps the password now leaves revoked tokens revoked, and

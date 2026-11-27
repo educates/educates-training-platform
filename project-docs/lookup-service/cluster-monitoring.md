@@ -74,7 +74,21 @@ The Educates CLI provides a command to generate a kubeconfig with the appropriat
 educates admin lookup kubeconfig --context cluster-1 --output kubeconfig-cluster-1.yaml
 ```
 
-The generated kubeconfig accesses the remote cluster as the ``remote-access`` service account in the ``educates`` namespace, using the token Educates creates for that account when remote access is installed on the remote cluster. The ``--context`` option specifies which Kubernetes context to use when connecting to the remote cluster to read that token. The ``--output`` option specifies the file to write the generated kubeconfig to.
+The generated kubeconfig accesses the remote cluster as the ``remote-access`` service account, using the token Educates creates for that account when remote access is installed on the remote cluster. The ``--context`` option specifies which Kubernetes context to use when connecting to the remote cluster to read that token. The ``--output`` option specifies the file to write the generated kubeconfig to, which only its owner can read, since it holds the token.
+
+Remote access is installed on a cluster by its ``SessionManager`` resource when ``spec.remoteAccess.mode`` is ``Enabled``, or at its default of ``Auto`` while a ``LookupService`` resource exists on the cluster. When remote access is not installed, the command fails and says so. The operator installs remote access in the ``educates`` namespace. If you installed the runtime chart without the operator, into another namespace, name that namespace with the ``--namespace`` option.
+
+The kubeconfig names the API server at the address of the Kubernetes context the command uses. When the lookup service reaches the API server at another address, as when the context goes through a proxy or uses an endpoint only your network reaches, name the address with the ``--server`` option:
+
+```
+educates admin lookup kubeconfig --context cluster-1 --server https://api.cluster-1.example.com:6443 --output kubeconfig-cluster-1.yaml
+```
+
+For a local cluster created with ``educates local cluster create``, whose context reaches the API server at a port on the loopback address of your machine, the kubeconfig names instead the address at which the pods of the other local clusters reach it: the control plane container of the cluster on Docker's ``kind`` network, ``https://educates-control-plane:6443`` for the default local cluster and ``https://educates-<name>-control-plane:6443`` for the local cluster ``<name>``. A lookup service on another local cluster can use the kubeconfig as it is:
+
+```
+educates admin lookup kubeconfig --local-cluster cluster-2 --output kubeconfig-cluster-2.yaml
+```
 
 You can verify the generated kubeconfig has the correct permissions by testing it:
 

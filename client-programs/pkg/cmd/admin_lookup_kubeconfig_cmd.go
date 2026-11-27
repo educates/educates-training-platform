@@ -1,15 +1,22 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
-	"encoding/base64"
-	"fmt"
-	"io/ioutil"
+	"net/url"
+	"os"
 
-	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 var adminLookupKubeconfigExample = `
@@ -18,91 +25,181 @@ var adminLookupKubeconfigExample = `
 
   # Write the kubeconfig to a file:
   educates admin lookup kubeconfig --output kubeconfig.yaml
+
+  # Write the kubeconfig of the local cluster "remote", which names the
+  # address the pods of the other local clusters reach its API server at:
+  educates admin lookup kubeconfig --local-cluster remote --output kubeconfig-remote.yaml
+
+  # Name the address a lookup service on another cluster reaches the API
+  # server at:
+  educates admin lookup kubeconfig --context cluster-1 --server https://api.cluster-1.example.com:6443
 `
+
+const (
+	// remoteAccessDefaultNamespace is the namespace the operator installs
+	// remote access in, with the other runtime components.
+	remoteAccessDefaultNamespace = "educates"
+
+	// remoteAccessTokenSecretName is the name of the Secret remote access
+	// installs, which Kubernetes fills with the token of the remote-access
+	// service account and the CA certificate of the cluster.
+	remoteAccessTokenSecretName = "remote-access-token"
+)
 
 type LookupConfigOptions struct {
 	KubeconfigOptions
 	OutputPath string
+	Namespace  string
+	Server     string
 }
 
-func (o *LookupConfigOptions) Run() error {
-	var err error
-
+func (o *LookupConfigOptions) Run(ctx context.Context) error {
 	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
 	if err != nil {
 		return err
 	}
 
-	client, err := clusterConfig.GetClient()
-
+	restConfig, err := clusterConfig.GetConfig()
 	if err != nil {
 		return err
 	}
 
-	// We need to fetch the secret called "remote-access-token" from the
-	// "educates" namespace. This contains a Kubernetes access token secret
-	// giving access to just the Educates custom resources.
-
-	secretsClient := client.CoreV1().Secrets("educates")
-
-	secret, err := secretsClient.Get(context.TODO(), "remote-access-token", metav1.GetOptions{})
-
+	server, err := lookupKubeconfigServer(o.Server, cmp.Or(o.Context, cluster.CurrentContext(o.Kubeconfig)),
+		restConfig.Host, utils.GetEducatesHomeDir())
 	if err != nil {
-		return errors.Wrapf(err, "unable to fetch remote-access secret")
+		return err
 	}
 
-	// Within the secret are data fields for "ca.crt" and "token". We need to
-	// extract these and use them to create a kubeconfig file. Note that there
-	// is no "server" property in the secret, so when constructing the kubeconfig
-	// we need to use the server from the same cluster as we are requesting the
-	// secret from.
+	client, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return err
+	}
 
-	caCrt := secret.Data["ca.crt"]
-	token := secret.Data["token"]
+	credentials, err := readRemoteAccessCredentials(ctx, client, o.Namespace)
+	if err != nil {
+		return err
+	}
 
-	// Get the server from the client for Kubernetes cluster access.
+	kubeconfig, err := remoteAccessKubeconfig(server, credentials)
+	if err != nil {
+		return err
+	}
 
-	serverScheme := client.CoreV1().RESTClient().Get().URL().Scheme
-	serverHost := client.CoreV1().RESTClient().Get().URL().Host
+	if o.OutputPath == "" {
+		_, err = os.Stdout.Write(kubeconfig)
+		return err
+	}
+	return errors.Wrapf(writeOwnerOnlyFile(o.OutputPath, kubeconfig), "unable to write kubeconfig to %s", o.OutputPath)
+}
 
-	serverUrl := fmt.Sprintf("%s://%s", serverScheme, serverHost)
+// writeOwnerOnlyFile writes data to the file path, which only its owner
+// may read or write, since the kubeconfig holds the token. An existing
+// file keeps its mode when it is opened, so the mode is set before data
+// is written.
+func writeOwnerOnlyFile(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	if err := f.Chmod(0600); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
 
-	// Construct the kubeconfig file. We need to base64 encode the ca.crt file
-	// as it is a binary file.
-
-	kubeconfig := fmt.Sprintf(`apiVersion: v1
-kind: Config
-clusters:
-- name: training-platform
-  cluster:
-    server: %s
-    certificate-authority-data: %s
-contexts:
-- name: training-platform
-  context:
-    cluster: training-platform
-    user: remote-access
-current-context: training-platform
-users:
-- name: remote-access
-  user:
-    token: %s
-`, serverUrl, base64.StdEncoding.EncodeToString(caCrt), token)
-
-	// Write out the kubeconfig to the output path if provided, otherwise
-	// print it to stdout.
-
-	if o.OutputPath != "" {
-		err = ioutil.WriteFile(o.OutputPath, []byte(kubeconfig), 0644)
-
-		if err != nil {
-			return errors.Wrapf(err, "unable to write kubeconfig to %s", o.OutputPath)
+// lookupKubeconfigServer returns the API server address the kubeconfig
+// names.
+//
+//   - With server, from --server, it is server, which must be an https URL
+//     with a host.
+//   - Without it, when kubeContext, the kube context the command reads the
+//     token through, is the context of a local cluster of the data home
+//     dataHome, as localclusters.ClusterOfContext recognises it, it is the
+//     URL at which the pods of the other local clusters reach the cluster.
+//     The kube context reaches it at a loopback port of the host that no
+//     pod reaches.
+//   - Otherwise it is contextServer, the server of kubeContext.
+func lookupKubeconfigServer(server, kubeContext, contextServer, dataHome string) (string, error) {
+	if server != "" {
+		u, err := url.Parse(server)
+		if err != nil || u.Scheme != "https" || u.Host == "" {
+			return "", errors.Errorf("invalid --server %q: the API server address is an https URL, "+
+				"such as https://api.cluster-1.example.com:6443", server)
 		}
-	} else {
-		fmt.Print(kubeconfig)
+		return server, nil
+	}
+	if id, ok := localclusters.ClusterOfContext(kubeContext, dataHome); ok {
+		return id.KindNetworkAPIServerURL(), nil
+	}
+	return contextServer, nil
+}
+
+// remoteAccessCredentials is what the kubeconfig reaches a cluster with as
+// the remote-access service account.
+type remoteAccessCredentials struct {
+	// CACertificate is the CA certificate of the cluster, which its API
+	// server certificate chains to.
+	CACertificate []byte
+
+	// Token is the token of the remote-access service account.
+	Token []byte
+}
+
+// readRemoteAccessCredentials returns the credentials of the remote-access
+// service account, from the Secret remote access installs in namespace.
+// The error says why when remote access is not installed there, or
+// Kubernetes has not filled the Secret yet.
+func readRemoteAccessCredentials(ctx context.Context, client kubernetes.Interface, namespace string) (remoteAccessCredentials, error) {
+	secret, err := client.CoreV1().Secrets(namespace).Get(ctx, remoteAccessTokenSecretName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return remoteAccessCredentials{}, errors.Errorf("remote access is not installed on the cluster: "+
+			"namespace %q has no Secret %s. Install it by setting spec.remoteAccess.mode to Enabled on the "+
+			"cluster's SessionManager, since at its default, Auto, remote access is installed only while a "+
+			"LookupService exists on the cluster. For the runtime chart installed without the operator, "+
+			"name the namespace it was installed in with --namespace",
+			namespace, remoteAccessTokenSecretName)
+	}
+	if err != nil {
+		return remoteAccessCredentials{}, errors.Wrapf(err, "unable to read Secret %s in namespace %q",
+			remoteAccessTokenSecretName, namespace)
 	}
 
-	return nil
+	credentials := remoteAccessCredentials{CACertificate: secret.Data["ca.crt"], Token: secret.Data["token"]}
+	if len(credentials.CACertificate) == 0 || len(credentials.Token) == 0 {
+		return remoteAccessCredentials{}, errors.Errorf("Secret %s in namespace %q holds no token yet: "+
+			"Kubernetes adds the token of the remote-access service account to it shortly after remote "+
+			"access is installed, so try again", remoteAccessTokenSecretName, namespace)
+	}
+	return credentials, nil
+}
+
+// remoteAccessKubeconfig returns a kubeconfig that reaches the API server
+// at server as the remote-access service account, with credentials.
+func remoteAccessKubeconfig(server string, credentials remoteAccessCredentials) ([]byte, error) {
+	config := clientcmdapi.NewConfig()
+	config.Clusters["training-platform"] = &clientcmdapi.Cluster{
+		Server:                   server,
+		CertificateAuthorityData: credentials.CACertificate,
+	}
+	config.AuthInfos["remote-access"] = &clientcmdapi.AuthInfo{
+		Token: string(credentials.Token),
+	}
+	config.Contexts["training-platform"] = &clientcmdapi.Context{
+		Cluster:  "training-platform",
+		AuthInfo: "remote-access",
+	}
+	config.CurrentContext = "training-platform"
+
+	kubeconfig, err := clientcmd.Write(*config)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to write kubeconfig")
+	}
+	return kubeconfig, nil
 }
 
 func (p *ProjectInfo) NewAdminLookupKubeconfigCmd() *cobra.Command {
@@ -114,7 +211,7 @@ func (p *ProjectInfo) NewAdminLookupKubeconfigCmd() *cobra.Command {
 		Short:   "Fetch kubeconfig for lookup service remote access",
 		Example: adminLookupKubeconfigExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return o.Run()
+			return o.Run(cmd.Context())
 		},
 	}
 
@@ -137,6 +234,19 @@ func (p *ProjectInfo) NewAdminLookupKubeconfigCmd() *cobra.Command {
 		"o",
 		"",
 		"Path to write Kubeconfig file to",
+	)
+	c.Flags().StringVar(
+		&o.Namespace,
+		"namespace",
+		remoteAccessDefaultNamespace,
+		"namespace remote access is installed in, which holds the "+remoteAccessTokenSecretName+" Secret",
+	)
+	c.Flags().StringVar(
+		&o.Server,
+		"server",
+		"",
+		"API server address the kubeconfig names, an https URL; by default the address the pods of the other "+
+			"local clusters reach a local cluster at, and otherwise the server of the kube context",
 	)
 
 	return c

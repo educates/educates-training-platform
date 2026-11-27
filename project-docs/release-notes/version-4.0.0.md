@@ -2838,6 +2838,24 @@ Bugs Fixed
   ``info`` level when it is back. The attempts in between are logged at
   ``debug`` level.
 
+* ``educates admin lookup kubeconfig`` wrote the API server address of the
+  kube context it read the token through, which for a local cluster is a
+  port on the loopback address of the host that a lookup service on another
+  local cluster cannot reach, so the kubeconfig did not work until that
+  address was edited. For a local cluster it now writes the address of the
+  cluster's control plane container on Docker's ``kind`` network,
+  ``https://educates-control-plane:6443`` for the default local cluster and
+  ``https://educates-<name>-control-plane:6443`` for a named one, which the
+  pods of the other local clusters reach. The new ``--server`` option names
+  the address for any cluster, as when a lookup service reaches its API
+  server at an address other than the kube context's. The command also read
+  the ``remote-access-token`` secret from the ``educates`` namespace only.
+  The new ``--namespace`` option names another, for the runtime chart
+  installed without the operator, and a missing secret now gives an error
+  saying that remote access is not installed and how to install it. The
+  file ``--output`` writes is now readable by its owner only, since the
+  kubeconfig holds the token.
+
 * A workshop environment with a capacity of 0 no longer receives sessions.
   The lookup service treated a capacity of 0 as no limit, so it sent session
   requests to such a workshop environment, and preferred it to one which was

@@ -1145,7 +1145,14 @@ Features Changed
   been renamed, including ``localKindCluster`` to ``cluster``,
   ``localDNSResolver`` to ``resolver``, and the kind cluster networking
   fields ``podCIDR`` and ``serviceCIDR`` to ``podSubnet`` and
-  ``serviceSubnet``.
+  ``serviceSubnet``. The migration carries ``sessionManager.clusterAdmin``
+  over to ``clusterAdmin``, which a local cluster does not apply yet, and a
+  set ``lookupService.enabled`` over to ``lookupService``. Its notice names
+  every setting it drops, each top-level setting it does not carry over and
+  each setting dropped from a block it carries in part, and says where the
+  setting's version 4 equivalent lives, often a field of an
+  ``EducatesConfig``. See [laptop installs migrate
+  automatically](laptop-installs-migrate-automatically).
 
 * Workshop sessions are served over HTTPS when the cluster configuration
   provides certificate settings, which is a wildcard certificate, a
@@ -1159,8 +1166,13 @@ Features Changed
   address and needs no CA, since that address cannot obtain a trusted
   certificate. Set
   ``ingress.insecure`` to request plain HTTP explicitly for a custom domain.
-  See the New Features entry on installing without in-cluster TLS for the
-  full picture.
+  The CLI's first-run migration of a version 3 ``values.yaml`` leaves a
+  ``clusterIngress.domain`` that is the ``nip.io`` name of an IPv4 address,
+  such as ``10.10.10.1.nip.io``, to this default when version 3 served it
+  over plain HTTP, with no wildcard certificate for it cached and no
+  certificate settings or ``clusterIngress.protocol`` in the file, and its
+  notice says how to keep the domain. See the New Features entry on
+  installing without in-cluster TLS for the full picture.
 
 * The local secrets cache stores certificate authorities in a new shape,
   and ``educates local secrets add ca`` and ``educates local secrets add tls``
@@ -1314,8 +1326,9 @@ Features Changed
   that an alias added to a network interface, such as ``10.10.10.1``,
   survives network changes. The CLI's first-run migration of a version 3
   ``values.yaml`` sets a missing or ``0.0.0.0`` listen address to the
-  host's IP address, saying so in its notice. A missing listen address,
-  ``0.0.0.0`` and a loopback address such as ``127.0.0.1`` are refused
+  host's IP address, with the same comment, saying so in its notice. A
+  missing listen address, ``0.0.0.0`` and a loopback address such as
+  ``127.0.0.1`` are refused
   wherever the cluster is used, with an error naming
   ``cluster.listenAddress``, saying why, and giving the command that sets
   it, while ``educates local config get``, ``view`` and ``edit`` still open

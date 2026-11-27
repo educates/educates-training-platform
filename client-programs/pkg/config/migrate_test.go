@@ -9,9 +9,13 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/educates/educates-training-platform/client-programs/internal/testpki"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
+	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
+	"github.com/educates/educates-training-platform/client-programs/pkg/utils"
 )
 
 const v3KindValues = `
@@ -126,6 +130,15 @@ func TestMaybeMigrateV3_KindProvider_Migrates(t *testing.T) {
 	}
 	if got, want := len(cfg.WebsiteStyling.ThemeDataRefs), 1; got != want {
 		t.Errorf("ThemeDataRefs len = %d, want %d", got, want)
+	}
+}
+
+func TestMaybeMigrateV3_WritesTheSchemaModeline(t *testing.T) {
+	_, written, _ := migrateV3Values(t, v3KindValues)
+
+	const modeline = "# yaml-language-server: $schema=https://schemas.educates.dev/cli/v1alpha1/EducatesLocalConfig.json\n"
+	if !strings.HasPrefix(written, modeline+"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\n") {
+		t.Errorf("migrated file does not start with the schema modeline and then the config:\n%s", written)
 	}
 }
 
@@ -258,7 +271,13 @@ func TestEnsureLocalConfigFile_NoMigrationNeeded_SurfacesMissingError(t *testing
 // configuration, the written file and the migration's notice.
 func migrateV3Values(t *testing.T, values string) (*v1alpha1.EducatesLocalConfig, string, string) {
 	t.Helper()
-	dataHome := t.TempDir()
+	return migrateV3ValuesIn(t, t.TempDir(), values)
+}
+
+// migrateV3ValuesIn is migrateV3Values in the data home dataHome, which
+// may already hold a local secrets cache.
+func migrateV3ValuesIn(t *testing.T, dataHome, values string) (*v1alpha1.EducatesLocalConfig, string, string) {
+	t.Helper()
 	must(t, os.WriteFile(filepath.Join(dataHome, "values.yaml"), []byte(values), 0o644))
 
 	var notice bytes.Buffer
@@ -579,6 +598,24 @@ func TestMaybeMigrateV3_ListenAddressOnEveryHostAddress_BecomesTheHostIP(t *test
 	}
 }
 
+func TestMaybeMigrateV3_ListenAddress_IsCommentedOnlyWhenItIsTheHostIP(t *testing.T) {
+	const comment = "cluster:\n" +
+		"  # This host's IP address when this file was written. An alias such as\n" +
+		"  # 10.10.10.1, added to a network interface, survives network changes.\n" +
+		"  listenAddress: 192.168.50.151\n"
+	stubHostIP(t, "192.168.50.151")
+
+	_, written, _ := migrateV3Values(t, "localKindCluster:\n  listenAddress: 0.0.0.0\n")
+	if !strings.Contains(written, comment) {
+		t.Errorf("migrated file does not comment the host's IP address as its listen address:\n%s", written)
+	}
+
+	_, written, _ = migrateV3Values(t, "localKindCluster:\n  listenAddress: 10.10.10.1\n")
+	if strings.Contains(written, "This host's IP address") {
+		t.Errorf("migrated file comments a listen address kept from v3 as the host's IP address:\n%s", written)
+	}
+}
+
 func TestMaybeMigrateV3_ListenAddressOnEveryHostAddress_WithNoHostIP_SaysToSetIt(t *testing.T) {
 	stubHostIP(t, "")
 
@@ -606,6 +643,325 @@ func TestMaybeMigrateV3_SpecificListenAddress_IsKeptWithoutANote(t *testing.T) {
 	if strings.Contains(notice, "listenAddress") {
 		t.Errorf("notice mentions the listen address it kept:\n%s", notice)
 	}
+}
+
+func TestMaybeMigrateV3_NipDomainWithNoCachedCertificate_IsDroppedForTheV4Default(t *testing.T) {
+	for _, domain := range []string{"10.10.10.1.nip.io", "10-10-10-1.nip.io"} {
+		t.Run(domain, func(t *testing.T) {
+			cfg, written, notice := migrateV3Values(t,
+				"clusterIngress:\n  domain: "+domain+"\nlocalKindCluster:\n  listenAddress: 10.10.10.2\n")
+
+			if cfg.Ingress.Domain != "" || strings.Contains(written, "domain:") {
+				t.Errorf("migrated file keeps ingress.domain %s, want it left to the nip.io default:\n%s", domain, written)
+			}
+			for _, want := range []string{"dropped clusterIngress.domain " + domain,
+				"no wildcard TLS certificate for it is cached", "10-10-10-2.nip.io", "plain HTTP",
+				"to keep " + domain + ", set ingress.domain to it and ingress.insecure to true"} {
+				if !strings.Contains(notice, want) {
+					t.Errorf("notice does not mention %q:\n%s", want, notice)
+				}
+			}
+		})
+	}
+}
+
+func TestMaybeMigrateV3_NipDomainWithACachedCertificate_IsKept(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv(utils.EducatesCLIDataHomeEnv, dataHome)
+	leaf := testpki.NewRootCA().NewLeaf(testpki.WithDNSNames("*.10.10.10.1.nip.io"))
+	must(t, secrets.WriteCachedSecret(secrets.NewTLSSecret("nip-tls", leaf.ChainPEM(), leaf.KeyPEM)))
+
+	cfg, _, notice := migrateV3ValuesIn(t, dataHome, "clusterIngress:\n  domain: 10.10.10.1.nip.io\n")
+
+	if got, want := cfg.Ingress.Domain, "10.10.10.1.nip.io"; got != want {
+		t.Errorf("Ingress.Domain = %q, want %q, which the cached wildcard certificate serves", got, want)
+	}
+	if strings.Contains(notice, "clusterIngress.domain") {
+		t.Errorf("notice mentions the domain it kept:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_NipDomainWithAnExpiredCachedCertificate_IsDropped(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv(utils.EducatesCLIDataHomeEnv, dataHome)
+	leaf := testpki.NewRootCA().NewLeaf(testpki.WithDNSNames("*.10.10.10.1.nip.io"),
+		testpki.WithValidity(time.Now().Add(-48*time.Hour), time.Now().Add(-24*time.Hour)))
+	must(t, secrets.WriteCachedSecret(secrets.NewTLSSecret("nip-tls", leaf.ChainPEM(), leaf.KeyPEM)))
+
+	cfg, _, notice := migrateV3ValuesIn(t, dataHome, "clusterIngress:\n  domain: 10.10.10.1.nip.io\n")
+
+	if cfg.Ingress.Domain != "" {
+		t.Errorf("Ingress.Domain = %q, want it left to the nip.io default, since no deploy serves an expired certificate", cfg.Ingress.Domain)
+	}
+	if !strings.Contains(notice, "dropped clusterIngress.domain 10.10.10.1.nip.io") {
+		t.Errorf("notice does not say the domain was dropped:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_NipDomainVersion3ServedOverHTTPS_IsKept(t *testing.T) {
+	const domain = "clusterIngress:\n  domain: 10.10.10.1.nip.io\n"
+	for name, values := range map[string]string{
+		"tlsCertificate":    domain + "  tlsCertificate:\n    tls.crt: CERT\n    tls.key: KEY\n",
+		"tlsCertificateRef": domain + "  tlsCertificateRef:\n    namespace: default\n    name: wildcard\n",
+		"protocol https":    domain + "  protocol: https\n",
+		"clusterInfrastructure.caCertificateRef": domain +
+			"clusterInfrastructure:\n  caCertificateRef:\n    namespace: default\n    name: root-ca\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, _, notice := migrateV3Values(t, values)
+
+			if got, want := cfg.Ingress.Domain, "10.10.10.1.nip.io"; got != want {
+				t.Errorf("Ingress.Domain = %q, want %q, which version 3 served over HTTPS", got, want)
+			}
+			if strings.Contains(notice, "dropped clusterIngress.domain") {
+				t.Errorf("notice says the domain was dropped:\n%s", notice)
+			}
+		})
+	}
+}
+
+func TestMaybeMigrateV3_DroppedNipDomain_GetsNoCACacheNote(t *testing.T) {
+	dataHome := t.TempDir()
+	must(t, os.MkdirAll(filepath.Join(dataHome, "secrets"), 0o755))
+	must(t, os.WriteFile(filepath.Join(dataHome, "secrets", "nip-ca.yaml"), []byte(`apiVersion: v1
+kind: Secret
+metadata:
+  name: nip-ca
+  annotations:
+    training.educates.dev/domain: 10.10.10.1.nip.io
+type: Opaque
+data:
+  ca.crt: dGVzdA==
+`), 0o644))
+
+	_, _, notice := migrateV3ValuesIn(t, dataHome, "clusterIngress:\n  domain: 10.10.10.1.nip.io\n")
+
+	if strings.Contains(notice, "the cached v3 CA certificate") {
+		t.Errorf("notice explains a CA certificate for the domain it dropped:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_NipDomainOverPlainHTTP_IsKept(t *testing.T) {
+	cfg, _, notice := migrateV3Values(t, "clusterIngress:\n  domain: 10.10.10.1.nip.io\n  protocol: http\n")
+
+	if got, want := cfg.Ingress.Domain, "10.10.10.1.nip.io"; got != want || !cfg.Ingress.Insecure {
+		t.Errorf("Ingress = %+v, want domain %q served over plain HTTP, as version 3 served it", cfg.Ingress, want)
+	}
+	if strings.Contains(notice, "clusterIngress.domain") {
+		t.Errorf("notice mentions the domain it kept:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_DroppedTopLevelSettings_AreEachNotedWithTheirV4Home(t *testing.T) {
+	for _, tc := range []struct {
+		values string
+		want   []string
+	}{
+		{"debug: true\n", []string{"dropped debug: it has no version 4 equivalent", "educates admin platform render --local-config"}},
+		{"clusterPackages:\n  kyverno:\n    enabled: false\n", []string{"dropped clusterPackages: a local cluster always installs Contour and Kyverno", "in an EducatesConfig"}},
+		{"imageRegistry:\n  host: registry.internal\n", []string{"dropped imageRegistry:", "educatesClusterConfig.imageRegistry.prefix in an EducatesConfig"}},
+		{"version: 3.7.1\n", []string{"dropped version:", "imageVersions"}},
+		{"clusterRuntime:\n  class: kata\n", []string{"dropped clusterRuntime: it has no version 4 equivalent"}},
+		{"sessionCookies:\n  domain: educates.test\n", []string{"dropped sessionCookies:", "sessionManager.sessionCookieDomain in an EducatesConfig"}},
+		{"clusterStorage:\n  class: fast\n", []string{"dropped clusterStorage:", "sessionManager.storage"}},
+		{"clusterSecrets:\n  pullSecretRefs:\n    - namespace: default\n      name: pull\n", []string{"dropped clusterSecrets:", "educatesClusterConfig.imageRegistry.pullSecrets"}},
+		{"clusterSecurity:\n  policyEngine: none\n", []string{"dropped clusterSecurity: a local cluster enforces cluster policy with Kyverno", "educatesClusterConfig.policyEnforcement.clusterPolicy.engine"}},
+		{"workshopSecurity:\n  rulesEngine: none\n", []string{"dropped workshopSecurity: a local cluster enforces workshop policy with Kyverno", "educatesClusterConfig.policyEnforcement.workshopPolicy.engine"}},
+		{"trainingPortal:\n  credentials:\n    admin:\n      password: secret\n", []string{"dropped trainingPortal:", "spec.portal.credentials"}},
+		{"dockerDaemon:\n  networkMTU: 1300\n", []string{"dropped dockerDaemon:", "sessionManager.network.packetSize", "proxyCache, rootless and privileged have no version 4 equivalent"}},
+		{"clusterNetwork:\n  blockCIDRs:\n    - 10.0.0.0/8\n", []string{"dropped clusterNetwork:", "sessionManager.network.blockedCidrs"}},
+		{"workshopAnalytics:\n  google:\n    trackingId: G-123\n", []string{"dropped workshopAnalytics:", "sessionManager.tracking"}},
+		{"notAV3Setting: 1\n", []string{"dropped notAV3Setting: it is not a version 3 setting the migration knows"}},
+	} {
+		name, _, _ := strings.Cut(tc.values, ":")
+		t.Run(name, func(t *testing.T) {
+			_, _, notice := migrateV3Values(t, tc.values)
+
+			for _, want := range tc.want {
+				if !strings.Contains(notice, want) {
+					t.Errorf("notice does not mention %q:\n%s", want, notice)
+				}
+			}
+		})
+	}
+}
+
+func TestMaybeMigrateV3_SettingsDroppedFromCarriedBlocks_AreEachNoted(t *testing.T) {
+	_, _, notice := migrateV3Values(t, `
+clusterInfrastructure:
+  provider: kind
+  aws:
+    region: eu-west-1
+  gcp:
+    project: my-project
+  caCertificateRef:
+    namespace: default
+    name: root-ca
+clusterIngress:
+  domain: educates.test
+  class: nginx
+  tlsCertificate:
+    tls.crt: CERT
+  tlsCertificateRef:
+    namespace: default
+    name: wildcard
+  caCertificate:
+    ca.crt: CA
+  caCertificateRef:
+    namespace: default
+    name: ca
+  caNodeInjector:
+    enabled: true
+websiteStyling:
+  defaultTheme: my-theme
+  workshopDashboard:
+    html: <p>dashboard</p>
+  workshopInstructions:
+    style: p {}
+  workshopStarted:
+    html: <p>started</p>
+  workshopFinished:
+    html: <p>finished</p>
+  trainingPortal:
+    script: x()
+  frameAncestors:
+    - https://example.com
+`)
+
+	for path, want := range map[string]string{
+		"clusterInfrastructure.aws":              "EducatesEKSConfig",
+		"clusterInfrastructure.gcp":              "EducatesGKEConfig",
+		"clusterInfrastructure.caCertificateRef": "educates local secrets add ca <name> --cert ROOT.pem --key ROOT-KEY.pem",
+		"clusterIngress.class":                   "educatesClusterConfig.ingress.ingressClassName in an EducatesConfig",
+		"clusterIngress.tlsCertificate":          "educates local secrets add tls <name> --cert FILE --key FILE",
+		"clusterIngress.tlsCertificateRef":       "educates local secrets add tls <name> --cert FILE --key FILE",
+		"clusterIngress.caCertificate":           "educates local secrets add ca <name> --cert FILE",
+		"clusterIngress.caCertificateRef":        "educates local secrets add ca <name> --cert FILE",
+		"clusterIngress.caNodeInjector":          "sessionManager.nodeCATrust.mode in an EducatesConfig",
+		"websiteStyling.workshopDashboard":       "websiteStyling.themeDataRefs",
+		"websiteStyling.workshopInstructions":    "websiteStyling.themeDataRefs",
+		"websiteStyling.workshopStarted":         "websiteStyling.themeDataRefs",
+		"websiteStyling.workshopFinished":        "websiteStyling.themeDataRefs",
+		"websiteStyling.trainingPortal":          "websiteStyling.themeDataRefs",
+		"websiteStyling.frameAncestors":          "sessionManager.allowedEmbeddingHosts in an EducatesConfig",
+	} {
+		line := lineStartingWith(notice, "dropped "+path+":")
+		if !strings.Contains(line, want) {
+			t.Errorf("notice line for %s does not mention %q:\n%s", path, want, notice)
+		}
+	}
+	for _, carried := range []string{"clusterInfrastructure", "clusterIngress", "websiteStyling",
+		"clusterInfrastructure.provider", "clusterIngress.domain", "websiteStyling.defaultTheme"} {
+		if strings.Contains(notice, "dropped "+carried+":") {
+			t.Errorf("notice says the migration dropped %s, which it carries over:\n%s", carried, notice)
+		}
+	}
+}
+
+func TestMaybeMigrateV3_SessionManagerClusterAdmin_IsCarriedOverAndNotedAsNotAppliedYet(t *testing.T) {
+	for _, value := range []string{"true", "false"} {
+		t.Run(value, func(t *testing.T) {
+			_, written, notice := migrateV3Values(t, "sessionManager:\n  clusterAdmin: "+value+"\n")
+
+			if !strings.Contains(written, "\nclusterAdmin: "+value+"\n") {
+				t.Errorf("migrated file does not set clusterAdmin: %s:\n%s", value, written)
+			}
+			line := lineStartingWith(notice, "carried sessionManager.clusterAdmin over to clusterAdmin: "+value)
+			if !strings.Contains(line, "a local cluster does not apply clusterAdmin yet") {
+				t.Errorf("notice does not say clusterAdmin is carried over and not applied yet:\n%s", notice)
+			}
+			if strings.Contains(notice, "dropped sessionManager") {
+				t.Errorf("notice says sessionManager was dropped:\n%s", notice)
+			}
+		})
+	}
+}
+
+func TestMaybeMigrateV3_LookupService_CarriesASetSwitchAndNotesThePrefix(t *testing.T) {
+	for _, tc := range []struct {
+		name, values, written string
+		want                  []string
+		dontWant              []string
+	}{
+		{
+			name:    "on, default prefix",
+			values:  "lookupService:\n  enabled: true\n",
+			written: "\nlookupService: true\n",
+			want: []string{"carried lookupService.enabled over to lookupService: true; a local cluster serves it " +
+				"under the prefix lookup, where version 3 used educates-api"},
+		},
+		{
+			name:    "on, own prefix",
+			values:  "lookupService:\n  enabled: true\n  ingressPrefix: api\n",
+			written: "\nlookupService: true\n",
+			want: []string{"carried lookupService.enabled over to lookupService: true\n",
+				"dropped lookupService.ingressPrefix: a local cluster serves the lookup service under the prefix lookup; " +
+					"set lookupService.ingress.prefix in an EducatesConfig for another"},
+		},
+		{
+			name:    "on, empty prefix",
+			values:  "lookupService:\n  enabled: true\n  ingressPrefix: \"\"\n",
+			written: "\nlookupService: true\n",
+			want: []string{"carried lookupService.enabled over to lookupService: true; a local cluster serves it " +
+				"under the prefix lookup, where version 3 used educates-api"},
+		},
+		{
+			name:     "off",
+			values:   "lookupService:\n  enabled: false\n",
+			written:  "\nlookupService: false\n",
+			want:     []string{"carried lookupService.enabled over to lookupService: false\n"},
+			dontWant: []string{"prefix"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, written, notice := migrateV3Values(t, tc.values)
+
+			if !strings.Contains(written, tc.written) {
+				t.Errorf("migrated file does not hold %q:\n%s", tc.written, written)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(notice, want) {
+					t.Errorf("notice does not mention %q:\n%s", want, notice)
+				}
+			}
+			for _, dontWant := range append(tc.dontWant, "dropped lookupService:") {
+				if strings.Contains(notice, dontWant) {
+					t.Errorf("notice mentions %q:\n%s", dontWant, notice)
+				}
+			}
+		})
+	}
+}
+
+func TestMaybeMigrateV3_NoLookupServiceSwitch_LeavesTheDefault(t *testing.T) {
+	_, written, notice := migrateV3Values(t, "lookupService:\n  ingressPrefix: api\n")
+
+	if strings.Contains(written, "lookupService") {
+		t.Errorf("migrated file sets lookupService, want it left to the default:\n%s", written)
+	}
+	if strings.Contains(notice, "carried lookupService") {
+		t.Errorf("notice says lookupService was carried over:\n%s", notice)
+	}
+}
+
+func TestMaybeMigrateV3_SettingsWithNoValue_AreNotNoted(t *testing.T) {
+	_, _, notice := migrateV3Values(t,
+		"version: \"\"\nclusterNetwork: {}\nclusterSecrets:\n  pullSecretRefs: []\ndebug:\nclusterIngress:\n  class: \"\"\n")
+
+	if strings.Contains(notice, "dropped ") {
+		t.Errorf("notice notes settings that hold no value:\n%s", notice)
+	}
+}
+
+// lineStartingWith returns the line of notice that starts with prefix,
+// or "" when there is none.
+func lineStartingWith(notice, prefix string) string {
+	for line := range strings.Lines(notice) {
+		if strings.HasPrefix(line, prefix) {
+			return line
+		}
+	}
+	return ""
 }
 
 func TestMaybeMigrateV3_NoResolverTargetAddress_NoNote(t *testing.T) {

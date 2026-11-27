@@ -225,8 +225,9 @@ func main() {
 
 	// Scope the Secret cache to: the operator namespace, plus any
 	// cross-namespace refs the current EducatesClusterConfig and
-	// SessionManager singletons point at. APIReader still handles ad-hoc reads from elsewhere; the cache
-	// scope here only affects watch-driven enqueue.
+	// SessionManager singletons point at. APIReader still handles ad-hoc
+	// reads from elsewhere; the cache scope here only affects watch-driven
+	// enqueue.
 	//
 	// Boot-time discovery: if the user later edits either singleton to
 	// point at a new namespace, the operator pod needs to restart to pick

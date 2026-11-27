@@ -157,8 +157,19 @@ name of the router address.`, path)
 		routerTrust := plan.Certificates.None != nil && plan.Certificates.None.CACertificateSecretRef != nil
 		if plan.Certificates.Provider != translator.CertificatesProviderNone || routerTrust ||
 			len(c.ImageRegistry.PullSecrets) > 0 {
-			notes.Note(fmt.Sprintf("Before 'helm install', run 'educates local secrets sync' to copy the cached secrets\n"+
-				"these resources reference into the operator namespace, %s.", deployer.OperatorNamespace))
+			command := "educates local secrets sync"
+			if o.LocalConfig {
+				// The sync resolves its config from the same selection.
+				if id, err := localclusters.Resolve(o.LocalCluster, utils.GetEducatesHomeDir()); err == nil && !id.IsDefault() {
+					command += " --local-cluster " + id.Name
+				}
+			}
+			referenced := "these resources reference"
+			if len(c.ImageRegistry.PullSecrets) > 0 {
+				referenced += ", the image pull " + pullSecretsPhrase(c.ImageRegistry.PullSecrets) + " among\nthem,"
+			}
+			notes.Note(fmt.Sprintf("Before 'helm install', run '%s' to copy\nthe cached secrets %s into the "+
+				"operator namespace, %s.", command, referenced, deployer.OperatorNamespace))
 		}
 	case *v1alpha1.EducatesConfig:
 		// Escape-hatch: pure passthrough. No CLI-side defaults. User owns
@@ -167,16 +178,8 @@ name of the router address.`, path)
 	}
 
 	if names := pullSecretsToCheck(cfg); len(names) > 0 {
-		noun := "secret"
-		if len(names) > 1 {
-			noun = "secrets"
-		}
-		quoted := make([]string, len(names))
-		for i, name := range names {
-			quoted[i] = strconv.Quote(name)
-		}
-		notes.Note(fmt.Sprintf("Before 'helm install', create the image pull %s %s, of type\n"+
-			"kubernetes.io/dockerconfigjson, in the operator namespace, %s.", noun, strings.Join(quoted, ", "),
+		notes.Note(fmt.Sprintf("Before 'helm install', create the image pull %s, of type\n"+
+			"kubernetes.io/dockerconfigjson, in the operator namespace, %s.", pullSecretsPhrase(names),
 			deployer.OperatorNamespace))
 	}
 
@@ -186,6 +189,19 @@ name of the router address.`, path)
 	}
 
 	return writeRender(w, out, notes.String(), valuesFile, resourcesFile)
+}
+
+// pullSecretsPhrase names the image pull secrets names for a render note:
+// secret "a", or secrets "a", "b".
+func pullSecretsPhrase(names []string) string {
+	quoted := make([]string, len(names))
+	for i, name := range names {
+		quoted[i] = strconv.Quote(name)
+	}
+	if len(names) == 1 {
+		return "secret " + quoted[0]
+	}
+	return "secrets " + strings.Join(quoted, ", ")
 }
 
 // applyCLIDefaults gives cfg the defaults that come from this CLI binary,

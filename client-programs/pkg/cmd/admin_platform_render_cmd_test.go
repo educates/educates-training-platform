@@ -307,7 +307,7 @@ func TestRender_RootCA_ReferencesTheDomainCAKeyPairWithoutWritingIt(t *testing.T
 	if strings.Contains(s, "namespace: educates-secrets") {
 		t.Errorf("render output references the retired educates-secrets namespace:\n%s", s)
 	}
-	if want := "# Before 'helm install', run 'educates local secrets sync' to copy the cached secrets"; !strings.Contains(s, want) {
+	if want := "# Before 'helm install', run 'educates local secrets sync' to copy\n# the cached secrets these resources reference into the operator namespace, educates-installer."; !strings.Contains(s, want) {
 		t.Errorf("render output missing %q:\n%s", want, s)
 	}
 	if after := cachedSecretNames(t); !reflect.DeepEqual(after, before) {

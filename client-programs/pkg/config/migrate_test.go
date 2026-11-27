@@ -902,8 +902,15 @@ websiteStyling:
 	}
 }
 
-func TestMaybeMigrateV3_SessionManagerClusterAdmin_IsCarriedOverAndNotedAsNotAppliedYet(t *testing.T) {
-	for _, value := range []string{"true", "false"} {
+func TestMaybeMigrateV3_SessionManagerClusterAdmin_IsCarriedOver(t *testing.T) {
+	for _, c := range []struct {
+		value string
+		says  string
+	}{
+		{"true", "binds the session manager's service account to the cluster-admin ClusterRole"},
+		{"false", "the default"},
+	} {
+		value := c.value
 		t.Run(value, func(t *testing.T) {
 			_, written, notice := migrateV3Values(t, "sessionManager:\n  clusterAdmin: "+value+"\n")
 
@@ -911,8 +918,11 @@ func TestMaybeMigrateV3_SessionManagerClusterAdmin_IsCarriedOverAndNotedAsNotApp
 				t.Errorf("migrated file does not set clusterAdmin: %s:\n%s", value, written)
 			}
 			line := lineStartingWith(notice, "carried sessionManager.clusterAdmin over to clusterAdmin: "+value)
-			if !strings.Contains(line, "a local cluster does not apply clusterAdmin yet") {
-				t.Errorf("notice does not say clusterAdmin is carried over and not applied yet:\n%s", notice)
+			if !strings.Contains(line, c.says) {
+				t.Errorf("notice line for clusterAdmin: %s does not say %q:\n%s", value, c.says, notice)
+			}
+			if strings.Contains(line, "does not apply") {
+				t.Errorf("notice still says a local cluster does not apply clusterAdmin:\n%s", notice)
 			}
 			if strings.Contains(notice, "dropped sessionManager") {
 				t.Errorf("notice says sessionManager was dropped:\n%s", notice)

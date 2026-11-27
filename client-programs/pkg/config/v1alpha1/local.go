@@ -200,8 +200,8 @@ type OperatorImage struct {
 //     `--config`, the GitOps mode, don't apply them.
 func (c *EducatesLocalConfig) WithDefaults() *EducatesLocalConfig {
 	if c.ClusterAdmin == nil {
-		t := true
-		c.ClusterAdmin = &t
+		f := false
+		c.ClusterAdmin = &f
 	}
 	if c.LookupService == nil {
 		t := true

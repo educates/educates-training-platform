@@ -75,8 +75,8 @@ func TestLoadConfigFileOfANamedClusterFallsBackToItsNameUnderTheNipDomainOfTheRo
 	if !c.Ingress.Insecure {
 		t.Errorf("ingress.insecure = false, want true with the nip.io fallback")
 	}
-	if c.ClusterAdmin == nil || !*c.ClusterAdmin {
-		t.Errorf("clusterAdmin = %v, want the static default true", c.ClusterAdmin)
+	if c.ClusterAdmin == nil || *c.ClusterAdmin {
+		t.Errorf("clusterAdmin = %v, want the static default false", c.ClusterAdmin)
 	}
 }
 

@@ -119,6 +119,7 @@ func inlineSessionManagerSpec(cfg *v1alpha1.EducatesInlineConfig) map[string]int
 	if cfg.Operator.LogLevel != "" {
 		spec["logLevel"] = cfg.Operator.LogLevel
 	}
+	applyClusterAdmin(spec, cfg.ClusterAdmin)
 	if cfg.WebsiteStyling.DefaultTheme != "" {
 		spec["defaultTheme"] = cfg.WebsiteStyling.DefaultTheme
 	}

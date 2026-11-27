@@ -653,6 +653,11 @@ func (in *SessionManagerSpec) DeepCopyInto(out *SessionManagerSpec) {
 		*out = make([]RegistryMirror, len(*in))
 		copy(*out, *in)
 	}
+	if in.ClusterAdmin != nil {
+		in, out := &in.ClusterAdmin, &out.ClusterAdmin
+		*out = new(bool)
+		**out = **in
+	}
 	if in.NodeCATrust != nil {
 		in, out := &in.NodeCATrust, &out.NodeCATrust
 		*out = new(NodeCATrust)

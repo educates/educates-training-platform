@@ -23,8 +23,8 @@ func TestLoad_EmptyLocalConfig_AppliesDefaults(t *testing.T) {
 		t.Fatalf("expected *EducatesLocalConfig, got %T", cfg)
 	}
 
-	if local.ClusterAdmin == nil || *local.ClusterAdmin != true {
-		t.Errorf("ClusterAdmin = %v, want true", local.ClusterAdmin)
+	if local.ClusterAdmin == nil || *local.ClusterAdmin != false {
+		t.Errorf("ClusterAdmin = %v, want false", local.ClusterAdmin)
 	}
 	if local.LookupService == nil || *local.LookupService != true {
 		t.Errorf("LookupService = %v, want true", local.LookupService)
@@ -56,8 +56,8 @@ func TestLoad_FullLocalConfig_RoundTripsAllFields(t *testing.T) {
 	if got, want := local.Cluster.VolumeMounts[0].HostPath, "/tmp/data"; got != want {
 		t.Errorf("VolumeMounts[0].HostPath = %q, want %q", got, want)
 	}
-	if local.ClusterAdmin == nil || *local.ClusterAdmin != false {
-		t.Errorf("ClusterAdmin = %v, want false (explicit override)", local.ClusterAdmin)
+	if local.ClusterAdmin == nil || *local.ClusterAdmin != true {
+		t.Errorf("ClusterAdmin = %v, want true (explicit override)", local.ClusterAdmin)
 	}
 	if got, want := local.Operator.LogLevel, "debug"; got != want {
 		t.Errorf("Operator.LogLevel = %q, want %q", got, want)

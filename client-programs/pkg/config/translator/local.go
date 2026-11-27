@@ -32,7 +32,7 @@ import (
 // URLs (ingress.protocol https), and the decision must be None, optionally
 // with the CA trust Secret of the router's certificate.
 //
-// Static field defaults (clusterAdmin true, lookupService true,
+// Static field defaults (clusterAdmin false, lookupService true,
 // imagePrePuller.enabled true, operator.logLevel info) have already been
 // applied by EducatesLocalConfig.WithDefaults() at load time.
 //
@@ -214,12 +214,6 @@ func localLookupServiceSpec(cfg *v1alpha1.EducatesLocalConfig) map[string]interf
 //   - network.blockedCidrs: cloud metadata endpoints
 //     (169.254.169.254/32 covers AWS/GCP/Azure IMDS;
 //     fd00:ec2::254/128 covers AWS IMDS over IPv6).
-//
-// TODO: clusterAdmin and secretPropagation have no landing field in the
-// current SessionManager CRD. They are dropped here pending the CRD
-// additions. The operator will need spec.clusterAdmin (bool) and
-// spec.secretPropagation (imagePullSecretNames list) before this
-// translator can wire them up.
 func localSessionManagerSpec(cfg *v1alpha1.EducatesLocalConfig) map[string]interface{} {
 	spec := map[string]interface{}{
 		"storage": map[string]interface{}{
@@ -235,6 +229,7 @@ func localSessionManagerSpec(cfg *v1alpha1.EducatesLocalConfig) map[string]inter
 	if cfg.Operator.LogLevel != "" {
 		spec["logLevel"] = cfg.Operator.LogLevel
 	}
+	applyClusterAdmin(spec, cfg.ClusterAdmin)
 	if cfg.WebsiteStyling.DefaultTheme != "" {
 		spec["defaultTheme"] = cfg.WebsiteStyling.DefaultTheme
 	}
@@ -244,4 +239,14 @@ func localSessionManagerSpec(cfg *v1alpha1.EducatesLocalConfig) map[string]inter
 	applyImagePrePuller(spec, cfg.ImagePrePuller)
 	applySessionManagerImageOverrides(spec, cfg.ImageVersions)
 	return spec
+}
+
+// applyClusterAdmin writes the config's clusterAdmin to the SessionManager
+// spec, which binds the session manager's service account to the
+// cluster-admin ClusterRole when true. Defaults have set it by now, so it
+// is written for every config, false included.
+func applyClusterAdmin(spec map[string]interface{}, clusterAdmin *bool) {
+	if clusterAdmin != nil {
+		spec["clusterAdmin"] = *clusterAdmin
+	}
 }

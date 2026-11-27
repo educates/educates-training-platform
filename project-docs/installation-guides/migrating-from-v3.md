@@ -149,9 +149,13 @@ need the ``EducatesConfig`` escape hatch, and the notice names the field of
 the custom resource to set. A setting that holds no value drops nothing, and
 is not named.
 
-``sessionManager.clusterAdmin`` is carried over to ``clusterAdmin``, which a
-local cluster does not apply yet: its session manager is not bound to the
-``cluster-admin`` ClusterRole, and the notice says so.
+``sessionManager.clusterAdmin`` is carried over to ``clusterAdmin`` when the
+version 3 file sets it, and ``true`` binds the session manager's service
+account to the ``cluster-admin`` ClusterRole, as the notice says. Version 3
+bound the session manager to ``cluster-admin`` by default, and a local cluster
+does not, so a version 3 file that does not set it gets a session manager
+with only the permissions Educates grants it. Set ``clusterAdmin: true`` for a
+workshop whose objects need more.
 ``lookupService.enabled`` is carried over to ``lookupService`` when the version
 3 file sets it. Version 3 left the lookup service off by default, and a local
 cluster runs it by default, so a version 3 file that does not set it gets the

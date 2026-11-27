@@ -294,13 +294,16 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		}
 	}
 
-	// sessionManager. clusterAdmin is carried over although a local
-	// cluster does not apply it, which its notice line says.
+	// sessionManager. A set clusterAdmin is carried over; left unset, the
+	// version 4 default, false, applies.
 	if clusterAdmin, isBool := asMap(v3["sessionManager"])["clusterAdmin"].(bool); isBool {
 		cfg.ClusterAdmin = &clusterAdmin
-		notes = append(notes, fmt.Sprintf("carried sessionManager.clusterAdmin over to clusterAdmin: %t; a local "+
-			"cluster does not apply clusterAdmin yet, and does not bind its session manager to the cluster-admin "+
-			"ClusterRole", clusterAdmin))
+		effect := "the default, which leaves the session manager with only the permissions Educates grants it"
+		if clusterAdmin {
+			effect = "which binds the session manager's service account to the cluster-admin ClusterRole"
+		}
+		notes = append(notes, fmt.Sprintf("carried sessionManager.clusterAdmin over to clusterAdmin: %t, %s",
+			clusterAdmin, effect))
 	}
 
 	// lookupService. Only a set switch is carried over: v3 left the lookup

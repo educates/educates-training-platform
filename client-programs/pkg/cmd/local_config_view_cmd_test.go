@@ -43,7 +43,7 @@ func TestLocalConfigView_Effective(t *testing.T) {
 		t.Errorf("effective view should show the configuration file location:\n%s", s)
 	}
 	// Static defaults are environment-independent and must always appear.
-	for _, want := range []string{"clusterAdmin: true", "lookupService: true", "logLevel: info"} {
+	for _, want := range []string{"clusterAdmin: false", "lookupService: true", "logLevel: info"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("effective configuration missing default %q:\n%s", want, s)
 		}
@@ -182,7 +182,7 @@ func TestLocalConfigInit_Defaults_WritesEffective(t *testing.T) {
 	for _, want := range []string{
 		"# yaml-language-server: $schema=",
 		"kind: EducatesLocalConfig",
-		"clusterAdmin: true",
+		"clusterAdmin: false",
 		"logLevel: info",
 	} {
 		if !strings.Contains(s, want) {

@@ -1235,8 +1235,8 @@ Features Changed
   ``localDNSResolver`` to ``resolver``, and the kind cluster networking
   fields ``podCIDR`` and ``serviceCIDR`` to ``podSubnet`` and
   ``serviceSubnet``. The migration carries ``sessionManager.clusterAdmin``
-  over to ``clusterAdmin``, which a local cluster does not apply yet, and a
-  set ``lookupService.enabled`` over to ``lookupService``. Its notice names
+  over to ``clusterAdmin``, and a set ``lookupService.enabled`` over to
+  ``lookupService``. Its notice names
   every setting it drops, each top-level setting it does not carry over and
   each setting dropped from a block it carries in part, and says where the
   setting's version 4 equivalent lives, often a field of an
@@ -3118,3 +3118,20 @@ Bugs Fixed
   as of the components. An operator installed without a ``logLevel``, with
   the CLI or with Helm, now logs at ``info`` instead of ``debug``. As with the
   components, ``warn`` logs only errors.
+
+* ``clusterAdmin`` in a CLI configuration of any kind was accepted, shown by
+  ``educates local config view`` and documented, but no translation wrote it
+  anywhere, since the ``SessionManager`` resource had no field for it, so the
+  session manager was never bound to the ``cluster-admin`` ClusterRole. The
+  ``SessionManager`` resource now has ``spec.clusterAdmin``, which binds the
+  session manager's service account to ``cluster-admin`` when ``true``, and
+  every configuration kind sets it from ``clusterAdmin``. An
+  ``EducatesLocalConfig`` now defaults ``clusterAdmin`` to ``false``, like the
+  other kinds, so a local cluster gives the session manager the permissions it
+  has on any other install, and a workshop that needs more fails on the laptop
+  first. A configuration that sets ``clusterAdmin: true``, such as one written
+  by ``educates local config init --defaults`` of an earlier release, now
+  binds the session manager to ``cluster-admin``; remove the line, or set it
+  to ``false``, to keep the session manager to the permissions Educates grants
+  it. The schemas described ``clusterAdmin`` as granting workshop sessions
+  cluster-admin access, and now say what it does.

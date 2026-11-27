@@ -403,6 +403,13 @@ func renderSessionManagerValues(obj *platformv1alpha1.SessionManager, cfg *confi
 		applySMImagePrePullerValues(imagePrePullerValues(values), obj.Spec.ImagePrePuller)
 	}
 
+	// The chart binds the session manager's service account to
+	// cluster-admin from clusterAdmin; left unset, its default, false,
+	// applies.
+	if obj.Spec.ClusterAdmin != nil {
+		values["clusterAdmin"] = *obj.Spec.ClusterAdmin
+	}
+
 	// DefaultAccessCredentials and RegistryMirrors are reserved in the
 	// CRD; validateSessionManagerSpec rejects them as "not yet
 	// supported in v1alpha1", since the chart has no values for them.

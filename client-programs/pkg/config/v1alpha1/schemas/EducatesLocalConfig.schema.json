@@ -113,7 +113,7 @@
       }
     },
 
-    "clusterAdmin":   { "type": "boolean", "default": true, "description": "Grant workshop sessions cluster-admin access. Enabled by default for the local environment so workshops that manage cluster-scoped resources work out of the box." },
+    "clusterAdmin":   { "type": "boolean", "default": false, "description": "Bind the session manager's service account to the cluster-admin ClusterRole, an escape hatch for workshops whose objects need permissions beyond those the session manager holds. Off by default, so workshops run with the same permissions as on any other Educates install." },
     "lookupService":  { "type": "boolean", "default": true, "description": "Deploy the lookup service used for service discovery across training portals. Enabled by default." },
     "imagePrePuller": {
       "type": "object",

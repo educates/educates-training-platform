@@ -149,6 +149,40 @@ imagePrePuller:
 	}
 }
 
+func TestTranslate_ClusterAdmin_ReachesSessionManager(t *testing.T) {
+	cases := []struct {
+		name  string
+		extra string
+		want  interface{}
+	}{
+		{"unset", "", false},
+		{"true", "\nclusterAdmin: true\n", true},
+		{"false", "\nclusterAdmin: false\n", false},
+	}
+	for _, fixture := range []string{"local-empty.yaml", "gke-minimal.yaml", "eks-minimal.yaml", "inline-minimal.yaml"} {
+		base, err := os.ReadFile(filepath.Join("..", "testdata", fixture))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range cases {
+			t.Run(fixture+"/"+tc.name, func(t *testing.T) {
+				cfg, err := config.LoadBytes(append(append([]byte{}, base...), tc.extra...), fixture)
+				if err != nil {
+					t.Fatalf("LoadBytes: %v", err)
+				}
+				out, err := Translate(cfg, testOpts())
+				if err != nil {
+					t.Fatalf("Translate: %v", err)
+				}
+				sm := out.SessionManager["spec"].(map[string]interface{})
+				if got := sm["clusterAdmin"]; got != tc.want {
+					t.Errorf("clusterAdmin = %#v, want %#v", got, tc.want)
+				}
+			})
+		}
+	}
+}
+
 // TestTranslateLocal_AllLockedInvariants is the regression backstop for
 // the translator invariants. Every row here corresponds to a single
 // bullet in the "Translator invariants" applied by TranslateLocal. A row

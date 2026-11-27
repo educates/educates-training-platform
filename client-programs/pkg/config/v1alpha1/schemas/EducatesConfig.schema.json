@@ -1135,6 +1135,10 @@
           },
           "type": "array"
         },
+        "clusterAdmin": {
+          "description": "clusterAdmin binds the session manager's service account to the\nbuilt-in cluster-admin ClusterRole. It is an escape hatch for\nworkshops whose objects need permissions beyond what the\neducates:session-manager ClusterRole grants, together with the\nClusterRoles aggregated into it through the\nrbac.educates.dev/extends-workshop-permissions label: the session\nmanager can only create what it may create itself, and grant what\nit holds. Unset means false.",
+          "type": "boolean"
+        },
         "defaultAccessCredentials": {
           "description": "DefaultAccessCredentials configures the default\nusername/password used for workshop access when a TrainingPortal\ndoesn't override them.",
           "properties": {

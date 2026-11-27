@@ -2035,11 +2035,38 @@ Features Changed
   and ``educates admin platform delete --purge`` removes it. Nothing in
   Educates uses it any more: a workshop whose ``spec.environment.secrets``
   copies a secret from it on a local cluster finds nothing there on a new
-  one, and can name one of the cluster's image pull secrets in a package's
-  ``pullSecretRef`` directly, since they are copied into the workshop
-  namespace, or name the namespace that holds its secret. The operator no
-  longer watches ``educates-secrets`` unless the ``EducatesClusterConfig``
-  references a secret there when the operator starts.
+  one. Such a workshop can copy one of the cluster's image pull secrets from
+  the ``educates`` namespace instead, where the operator copies them, or name
+  the namespace that holds its secret. The operator no longer watches
+  ``educates-secrets`` unless the ``EducatesClusterConfig`` references a
+  secret there when the operator starts.
+
+* The operator logs at ``info`` by default, where it logged at ``debug``,
+  whether installed with the CLI or with Helm. ``operator.logLevel`` of a CLI
+  configuration, or the ``logLevel`` value of the ``educates-installer``
+  chart, sets it.
+
+* ``clusterAdmin`` of an ``EducatesLocalConfig`` defaults to ``false``, as in
+  the other configuration kinds, where a version 3 local cluster bound the
+  session manager to the ``cluster-admin`` ClusterRole by default. A local
+  cluster gives the session manager the permissions it has on any other
+  install, so a workshop that needs more fails on the laptop first; set
+  ``clusterAdmin: true`` for such a workshop. A configuration that sets
+  ``clusterAdmin: true``, such as one written by
+  ``educates local config init --defaults`` of an earlier release, now binds
+  the session manager to ``cluster-admin``; remove the line, or set it to
+  ``false``, to keep the session manager to the permissions Educates grants
+  it.
+
+* ``imageRegistry.pullSecrets`` replaces
+  ``secretPropagation.imagePullSecretNames`` in every CLI configuration kind,
+  and names the image pull secrets of an install for the operator pod as well
+  as for everything the operator installs. A configuration in the data home
+  that still has ``secretPropagation`` is moved over the first time a command
+  reads it, with the previous configuration kept as a backup beside it, and
+  any other configuration with it fails to load, saying what to change.
+  ``operator.imagePullSecrets`` stays, for a secret only the operator pulls
+  with.
 
 Removed Features
 ----------------
@@ -3132,12 +3159,11 @@ Bugs Fixed
 * ``operator.logLevel`` in a CLI configuration was written into the values of
   the ``educates-installer`` chart, which had no such value, so the operator
   always logged at ``debug``, whatever the configuration said, while the
-  platform components took the level. The chart now has a ``logLevel`` value,
-  ``info`` by default, which the operator takes as its new ``--log-level``
-  option, so ``operator.logLevel`` sets the log level of the operator as well
-  as of the components. An operator installed without a ``logLevel``, with
-  the CLI or with Helm, now logs at ``info`` instead of ``debug``. As with the
-  components, ``warn`` logs only errors.
+  platform components took the level from their resources. The chart now has
+  a ``logLevel`` value, ``info`` by default, which the operator takes as its
+  new ``--log-level`` option, so ``operator.logLevel`` sets the log level of
+  the operator as well as of the components. As with the components, ``warn``
+  logs only errors.
 
 * ``clusterAdmin`` in a CLI configuration of any kind was accepted, shown by
   ``educates local config view`` and documented, but no translation wrote it
@@ -3145,16 +3171,9 @@ Bugs Fixed
   session manager was never bound to the ``cluster-admin`` ClusterRole. The
   ``SessionManager`` resource now has ``spec.clusterAdmin``, which binds the
   session manager's service account to ``cluster-admin`` when ``true``, and
-  every configuration kind sets it from ``clusterAdmin``. An
-  ``EducatesLocalConfig`` now defaults ``clusterAdmin`` to ``false``, like the
-  other kinds, so a local cluster gives the session manager the permissions it
-  has on any other install, and a workshop that needs more fails on the laptop
-  first. A configuration that sets ``clusterAdmin: true``, such as one written
-  by ``educates local config init --defaults`` of an earlier release, now
-  binds the session manager to ``cluster-admin``; remove the line, or set it
-  to ``false``, to keep the session manager to the permissions Educates grants
-  it. The schemas described ``clusterAdmin`` as granting workshop sessions
-  cluster-admin access, and now say what it does.
+  every configuration kind sets it from ``clusterAdmin``. The schemas
+  described ``clusterAdmin`` as granting workshop sessions cluster-admin
+  access, and now say what it does.
 
 * ``secretPropagation.imagePullSecretNames`` in a CLI configuration of any kind
   was accepted and documented as making image pull secrets available to
@@ -3173,9 +3192,4 @@ Bugs Fixed
   other kinds they are secrets you create in the operator namespace, which
   ``educates admin platform deploy`` checks for before it installs anything,
   ``--diff`` reports, and ``educates admin platform render`` names in a
-  comment. ``imageRegistry.pullSecrets`` replaces
-  ``secretPropagation.imagePullSecretNames``: a configuration in the data
-  home that still has it is moved over, with the previous configuration kept
-  as a backup beside it, and any other configuration with it fails to load,
-  saying what to change. ``operator.imagePullSecrets`` stays, for a secret
-  only the operator pulls with.
+  comment.

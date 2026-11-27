@@ -36,3 +36,4 @@ Records
 * [0010 - Training portals are confined by admission policy, not by RBAC alone](0010-training-portals-are-confined-by-admission-policy.md)
 * [0011 - Educates server components are ported to Go one at a time](0011-server-components-are-ported-to-go-one-at-a-time.md)
 * [0012 - Local clusters are served through one shared router on one host address](0012-local-clusters-are-served-through-one-shared-router.md)
+* [0013 - Local cluster API servers are reached through the router by TLS server name](0013-local-cluster-api-servers-are-reached-through-the-router-by-tls-server-name.md)

@@ -13,7 +13,7 @@ import (
 // config — its presence is the deploy signal.
 func TranslateEscape(cfg *v1alpha1.EducatesConfig) *Output {
 	out := &Output{
-		OperatorChartValues:   operatorChartValuesFor(cfg.Operator),
+		OperatorChartValues:   operatorChartValuesFor(cfg.Operator, nil),
 		EducatesClusterConfig: wrapCR(apiVersionConfig, "EducatesClusterConfig", normaliseSpec(cfg.EducatesClusterConfig)),
 		SecretsManager:        wrapCR(apiVersionPlatform, "SecretsManager", normaliseSpec(cfg.SecretsManager)),
 		SessionManager:        wrapCR(apiVersionPlatform, "SessionManager", normaliseSpec(cfg.SessionManager)),

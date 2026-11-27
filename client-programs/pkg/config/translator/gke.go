@@ -13,8 +13,8 @@ import (
 // CASecret fields are not consumed (ACME does its own cert lifecycle).
 func TranslateGKE(cfg *v1alpha1.EducatesGKEConfig, _ Options) (*Output, error) {
 	out := &Output{
-		OperatorChartValues:   operatorChartValuesFor(cfg.Operator),
-		EducatesClusterConfig: wrapCR(apiVersionConfig, "EducatesClusterConfig", gkeECCSpec(cfg)),
+		OperatorChartValues:   operatorChartValuesFor(cfg.Operator, cfg.ImageRegistry.PullSecrets),
+		EducatesClusterConfig: wrapCR(apiVersionConfig, "EducatesClusterConfig", withImageRegistryPullSecrets(gkeECCSpec(cfg), cfg.ImageRegistry.PullSecrets)),
 		SecretsManager:        wrapCR(apiVersionPlatform, "SecretsManager", scenarioSecretsManagerSpec(cfg.Operator.LogLevel, cfg.ImageVersions)),
 		SessionManager:        wrapCR(apiVersionPlatform, "SessionManager", scenarioSessionManagerSpec(cfg.Operator.LogLevel, cfg.ClusterAdmin, cfg.WebsiteStyling, cfg.ImagePrePuller, cfg.ImageVersions)),
 	}

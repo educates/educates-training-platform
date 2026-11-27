@@ -86,6 +86,12 @@ type Options struct {
 	// the local certificate resolution plan's SyncSecretNames.
 	LocalSecretNames []string
 
+	// PullSecrets names the image pull Secrets the operator namespace must
+	// hold before anything is installed, as the config's
+	// imageRegistry.pullSecrets names them, for a config whose Secrets the
+	// deploy does not sync. The deploy checks each one first.
+	PullSecrets []string
+
 	// Record, when set, has the deploy recorded as a revision of the
 	// deploy history once it has applied the platform resources.
 	Record *RevisionInput
@@ -143,6 +149,19 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 		if note != "" {
 			opts.Progress.Note(note)
 		}
+	}
+
+	if len(opts.PullSecrets) > 0 {
+		step := opts.Progress.Start("checking image pull secrets in namespace " + OperatorNamespace)
+		cs, err := clientsetFor(opts.Getter)
+		if err == nil {
+			err = checkPullSecrets(cs, opts.PullSecrets)
+		}
+		if err != nil {
+			step.Fail(err)
+			return err
+		}
+		step.Done(fmt.Sprintf("%d present", len(opts.PullSecrets)))
 	}
 
 	chrt, err := chart.Load()

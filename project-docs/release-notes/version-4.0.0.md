@@ -1235,8 +1235,10 @@ Features Changed
   ``localDNSResolver`` to ``resolver``, and the kind cluster networking
   fields ``podCIDR`` and ``serviceCIDR`` to ``podSubnet`` and
   ``serviceSubnet``. The migration carries ``sessionManager.clusterAdmin``
-  over to ``clusterAdmin``, and a set ``lookupService.enabled`` over to
-  ``lookupService``. Its notice names
+  over to ``clusterAdmin``, a set ``lookupService.enabled`` over to
+  ``lookupService``, and the ``clusterSecrets.pullSecretRefs`` entries in
+  the ``educates-secrets`` namespace, secrets of the local secrets cache, over
+  to ``imageRegistry.pullSecrets``. Its notice names
   every setting it drops, each top-level setting it does not carry over and
   each setting dropped from a block it carries in part, and says where the
   setting's version 4 equivalent lives, often a field of an
@@ -3153,3 +3155,27 @@ Bugs Fixed
   to ``false``, to keep the session manager to the permissions Educates grants
   it. The schemas described ``clusterAdmin`` as granting workshop sessions
   cluster-admin access, and now say what it does.
+
+* ``secretPropagation.imagePullSecretNames`` in a CLI configuration of any kind
+  was accepted and documented as making image pull secrets available to
+  workshop sessions, but nothing read it, and a local cluster had no way to
+  pull from a registry that needs credentials, as version 3 laptops could
+  through ``clusterSecrets.pullSecretRefs``. Every configuration kind now takes
+  ``imageRegistry.pullSecrets``, as ``EducatesInlineConfig`` already did, and
+  names its secrets both in the operator chart's ``imagePullSecrets``, so the
+  operator pod pulls its own image with them, and in the
+  ``EducatesClusterConfig``, so everything the operator installs and every
+  workshop does. In an ``EducatesLocalConfig`` they are secrets of the local
+  secrets cache, cached with ``educates local secrets add docker-registry``,
+  which a deploy copies into the operator namespace, and a name that is not a
+  cached registry credential fails the deploy, the render and
+  ``educates local secrets sync`` before anything reaches the cluster. In the
+  other kinds they are secrets you create in the operator namespace, which
+  ``educates admin platform deploy`` checks for before it installs anything,
+  ``--diff`` reports, and ``educates admin platform render`` names in a
+  comment. ``imageRegistry.pullSecrets`` replaces
+  ``secretPropagation.imagePullSecretNames``: a configuration in the data
+  home that still has it is moved over, with the previous configuration kept
+  as a backup beside it, and any other configuration with it fails to load,
+  saying what to change. ``operator.imagePullSecrets`` stays, for a secret
+  only the operator pulls with.

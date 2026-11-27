@@ -30,18 +30,23 @@ func Load(path string) (v1alpha1.Config, error) {
 
 // ReadConfigFile reads the CLI config file at path. A config of a local
 // cluster in the data home that still declares registry mirrors or a
-// listen address in its cluster block has them moved first, once, with a
-// note on standard error: the registry mirrors to the registry mirrors
-// file (MoveClusterRegistryMirrors), and the default local cluster's
-// listen address to the router file (MoveClusterListenAddress). So every
-// command that reads such a config moves it. A failed read is an error
-// naming path and wrapping the cause, such as fs.ErrNotExist.
+// listen address in its cluster block, or secretPropagation, has them
+// moved first, once, with a note on standard error: the registry mirrors
+// to the registry mirrors file (MoveClusterRegistryMirrors), the default
+// local cluster's listen address to the router file
+// (MoveClusterListenAddress), and the names in secretPropagation to
+// imageRegistry.pullSecrets (MoveSecretPropagation). So every command that
+// reads such a config moves it. A failed read is an error naming path and
+// wrapping the cause, such as fs.ErrNotExist.
 func ReadConfigFile(path string) ([]byte, error) {
 	dataHome := utils.GetEducatesHomeDir()
 	if err := MoveClusterRegistryMirrors(dataHome, path, os.Stderr); err != nil {
 		return nil, err
 	}
 	if err := MoveClusterListenAddress(dataHome, path, os.Stderr); err != nil {
+		return nil, err
+	}
+	if err := MoveSecretPropagation(dataHome, path, os.Stderr); err != nil {
 		return nil, err
 	}
 	data, err := os.ReadFile(path)
@@ -119,9 +124,10 @@ func LoadBytesWithoutDefaults(data []byte, source string) (v1alpha1.Config, erro
 
 // CheckNoRemovedFields returns an error saying where a removed field's
 // setting went when raw, the top level of a config of kind kind, still
-// declares one: the resolver's targetAddress, or the registry mirrors or
-// the listen address of its cluster block. Loading a config checks it
-// before the schema's generic error, and so can a command that edits one.
+// declares one: the resolver's targetAddress, the registry mirrors or the
+// listen address of its cluster block, or, in a narrow kind,
+// secretPropagation. Loading a config checks it before the schema's
+// generic error, and so can a command that edits one.
 func CheckNoRemovedFields(raw map[string]interface{}, kind string) error {
 	if err := checkNoResolverTargetAddress(raw, kind); err != nil {
 		return err
@@ -129,7 +135,13 @@ func CheckNoRemovedFields(raw map[string]interface{}, kind string) error {
 	if err := checkNoClusterRegistryMirrors(raw, kind); err != nil {
 		return err
 	}
-	return checkNoClusterListenAddress(raw, kind)
+	if err := checkNoClusterListenAddress(raw, kind); err != nil {
+		return err
+	}
+	if kind == v1alpha1.KindEducatesConfig {
+		return nil
+	}
+	return checkNoSecretPropagation(raw)
 }
 
 // checkNoResolverTargetAddress returns an error saying what replaces

@@ -180,7 +180,7 @@ func TestLoad_FullGKEConfig_RoundTripsAllFields(t *testing.T) {
 	if got, want := gke.WebsiteStyling.ThemeDataRefs[0].Namespace, "educates"; got != want {
 		t.Errorf("ThemeDataRefs[0].Namespace = %q, want %q", got, want)
 	}
-	if got, want := len(gke.SecretPropagation.ImagePullSecretNames), 1; got != want {
+	if got, want := len(gke.ImageRegistry.PullSecrets), 1; got != want {
 		t.Errorf("ImagePullSecretNames len = %d, want %d", got, want)
 	}
 	if got, want := len(gke.ImageVersions), 1; got != want {
@@ -249,7 +249,7 @@ func TestLoad_FullEKSConfig_RoundTripsAllFields(t *testing.T) {
 	if got, want := eks.WebsiteStyling.DefaultTheme, "my-theme-data"; got != want {
 		t.Errorf("WebsiteStyling.DefaultTheme = %q, want %q", got, want)
 	}
-	if got, want := len(eks.SecretPropagation.ImagePullSecretNames), 1; got != want {
+	if got, want := len(eks.ImageRegistry.PullSecrets), 1; got != want {
 		t.Errorf("ImagePullSecretNames len = %d, want %d", got, want)
 	}
 	if got, want := len(eks.ImageVersions), 1; got != want {
@@ -291,7 +291,7 @@ func TestLoad_FullInlineConfig_RoundTripsAllFields(t *testing.T) {
 	if got, want := inline.ImageRegistry.Prefix, "registry.internal.example.com/educates"; got != want {
 		t.Errorf("ImageRegistry.Prefix = %q, want %q", got, want)
 	}
-	if got, want := len(inline.ImageRegistry.PullSecrets), 1; got != want {
+	if got, want := len(inline.ImageRegistry.PullSecrets), 2; got != want {
 		t.Errorf("ImageRegistry.PullSecrets len = %d, want %d", got, want)
 	}
 	// Explicit engines must override the Kyverno/Kyverno defaults.
@@ -316,9 +316,6 @@ func TestLoad_FullInlineConfig_RoundTripsAllFields(t *testing.T) {
 	})
 	if got, want := inline.WebsiteStyling.DefaultTheme, "my-theme-data"; got != want {
 		t.Errorf("WebsiteStyling.DefaultTheme = %q, want %q", got, want)
-	}
-	if got, want := len(inline.SecretPropagation.ImagePullSecretNames), 1; got != want {
-		t.Errorf("ImagePullSecretNames len = %d, want %d", got, want)
 	}
 	if got, want := len(inline.ImageVersions), 1; got != want {
 		t.Errorf("ImageVersions len = %d, want %d", got, want)

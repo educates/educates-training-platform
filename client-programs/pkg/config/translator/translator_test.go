@@ -183,6 +183,80 @@ func TestTranslate_ClusterAdmin_ReachesSessionManager(t *testing.T) {
 	}
 }
 
+// TestTranslate_ImageRegistryPullSecrets_ReachBothPlaces checks that every
+// narrow kind names its image registry pull Secrets both in the
+// EducatesClusterConfig, for everything the operator installs, and in the
+// operator chart's imagePullSecrets, for the operator pod itself, after
+// the names operator.imagePullSecrets gives and without repeating one.
+func TestTranslate_ImageRegistryPullSecrets_ReachBothPlaces(t *testing.T) {
+	extra := "\nimageRegistry:\n  pullSecrets: [mirror, shared]\noperator:\n  imagePullSecrets: [shared, operator-only]\n"
+	wantECC := []interface{}{
+		map[string]interface{}{"name": "mirror"},
+		map[string]interface{}{"name": "shared"},
+	}
+	wantOperator := []interface{}{
+		map[string]interface{}{"name": "shared"},
+		map[string]interface{}{"name": "operator-only"},
+		map[string]interface{}{"name": "mirror"},
+	}
+	for _, c := range []struct {
+		fixture string
+		path    []string // the ECC spec path to imageRegistry
+	}{
+		{"local-empty.yaml", []string{"imageRegistry"}},
+		{"gke-minimal.yaml", []string{"imageRegistry"}},
+		{"eks-minimal.yaml", []string{"imageRegistry"}},
+		{"inline-minimal.yaml", []string{"inline", "imageRegistry"}},
+	} {
+		t.Run(c.fixture, func(t *testing.T) {
+			base, err := os.ReadFile(filepath.Join("..", "testdata", c.fixture))
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.LoadBytes(append(base, extra...), c.fixture)
+			if err != nil {
+				t.Fatalf("LoadBytes: %v", err)
+			}
+			out, err := Translate(cfg, testOpts())
+			if err != nil {
+				t.Fatalf("Translate: %v", err)
+			}
+			var registry interface{} = out.EducatesClusterConfig["spec"]
+			for _, key := range c.path {
+				m, _ := registry.(map[string]interface{})
+				registry = m[key]
+			}
+			m, _ := registry.(map[string]interface{})
+			if got := m["pullSecrets"]; !reflect.DeepEqual(got, wantECC) {
+				t.Errorf("EducatesClusterConfig %s.pullSecrets = %#v, want %#v", strings.Join(c.path, "."), got, wantECC)
+			}
+			if got := out.OperatorChartValues["imagePullSecrets"]; !reflect.DeepEqual(got, wantOperator) {
+				t.Errorf("operator imagePullSecrets = %#v, want %#v", got, wantOperator)
+			}
+		})
+	}
+}
+
+// TestTranslate_NoImageRegistryPullSecrets_LeavesBothPlacesUnset checks
+// that a config without pull Secrets sets none in either place.
+func TestTranslate_NoImageRegistryPullSecrets_LeavesBothPlacesUnset(t *testing.T) {
+	for _, fixture := range []string{"local-empty.yaml", "gke-minimal.yaml", "eks-minimal.yaml"} {
+		t.Run(fixture, func(t *testing.T) {
+			out, err := Translate(loadCfg(t, fixture), testOpts())
+			if err != nil {
+				t.Fatalf("Translate: %v", err)
+			}
+			spec := out.EducatesClusterConfig["spec"].(map[string]interface{})
+			if registry, set := spec["imageRegistry"]; set {
+				t.Errorf("EducatesClusterConfig imageRegistry = %#v, want none", registry)
+			}
+			if secrets, set := out.OperatorChartValues["imagePullSecrets"]; set {
+				t.Errorf("operator imagePullSecrets = %#v, want none", secrets)
+			}
+		})
+	}
+}
+
 // TestTranslateLocal_AllLockedInvariants is the regression backstop for
 // the translator invariants. Every row here corresponds to a single
 // bullet in the "Translator invariants" applied by TranslateLocal. A row
@@ -530,12 +604,15 @@ func TestTranslateLocal_FullConfig_OperatorChartValues(t *testing.T) {
 		t.Errorf("image.tag = %v, want %v", got, want)
 	}
 
+	// operator.imagePullSecrets, then imageRegistry.pullSecrets.
 	secrets := values["imagePullSecrets"].([]interface{})
-	if len(secrets) != 1 {
-		t.Fatalf("imagePullSecrets len = %d, want 1", len(secrets))
+	if len(secrets) != 2 {
+		t.Fatalf("imagePullSecrets len = %d, want 2", len(secrets))
 	}
-	if got, want := secrets[0].(map[string]interface{})["name"], "operator-pull-secret"; got != want {
-		t.Errorf("imagePullSecrets[0].name = %v, want %v (k8s [{name:}] shape)", got, want)
+	for i, want := range []string{"operator-pull-secret", "my-pull-secret"} {
+		if got := secrets[i].(map[string]interface{})["name"]; got != want {
+			t.Errorf("imagePullSecrets[%d].name = %v, want %v (k8s [{name:}] shape)", i, got, want)
+		}
 	}
 
 	if got, want := values["logLevel"], "debug"; got != want {

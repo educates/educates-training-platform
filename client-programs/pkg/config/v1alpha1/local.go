@@ -12,16 +12,16 @@ import "regexp"
 type EducatesLocalConfig struct {
 	TypeMeta `yaml:",inline"`
 
-	Cluster           LocalClusterConfig           `yaml:"cluster,omitempty"`
-	Resolver          LocalResolverConfig          `yaml:"resolver,omitempty"`
-	Ingress           LocalIngressConfig           `yaml:"ingress,omitempty"`
-	ClusterAdmin      *bool                        `yaml:"clusterAdmin,omitempty"`
-	LookupService     *bool                        `yaml:"lookupService,omitempty"`
-	ImagePrePuller    ImagePrePullerConfig         `yaml:"imagePrePuller,omitempty"`
-	WebsiteStyling    LocalWebsiteStylingConfig    `yaml:"websiteStyling,omitempty"`
-	SecretPropagation LocalSecretPropagationConfig `yaml:"secretPropagation,omitempty"`
-	ImageVersions     []ImageVersion               `yaml:"imageVersions,omitempty"`
-	Operator          LocalOperatorConfig          `yaml:"operator,omitempty"`
+	Cluster        LocalClusterConfig        `yaml:"cluster,omitempty"`
+	Resolver       LocalResolverConfig       `yaml:"resolver,omitempty"`
+	Ingress        LocalIngressConfig        `yaml:"ingress,omitempty"`
+	ClusterAdmin   *bool                     `yaml:"clusterAdmin,omitempty"`
+	LookupService  *bool                     `yaml:"lookupService,omitempty"`
+	ImagePrePuller ImagePrePullerConfig      `yaml:"imagePrePuller,omitempty"`
+	WebsiteStyling LocalWebsiteStylingConfig `yaml:"websiteStyling,omitempty"`
+	ImageRegistry  LocalImageRegistryConfig  `yaml:"imageRegistry,omitempty"`
+	ImageVersions  []ImageVersion            `yaml:"imageVersions,omitempty"`
+	Operator       LocalOperatorConfig       `yaml:"operator,omitempty"`
 }
 
 type LocalClusterConfig struct {
@@ -112,8 +112,15 @@ type ThemeDataRef struct {
 	Name      string `yaml:"name"`
 }
 
-type LocalSecretPropagationConfig struct {
-	ImagePullSecretNames []string `yaml:"imagePullSecretNames,omitempty"`
+// LocalImageRegistryConfig names the image pull Secrets of an install,
+// shared by the EducatesLocalConfig, EducatesGKEConfig and
+// EducatesEKSConfig kinds. The translators name them both on the
+// operator chart, for the operator pod, and in the EducatesClusterConfig,
+// for everything the operator installs. They are Secrets in the operator
+// namespace: for an EducatesLocalConfig, Secrets of the local secrets
+// cache, which a deploy syncs there.
+type LocalImageRegistryConfig struct {
+	PullSecrets []string `yaml:"pullSecrets,omitempty"`
 }
 
 type ImageVersion struct {

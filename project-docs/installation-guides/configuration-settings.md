@@ -55,7 +55,7 @@ Key fields (all optional: an `apiVersion` + `kind` stub, which `educates local c
   ``EducatesGKEConfig``, ``EducatesEKSConfig`` and ``EducatesInlineConfig``
   kinds, which take the same block. See
   [pre-pulling workshop images](pre-pulling-workshop-images).
-* `secretPropagation.imagePullSecretNames` — locally cached pull secrets to propagate into the cluster.
+* `imageRegistry.pullSecrets`: image pull secrets for registries that need credentials, such as one holding private workshop images or a mirror of the platform images. Each is a secret of the local secrets cache, cached with `educates local secrets add docker-registry <name>`, which a deploy copies into the operator namespace, `educates-installer`. The operator pod pulls its own image with them, the operator passes them on to every pod it installs, and the session manager passes them on to the training portal, workshop environment and workshop session namespaces, where workshop users can read them. A name that is not a cached registry credential fails the deploy before anything reaches the cluster. This replaces `secretPropagation.imagePullSecretNames`: a configuration in the data home that still has it is moved to `imageRegistry.pullSecrets` the first time a command reads it, keeping the previous configuration as a backup beside it, and a configuration elsewhere with it fails to load, saying what to change.
 * `imageVersions` — per-image reference overrides.
 * `operator.image.*`, `operator.imagePullSecrets`: operator deployment settings. Image repository and tag default from the CLI binary's own version, so they normally stay unset.
 * `operator.logLevel`: the log level of the operator and of the platform components, `debug`, `info`, `warn` or `error`, `info` by default. The operator takes it from the `logLevel` value of the `educates-installer` chart, and each component from the `spec.logLevel` of its resource. Since the components and the operator log through logr, which has no warning level, `warn` logs only errors.
@@ -85,8 +85,13 @@ acme:
 too: the ``lookupService`` and ``clusterAdmin`` component toggles, the
 ``imagePrePuller`` block, which turns the image pre-puller on by default (see
 [pre-pulling workshop images](pre-pulling-workshop-images)),
-``websiteStyling``, ``secretPropagation``, ``imageVersions`` and the
-``operator`` block. When TLS for the ingress domain is terminated outside the
+``websiteStyling``, ``imageRegistry.pullSecrets``, ``imageVersions`` and the
+``operator`` block. Here ``imageRegistry.pullSecrets`` names
+``kubernetes.io/dockerconfigjson`` secrets you create in the operator
+namespace, ``educates-installer``, before deploying:
+``educates admin platform deploy`` checks that each one is there before it
+installs anything, and ``educates admin platform render`` names them in a
+comment above its output. When TLS for the ingress domain is terminated outside the
 cluster, by a cloud load balancer or a proxy forwarding plain HTTP inward, set
 ``externalTLSTermination: true`` so generated portal and workshop URLs use
 ``https``, as [secure HTTP connections](secure-http-connections) explains. The
@@ -139,17 +144,21 @@ policyEnforcement:
   workshopEngine: Kyverno                      # Kyverno | None
 imageRegistry:
   prefix: registry.internal/educates           # optional mirror prefix
+  pullSecrets:                                 # optional, kubernetes.io/dockerconfigjson Secrets
+    - registry-credentials                     # in the operator namespace
 externalTLSTermination: false                  # true when a proxy/LB terminates TLS in front of the cluster
 ```
 
-`domain`, `ingressClassName` and `wildcardCertificateSecret` are required. The referenced Secrets must exist in the operator's namespace before deployment. Educates components never receive the `caCertificateSecret` itself, only a copy of its `ca.crt`. To keep the Secrets in another namespace, use the `EducatesConfig` escape hatch, whose `inline.ingress.wildcardCertificateSecretRef` and `inline.ingress.caCertificateSecretRef` take an optional `namespace`. See [secure HTTP connections](secure-http-connections) for the certificate options across all scenarios.
+`domain`, `ingressClassName` and `wildcardCertificateSecret` are required. The referenced Secrets must exist in the operator's namespace before deployment, the image pull secrets of `imageRegistry.pullSecrets` included, which the operator pod pulls its own image with too, as for the GKE kind. Educates components never receive the `caCertificateSecret` itself, only a copy of its `ca.crt`. To keep the Secrets in another namespace, use the `EducatesConfig` escape hatch, whose `inline.ingress.wildcardCertificateSecretRef` and `inline.ingress.caCertificateSecretRef` take an optional `namespace`. See [secure HTTP connections](secure-http-connections) for the certificate options across all scenarios.
 
 As with the GKE kind, the settings of ``EducatesLocalConfig`` that are not
 about the local cluster are available here too: the ``lookupService`` and
 ``clusterAdmin`` component toggles, the ``imagePrePuller`` block, which turns
 the image pre-puller on by default (see [pre-pulling workshop
 images](pre-pulling-workshop-images)), ``websiteStyling``,
-``secretPropagation``, ``imageVersions`` and the ``operator`` block.
+``imageRegistry.pullSecrets``, ``imageVersions`` and the ``operator`` block,
+with ``imageRegistry.pullSecrets`` naming secrets you create in the operator
+namespace as for the GKE kind.
 
 Note that with `workshopEngine: None` there is no workshop-level security policy enforcement. See the [cluster requirements](cluster-requirements) discussion before serving untrusted users. When either engine is `Kyverno`, the operator checks that the Kyverno you installed serves the policy kinds Educates creates, and the installation does not become ready until it does.
 

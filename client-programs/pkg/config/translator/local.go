@@ -51,8 +51,8 @@ func TranslateLocal(cfg *v1alpha1.EducatesLocalConfig, opts Options) (*Output, e
 			opts.LocalCertificates.Provider)
 	}
 	out := &Output{
-		OperatorChartValues:   operatorChartValuesFor(cfg.Operator),
-		EducatesClusterConfig: wrapCR(apiVersionConfig, "EducatesClusterConfig", localECCSpec(cfg, certificates)),
+		OperatorChartValues:   operatorChartValuesFor(cfg.Operator, cfg.ImageRegistry.PullSecrets),
+		EducatesClusterConfig: wrapCR(apiVersionConfig, "EducatesClusterConfig", withImageRegistryPullSecrets(localECCSpec(cfg, certificates), cfg.ImageRegistry.PullSecrets)),
 		SecretsManager:        wrapCR(apiVersionPlatform, "SecretsManager", localSecretsManagerSpec(cfg)),
 		SessionManager:        wrapCR(apiVersionPlatform, "SessionManager", localSessionManagerSpec(cfg)),
 	}

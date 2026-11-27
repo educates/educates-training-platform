@@ -171,14 +171,19 @@ Secret holding its credentials in the operator namespace, `educates-installer`
 by default, and use it in two places:
 
 * **The operator chart's `imagePullSecrets`**, so that the operator pod can
-  pull its own image. From the CLI, set `operator.imagePullSecrets` in the
-  configuration file.
+  pull its own image.
 * **The image pull secrets of `EducatesClusterConfig`**,
   `spec.imageRegistry.pullSecrets` in Managed mode and
   `spec.inline.imageRegistry.pullSecrets` in Inline mode, so that everything
-  the operator installs can pull from the mirror. From the CLI, set them in
-  the `educatesClusterConfig` block of an `EducatesConfig` configuration file,
-  or as `imageRegistry.pullSecrets` in `EducatesInlineConfig`.
+  the operator installs can pull from the mirror.
+
+From the CLI, `imageRegistry.pullSecrets` in an `EducatesGKEConfig`,
+`EducatesEKSConfig` or `EducatesInlineConfig` names the secret in both places,
+and `educates admin platform deploy` checks that it is in the operator
+namespace before it installs anything. In an `EducatesLocalConfig` it names a
+secret of the local secrets cache, which the deploy copies into the operator
+namespace. An `EducatesConfig` sets both places itself: `operator.imagePullSecrets`
+and the `educatesClusterConfig` block.
 
 A pod can use a pull secret only from its own namespace, so the operator
 copies each Secret listed in `pullSecrets`, under the same name, into every

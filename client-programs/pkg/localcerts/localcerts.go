@@ -91,6 +91,9 @@ func Resolve(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := checkPullSecrets(cfg); err != nil {
+		return nil, err
+	}
 	plan := &Plan{}
 	if cfg.Ingress.Insecure {
 		// Plain HTTP needs no CA.
@@ -178,7 +181,13 @@ func ResolveSync(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 		return nil, err
 	}
 	plan := &Plan{SyncSecretNames: syncSecretNames(names, "")}
-	if cfg == nil || cfg.Ingress.Domain == "" {
+	if cfg == nil {
+		return plan, nil
+	}
+	if err := checkPullSecrets(cfg); err != nil {
+		return nil, err
+	}
+	if cfg.Ingress.Domain == "" {
 		return plan, nil
 	}
 	resolved, err := Resolve(cfg)
@@ -207,6 +216,29 @@ ingress domain. Remove the root CAs you do not use with:
   educates local secrets remove NAME`, secrets.QuoteNames(roots))
 	}
 	return roots, nil
+}
+
+// checkPullSecrets checks that each image pull Secret cfg names in
+// imageRegistry.pullSecrets is a registry credential in the local secrets
+// cache, which a deploy syncs into the operator namespace with the rest of
+// the cache. The EducatesClusterConfig is not Ready until each one exists
+// there with that type, and the operator pod cannot pull without it, so a
+// name that fails is refused before anything reaches the cluster.
+func checkPullSecrets(cfg *v1alpha1.EducatesLocalConfig) error {
+	for _, name := range cfg.ImageRegistry.PullSecrets {
+		secret, err := secrets.LoadCachedSecret(name)
+		if err != nil {
+			return fmt.Errorf("imageRegistry.pullSecrets names %q, which is not a usable secret in the local "+
+				"secrets cache; cache the registry credentials with 'educates local secrets add docker-registry %s': %w",
+				name, name, err)
+		}
+		if secret.Type != apiv1.SecretTypeDockerConfigJson {
+			return fmt.Errorf("imageRegistry.pullSecrets names %q, a secret of type %q in the local secrets cache, "+
+				"where an image pull secret has type %q; cache the registry credentials with "+
+				"'educates local secrets add docker-registry'", name, secret.Type, apiv1.SecretTypeDockerConfigJson)
+		}
+	}
+	return nil
 }
 
 // tlsCertificate is a wildcard TLS certificate in the local secrets

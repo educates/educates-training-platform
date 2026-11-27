@@ -120,9 +120,10 @@ For local kind-cluster users, the v4 CLI migrates your configuration on first us
   with the schema modeline ``educates local config init`` writes, carrying over
   the ingress domain, kind cluster settings (API server, subnets, volume
   mounts), the local DNS resolver's extra domains, image version overrides,
-  image pre-puller settings, website styling references, image pull secret
-  propagation, the session manager's ``clusterAdmin`` switch, and the lookup
-  service switch;
+  image pre-puller settings, website styling references, the image pull
+  secrets of ``clusterSecrets.pullSecretRefs`` that version 3 synced from the
+  local secrets cache, the session manager's ``clusterAdmin`` switch, and the
+  lookup service switch;
 * writes the router address, from ``localKindCluster.listenAddress``, to
   ``router.yaml`` (``EducatesLocalRouter``) beside it, unless that file
   already exists;
@@ -156,6 +157,14 @@ bound the session manager to ``cluster-admin`` by default, and a local cluster
 does not, so a version 3 file that does not set it gets a session manager
 with only the permissions Educates grants it. Set ``clusterAdmin: true`` for a
 workshop whose objects need more.
+
+Each ``clusterSecrets.pullSecretRefs`` entry in the ``educates-secrets``
+namespace, where version 3 copied the local secrets cache, names a secret of
+the cache, which version 4 keeps, and is carried over to
+``imageRegistry.pullSecrets``. Version 4 copies the cache into the operator
+namespace, ``educates-installer``, instead, and pulls the operator's own
+image with these secrets too. An entry in any other namespace is named in the
+notice as dropped, with the command that caches the credentials.
 ``lookupService.enabled`` is carried over to ``lookupService`` when the version
 3 file sets it. Version 3 left the lookup service off by default, and a local
 cluster runs it by default, so a version 3 file that does not set it gets the

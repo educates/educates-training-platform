@@ -37,8 +37,8 @@ websiteStyling:
     - namespace: educates
       name: my-theme-data
 
-secretPropagation:
-  imagePullSecretNames:
+imageRegistry:
+  pullSecrets:
     - my-pull-secret
 
 imageVersions:

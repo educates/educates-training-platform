@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1235,4 +1236,56 @@ func keys(m map[string]string) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// pullSecretConfig is an insecure local config, which needs no CA, naming
+// pull Secrets in imageRegistry.pullSecrets.
+func pullSecretConfig(pullSecrets ...string) *v1alpha1.EducatesLocalConfig {
+	cfg := localConfig("workshop.test", true)
+	cfg.ImageRegistry.PullSecrets = pullSecrets
+	return cfg
+}
+
+func TestResolve_PullSecrets_CachedRegistryCredentialsAreSynced(t *testing.T) {
+	withDataHome(t)
+	writeCached(t, secrets.NewDockerRegistrySecret("mirror", "registry.example.com", "user", "pass", ""))
+
+	for name, resolve := range map[string]func(*v1alpha1.EducatesLocalConfig) (*localcerts.Plan, error){
+		"Resolve": localcerts.Resolve, "ResolveSync": localcerts.ResolveSync,
+	} {
+		plan, err := resolve(pullSecretConfig("mirror"))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !slices.Contains(plan.SyncSecretNames, "mirror") {
+			t.Errorf("%s syncs %v, want mirror among them", name, plan.SyncSecretNames)
+		}
+	}
+}
+
+func TestResolve_PullSecrets_RefusesOneThatIsNotACachedRegistryCredential(t *testing.T) {
+	withDataHome(t)
+	writeCached(t, secrets.NewCATrustSecret("not-a-registry-credential", testpki.NewRootCA().CertPEM))
+
+	for _, c := range []struct {
+		name string
+		says []string
+	}{
+		{"missing", []string{`"missing"`, "educates local secrets add docker-registry"}},
+		{"not-a-registry-credential", []string{`"not-a-registry-credential"`, "kubernetes.io/dockerconfigjson"}},
+	} {
+		for name, resolve := range map[string]func(*v1alpha1.EducatesLocalConfig) (*localcerts.Plan, error){
+			"Resolve": localcerts.Resolve, "ResolveSync": localcerts.ResolveSync,
+		} {
+			_, err := resolve(pullSecretConfig(c.name))
+			if err == nil {
+				t.Fatalf("%s accepted pull secret %q", name, c.name)
+			}
+			for _, want := range c.says {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("%s error %q does not mention %s", name, err, want)
+				}
+			}
+		}
+	}
 }

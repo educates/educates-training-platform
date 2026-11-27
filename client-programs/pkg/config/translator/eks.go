@@ -10,8 +10,8 @@ import (
 // BundledExternalDNS with Route53, BundledKyverno.
 func TranslateEKS(cfg *v1alpha1.EducatesEKSConfig, _ Options) (*Output, error) {
 	out := &Output{
-		OperatorChartValues:   operatorChartValuesFor(cfg.Operator),
-		EducatesClusterConfig: wrapCR(apiVersionConfig, "EducatesClusterConfig", eksECCSpec(cfg)),
+		OperatorChartValues:   operatorChartValuesFor(cfg.Operator, cfg.ImageRegistry.PullSecrets),
+		EducatesClusterConfig: wrapCR(apiVersionConfig, "EducatesClusterConfig", withImageRegistryPullSecrets(eksECCSpec(cfg), cfg.ImageRegistry.PullSecrets)),
 		SecretsManager:        wrapCR(apiVersionPlatform, "SecretsManager", scenarioSecretsManagerSpec(cfg.Operator.LogLevel, cfg.ImageVersions)),
 		SessionManager:        wrapCR(apiVersionPlatform, "SessionManager", scenarioSessionManagerSpec(cfg.Operator.LogLevel, cfg.ClusterAdmin, cfg.WebsiteStyling, cfg.ImagePrePuller, cfg.ImageVersions)),
 	}

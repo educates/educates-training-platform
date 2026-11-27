@@ -29,7 +29,7 @@ func TranslateInline(cfg *v1alpha1.EducatesInlineConfig, _ Options) (*Output, er
 }
 
 func inlineOperatorChartValues(cfg *v1alpha1.EducatesInlineConfig) map[string]interface{} {
-	return operatorChartValuesFor(cfg.Operator)
+	return operatorChartValuesFor(cfg.Operator, cfg.ImageRegistry.PullSecrets)
 }
 
 // inlineECCSpec builds the mode: Inline ECC.spec. The CRD's CEL rule
@@ -69,11 +69,7 @@ func inlineECCSpec(cfg *v1alpha1.EducatesInlineConfig) map[string]interface{} {
 			ir["prefix"] = cfg.ImageRegistry.Prefix
 		}
 		if len(cfg.ImageRegistry.PullSecrets) > 0 {
-			refs := make([]interface{}, len(cfg.ImageRegistry.PullSecrets))
-			for i, n := range cfg.ImageRegistry.PullSecrets {
-				refs[i] = map[string]interface{}{"name": n}
-			}
-			ir["pullSecrets"] = refs
+			ir["pullSecrets"] = secretNameRefs(cfg.ImageRegistry.PullSecrets)
 		}
 		inline["imageRegistry"] = ir
 	}
@@ -132,8 +128,11 @@ func inlineSessionManagerSpec(cfg *v1alpha1.EducatesInlineConfig) map[string]int
 }
 
 // operatorChartValuesFor is the shared operator chart values builder.
-// Inline + Local both call it; GKE/EKS will too in 11b/11c.
-func operatorChartValuesFor(op v1alpha1.LocalOperatorConfig) map[string]interface{} {
+// pullSecrets are the config's image registry pull Secrets, which the
+// operator pod pulls its own image with too: they join the chart's
+// imagePullSecrets after operator.imagePullSecrets, without repeating a
+// name.
+func operatorChartValuesFor(op v1alpha1.LocalOperatorConfig, pullSecrets []string) map[string]interface{} {
 	values := map[string]interface{}{}
 	if op.Image.Repository != "" || op.Image.Tag != "" || op.Image.PullPolicy != "" {
 		image := map[string]interface{}{}
@@ -148,12 +147,8 @@ func operatorChartValuesFor(op v1alpha1.LocalOperatorConfig) map[string]interfac
 		}
 		values["image"] = image
 	}
-	if len(op.ImagePullSecrets) > 0 {
-		secrets := make([]interface{}, len(op.ImagePullSecrets))
-		for i, name := range op.ImagePullSecrets {
-			secrets[i] = map[string]interface{}{"name": name}
-		}
-		values["imagePullSecrets"] = secrets
+	if names := mergeNames(op.ImagePullSecrets, pullSecrets); len(names) > 0 {
+		values["imagePullSecrets"] = secretNameRefs(names)
 	}
 	if op.LogLevel != "" {
 		values["logLevel"] = op.LogLevel

@@ -62,8 +62,8 @@ after the change. The write only happens when validation passes, so
 type / enum errors are caught up front with the offending field path. The
 config must also keep following the rules of a local cluster's config,
 such as a cluster.nodes list, when declared, with exactly one
-control-plane node, and a cluster.listenAddress that is a specific IP
-address of the host: a config without one takes
+control-plane node, which declares no taints, and a cluster.listenAddress
+that is a specific IP address of the host: a config without one takes
 'educates local config set cluster.listenAddress <ip>' before any other
 change.
 

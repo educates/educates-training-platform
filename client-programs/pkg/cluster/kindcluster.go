@@ -1,11 +1,8 @@
 package cluster
 
 import (
-	"bytes"
 	"context"
-	_ "embed"
 	"fmt"
-	"html/template"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,9 +94,6 @@ func NewKindClusterConfig(kubeconfig string, id localclusters.Identity) *KindClu
 	return &KindClusterConfig{ClusterConfig{KindKubeconfigPath(kubeconfig), id.Context}, id, provider}
 }
 
-//go:embed kindclusterconfig.yaml.tpl
-var clusterConfigTemplateData string
-
 // ClusterExists reports whether the local cluster's kind cluster
 // currently exists. err is set only when the underlying list call
 // failed; the existence outcome itself is not an error: callers decide
@@ -128,18 +122,9 @@ func (o *KindClusterConfig) CreateCluster(input *KindBootstrapInput, image strin
 		return errors.Errorf("kind cluster %s already exists", o.Identity.KindName)
 	}
 
-	clusterConfigTemplate, err := template.New("kind-cluster-config").Parse(clusterConfigTemplateData)
-
+	kindConfig, err := RenderKindConfig(input)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse cluster config template")
-	}
-
-	var clusterConfigData bytes.Buffer
-
-	err = clusterConfigTemplate.Execute(&clusterConfigData, input)
-
-	if err != nil {
-		return errors.Wrap(err, "failed to generate cluster config")
+		return err
 	}
 
 	// Save the cluster config to a file
@@ -152,7 +137,7 @@ func (o *KindClusterConfig) CreateCluster(input *KindBootstrapInput, image strin
 		return errors.Wrapf(err, "unable to create config directory")
 	}
 
-	err = os.WriteFile(kindConfigPath, clusterConfigData.Bytes(), 0644)
+	err = os.WriteFile(kindConfigPath, kindConfig, 0644)
 	if err != nil {
 		return errors.Wrap(err, "failed to write cluster config to file")
 	}
@@ -170,7 +155,7 @@ func (o *KindClusterConfig) CreateCluster(input *KindBootstrapInput, image strin
 
 	if err := provider.Create(
 		o.Identity.KindName,
-		cluster.CreateWithRawConfig(clusterConfigData.Bytes()),
+		cluster.CreateWithRawConfig(kindConfig),
 		cluster.CreateWithNodeImage(image),
 		cluster.CreateWithWaitForReady(time.Duration(time.Duration(60)*time.Second)),
 		cluster.CreateWithKubeconfigPath(o.Config.Kubeconfig),

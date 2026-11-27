@@ -35,9 +35,11 @@ type LocalClusterConfig struct {
 
 // ClusterNode describes a node of the local kind cluster. Leaving
 // cluster.nodes empty keeps the default single-control-plane cluster; when
-// set, the list fully declares the cluster's nodes and must include a
-// control-plane. Labels become Kubernetes node labels; taints are
-// registered on the node at join time (worker nodes).
+// set, the list fully declares the cluster's nodes and must include
+// exactly one control-plane node. Labels become Kubernetes node labels;
+// taints are registered on a worker node when it joins the cluster. The
+// control-plane node can't have taints, since Envoy serves ports 80 and
+// 443 from it.
 type ClusterNode struct {
 	Role   string             `yaml:"role"`
 	Labels map[string]string  `yaml:"labels,omitempty"`

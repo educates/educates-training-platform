@@ -49,6 +49,10 @@ To monitor a remote cluster, the lookup service needs a kubeconfig file that pro
 
 The context of the kubeconfig the lookup service uses, as ``spec.credentials.kubeconfig.context`` of the ``ClusterConfig`` selects it, must authenticate with a bearer token, and its cluster must give the address of the API server and the CA certificate to verify it with, as ``certificate-authority-data``. A context whose user authenticates with an exec plugin, an authentication provider or a client certificate is not supported: the kubeconfig is refused, and the cluster is not connected. Only that context is checked, so the kubeconfig may hold other contexts, whatever they use. The kubeconfig generated as described below meets these requirements.
 
+When the certificate of the API server does not name the host in the cluster's ``server``, as when the lookup service reaches the API server through a gateway that routes several clusters by server name, or at an address or alias the certificate does not list, give a name the certificate does carry as the cluster's ``tls-server-name``. The lookup service sends that name as the TLS server name and verifies the certificate against it, as ``kubectl`` does. A ``tls-server-name`` which is not a string is refused.
+
+When the lookup service reaches the API server through a proxy, give the proxy as the cluster's ``proxy-url``, an ``http``, ``https`` or ``socks5`` URL with a host, which may hold the credentials of the proxy. The lookup service sends its requests to the API server through that proxy, in place of any proxy its environment names, as ``kubectl`` does. A ``proxy-url`` with another scheme or without a host, or one which is not a string, is refused.
+
 The service account used in the kubeconfig should have limited permissions. Specifically, it needs ``list`` and ``watch`` access to the following Educates resource types:
 
 * ``TrainingPortal``
@@ -82,6 +86,18 @@ The kubeconfig names the API server at the address of the Kubernetes context the
 
 ```
 educates admin lookup kubeconfig --context cluster-1 --server https://api.cluster-1.example.com:6443 --output kubeconfig-cluster-1.yaml
+```
+
+When the kubeconfig names the address of the Kubernetes context, it also gives the ``tls-server-name`` of the context, if the context has one. With the ``--server`` option, or for a local cluster, it gives none, since the certificate of the API server may name that address itself. When the certificate does not name the address in the kubeconfig, name a server name the certificate does carry with the ``--tls-server-name`` option, which sets it in every case:
+
+```
+educates admin lookup kubeconfig --context cluster-1 --server https://10.0.0.5:6443 --tls-server-name api.cluster-1.internal --output kubeconfig-cluster-1.yaml
+```
+
+The kubeconfig never gives the proxy the Kubernetes context reaches the API server through, since that proxy, such as a tunnel on the loopback address of your machine, is seldom one the lookup service reaches, and the command says so on its error output when it leaves the proxy out. When the lookup service reaches the API server through a proxy, name that proxy with the ``--proxy-url`` option, as an ``http``, ``https`` or ``socks5`` URL:
+
+```
+educates admin lookup kubeconfig --context cluster-1 --proxy-url http://proxy.example.com:3128 --output kubeconfig-cluster-1.yaml
 ```
 
 For a local cluster created with ``educates local cluster create``, whose context reaches the API server at a port on the loopback address of your machine, the kubeconfig names instead the address at which the pods of the other local clusters reach it: the control plane container of the cluster on Docker's ``kind`` network, ``https://educates-control-plane:6443`` for the default local cluster and ``https://educates-<name>-control-plane:6443`` for the local cluster ``<name>``. A lookup service on another local cluster can use the kubeconfig as it is:

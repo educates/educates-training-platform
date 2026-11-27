@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -39,6 +40,14 @@ type Cluster struct {
 	// CertificateAuthorityData is the base64 encoding of the PEM encoded
 	// CA certificates the server's certificate is verified against.
 	CertificateAuthorityData string `json:"certificate-authority-data"`
+	// TLSServerName is the name sent as the TLS server name and that the
+	// server's certificate is verified against, in place of the host of
+	// Server, as when the server is reached through a gateway that routes
+	// by server name or at an address its certificate does not name.
+	TLSServerName string `json:"tls-server-name,omitempty"`
+	// ProxyURL is the URL of the http, https or socks5 proxy the server is
+	// reached through, in place of the proxy the environment names.
+	ProxyURL string `json:"proxy-url,omitempty"`
 }
 
 // NamedContext is a kubeconfig's context entry.
@@ -86,8 +95,10 @@ type file struct {
 // Select reads a kubeconfig and returns it reduced to the context named
 // context, or to its current context when context is empty, or to its first
 // context when it names no current context. Only the selected context is
-// checked: its cluster must give a server and CA data, and its user a token
-// and no other way to authenticate. Every other entry is ignored.
+// checked, and every other entry is ignored. Its cluster must give a server
+// and CA data, and may give the server name to verify the server's
+// certificate against and the proxy to reach the server through. Its user
+// must give a token and no other way to authenticate.
 func Select(data []byte, context string) (*Config, error) {
 	var f file
 	if err := yaml.Unmarshal(data, &f); err != nil {
@@ -154,9 +165,53 @@ func selectCluster(f *file, name string) (*NamedCluster, error) {
 		if _, err := base64.StdEncoding.DecodeString(ca); err != nil {
 			return nil, fmt.Errorf("its cluster %q has certificate-authority-data that is not base64: %w", name, err)
 		}
-		return &NamedCluster{Name: name, Cluster: Cluster{Server: server, CertificateAuthorityData: ca}}, nil
+		serverName, err := optionalString(entry.Cluster, "tls-server-name")
+		if err != nil {
+			return nil, fmt.Errorf("its cluster %q %w", name, err)
+		}
+		proxyURL, err := optionalString(entry.Cluster, "proxy-url")
+		if err != nil {
+			return nil, fmt.Errorf("its cluster %q %w", name, err)
+		}
+		if proxyURL != "" {
+			if _, err := parseProxyURL(proxyURL); err != nil {
+				return nil, fmt.Errorf("its cluster %q %w", name, err)
+			}
+		}
+		return &NamedCluster{Name: name, Cluster: Cluster{
+			Server:                   server,
+			CertificateAuthorityData: ca,
+			TLSServerName:            serverName,
+			ProxyURL:                 proxyURL,
+		}}, nil
 	}
 	return nil, fmt.Errorf("the kubeconfig has no cluster %q", name)
+}
+
+// optionalString returns the string an entry gives under field, empty when
+// the entry does not give the field or gives it as null. The error, which
+// follows the entry's name, says why the field is refused.
+func optionalString(entry map[string]any, field string) (string, error) {
+	switch value := entry[field].(type) {
+	case nil:
+		return "", nil
+	case string:
+		return value, nil
+	default:
+		return "", fmt.Errorf("has a %s that is not a string", field)
+	}
+}
+
+// parseProxyURL parses a cluster's proxy-url, which must be an http, https
+// or socks5 URL, as kubectl requires, with a host. The error, which follows
+// the cluster's name, leaves the URL out, since it may hold the proxy's
+// credentials.
+func parseProxyURL(proxyURL string) (*url.URL, error) {
+	u, err := url.Parse(proxyURL)
+	if err != nil || u.Host == "" || u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5" {
+		return nil, errors.New("has a proxy-url that is not an http, https or socks5 URL with a host")
+	}
+	return u, nil
 }
 
 // refusedUserFields are the ways to authenticate, other than a token, that
@@ -211,15 +266,27 @@ func (c *Config) RESTConfig() (*rest.Config, error) {
 	if len(c.Clusters) != 1 || len(c.Users) != 1 {
 		return nil, errors.New("the kubeconfig must hold one cluster and one user")
 	}
-	ca, err := base64.StdEncoding.DecodeString(c.Clusters[0].Cluster.CertificateAuthorityData)
+	cluster := c.Clusters[0].Cluster
+	ca, err := base64.StdEncoding.DecodeString(cluster.CertificateAuthorityData)
 	if err != nil {
 		return nil, fmt.Errorf("decoding the certificate-authority-data: %w", err)
 	}
-	return &rest.Config{
-		Host:            c.Clusters[0].Cluster.Server,
-		BearerToken:     c.Users[0].User.Token,
-		TLSClientConfig: rest.TLSClientConfig{CAData: ca},
-	}, nil
+	config := &rest.Config{
+		Host:        cluster.Server,
+		BearerToken: c.Users[0].User.Token,
+		TLSClientConfig: rest.TLSClientConfig{
+			CAData:     ca,
+			ServerName: cluster.TLSServerName,
+		},
+	}
+	if cluster.ProxyURL != "" {
+		u, err := parseProxyURL(cluster.ProxyURL)
+		if err != nil {
+			return nil, fmt.Errorf("the cluster %w", err)
+		}
+		config.Proxy = http.ProxyURL(u)
+	}
+	return config, nil
 }
 
 // YAML returns the kubeconfig as a kubeconfig file.

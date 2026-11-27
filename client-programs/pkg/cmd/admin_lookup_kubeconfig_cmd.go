@@ -3,6 +3,8 @@ package cmd
 import (
 	"cmp"
 	"context"
+	"fmt"
+	"io"
 	"net/url"
 	"os"
 
@@ -11,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
@@ -33,6 +36,14 @@ var adminLookupKubeconfigExample = `
   # Name the address a lookup service on another cluster reaches the API
   # server at:
   educates admin lookup kubeconfig --context cluster-1 --server https://api.cluster-1.example.com:6443
+
+  # Name the API server at an address its certificate does not name, and
+  # the name the certificate is verified against:
+  educates admin lookup kubeconfig --context cluster-1 --server https://10.0.0.5:6443 --tls-server-name api.cluster-1.internal
+
+  # Name the proxy a lookup service on another cluster reaches the API
+  # server through:
+  educates admin lookup kubeconfig --context cluster-1 --proxy-url http://proxy.example.com:3128
 `
 
 const (
@@ -48,12 +59,16 @@ const (
 
 type LookupConfigOptions struct {
 	KubeconfigOptions
-	OutputPath string
-	Namespace  string
-	Server     string
+	OutputPath    string
+	Namespace     string
+	Server        string
+	TLSServerName string
+	ProxyURL      string
 }
 
-func (o *LookupConfigOptions) Run(ctx context.Context) error {
+// Run writes the kubeconfig, and then writes to stderr what the kubeconfig
+// leaves out of the kube context's way to the API server.
+func (o *LookupConfigOptions) Run(ctx context.Context, stderr io.Writer) error {
 	clusterConfig, err := cluster.NewClusterConfigIfAvailable(o.Kubeconfig, o.Context)
 	if err != nil {
 		return err
@@ -64,8 +79,8 @@ func (o *LookupConfigOptions) Run(ctx context.Context) error {
 		return err
 	}
 
-	server, err := lookupKubeconfigServer(o.Server, cmp.Or(o.Context, cluster.CurrentContext(o.Kubeconfig)),
-		restConfig.Host, utils.GetEducatesHomeDir())
+	kubeconfigCluster, note, err := o.kubeconfigCluster(cmp.Or(o.Context, cluster.CurrentContext(o.Kubeconfig)),
+		restConfig, utils.GetEducatesHomeDir())
 	if err != nil {
 		return err
 	}
@@ -80,16 +95,21 @@ func (o *LookupConfigOptions) Run(ctx context.Context) error {
 		return err
 	}
 
-	kubeconfig, err := remoteAccessKubeconfig(server, credentials)
+	kubeconfig, err := remoteAccessKubeconfig(kubeconfigCluster, credentials)
 	if err != nil {
 		return err
 	}
 
 	if o.OutputPath == "" {
 		_, err = os.Stdout.Write(kubeconfig)
-		return err
+	} else {
+		err = errors.Wrapf(writeOwnerOnlyFile(o.OutputPath, kubeconfig), "unable to write kubeconfig to %s",
+			o.OutputPath)
 	}
-	return errors.Wrapf(writeOwnerOnlyFile(o.OutputPath, kubeconfig), "unable to write kubeconfig to %s", o.OutputPath)
+	if err == nil && note != "" {
+		fmt.Fprintln(stderr, note)
+	}
+	return err
 }
 
 // writeOwnerOnlyFile writes data to the file path, which only its owner
@@ -139,6 +159,54 @@ func lookupKubeconfigServer(server, kubeContext, contextServer, dataHome string)
 	return contextServer, nil
 }
 
+// kubeconfigCluster returns the cluster entry of the kubeconfig, but for
+// its CA certificate, which the remote-access-token Secret holds, and a note
+// to print when the kubeconfig leaves out part of the way the kube context
+// kubeContext, whose client configuration is contextConfig, reaches the API
+// server.
+//
+// Its server is lookupKubeconfigServer's. Its tls-server-name is the one
+// --tls-server-name gives, and otherwise the kube context's when the
+// kubeconfig names the kube context's own server, without --server and for
+// a cluster that is no local cluster: the certificate of an address
+// --server gives, or of a local cluster on the kind network, may name that
+// address itself, and kubectl too drops the tls-server-name of a kube
+// context whose server --server overrides.
+//
+// Its proxy-url is the one --proxy-url gives, which must be an http, https
+// or socks5 URL with a host. The kube context's proxy is never copied, since
+// a lookup service seldom reaches the proxy of a kube context, often a
+// tunnel on the loopback address, and the note says it is left out.
+func (o *LookupConfigOptions) kubeconfigCluster(kubeContext string, contextConfig *rest.Config,
+	dataHome string) (*clientcmdapi.Cluster, string, error) {
+	server, err := lookupKubeconfigServer(o.Server, kubeContext, contextConfig.Host, dataHome)
+	if err != nil {
+		return nil, "", err
+	}
+	entry := &clientcmdapi.Cluster{Server: server, TLSServerName: o.TLSServerName}
+	if entry.TLSServerName == "" && o.Server == "" && server == contextConfig.Host {
+		entry.TLSServerName = contextConfig.ServerName
+	}
+
+	if o.ProxyURL != "" {
+		// The error leaves the URL out, since it may hold the proxy's
+		// credentials.
+		u, err := url.Parse(o.ProxyURL)
+		if err != nil || u.Host == "" || u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5" {
+			return nil, "", errors.New("invalid --proxy-url: the proxy is an http, https or socks5 URL with a " +
+				"host, such as http://proxy.example.com:3128")
+		}
+		entry.ProxyURL = o.ProxyURL
+	}
+	var note string
+	if o.ProxyURL == "" && contextConfig.Proxy != nil {
+		note = "Note: the kube context reaches the API server through a proxy, which the kubeconfig leaves out, " +
+			"since a lookup service seldom reaches the proxy of a kube context. If the lookup service reaches " +
+			"the API server through a proxy, name that proxy with --proxy-url."
+	}
+	return entry, note, nil
+}
+
 // remoteAccessCredentials is what the kubeconfig reaches a cluster with as
 // the remote-access service account.
 type remoteAccessCredentials struct {
@@ -179,13 +247,13 @@ func readRemoteAccessCredentials(ctx context.Context, client kubernetes.Interfac
 }
 
 // remoteAccessKubeconfig returns a kubeconfig that reaches the API server
-// at server as the remote-access service account, with credentials.
-func remoteAccessKubeconfig(server string, credentials remoteAccessCredentials) ([]byte, error) {
+// the way the cluster entry gives as the remote-access service account,
+// with credentials, whose CA certificate the entry gives.
+func remoteAccessKubeconfig(entry *clientcmdapi.Cluster, credentials remoteAccessCredentials) ([]byte, error) {
 	config := clientcmdapi.NewConfig()
-	config.Clusters["training-platform"] = &clientcmdapi.Cluster{
-		Server:                   server,
-		CertificateAuthorityData: credentials.CACertificate,
-	}
+	cluster := entry.DeepCopy()
+	cluster.CertificateAuthorityData = credentials.CACertificate
+	config.Clusters["training-platform"] = cluster
 	config.AuthInfos["remote-access"] = &clientcmdapi.AuthInfo{
 		Token: string(credentials.Token),
 	}
@@ -211,7 +279,7 @@ func (p *ProjectInfo) NewAdminLookupKubeconfigCmd() *cobra.Command {
 		Short:   "Fetch kubeconfig for lookup service remote access",
 		Example: adminLookupKubeconfigExample,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return o.Run(cmd.Context())
+			return o.Run(cmd.Context(), cmd.ErrOrStderr())
 		},
 	}
 
@@ -247,6 +315,20 @@ func (p *ProjectInfo) NewAdminLookupKubeconfigCmd() *cobra.Command {
 		"",
 		"API server address the kubeconfig names, an https URL; by default the address the pods of the other "+
 			"local clusters reach a local cluster at, and otherwise the server of the kube context",
+	)
+	c.Flags().StringVar(
+		&o.TLSServerName,
+		"tls-server-name",
+		"",
+		"name the API server's certificate is verified against in place of the host of the server; by default "+
+			"the kube context's, without --server and for a cluster that is no local cluster",
+	)
+	c.Flags().StringVar(
+		&o.ProxyURL,
+		"proxy-url",
+		"",
+		"http, https or socks5 proxy the lookup service reaches the API server through; the kube context's "+
+			"proxy is never copied",
 	)
 
 	return c

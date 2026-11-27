@@ -2856,6 +2856,19 @@ Bugs Fixed
   file ``--output`` writes is now readable by its owner only, since the
   kubeconfig holds the token.
 
+* ``educates admin lookup kubeconfig`` left out the ``tls-server-name`` of
+  the kube context it read the token through, so a kubeconfig for an API
+  server whose certificate does not name the address of the kube context,
+  as behind a gateway that routes several clusters by server name, failed
+  TLS verification. When the kubeconfig names the kube context's own
+  server, without ``--server``, it now gives the kube context's
+  ``tls-server-name``, and the new ``--tls-server-name`` option names it for
+  any server. The new
+  ``--proxy-url`` option names an ``http``, ``https`` or ``socks5`` proxy
+  the lookup service reaches the API server through. The proxy of the kube
+  context is never copied, since a lookup service seldom reaches it, and
+  the command says so when it leaves one out.
+
 * A workshop environment with a capacity of 0 no longer receives sessions.
   The lookup service treated a capacity of 0 as no limit, so it sent session
   requests to such a workshop environment, and preferred it to one which was
@@ -2912,6 +2925,28 @@ Bugs Fixed
   that cluster or training portal, so a request which needed it failed with
   HTTP 500. Such a label now matches as a label whose value is the empty
   string.
+
+* The lookup service ignored the ``tls-server-name`` of the cluster in a
+  ``ClusterConfig``'s kubeconfig, and verified the certificate of the API
+  server against the host of ``server`` instead. A kubeconfig which reaches
+  the API server at an address its certificate does not name, as through a
+  gateway that routes several clusters by server name, therefore failed TLS
+  verification, and nothing said the field was ignored. The lookup service
+  now sends ``tls-server-name`` as the TLS server name and verifies the
+  certificate against it, as ``kubectl`` does, and the kubeconfig the REST
+  API gives an admin for the cluster keeps it. A ``tls-server-name`` which
+  is not a string is refused: the cluster is not connected, and the lookup
+  service logs the reason.
+
+* The lookup service ignored the ``proxy-url`` of the cluster in a
+  ``ClusterConfig``'s kubeconfig, and connected to the API server directly,
+  or through the proxy its environment named, so a cluster reached only
+  through a proxy could not be connected, and nothing said the field was
+  ignored. The lookup service now sends its requests to the API server
+  through the ``proxy-url``, as ``kubectl`` does, and the kubeconfig the
+  REST API gives an admin for the cluster keeps it. A ``proxy-url`` which is
+  not an ``http``, ``https`` or ``socks5`` URL with a host is refused: the
+  cluster is not connected, and the lookup service logs the reason.
 
 * Updating a ``ClientConfig``, for example to change its roles or tenants,
   made the tokens which its client had revoked by logging out valid again.

@@ -2850,11 +2850,16 @@ Bugs Fixed
   kube context it read the token through, which for a local cluster is a
   port on the loopback address of the host that a lookup service on another
   local cluster cannot reach, so the kubeconfig did not work until that
-  address was edited. For a local cluster it now writes the address of the
-  cluster's control plane container on Docker's ``kind`` network,
-  ``https://educates-control-plane:6443`` for the default local cluster and
-  ``https://educates-<name>-control-plane:6443`` for a named one, which the
-  pods of the other local clusters reach. The new ``--server`` option names
+  address was edited. For a local cluster it now writes port 6443 of the
+  router address, such as ``https://10.10.10.1:6443``, with the name of the
+  cluster's control plane container as ``tls-server-name``,
+  ``educates-control-plane`` for the default local cluster and
+  ``educates-<name>-control-plane`` for a named one, which the host and the
+  pods of every local cluster reach through the router. When the router
+  does not serve the cluster, it writes the cluster's control plane
+  container on Docker's ``kind`` network, such as
+  ``https://educates-control-plane:6443``, which only the pods of the other
+  local clusters reach, and says so. The new ``--server`` option names
   the address for any cluster, as when a lookup service reaches its API
   server at an address other than the kube context's. The command also read
   the ``remote-access-token`` secret from the ``educates`` namespace only.

@@ -51,7 +51,7 @@ func (inv Inventory) RouterRoutes(given ...LoadedConfig) ([]RouterRoute, []error
 				continue
 			}
 		}
-		fields, err := servedClusterFields(loaded, routerServer)
+		route, err := routeOf(loaded)
 		if err != nil {
 			if isGiven {
 				return nil, nil, err
@@ -59,22 +59,7 @@ func (inv Inventory) RouterRoutes(given ...LoadedConfig) ([]RouterRoute, []error
 			leftOut = append(leftOut, leftOutBy(routerServer, id, err))
 			continue
 		}
-		route := RouterRoute{
-			Cluster:         id,
-			IngressDomain:   loaded.Domain(),
-			Node:            id.ControlPlaneNode(),
-			State:           id.State(inv.observed.Nodes),
-			TLSEndsAtRouter: endsTLSAtRouter(loaded.Config) && loaded.Domain() != "",
-		}
-		// servedNames gives the ingress domain first, when there is one,
-		// then each extra domain it does not already give.
-		served := servedNames(route.IngressDomain, "", fields.resolver.ExtraDomains, "")
-		if route.IngressDomain != "" {
-			served = served[1:]
-		}
-		for _, name := range served {
-			route.ExtraDomains = append(route.ExtraDomains, name.domain)
-		}
+		route.State = id.State(inv.observed.Nodes)
 		routes = append(routes, route)
 	}
 
@@ -86,6 +71,33 @@ func (inv Inventory) RouterRoutes(given ...LoadedConfig) ([]RouterRoute, []error
 		return nil, nil, err
 	}
 	return routes, leftOut, nil
+}
+
+// routeOf returns the route of the local cluster of the config loaded, as
+// RouterRoutes gives it but for its State, or the error that the router
+// can't serve the cluster.
+func routeOf(loaded LoadedConfig) (RouterRoute, error) {
+	fields, err := servedClusterFields(loaded, routerServer)
+	if err != nil {
+		return RouterRoute{}, err
+	}
+	id := loaded.Identity
+	route := RouterRoute{
+		Cluster:         id,
+		IngressDomain:   loaded.Domain(),
+		Node:            id.ControlPlaneNode(),
+		TLSEndsAtRouter: endsTLSAtRouter(loaded.Config) && loaded.Domain() != "",
+	}
+	// servedNames gives the ingress domain first, when there is one, then
+	// each extra domain it does not already give.
+	served := servedNames(route.IngressDomain, "", fields.resolver.ExtraDomains, "")
+	if route.IngressDomain != "" {
+		served = served[1:]
+	}
+	for _, name := range served {
+		route.ExtraDomains = append(route.ExtraDomains, name.domain)
+	}
+	return route, nil
 }
 
 // endsTLSAtRouter reports whether the config cfg asks the router to end

@@ -4,6 +4,79 @@ import (
 	"testing"
 )
 
+// The router serves the API server of a local cluster on port 6443 of the
+// router address, to a client that names the cluster's control-plane node
+// as its TLS server name, whether the cluster declares its domain or
+// derives the nip.io name of the router address.
+func TestRouterAPIServerOfIsPort6443OfTheRouterAddressByTheNodeName(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  domain: educates.test\n")
+	writeClusterConfig(t, dataHome, "test2", localConfigHeader)
+
+	for _, tc := range []struct {
+		id   Identity
+		want RouterAPIServer
+	}{
+		{Default(dataHome), RouterAPIServer{URL: "https://10.10.10.1:6443", ServerName: "educates-control-plane"}},
+		{namedID(t, "test2", dataHome), RouterAPIServer{URL: "https://10.10.10.1:6443", ServerName: "educates-test2-control-plane"}},
+	} {
+		t.Run(tc.id.KindName, func(t *testing.T) {
+			got, err := RouterAPIServerOf(tc.id)
+			if err != nil || got != tc.want {
+				t.Errorf("RouterAPIServerOf() = %+v, %v; want %+v, nil", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestRouterAPIServerOfBracketsAnIPv6RouterAddress(t *testing.T) {
+	dataHome := t.TempDir()
+	routerFile(t, dataHome, routerHeader+"address: fd00::1\n")
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  domain: educates.test\n")
+
+	got, err := RouterAPIServerOf(Default(dataHome))
+
+	if want := "https://[fd00::1]:6443"; err != nil || got.URL != want {
+		t.Errorf("RouterAPIServerOf() = %+v, %v; want URL %s", got, err, want)
+	}
+}
+
+// The router serves nothing of a cluster whose config is missing, or
+// declares no domain at all, and the error says why.
+func TestRouterAPIServerOfSaysWhyTheRouterDoesNotServeACluster(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		config string
+		parts  []string
+	}{
+		{name: "no config", parts: []string{"the router leaves out", `local cluster "test2"`}},
+		{name: "no domain", config: escapeConfig("", ""), parts: []string{"neither an ingress domain nor an extra domain"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dataHome := t.TempDir()
+			routerFile(t, dataHome, routerHeader+"address: 10.10.10.1\n")
+			id := namedForTest(t, dataHome, "test2")
+			if tc.config != "" {
+				writeClusterConfig(t, dataHome, "test2", tc.config)
+			}
+
+			_, err := RouterAPIServerOf(id)
+
+			wantErrorMentioning(t, err, tc.parts...)
+		})
+	}
+}
+
+func TestRouterAPIServerOfNeedsTheRouterFile(t *testing.T) {
+	dataHome := t.TempDir()
+	writeClusterConfig(t, dataHome, "", localConfigHeader+"ingress:\n  domain: educates.test\n")
+
+	_, err := RouterAPIServerOf(Default(dataHome))
+
+	wantErrorMentioning(t, err, "router.yaml")
+}
+
 // kind must not publish a cluster's API server on port 6443 of the router
 // address, where the router publishes it for every cluster's API server:
 // on the router address, or on every host address, it would take it.

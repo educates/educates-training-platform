@@ -37,10 +37,11 @@ A run:
 3. registers both clusters with the Lookup Service on the lookup cluster:
    the lookup cluster through the service's own remote access token, and the
    remote cluster through a kubeconfig Secret made with `educates admin
-   lookup kubeconfig`, which for a local cluster names
-   `https://educates-<remote cluster>-control-plane:6443`, the remote
-   control plane container that the lookup cluster's pods reach on Docker's
-   `kind` network; and adds a tenant that reaches every portal
+   lookup kubeconfig`, which for a local cluster names port 6443 of the
+   router address, with the remote control plane container,
+   `educates-<remote cluster>-control-plane`, as its `tls-server-name`, by
+   which the router sends the lookup cluster's pods to the remote API
+   server; and adds a tenant that reaches every portal
    on those two clusters, selected by a label the run gives their
    `ClusterConfig`s, an admin client and a tenant client, with passwords made
    up for the run;
@@ -177,10 +178,11 @@ Results are gitignored.
 
 When the Lookup Service never lists the remote cluster's portal, the run
 stops with what it last saw, and the Lookup Service's log says why it could
-not connect to the remote cluster. Its pods reach the remote control plane
-container by name through Docker's DNS, and the remote portal's host name
-through the local DNS resolver, which answers it with the router address,
-and the router, which sends it to the remote cluster. So both clusters must
+not connect to the remote cluster. Its pods reach the remote API server on
+port 6443 of the router address, which the router sends to the remote
+cluster by the kubeconfig's `tls-server-name`, and the remote portal's host
+name through the local DNS resolver, which answers it with the router
+address, and the router, which sends it to the remote cluster. So both clusters must
 run on the same Docker host, with Docker Desktop's "Allow privileged port
 forwarding to external machines" setting on, which the router needs and
 `educates local cluster create` checks.

@@ -3,6 +3,7 @@ package cmd
 import (
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,77 +14,122 @@ import (
 	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 )
 
+// apiServerDataHome is a data home whose router address is 10.10.10.1,
+// with the default local cluster on educates.test and the local cluster
+// test2 on test2.educates.test.
+func apiServerDataHome(t *testing.T) string {
+	t.Helper()
+	dataHome := routerDataHome(t)
+	writeLocalClusterListFile(t, filepath.Join(dataHome, "clusters", "test2", "config.yaml"),
+		"apiVersion: cli.educates.dev/v1alpha1\nkind: EducatesLocalConfig\ningress:\n  domain: test2.educates.test\n")
+	return dataHome
+}
+
 func TestLookupKubeconfigServerOfAKubeContext(t *testing.T) {
-	dataHome := t.TempDir()
-	named, err := localclusters.Named("test2", dataHome)
-	if err != nil {
-		t.Fatalf("Named: %v", err)
-	}
-	if err := localclusters.MakeClusterFolder(named); err != nil {
-		t.Fatalf("MakeClusterFolder: %v", err)
-	}
+	dataHome := apiServerDataHome(t)
 
 	cases := []struct {
 		name          string
 		kubeContext   string
-		contextServer string
-		want          string
+		contextConfig *rest.Config
+		want          kubeconfigServer
 	}{
 		{
 			name:          "the default local cluster",
 			kubeContext:   "kind-educates",
-			contextServer: "https://127.0.0.1:59223",
-			want:          "https://educates-control-plane:6443",
+			contextConfig: &rest.Config{Host: "https://127.0.0.1:59223"},
+			want:          kubeconfigServer{Server: "https://10.10.10.1:6443", TLSServerName: "educates-control-plane"},
 		},
 		{
 			name:          "a named local cluster",
 			kubeContext:   "kind-educates-test2",
-			contextServer: "https://127.0.0.1:59224",
-			want:          "https://educates-test2-control-plane:6443",
+			contextConfig: &rest.Config{Host: "https://127.0.0.1:59224"},
+			want:          kubeconfigServer{Server: "https://10.10.10.1:6443", TLSServerName: "educates-test2-control-plane"},
 		},
 		{
 			name:          "a kind cluster named like a local cluster the data home has no folder for",
 			kubeContext:   "kind-educates-other",
-			contextServer: "https://127.0.0.1:59225",
-			want:          "https://127.0.0.1:59225",
+			contextConfig: &rest.Config{Host: "https://127.0.0.1:59225"},
+			want:          kubeconfigServer{Server: "https://127.0.0.1:59225"},
 		},
 		{
 			name:          "a cluster that is no local cluster",
 			kubeContext:   "gke_project_region_cluster-1",
-			contextServer: "https://34.1.2.3",
-			want:          "https://34.1.2.3",
+			contextConfig: gatewayContext,
+			want:          kubeconfigServer{Server: "https://gateway.example.com", TLSServerName: "api.cluster-1.internal"},
 		},
 		{
 			name:          "no kube context, as in a pod",
 			kubeContext:   "",
-			contextServer: "https://10.96.0.1:443",
-			want:          "https://10.96.0.1:443",
+			contextConfig: &rest.Config{Host: "https://10.96.0.1:443"},
+			want:          kubeconfigServer{Server: "https://10.96.0.1:443"},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := lookupKubeconfigServer("", tc.kubeContext, tc.contextServer, dataHome)
+			got, err := lookupKubeconfigServer("", tc.kubeContext, tc.contextConfig, dataHome)
 			if err != nil {
 				t.Fatalf("lookupKubeconfigServer: %v", err)
 			}
 			if got != tc.want {
-				t.Errorf("lookupKubeconfigServer(%q) = %q, want %q", tc.kubeContext, got, tc.want)
+				t.Errorf("lookupKubeconfigServer(%q) = %+v, want %+v", tc.kubeContext, got, tc.want)
+			}
+		})
+	}
+}
+
+// A local cluster whose names the router does not serve, as one with no
+// config in the data home, or with no router file to give the router
+// address, falls back to its address on Docker's kind network, which only
+// the pods of the other local clusters reach, and the note says so.
+func TestLookupKubeconfigServerOfALocalClusterTheRouterDoesNotServe(t *testing.T) {
+	noConfig := routerDataHome(t)
+	test2, err := localclusters.Named("test2", noConfig)
+	if err != nil {
+		t.Fatalf("Named: %v", err)
+	}
+	if err := localclusters.MakeClusterFolder(test2); err != nil {
+		t.Fatalf("MakeClusterFolder: %v", err)
+	}
+
+	cases := []struct {
+		name, kubeContext, dataHome, want string
+	}{
+		{name: "no config", kubeContext: "kind-educates-test2", dataHome: noConfig,
+			want: "https://educates-test2-control-plane:6443"},
+		{name: "no router file", kubeContext: "kind-educates", dataHome: t.TempDir(),
+			want: "https://educates-control-plane:6443"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := lookupKubeconfigServer("", tc.kubeContext, &rest.Config{Host: "https://127.0.0.1:59223"}, tc.dataHome)
+			if err != nil {
+				t.Fatalf("lookupKubeconfigServer: %v", err)
+			}
+			if got.Server != tc.want || got.TLSServerName != "" {
+				t.Errorf("lookupKubeconfigServer gives server %q and tls-server-name %q, want %q and none",
+					got.Server, got.TLSServerName, tc.want)
+			}
+			for _, part := range []string{tc.want, "kind network", "only the pods of the other local clusters", "router"} {
+				if !strings.Contains(got.Note, part) {
+					t.Errorf("note %q does not mention %q", got.Note, part)
+				}
 			}
 		})
 	}
 }
 
 func TestLookupKubeconfigServerGivenWithServer(t *testing.T) {
-	dataHome := t.TempDir()
+	dataHome := apiServerDataHome(t)
 
 	for _, kubeContext := range []string{"kind-educates", "gke_project_region_cluster-1"} {
 		t.Run(kubeContext, func(t *testing.T) {
-			got, err := lookupKubeconfigServer("https://api.cluster-1.example.com:6443", kubeContext, "https://127.0.0.1:59223", dataHome)
+			got, err := lookupKubeconfigServer("https://api.cluster-1.example.com:6443", kubeContext, gatewayContext, dataHome)
 			if err != nil {
 				t.Fatalf("lookupKubeconfigServer: %v", err)
 			}
-			if want := "https://api.cluster-1.example.com:6443"; got != want {
-				t.Errorf("lookupKubeconfigServer = %q, want %q", got, want)
+			if want := (kubeconfigServer{Server: "https://api.cluster-1.example.com:6443"}); got != want {
+				t.Errorf("lookupKubeconfigServer = %+v, want %+v", got, want)
 			}
 		})
 	}
@@ -99,7 +145,7 @@ func TestLookupKubeconfigServerRefusesAServerThatIsNoHTTPSAddress(t *testing.T) 
 		"https://api.cluster-1.example.com:6443/%zz",
 	} {
 		t.Run(server, func(t *testing.T) {
-			_, err := lookupKubeconfigServer(server, "kind-educates", "https://127.0.0.1:59223", dataHome)
+			_, err := lookupKubeconfigServer(server, "kind-educates", &rest.Config{Host: "https://127.0.0.1:59223"}, dataHome)
 			if err == nil {
 				t.Fatalf("lookupKubeconfigServer(%q) gave no error", server)
 			}
@@ -127,7 +173,7 @@ func TestLookupKubeconfigClusterCopiesTheTLSServerNameOfTheKubeContextsOwnServer
 	}
 }
 
-func TestLookupKubeconfigClusterLeavesOutTheKubeContextsTLSServerNameWithServerOrForALocalCluster(t *testing.T) {
+func TestLookupKubeconfigClusterLeavesOutTheKubeContextsTLSServerNameWithServer(t *testing.T) {
 	cases := []struct {
 		name        string
 		server      string
@@ -138,8 +184,6 @@ func TestLookupKubeconfigClusterLeavesOutTheKubeContextsTLSServerNameWithServerO
 			kubeContext: "gke_project_region_cluster-1", wantServer: "https://api.cluster-1.example.com:6443"},
 		{name: "the kube context's own address --server gives", server: "https://gateway.example.com",
 			kubeContext: "gke_project_region_cluster-1", wantServer: "https://gateway.example.com"},
-		{name: "the address of a local cluster", kubeContext: "kind-educates",
-			wantServer: "https://educates-control-plane:6443"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -153,6 +197,22 @@ func TestLookupKubeconfigClusterLeavesOutTheKubeContextsTLSServerNameWithServerO
 					got.Server, got.TLSServerName, tc.wantServer)
 			}
 		})
+	}
+}
+
+// The kubeconfig of a local cluster names the router's address for its
+// API server, with its control-plane node as tls-server-name, and needs no
+// note.
+func TestLookupKubeconfigClusterNamesTheRoutersAddressForALocalCluster(t *testing.T) {
+	o := &LookupConfigOptions{}
+	got, note, err := o.kubeconfigCluster("kind-educates-test2", &rest.Config{Host: "https://127.0.0.1:59224"},
+		apiServerDataHome(t))
+	if err != nil {
+		t.Fatalf("kubeconfigCluster: %v", err)
+	}
+	if got.Server != "https://10.10.10.1:6443" || got.TLSServerName != "educates-test2-control-plane" || note != "" {
+		t.Errorf("kubeconfigCluster gives server %q, tls-server-name %q and note %q, want %q, %q and none",
+			got.Server, got.TLSServerName, note, "https://10.10.10.1:6443", "educates-test2-control-plane")
 	}
 }
 
@@ -170,7 +230,7 @@ func TestLookupKubeconfigClusterGivesTheTLSServerNameOfTheFlag(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			o := &LookupConfigOptions{Server: tc.server, TLSServerName: "api.cluster-1.example.com"}
-			got, _, err := o.kubeconfigCluster(tc.kubeContext, gatewayContext, t.TempDir())
+			got, _, err := o.kubeconfigCluster(tc.kubeContext, gatewayContext, apiServerDataHome(t))
 			if err != nil {
 				t.Fatalf("kubeconfigCluster: %v", err)
 			}

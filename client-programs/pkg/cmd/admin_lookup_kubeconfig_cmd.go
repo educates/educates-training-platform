@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -29,8 +30,9 @@ var adminLookupKubeconfigExample = `
   # Write the kubeconfig to a file:
   educates admin lookup kubeconfig --output kubeconfig.yaml
 
-  # Write the kubeconfig of the local cluster "remote", which names the
-  # address the pods of the other local clusters reach its API server at:
+  # Write the kubeconfig of the local cluster "remote", which names port
+  # 6443 of the router address, where the router serves its API server to
+  # this host and to the pods of every local cluster:
   educates admin lookup kubeconfig --local-cluster remote --output kubeconfig-remote.yaml
 
   # Name the address a lookup service on another cluster reaches the API
@@ -132,46 +134,74 @@ func writeOwnerOnlyFile(path string, data []byte) error {
 	return f.Close()
 }
 
-// lookupKubeconfigServer returns the API server address the kubeconfig
-// names.
+// kubeconfigServer is how the kubeconfig names the API server: its
+// address, the name its certificate is verified against, and a note on
+// whom that address leaves out.
+type kubeconfigServer struct {
+	// Server is the API server's address.
+	Server string
+
+	// TLSServerName is the name the API server's certificate is verified
+	// against in place of the host of Server, empty for that host.
+	TLSServerName string
+
+	// Note says whom Server does not reach the API server for, empty when
+	// it reaches it for every lookup service it is meant for.
+	Note string
+}
+
+// lookupKubeconfigServer returns how the kubeconfig names the API server.
 //
 //   - With server, from --server, it is server, which must be an https URL
-//     with a host.
+//     with a host, with no tls-server-name, as kubectl too drops the
+//     tls-server-name of a kube context whose server --server overrides.
 //   - Without it, when kubeContext, the kube context the command reads the
 //     token through, is the context of a local cluster of the data home
 //     dataHome, as localclusters.ClusterOfContext recognises it, it is the
-//     URL at which the pods of the other local clusters reach the cluster.
-//     The kube context reaches it at a loopback port of the host that no
-//     pod reaches.
-//   - Otherwise it is contextServer, the server of kubeContext.
-func lookupKubeconfigServer(server, kubeContext, contextServer, dataHome string) (string, error) {
+//     router's address for the cluster's API server, which the host and
+//     the pods of every local cluster reach: port 6443 of the router
+//     address, with the cluster's control-plane node as tls-server-name,
+//     as localclusters.RouterAPIServerOf gives it. The kube context reaches
+//     the API server at a loopback port of the host, which no pod reaches.
+//     When the router serves nothing of the cluster, it is the cluster's
+//     address on Docker's kind network, which only the pods of the other
+//     local clusters reach, and the note says so, and why.
+//   - Otherwise it is the server of kubeContext, whose client
+//     configuration is contextConfig, with its tls-server-name.
+func lookupKubeconfigServer(server, kubeContext string, contextConfig *rest.Config,
+	dataHome string) (kubeconfigServer, error) {
 	if server != "" {
 		u, err := url.Parse(server)
 		if err != nil || u.Scheme != "https" || u.Host == "" {
-			return "", errors.Errorf("invalid --server %q: the API server address is an https URL, "+
+			return kubeconfigServer{}, errors.Errorf("invalid --server %q: the API server address is an https URL, "+
 				"such as https://api.cluster-1.example.com:6443", server)
 		}
-		return server, nil
+		return kubeconfigServer{Server: server}, nil
 	}
-	if id, ok := localclusters.ClusterOfContext(kubeContext, dataHome); ok {
-		return id.KindNetworkAPIServerURL(), nil
+	id, ok := localclusters.ClusterOfContext(kubeContext, dataHome)
+	if !ok {
+		return kubeconfigServer{Server: contextConfig.Host, TLSServerName: contextConfig.ServerName}, nil
 	}
-	return contextServer, nil
+	api, err := localclusters.RouterAPIServerOf(id)
+	if err != nil {
+		return kubeconfigServer{
+			Server: id.KindNetworkAPIServerURL(),
+			Note: fmt.Sprintf("Note: the kubeconfig names %s, the address of %s on Docker's kind network, which "+
+				"only the pods of the other local clusters reach, since the router, which this host reaches "+
+				"too, does not serve its API server: %v", id.KindNetworkAPIServerURL(), id.Description(), err),
+		}, nil
+	}
+	return kubeconfigServer{Server: api.URL, TLSServerName: api.ServerName}, nil
 }
 
 // kubeconfigCluster returns the cluster entry of the kubeconfig, but for
 // its CA certificate, which the remote-access-token Secret holds, and a note
 // to print when the kubeconfig leaves out part of the way the kube context
 // kubeContext, whose client configuration is contextConfig, reaches the API
-// server.
+// server, or reaches it for fewer clients than it is meant for.
 //
-// Its server is lookupKubeconfigServer's. Its tls-server-name is the one
-// --tls-server-name gives, and otherwise the kube context's when the
-// kubeconfig names the kube context's own server, without --server and for
-// a cluster that is no local cluster: the certificate of an address
-// --server gives, or of a local cluster on the kind network, may name that
-// address itself, and kubectl too drops the tls-server-name of a kube
-// context whose server --server overrides.
+// Its server and tls-server-name are lookupKubeconfigServer's, but for a
+// tls-server-name --tls-server-name gives, which wins.
 //
 // Its proxy-url is the one --proxy-url gives, which must be an http, https
 // or socks5 URL with a host. The kube context's proxy is never copied, since
@@ -179,14 +209,11 @@ func lookupKubeconfigServer(server, kubeContext, contextServer, dataHome string)
 // tunnel on the loopback address, and the note says it is left out.
 func (o *LookupConfigOptions) kubeconfigCluster(kubeContext string, contextConfig *rest.Config,
 	dataHome string) (*clientcmdapi.Cluster, string, error) {
-	server, err := lookupKubeconfigServer(o.Server, kubeContext, contextConfig.Host, dataHome)
+	server, err := lookupKubeconfigServer(o.Server, kubeContext, contextConfig, dataHome)
 	if err != nil {
 		return nil, "", err
 	}
-	entry := &clientcmdapi.Cluster{Server: server, TLSServerName: o.TLSServerName}
-	if entry.TLSServerName == "" && o.Server == "" && server == contextConfig.Host {
-		entry.TLSServerName = contextConfig.ServerName
-	}
+	entry := &clientcmdapi.Cluster{Server: server.Server, TLSServerName: cmp.Or(o.TLSServerName, server.TLSServerName)}
 
 	if o.ProxyURL != "" {
 		// The error leaves the URL out, since it may hold the proxy's
@@ -198,13 +225,16 @@ func (o *LookupConfigOptions) kubeconfigCluster(kubeContext string, contextConfi
 		}
 		entry.ProxyURL = o.ProxyURL
 	}
-	var note string
-	if o.ProxyURL == "" && contextConfig.Proxy != nil {
-		note = "Note: the kube context reaches the API server through a proxy, which the kubeconfig leaves out, " +
-			"since a lookup service seldom reaches the proxy of a kube context. If the lookup service reaches " +
-			"the API server through a proxy, name that proxy with --proxy-url."
+	var notes []string
+	if server.Note != "" {
+		notes = append(notes, server.Note)
 	}
-	return entry, note, nil
+	if o.ProxyURL == "" && contextConfig.Proxy != nil {
+		notes = append(notes, "Note: the kube context reaches the API server through a proxy, which the kubeconfig "+
+			"leaves out, since a lookup service seldom reaches the proxy of a kube context. If the lookup service "+
+			"reaches the API server through a proxy, name that proxy with --proxy-url.")
+	}
+	return entry, strings.Join(notes, "\n"), nil
 }
 
 // remoteAccessCredentials is what the kubeconfig reaches a cluster with as
@@ -313,15 +343,16 @@ func (p *ProjectInfo) NewAdminLookupKubeconfigCmd() *cobra.Command {
 		&o.Server,
 		"server",
 		"",
-		"API server address the kubeconfig names, an https URL; by default the address the pods of the other "+
-			"local clusters reach a local cluster at, and otherwise the server of the kube context",
+		"API server address the kubeconfig names, an https URL; by default port 6443 of the router address for "+
+			"a local cluster, and otherwise the server of the kube context",
 	)
 	c.Flags().StringVar(
 		&o.TLSServerName,
 		"tls-server-name",
 		"",
-		"name the API server's certificate is verified against in place of the host of the server; by default "+
-			"the kube context's, without --server and for a cluster that is no local cluster",
+		"name the API server's certificate is verified against in place of the host of the server; by default, "+
+			"without --server, the name of a local cluster's control-plane node, by which the router sends the "+
+			"connection to it, and otherwise the kube context's",
 	)
 	c.Flags().StringVar(
 		&o.ProxyURL,

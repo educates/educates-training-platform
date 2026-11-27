@@ -70,6 +70,11 @@ type RouterStatus struct {
 	// router container or it publishes neither.
 	PublishedAddress string
 
+	// PublishedPorts are the router ports, of RouterPorts, the router
+	// container is configured to publish on PublishedAddress, in order,
+	// empty when PublishedAddress is.
+	PublishedPorts []uint16
+
 	// Advice says what to run, and why, when the router does not serve
 	// the local clusters as it should, and is empty otherwise.
 	Advice string
@@ -105,7 +110,7 @@ type RouterStatusRow struct {
 // RouterAddress returns the router address the router file of the data
 // home, router.yaml, declares, in its canonical form: the one host address
 // every local cluster's names resolve to, and the router publishes ports
-// 80 and 443 on. A file that is missing or does not load, or an address
+// 80, 443 and 6443 on. A file that is missing or does not load, or an address
 // the rules of CheckRouterAddress that need no host interface refuse, is
 // an error naming the file and how to set the address.
 func (inv Inventory) RouterAddress() (string, error) {
@@ -143,6 +148,7 @@ func (inv Inventory) RouterStatus(image string) (RouterStatus, error) {
 		status.Image = router.Image
 		if published, ok := router.publishedAddress(); ok {
 			status.PublishedAddress = published.String()
+			status.PublishedPorts = router.publishedPorts(published)
 		}
 		// The router can be re-created only on a router address that can
 		// serve local clusters: AddressError says how to fix one that

@@ -41,7 +41,8 @@ workshop terminals, on the previous configuration until they close.
 
 The router is re-created when it runs another image than the one this CLI
 pins, publishes ports 80 and 443 on another address than the router
-address, or has stopped, which drops every connection through it. It is
+address, does not publish port 6443 there, as a router created before it
+served the local clusters' API servers, or has stopped, which drops every connection through it. It is
 created when it is missing while a local cluster exists. Creating it
 refuses to run on Docker Desktop 4.97 or later while "Allow privileged
 port forwarding to external machines" is off, in Settings > Advanced.

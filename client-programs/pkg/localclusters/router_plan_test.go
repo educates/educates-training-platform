@@ -11,16 +11,25 @@ import (
 const pinnedRouterImage = "haproxy:3.4.8-alpine@sha256:8aa6"
 
 // routerContainer is a router container created from image, configured
-// to publish ports 80 and 443 on hostIP.
+// to publish the router ports, 80, 443 and 6443, on hostIP.
 func routerContainer(image, hostIP string, running bool) *RouterContainer {
 	addr := netip.MustParseAddr(hostIP)
+	r := &RouterContainer{Running: running, Image: image}
+	for _, port := range RouterPorts() {
+		r.PortBindings = append(r.PortBindings, PortBinding{HostIP: addr, HostPort: port})
+	}
+	return r
+}
+
+// ingressOnlyRouter is a running router container on the pinned image,
+// created before the router served the local clusters' API servers:
+// configured to publish ports 80 and 443 on hostIP, but not port 6443.
+func ingressOnlyRouter(hostIP string) *RouterContainer {
+	addr := netip.MustParseAddr(hostIP)
 	return &RouterContainer{
-		Running: running,
-		Image:   image,
-		PortBindings: []PortBinding{
-			{HostIP: addr, HostPort: 80},
-			{HostIP: addr, HostPort: 443},
-		},
+		Running:      true,
+		Image:        pinnedRouterImage,
+		PortBindings: []PortBinding{{HostIP: addr, HostPort: 80}, {HostIP: addr, HostPort: 443}},
 	}
 }
 
@@ -77,6 +86,11 @@ func TestPlanRouterRecreatesARouterThatRunsAnotherImageListensElsewhereOrHasStop
 			name:   "stopped",
 			router: routerContainer(pinnedRouterImage, "10.10.10.1", false),
 			why:    []string{"not running"},
+		},
+		{
+			name:   "no API server port",
+			router: ingressOnlyRouter("10.10.10.1"),
+			why:    []string{"does not publish port 6443 on the router address 10.10.10.1", "API servers"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -255,7 +269,8 @@ func TestRouterStartErrorCarriesDockersErrorWithTheAddressAndPorts(t *testing.T)
 
 	err := inv.RouterStartError("10.10.10.1", dockerErr)
 
-	wantErrorMentioning(t, err, "ports 80 and 443 on 10.10.10.1", dockerErr.Error(), "Another process")
+	wantErrorMentioning(t, err, "ports 80, 443 and 6443 on 10.10.10.1", dockerErr.Error(), "Another process",
+		"Kubernetes API server")
 	if strings.Contains(err.Error(), "earlier release") {
 		t.Errorf("error %q blames a local cluster, none of which publishes the ports", err)
 	}

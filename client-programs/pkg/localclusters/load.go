@@ -114,6 +114,12 @@ type clusterFields struct {
 	// cluster's extra domains in the local DNS resolver.
 	extraDomainsField string
 
+	// apiServer is where the config asks kind to publish the cluster's API
+	// server on the host, and apiServerField the path of the field that
+	// declares it.
+	apiServer      v1alpha1.ApiServerConfig
+	apiServerField string
+
 	// derivesDomain reports whether a cluster whose config declares no
 	// ingress domain takes a nip.io name of the router address: an
 	// EducatesLocalConfig does, and an EducatesConfig, which gets no CLI
@@ -132,6 +138,8 @@ func clusterFieldsOf(cfg v1alpha1.Config) (clusterFields, bool) {
 		return clusterFields{
 			nodesField:        "cluster.nodes",
 			nodes:             c.Cluster.Nodes,
+			apiServer:         c.Cluster.ApiServer,
+			apiServerField:    "cluster.apiServer",
 			domain:            c.Ingress.Domain,
 			domainField:       "ingress.domain",
 			resolver:          c.Resolver,
@@ -148,6 +156,8 @@ func clusterFieldsOf(cfg v1alpha1.Config) (clusterFields, bool) {
 		}
 		fields.nodesField = "target.cluster.nodes"
 		fields.nodes = c.Target.Cluster.Nodes
+		fields.apiServer = c.Target.Cluster.ApiServer
+		fields.apiServerField = "target.cluster.apiServer"
 		fields.resolver = c.Target.Resolver
 		fields.extraDomainsField = "target.resolver.extraDomains"
 		return fields, true

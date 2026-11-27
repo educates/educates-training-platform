@@ -1,6 +1,7 @@
 // Package router runs the router, the HAProxy container that publishes
-// ports 80 and 443 on the router address for every local cluster, and
-// sends each request to the cluster that owns its name. It serves the
+// ports 80 and 443 on the router address for every local cluster's
+// ingress, and port 6443 for their API servers, and sends each request to
+// the cluster that owns its name. It serves the
 // configuration localclusters renders into the router folder of the data
 // home, and reports the container's state for the inventory.
 package router
@@ -48,7 +49,8 @@ const (
 
 // StartError is the error of a router container that was created but did
 // not start, which is how the router finds out that something else holds
-// ports 80 or 443 on the router address. The container is removed.
+// one of its ports, 80, 443 or 6443, on the router address. The container
+// is removed.
 type StartError struct {
 	Err error
 }
@@ -104,7 +106,7 @@ func Observe(ctx context.Context) (*localclusters.RouterContainer, error) {
 }
 
 // Create creates the router container and starts it: from Image, pulled
-// when missing, publishing ports 80 and 443 on the router address
+// when missing, publishing ports 80, 443 and 6443 on the router address
 // address only, and serving the configuration of the router folder dir,
 // which it mounts read-only. It runs with restart policy always, so it
 // comes back with Docker.
@@ -193,17 +195,19 @@ func pullImage(ctx context.Context, cli *client.Client) error {
 }
 
 // createContainer creates the router container, without starting it,
-// publishing ports 80 and 443 on hostIP, mounting the router folder dir,
+// publishing the router ports, localclusters.RouterPorts, on hostIP: 80
+// and 443 for the local clusters' ingress and 6443 for their API servers.
+// It mounts the router folder dir,
 // and running HAProxy as user, as localclusters.RouterUser chooses it. A
 // router container that exists already fails it with Docker's conflict
 // error.
 func createContainer(ctx context.Context, cli *client.Client, hostIP netip.Addr, dir, user string) error {
 	exposed := network.PortSet{}
 	bindings := network.PortMap{}
-	for _, port := range []string{"80", "443"} {
-		key := network.MustParsePort(port + "/tcp")
+	for _, port := range localclusters.RouterPorts() {
+		key := network.MustParsePort(fmt.Sprintf("%d/tcp", port))
 		exposed[key] = struct{}{}
-		bindings[key] = []network.PortBinding{{HostIP: hostIP, HostPort: port}}
+		bindings[key] = []network.PortBinding{{HostIP: hostIP, HostPort: strconv.Itoa(int(port))}}
 	}
 
 	_, err := cli.ContainerCreate(ctx, client.ContainerCreateOptions{

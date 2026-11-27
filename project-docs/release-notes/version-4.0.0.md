@@ -1418,10 +1418,18 @@ Features Changed
   ``ingress.externalTLSTermination``. An HTTPS connection for a name no
   local cluster serves, with no server name, or for a stopped cluster whose
   TLS passes through is closed, as the router has no certificate to answer
-  with. Version 3
+  with. The router also publishes port 6443 on the router address, and
+  sends each connection on it to the API server of the cluster whose
+  control plane container the server name of its TLS handshake names, such
+  as ``educates-control-plane``, passed through untouched, so the host and
+  the pods of every local cluster reach every cluster's API server there,
+  and ``educates local cluster create`` refuses a
+  ``cluster.apiServer.port`` of 6443 on the router address or on every host
+  address. Version 3
   published a cluster's ports from its Kind node, on every host address
   unless ``localKindCluster.listenAddress`` named one, and Kind nodes now
-  publish no ports at all. The router runs HAProxy, from the long-term
+  publish no ports but their API server's, on a loopback port that the
+  cluster's kube context uses. The router runs HAProxy, from the long-term
   support branch the CLI pins, and reaches each cluster's ingress on its
   control-plane node over Docker's ``kind`` network. The router address
   lives in ``router.yaml`` in the CLI data home: ``educates local config

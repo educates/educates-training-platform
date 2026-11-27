@@ -28,6 +28,18 @@ const (
 	routerNotFoundFile = "404.txt"
 )
 
+// RouterAPIServerPort is the port the router serves the API server of
+// every local cluster on, on the router address, beside their ingress on
+// ports 80 and 443.
+const RouterAPIServerPort = 6443
+
+// RouterPorts returns the host ports the router container publishes on the
+// router address: 80 and 443 for the local clusters' ingress, and
+// RouterAPIServerPort for their API servers.
+func RouterPorts() []uint16 {
+	return append(slices.Clone(ingressPorts), RouterAPIServerPort)
+}
+
 // RouterRoute is what the router serves for one local cluster: the
 // domains it sends to the cluster, and where it sends them. A domain
 // matches itself and every name under it.
@@ -45,7 +57,10 @@ type RouterRoute struct {
 
 	// Node is the name of the container of the cluster's control-plane
 	// node, which the router reaches through Docker's DNS: Envoy listens
-	// on ports 80 and 443 of every node.
+	// on ports 80 and 443 of every node, and the API server on port 6443
+	// of the control-plane node. It is also the TLS server name that
+	// reaches the cluster's API server on port RouterAPIServerPort, since
+	// the API server's certificate names the node.
 	Node string
 
 	// State is whether the cluster's nodes run. The router's configuration
@@ -132,6 +147,16 @@ type RouterCertificate struct {
 // certificate does not cover, is closed, as an unknown name is, and so is
 // every connection for the route when certificates hold none for its
 // domain.
+//
+// Port RouterAPIServerPort routes each connection by the server name of
+// its TLS handshake, lowercased, to the route whose node it names, and
+// passes it through untouched to the node's port 6443, where the cluster's
+// API server presents its own certificate, which names the node. A client
+// reaches it at the router address, naming the node as its TLS server
+// name. A connection that is
+// not TLS, names no server, or names no route's node is closed, and so is
+// one for a route whose node does not answer. A connection passed through
+// may stay idle for an hour.
 //
 // Each node is found by its container name through Docker's embedded DNS,
 // and its address resolved again every second, so a stopped cluster never
@@ -249,8 +274,12 @@ global
     # on beside the new one.
     maxconn 4096
     # No hard-stop-after: after a reload the previous worker keeps its open
-    # connections, such as terminals, until they close. mworker-max-reloads
-    # (default 50) bounds how many reloads an old worker survives.
+    # connections, such as terminals, until they close. A watch of an API
+    # server on port 6443, such as a lookup service's, never closes by
+    # itself, since its client pings the connection every 30 seconds, and
+    # keeps the worker that accepted it. mworker-max-reloads (default 50)
+    # bounds how many reloads an old worker survives: the client of a
+    # connection it closes then reconnects through the current worker.
 
 defaults
     log global
@@ -344,6 +373,8 @@ frontend tls_ended
 `, tlsEndedAddress, routerConfigPath(routerCertificatesDir), routerConfigPath(routerHostMapFile))
 	}
 
+	b.WriteString(renderAPIServerFrontend(routes))
+
 	for _, r := range routes {
 		key := routeKey(r.Cluster)
 		fmt.Fprintf(&b, `
@@ -355,6 +386,45 @@ backend http_%s
 `, routeDescription(r.Cluster), key, routerConfigPath(unavailableFile(r.Cluster)), r.Node)
 		_, certified := ended[key]
 		b.WriteString(renderTLSBackend(r, certified))
+		fmt.Fprintf(&b, `
+backend api_%s
+    mode tcp
+    server node %s:%d
+`, key, r.Node, kindAPIServerContainerPort)
+	}
+	return b.String()
+}
+
+// renderAPIServerFrontend renders the frontend of port RouterAPIServerPort,
+// which sends each connection to the api_ backend of the route of routes
+// whose node the server name of its TLS handshake names, and closes every
+// other connection. With no routes it closes every connection.
+func renderAPIServerFrontend(routes []RouterRoute) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, `
+# Port %d: each connection goes to the API server of the local cluster whose
+# control-plane node the server name of its TLS handshake names, passed
+# through untouched, so the API server presents its own certificate, which
+# names the node. A connection that is not TLS, names no server, or names no
+# local cluster's node is closed.
+frontend apiserver
+    mode tcp
+    bind :%d
+    tcp-request inspect-delay 5s
+    tcp-request content reject unless { req.ssl_hello_type 1 }
+    tcp-request content set-var(sess.sni) req.ssl_sni,lower
+`, RouterAPIServerPort, RouterAPIServerPort)
+	if len(routes) == 0 {
+		b.WriteString("    tcp-request content reject\n")
+		return b.String()
+	}
+	nodes := make([]string, 0, len(routes))
+	for _, r := range routes {
+		nodes = append(nodes, r.Node)
+	}
+	fmt.Fprintf(&b, "    tcp-request content reject unless { var(sess.sni) -m str %s }\n", strings.Join(nodes, " "))
+	for _, r := range routes {
+		fmt.Fprintf(&b, "    use_backend api_%s if { var(sess.sni) -m str %s }\n", routeKey(r.Cluster), r.Node)
 	}
 	return b.String()
 }

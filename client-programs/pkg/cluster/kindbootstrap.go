@@ -1,9 +1,43 @@
 package cluster
 
 import (
+	"bytes"
+	_ "embed"
+	"html/template"
 	"sort"
 	"strings"
+
+	"github.com/pkg/errors"
+
+	"github.com/educates/educates-training-platform/client-programs/pkg/localclusters"
 )
+
+//go:embed kindclusterconfig.yaml.tpl
+var kindConfigTemplateData string
+
+// RenderKindConfig renders the kind cluster config of input, the file
+// kind creates the local cluster's kind cluster from. It refuses taints on
+// the control-plane node, which the kind config registers only on worker
+// nodes, rather than leave them out.
+func RenderKindConfig(input *KindBootstrapInput) ([]byte, error) {
+	for _, n := range input.Nodes {
+		if n.Role == localclusters.ControlPlaneRole && len(n.Taints) > 0 {
+			return nil, errors.Errorf("the kind config registers taints only on worker nodes, "+
+				"so the node with role %q can't have taints", localclusters.ControlPlaneRole)
+		}
+	}
+
+	kindConfigTemplate, err := template.New("kind-cluster-config").Parse(kindConfigTemplateData)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse cluster config template")
+	}
+
+	var kindConfig bytes.Buffer
+	if err := kindConfigTemplate.Execute(&kindConfig, input); err != nil {
+		return nil, errors.Wrap(err, "failed to generate cluster config")
+	}
+	return kindConfig.Bytes(), nil
+}
 
 // KindBootstrapInput is the focused payload the kind-cluster template
 // reads from. Decouples cluster-bootstrap rendering from any specific
@@ -25,8 +59,9 @@ type KindBootstrapInput struct {
 
 // KindNode is one node in a multi-node kind cluster. Labels become
 // Kubernetes node labels; Taints are registered on worker nodes at join
-// time. The control-plane node additionally carries the ingress-ready
-// label and the volume mounts.
+// time, and RenderKindConfig refuses them on the control-plane node. The
+// control-plane node additionally carries the ingress-ready label and the
+// volume mounts.
 type KindNode struct {
 	Role   string
 	Labels map[string]string

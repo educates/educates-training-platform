@@ -48,10 +48,10 @@ shown inline (kubectl-edit style), preserving your in-progress changes,
 until the configuration is valid or you abort. On save it is also
 validated against the rules of a local cluster's config, such as a
 cluster.nodes list, when declared, with exactly one control-plane node,
-and, without an ingress.domain, a router address in
-<data-home>/router.yaml that has a nip.io name. Editing a missing
-<data-home>/config.yaml writes router.yaml first when it is missing, as
-'educates local config init' does.
+which declares no taints, and, without an ingress.domain, a router
+address in <data-home>/router.yaml that has a nip.io name. Editing a
+missing <data-home>/config.yaml writes router.yaml first when it is
+missing, as 'educates local config init' does.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, edits the config of a
 named local cluster instead, <data-home>/clusters/<name>/config.yaml,

@@ -62,8 +62,10 @@ func MoveClusterRegistryMirrors(dataHome, path string, w io.Writer) error {
 			path, field, mirrorsPath, err)
 	}
 	for _, m := range toRecord {
+		// RecordLocalMirror's error names the registry mirrors file.
 		if err := RecordLocalMirror(dataHome, m); err != nil {
-			return err
+			return fmt.Errorf("%s: %s was removed, and its registry mirrors can't be moved: %w. The config is left as it is",
+				path, field, err)
 		}
 	}
 

@@ -18,7 +18,8 @@ import (
 // Load reads a CLI config file, validates its apiVersion/kind, runs JSON
 // schema validation, then strict-unmarshals into the typed struct. The
 // returned value implements v1alpha1.Config; callers type-switch to the
-// concrete kind.
+// concrete kind. Every error it returns names the config file, so a
+// caller returns it as it is rather than naming the file again.
 func Load(path string) (v1alpha1.Config, error) {
 	data, err := ReadConfigFile(path)
 	if err != nil {
@@ -261,7 +262,8 @@ func checkNoClusterRegistryMirrors(raw map[string]interface{}, kind string) erro
 }
 
 // LoadLocal is the typed convenience wrapper for callers that only accept
-// EducatesLocalConfig (e.g. `educates local config *` commands).
+// EducatesLocalConfig (e.g. `educates local config *` commands). Like
+// Load, every error it returns names the config file.
 func LoadLocal(path string) (*v1alpha1.EducatesLocalConfig, error) {
 	cfg, err := Load(path)
 	if err != nil {

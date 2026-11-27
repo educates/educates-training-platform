@@ -1,8 +1,13 @@
 package cmd
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,10 +21,17 @@ import (
 )
 
 const adminPlatformRenderExample = `
-  # Render the install for a checked-in config file (GitOps mode).
+  # Render the install for a checked-in config file (GitOps mode), the
+  # operator chart values for helm install -f and the platform CRs for
+  # kubectl apply -f, each to a file of its own.
   #   - operator.image is defaulted from this CLI's compiled-in version.
-  #   - ingress.domain MUST be set in the config; render errors if empty.
-  educates admin platform render --config env.yaml > install.yaml
+  #   - an EducatesLocalConfig MUST set ingress.domain; render errors if
+  #     it is empty.
+  educates admin platform render --config env.yaml \
+    --values-file values.yaml --resources-file resources.yaml
+
+  # Render the same install to stdout as one YAML stream, for inspection:
+  educates admin platform render --config env.yaml
 
   # Render the install for laptop convenience (uses the default local
   # cluster's <data-home>/config.yaml). When ingress.domain is empty, it
@@ -34,6 +46,12 @@ type PlatformRenderOptions struct {
 	Config      string
 	LocalConfig bool
 
+	// ValuesFile and ResourcesFile, when set, name the files the operator
+	// chart values and the platform CRs are written to, in place of
+	// stdout.
+	ValuesFile    string
+	ResourcesFile string
+
 	// LocalCluster selects the local cluster whose config LocalConfig
 	// reads.
 	LocalCluster localclusters.Selection
@@ -45,19 +63,27 @@ func (p *ProjectInfo) NewAdminPlatformRenderCmd() *cobra.Command {
 	c := &cobra.Command{
 		Args:  cobra.NoArgs,
 		Use:   "render",
-		Short: "Render the install plan (operator chart values + 4 platform CRs) to stdout",
+		Short: "Render the install plan (operator chart values + 4 platform CRs) to stdout or files",
 		Long: `Render the install plan that "educates admin platform deploy" would apply,
 without touching the cluster. Useful for inspection, GitOps, and diffing.
 
-Output is a single YAML stream with two sections, in deploy order:
-  - operator chart values (consumed by 'helm install -f - educates-installer')
-  - the four platform CRs (consumed by 'kubectl apply -f -')
+The install plan has two parts, in deploy order:
+  - the operator chart values, for 'helm install -f <file> educates-installer'
+  - the four platform CRs, for 'kubectl apply -f <file>'
+
+By default both go to stdout as one YAML stream: the values are its first
+document and each CR a document after it. Helm reads every document of a
+values file, so the stream as a whole suits neither command.
+--values-file and --resources-file write each part to a file of its own
+instead, and stdout keeps the part not sent to a file, so either part can
+also be piped to its command with '-f -'.
 
 Defaulting is flag-driven:
   --config <file>   Explicit / GitOps mode. operator.image defaults from
-                    this CLI binary; ingress.domain MUST be set in the
-                    config. Render is deterministic for a given (input,
-                    CLI version) pair.
+                    this CLI binary, for every kind but EducatesConfig,
+                    which is rendered as declared. An EducatesLocalConfig
+                    MUST set ingress.domain. Render is deterministic for a
+                    given (input, CLI version) pair.
   --local-config    Laptop convenience mode. Same defaults, plus the
                     rules of a local cluster's config: the nip.io name
                     of the router address, with a named local cluster's
@@ -77,6 +103,10 @@ local cluster, <data-home>/clusters/<name>/config.yaml for a named one.`,
 	c.Flags().StringVarP(&o.Config, "config", "c", "", "path to a CLI config file (any kind)")
 	c.Flags().BoolVar(&o.LocalConfig, "local-config", false,
 		"use the selected local cluster's config in the data home; applies the nip.io fallback for ingress.domain")
+	c.Flags().StringVar(&o.ValuesFile, "values-file", "",
+		"write the operator chart values to this file instead of stdout")
+	c.Flags().StringVar(&o.ResourcesFile, "resources-file", "",
+		"write the platform CRs to this file instead of stdout")
 	addLocalClusterFlag(c)
 	c.MarkFlagsMutuallyExclusive("config", "local-config")
 	c.MarkFlagsMutuallyExclusive("config", localclusters.SelectionFlagName)
@@ -90,12 +120,17 @@ func (p *ProjectInfo) runRender(w io.Writer, o *PlatformRenderOptions) error {
 	if err != nil {
 		return err
 	}
+	valuesFile, resourcesFile := stdoutUnlessNamed(o.ValuesFile), stdoutUnlessNamed(o.ResourcesFile)
+	if err := checkRenderOutputFiles(valuesFile, resourcesFile, path); err != nil {
+		return err
+	}
+
+	p.applyCLIDefaults(cfg)
 
 	header := ""
 	opts := translator.Options{}
 	switch c := cfg.(type) {
 	case *v1alpha1.EducatesLocalConfig:
-		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
 		// The local cluster rules of --local-config have already given
 		// an empty ingress.domain a nip.io name.
 		if !o.LocalConfig && c.Ingress.Domain == "" {
@@ -127,7 +162,25 @@ name of the router address.`, path)
 		return err
 	}
 
-	return writeRender(w, out, header)
+	return writeRender(w, out, header, valuesFile, resourcesFile)
+}
+
+// applyCLIDefaults gives cfg the defaults that come from this CLI binary,
+// its version and image repository, such as the operator image, for every
+// kind but EducatesConfig, which render and deploy pass through as
+// declared. Render and deploy both call it, so the two install the same
+// operator image for the same config.
+func (p *ProjectInfo) applyCLIDefaults(cfg v1alpha1.Config) {
+	switch c := cfg.(type) {
+	case *v1alpha1.EducatesLocalConfig:
+		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
+	case *v1alpha1.EducatesGKEConfig:
+		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
+	case *v1alpha1.EducatesEKSConfig:
+		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
+	case *v1alpha1.EducatesInlineConfig:
+		c.ApplyCLIDefaults(p.Version, p.ImageRepository)
+	}
 }
 
 // yamlComments is a localcerts.Reporter that collects each reported line
@@ -172,11 +225,56 @@ func loadPlatformConfig(configFile string, localConfig bool, sel localclusters.S
 	return loaded.Config, id.ConfigPath, err
 }
 
-// writeRender emits the rendered install plan in deploy order:
-//   - optional host-defaulting header
-//   - "# === operator chart values ===" + values YAML
-//   - "# === platform CRs ===" + multi-doc CR YAML
-func writeRender(w io.Writer, out *translator.Output, hostHeader string) error {
+// stdoutUnlessNamed returns file, or "" for stdout when file is "-",
+// as for kubectl and helm.
+func stdoutUnlessNamed(file string) string {
+	if file == "-" {
+		return ""
+	}
+	return file
+}
+
+// checkRenderOutputFiles refuses output files that would overwrite each
+// other, or the config file render reads, configPath.
+func checkRenderOutputFiles(valuesFile, resourcesFile, configPath string) error {
+	if valuesFile != "" && resourcesFile != "" && sameFile(valuesFile, resourcesFile) {
+		return fmt.Errorf("--values-file and --resources-file name the same file, %s", valuesFile)
+	}
+	for _, f := range []struct{ flag, file string }{
+		{"--values-file", valuesFile},
+		{"--resources-file", resourcesFile},
+	} {
+		if f.file != "" && sameFile(f.file, configPath) {
+			return fmt.Errorf("%s names the config file being rendered, %s", f.flag, configPath)
+		}
+	}
+	return nil
+}
+
+// sameFile reports whether paths a and b name the same file: the same
+// path once made absolute, or, when both exist, the same file on disk.
+func sameFile(a, b string) bool {
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
+	if errA == nil && errB == nil && absA == absB {
+		return true
+	}
+	infoA, errA := os.Stat(a)
+	infoB, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(infoA, infoB)
+}
+
+// writeRender emits the rendered install plan in its two parts, in
+// deploy order: the operator chart values, then the platform CRs. Each
+// part goes to the file named for it, valuesFile or resourcesFile, or
+// else to w. Whatever w receives starts with hostHeader, and when w
+// receives both parts, each starts with a comment naming it and a "---"
+// separates them, so the values are a YAML document of their own.
+//
+// Both parts are encoded, and each file's content staged in a temporary
+// file beside it, before either file is replaced, so a file that cannot
+// be written leaves the other as it was, and each is replaced whole.
+func writeRender(w io.Writer, out *translator.Output, hostHeader, valuesFile, resourcesFile string) error {
 	values, err := translator.RenderOperatorValues(out)
 	if err != nil {
 		return fmt.Errorf("render operator values: %w", err)
@@ -186,20 +284,87 @@ func writeRender(w io.Writer, out *translator.Output, hostHeader string) error {
 		return fmt.Errorf("render CRs: %w", err)
 	}
 
-	if hostHeader != "" {
-		if _, err := fmt.Fprint(w, hostHeader); err != nil {
-			return err
+	var files []stagedFile
+	defer func() {
+		for _, f := range files {
+			os.Remove(f.staged)
+		}
+	}()
+	for _, part := range []struct {
+		file, what string
+		content    []byte
+	}{
+		{valuesFile, "operator chart values", values},
+		{resourcesFile, "platform CRs", crs},
+	} {
+		if part.file == "" {
+			continue
+		}
+		f, err := stageFile(part.file, part.content)
+		if err != nil {
+			return fmt.Errorf("write %s: %w", part.what, err)
+		}
+		files = append(files, f)
+	}
+	for _, f := range files {
+		if err := os.Rename(f.staged, f.path); err != nil {
+			return fmt.Errorf("write %s: %w", f.path, err)
 		}
 	}
-	if _, err := fmt.Fprintln(w, "# === operator chart values (helm install -f - educates-installer ...) ==="); err != nil {
-		return err
+
+	var stream bytes.Buffer
+	stream.WriteString(hostHeader)
+	switch {
+	case valuesFile == "" && resourcesFile == "":
+		stream.WriteString("# === operator chart values (educates-installer chart) ===\n")
+		stream.Write(values)
+		stream.WriteString("---\n# === platform CRs ===\n")
+		stream.Write(crs)
+	case valuesFile == "":
+		stream.Write(values)
+	case resourcesFile == "":
+		stream.Write(crs)
 	}
-	if _, err := w.Write(values); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(w, "# === platform CRs (kubectl apply -f - ...) ==="); err != nil {
-		return err
-	}
-	_, err = w.Write(crs)
+	_, err = w.Write(stream.Bytes())
 	return err
+}
+
+// stagedFile is a temporary file holding the content for path, renamed
+// over path once every file render writes is staged.
+type stagedFile struct{ path, staged string }
+
+// stageFile writes content to a new temporary file in the directory of
+// path, with the permissions path has, or else readable by all. When
+// path is a symbolic link, the file it links to is the one staged for,
+// so the link stays.
+func stageFile(path string, content []byte) (stagedFile, error) {
+	if target, err := filepath.EvalSymlinks(path); err == nil {
+		path = target
+	}
+	mode := fs.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	if err != nil {
+		// Name the file asked for, not the temporary one.
+		var pathErr *fs.PathError
+		if errors.As(err, &pathErr) {
+			err = pathErr.Err
+		}
+		return stagedFile{}, &fs.PathError{Op: "create", Path: path, Err: err}
+	}
+	f := stagedFile{path: path, staged: tmp.Name()}
+	_, err = tmp.Write(content)
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Chmod(f.staged, mode)
+	}
+	if err != nil {
+		os.Remove(f.staged)
+		return stagedFile{}, err
+	}
+	return f, nil
 }

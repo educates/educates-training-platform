@@ -10,7 +10,7 @@ Every kind has a published JSON schema at `https://schemas.educates.dev/cli/v1al
 # yaml-language-server: $schema=https://schemas.educates.dev/cli/v1alpha1/EducatesGKEConfig.json
 ```
 
-Files created by `educates local config init` include the modeline automatically.
+Files created by `educates local config init`, and by the CLI's first-run migration of a version 3 `values.yaml`, include the modeline automatically.
 
 You can also describe the fields of a kind from the command line, without a cluster or a configuration file, using `educates local config explain`. It reads the same embedded schema and prints a field's type, default and description in the style of `kubectl explain`:
 

@@ -73,7 +73,7 @@ Inspect it — this prints exactly what stage 2 will apply, without touching the
 educates admin platform render --config config.yaml
 ```
 
-The output is deterministic for a given config file and CLI version. Committing it to Git is the handoff point from the CLI path to the GitOps path: from here on, nothing remembers that a CLI kind ever existed.
+The output is deterministic for a given config file and CLI version. Written to files of their own with `--values-file` and `--resources-file` and committed to Git, the chart values and the custom resources are the handoff point from the CLI path to the GitOps path: from here on, nothing remembers that a CLI kind ever existed.
 
 ### Stage 2 — `educates-installer` chart → running operator
 

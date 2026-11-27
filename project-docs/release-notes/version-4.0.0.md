@@ -93,12 +93,14 @@ New Features
 * New ``educates admin platform`` commands drive the installation
   end-to-end. ``deploy`` installs the operator chart, applies the platform
   custom resources and waits for each to report ``Ready``. ``render`` emits
-  the Helm chart values and custom resources for inspection, or for committing
-  to a GitOps repository. ``delete`` uninstalls everything in reverse order
-  and supports ``--yes`` and ``--purge`` options. ``educates local cluster
-  create`` lays down the full local environment — kind cluster, local image
-  registry and platform — in a single command, with preflight checks for
-  common problems such as ports already being in use.
+  the Helm chart values and custom resources for inspection, or, with its
+  ``--values-file`` and ``--resources-file`` options, writes each to a file of
+  its own for committing to a GitOps repository. ``delete`` uninstalls
+  everything in reverse order and supports ``--yes`` and ``--purge`` options.
+  ``educates local cluster create`` lays down the full local environment, the
+  kind cluster, the local image registry and the platform, in a single
+  command, with preflight checks for common problems such as ports already
+  being in use.
 
 * The ``educates local config`` command group now provides ``init``, ``get``,
   ``set``, ``view``, ``edit`` and ``explain`` commands for managing the local
@@ -343,18 +345,21 @@ New Features
 
 * The local Kind cluster can now be multi-node. The ``EducatesLocalConfig``
   ``cluster.nodes`` list declares the cluster's nodes, each with a ``role``
-  (``control-plane`` or ``worker``), optional Kubernetes node ``labels``, and
-  optional ``taints``, so a laptop cluster can model node pools for workshops
-  that schedule across several nodes. Exactly one node has the
-  ``control-plane`` role, the node the router sends the cluster's names
-  to. ``educates local cluster create``, ``educates local
-  config edit`` and ``educates local config set`` refuse a list with none or
-  with more than one, and ``educates local config view`` says why the
-  cluster can't use such a config. Leaving ``cluster.nodes`` unset keeps the
-  default single control-plane cluster. Every node pulls from the local
-  image registry and the local registry mirrors: ``educates local cluster
-  create``, ``educates local registry deploy`` and ``educates local mirror
-  deploy`` configure each node, and ``educates local mirror delete`` removes
+  (``control-plane`` or ``worker``), optional Kubernetes node ``labels``, and,
+  for worker nodes, optional ``taints``, so a laptop cluster can model node
+  pools for workshops that schedule across several nodes. Exactly one node
+  has the ``control-plane`` role, the node the router sends the cluster's
+  names to. It can't have taints, since Envoy serves the cluster's ports 80
+  and 443 from it, and in a cluster with workers Kind already keeps other
+  workloads off it. ``educates local cluster create``, ``educates local
+  config edit`` and ``educates local config set`` refuse a list with no
+  control-plane node, with more than one, or with taints on it, and
+  ``educates local config view`` says why the cluster can't use such a
+  config. Leaving ``cluster.nodes`` unset keeps the default single
+  control-plane cluster. Every node pulls from the local image registry and
+  the local registry mirrors: ``educates local cluster create``,
+  ``educates local registry deploy`` and ``educates local mirror deploy``
+  configure each node, and ``educates local mirror delete`` removes
   the mirror's configuration from each node. ``educates local cluster stop``
   and ``educates local cluster start`` stop and start every node, and
   ``educates local cluster status`` reports a cluster with only some of its
@@ -1229,7 +1234,14 @@ Features Changed
   been renamed, including ``localKindCluster`` to ``cluster``,
   ``localDNSResolver`` to ``resolver``, and the kind cluster networking
   fields ``podCIDR`` and ``serviceCIDR`` to ``podSubnet`` and
-  ``serviceSubnet``.
+  ``serviceSubnet``. The migration carries ``sessionManager.clusterAdmin``
+  over to ``clusterAdmin``, which a local cluster does not apply yet, and a
+  set ``lookupService.enabled`` over to ``lookupService``. Its notice names
+  every setting it drops, each top-level setting it does not carry over and
+  each setting dropped from a block it carries in part, and says where the
+  setting's version 4 equivalent lives, often a field of an
+  ``EducatesConfig``. See [laptop installs migrate
+  automatically](laptop-installs-migrate-automatically).
 
 * Workshop sessions are served over HTTPS when the cluster configuration
   provides certificate settings, which is a wildcard certificate, a
@@ -1243,8 +1255,13 @@ Features Changed
   address and needs no CA, since that address cannot obtain a trusted
   certificate. Set
   ``ingress.insecure`` to request plain HTTP explicitly for a custom domain.
-  See the New Features entry on installing without in-cluster TLS for the
-  full picture.
+  The CLI's first-run migration of a version 3 ``values.yaml`` leaves a
+  ``clusterIngress.domain`` that is the ``nip.io`` name of an IPv4 address,
+  such as ``10.10.10.1.nip.io``, to this default when version 3 served it
+  over plain HTTP, with no wildcard certificate for it cached and no
+  certificate settings or ``clusterIngress.protocol`` in the file, and its
+  notice says how to keep the domain. See the New Features entry on
+  installing without in-cluster TLS for the full picture.
 
 * The local secrets cache stores certificate authorities in a new shape,
   and ``educates local secrets add ca`` and ``educates local secrets add tls``
@@ -2597,6 +2614,36 @@ Bugs Fixed
   now proceeds directly to installing the secrets manager. The operator still
   validates any CA secret named in the ``EducatesClusterConfig`` resource,
   and reports a missing or invalid secret in the status of that resource.
+
+* ``educates admin platform render`` and ``educates admin platform deploy``
+  gave the operator chart no image for an ``EducatesGKEConfig``,
+  ``EducatesEKSConfig`` or ``EducatesInlineConfig`` configuration that left
+  ``operator.image`` unset. The operator image then came from the chart
+  embedded in the CLI, not from the CLI itself as the help of ``render``
+  said and as it does for an ``EducatesLocalConfig`` configuration. A
+  released CLI deployed the same operator image either way, but a CLI built
+  from source deployed the default operator image of the chart in place of
+  the one built with it. Both commands now default
+  ``operator.image.repository`` and ``operator.image.tag`` from the image
+  registry and version of the CLI for these kinds too, so the rendered chart
+  values name the operator image. An ``EducatesConfig`` configuration is
+  still used as declared.
+
+* ``educates admin platform render`` wrote the operator chart values and the
+  platform custom resources as one YAML stream with no document separator
+  between them, so the chart values, such as ``logLevel``, parsed as fields
+  of the ``EducatesClusterConfig`` resource, and the output had to be split
+  by hand before ``helm install -f`` or ``kubectl apply -f`` could use it.
+  The chart values are now a YAML document of their own. The new
+  ``--values-file`` and ``--resources-file`` options write the chart values
+  and the custom resources to files of their own in place of standard
+  output, for ``helm install -f`` and ``kubectl apply -f``, and standard
+  output keeps the part not written to a file, so either part can also be
+  piped to its command, as it is when an option names the file ``-``. Helm
+  reads every document of a values file, so the stream holding both parts is
+  not a values file. The command refuses a file that is the configuration
+  file it renders, or that both options name, and a file it cannot write
+  leaves the other file as it was.
 
 * Deleting an ``EducatesClusterConfig`` in ``Managed`` mode, which
   ``educates admin platform delete`` does, uninstalled the Helm releases named

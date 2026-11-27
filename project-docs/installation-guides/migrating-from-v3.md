@@ -116,11 +116,13 @@ Laptop installs migrate automatically
 
 For local kind-cluster users, the v4 CLI migrates your configuration on first use. When a v4 command needs the local config (`educates local cluster create`, `educates admin platform deploy --local-config`, ...) and finds a v3 `values.yaml` in the CLI data home with `clusterInfrastructure.provider` empty or `kind`, it:
 
-* translates it to a v4 ``config.yaml`` (``EducatesLocalConfig``), carrying over
+* translates it to a v4 ``config.yaml`` (``EducatesLocalConfig``), starting
+  with the schema modeline ``educates local config init`` writes, carrying over
   the ingress domain, kind cluster settings (API server, subnets, volume
   mounts), the local DNS resolver's extra domains, image version overrides,
-  image pre-puller settings, website styling references, and image pull
-  secret propagation;
+  image pre-puller settings, website styling references, image pull secret
+  propagation, the session manager's ``clusterAdmin`` switch, and the lookup
+  service switch;
 * writes the router address, from ``localKindCluster.listenAddress``, to
   ``router.yaml`` (``EducatesLocalRouter``) beside it, unless that file
   already exists;
@@ -129,8 +131,33 @@ For local kind-cluster users, the v4 CLI migrates your configuration on first us
   already exists;
 * renames the original to `values.yaml.v3-backup`; and
 * prints a notice naming both files, followed by a line for each setting it
-  carried over in a changed form or dropped. There is no prompt and no flag:
+  carried over in a changed form or dropped, saying where the version 4
+  equivalent of a dropped setting lives. There is no prompt and no flag:
   you run the same command you would have run on v3.
+
+The notice names every setting the migration drops: each top-level setting it
+does not carry over, such as ``clusterPackages``, ``workshopAnalytics`` or
+``dockerDaemon``, and each setting it drops from a block it carries in part,
+such as ``clusterIngress.tlsCertificate`` or
+``websiteStyling.frameAncestors``. Some are expressed by the
+``EducatesLocalConfig`` kind itself, which always installs Contour and Kyverno
+and enforces cluster and workshop policy with Kyverno. Certificates go in the
+local secrets cache, with ``educates local secrets add tls`` and
+``educates local secrets add ca``. Others, such as analytics tracking IDs, the
+session cookie domain, storage settings and the Docker daemon's network MTU,
+need the ``EducatesConfig`` escape hatch, and the notice names the field of
+the custom resource to set. A setting that holds no value drops nothing, and
+is not named.
+
+``sessionManager.clusterAdmin`` is carried over to ``clusterAdmin``, which a
+local cluster does not apply yet: its session manager is not bound to the
+``cluster-admin`` ClusterRole, and the notice says so.
+``lookupService.enabled`` is carried over to ``lookupService`` when the version
+3 file sets it. Version 3 left the lookup service off by default, and a local
+cluster runs it by default, so a version 3 file that does not set it gets the
+lookup service. A local cluster serves the lookup service under the prefix
+``lookup``, where version 3 used ``educates-api`` or
+``lookupService.ingressPrefix``, and the notice says so.
 
 The image pre-puller settings are carried over as the mapping above describes,
 so the pre-puller keeps its switch and its list of names. The migration drops
@@ -164,6 +191,19 @@ address can't be detected, the migration writes no ``router.yaml``, and the
 notice says to set the router address. When ``router.yaml`` already exists,
 the migration leaves it as it is, and for a specific listen address the
 notice shows the command that makes it the router address.
+
+A local cluster serves an ingress domain it is given over HTTPS, which needs
+a root CA or a wildcard certificate for the domain in the local secrets cache,
+and with no ``ingress.domain`` it takes the ``nip.io`` name of the router
+address, with dashes, served over plain HTTP. When ``clusterIngress.domain``
+is the ``nip.io`` name of an IPv4 address, such as ``10.10.10.1.nip.io`` or
+``10-10-10-1.nip.io``, the migration leaves ``ingress.domain`` unset if version
+3 served the domain over plain HTTP: no unexpired wildcard certificate for it
+is cached, and the file sets none of ``clusterIngress.tlsCertificate``,
+``clusterIngress.tlsCertificateRef``, ``clusterInfrastructure.caCertificateRef``
+and ``clusterIngress.protocol``. A line of the notice says so, and the
+cluster's host names then follow the router address. To keep the version 3
+domain, set ``ingress.domain`` to it and ``ingress.insecure`` to ``true``.
 
 The migration also drops ``localDNSResolver.targetAddress``. A local cluster's
 names now resolve to the router address, where the router serves every local
@@ -237,6 +277,9 @@ moved localKindCluster.registryMirrors to /Users/me/Library/Application Support/
 dropped imageVersions entry pause-container: the image pre-puller now runs its own image-puller helper, which a pause container image cannot replace
 carried imagePuller over to imagePrePuller: enabled: true, images: jdk17-environment
 dropped imagePuller.prePullImages names the v4 image inventory does not hold: session-manager; to pull one, add its full reference to imagePrePuller.images as an image entry
+carried lookupService.enabled over to lookupService: true; a local cluster serves it under the prefix lookup, where version 3 used educates-api
+dropped clusterIngress.tlsCertificate: cache the wildcard certificate with 'educates local secrets add tls <name> --cert FILE --key FILE', which deploys serve for the domains of its wildcard DNS names
+dropped workshopAnalytics: set sessionManager.tracking, its googleAnalytics, clarity, amplitude and webhook, in an EducatesConfig
 ```
 
 If the v3 file's provider is anything other than kind or empty, the CLI refuses with instructions instead: cloud and BYO configurations carry intent the CLI cannot infer (DNS, ACME, identity wiring), so they must be re-declared against a v4 kind as described above. The `values.yaml` is left untouched for reference.

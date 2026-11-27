@@ -3,15 +3,21 @@ package config
 import (
 	"fmt"
 	"io"
+	"maps"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v2"
+	apiv1 "k8s.io/api/core/v1"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/hostinfo"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/v1alpha1"
+	"github.com/educates/educates-training-platform/client-programs/pkg/secrets"
 )
 
 // MaybeMigrateV3 attempts to translate a v3 values.yaml in dataHome
@@ -95,6 +101,9 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 	if routerNote != "" {
 		notes = append([]string{routerNote}, notes...)
 	}
+	if note := dropV3NipDomain(cfg, v3raw, dataHome); note != "" {
+		notes = append(notes, note)
+	}
 	// v4 declares registry mirrors for every local cluster in a file of
 	// their own, written before the config, so a mirror is never lost: a
 	// migration that fails here leaves the v3 values.yaml in place.
@@ -107,14 +116,12 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 		notes = append(notes, mirrorsNote)
 	}
 	notes = append(notes, droppedNotes...)
-	out, err := yaml.Marshal(cfg)
+	// The config is written as `local config init` writes it, starting
+	// with the yaml-language-server modeline.
+	out, err := MarshalLocalConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("marshal v4 config: %w", err)
+		return err
 	}
-	// Prepend the apiVersion/kind header line so the file reads
-	// naturally even though yaml.v2's inline TypeMeta marshal works
-	// fine — keeps the file consistent with what `local config init`
-	// emits.
 	if err := os.WriteFile(v4Path, out, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", v4Path, err)
 	}
@@ -133,7 +140,7 @@ reference while re-declaring.`, v3Path, provider, v3Path)
 	// Tell the user how deploys use it: beside a cached wildcard
 	// certificate it is that certificate's CA trust, and otherwise a root
 	// CA is still needed.
-	if domain := strV3Path(v3raw, "clusterIngress", "domain"); domain != "" {
+	if domain := cfg.Ingress.Domain; domain != "" {
 		noteIfV3CACachePresent(w, filepath.Join(dataHome, "secrets"), domain)
 	}
 	return nil
@@ -197,9 +204,10 @@ v3 certificate:
 
 // translateV3ToV4 builds the v4 EducatesLocalConfig from a v3 values map
 // parsed as map[string]interface{}. Missing fields stay zero — the v4
-// schema defaults pick up the rest at load time. It also returns the
-// lines of the migration notice that say what it carried over in a
-// changed form or dropped.
+// schema defaults pick up the rest at load time. It also returns whether
+// its cluster.listenAddress is the host's IP address the CLI detected,
+// and the lines of the migration notice that say what it carried over in
+// a changed form or dropped.
 func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, []string) {
 	var notes []string
 	cfg := &v1alpha1.EducatesLocalConfig{
@@ -286,7 +294,262 @@ func translateV3ToV4(v3 map[string]interface{}) (*v1alpha1.EducatesLocalConfig, 
 		}
 	}
 
+	// sessionManager. clusterAdmin is carried over although a local
+	// cluster does not apply it, which its notice line says.
+	if clusterAdmin, isBool := asMap(v3["sessionManager"])["clusterAdmin"].(bool); isBool {
+		cfg.ClusterAdmin = &clusterAdmin
+		notes = append(notes, fmt.Sprintf("carried sessionManager.clusterAdmin over to clusterAdmin: %t; a local "+
+			"cluster does not apply clusterAdmin yet, and does not bind its session manager to the cluster-admin "+
+			"ClusterRole", clusterAdmin))
+	}
+
+	// lookupService. Only a set switch is carried over: v3 left the lookup
+	// service off by default, and a local cluster runs it by default. A
+	// local cluster serves it under the prefix lookup, so a dropped
+	// ingressPrefix is noted with the dropped settings.
+	lookupService := asMap(v3["lookupService"])
+	if enabled, isBool := lookupService["enabled"].(bool); isBool {
+		cfg.LookupService = &enabled
+		note := fmt.Sprintf("carried lookupService.enabled over to lookupService: %t", enabled)
+		if enabled && isEmptyV3Value(lookupService["ingressPrefix"]) {
+			note += "; a local cluster serves it under the prefix lookup, where version 3 used educates-api"
+		}
+		notes = append(notes, note)
+	}
+
+	notes = append(notes, droppedV3SettingNotes(v3)...)
+
 	return cfg, notes
+}
+
+// v3CarriedSettings are the top-level settings of a v3 values.yaml that
+// the migration carries over, each with the settings under it that it
+// carries, or nil when it carries the whole setting, noting itself what
+// it carries over in a changed form or drops.
+var v3CarriedSettings = map[string][]string{
+	"clusterInfrastructure": {"provider"},
+	"clusterIngress":        {"domain", "protocol"},
+	"localKindCluster":      nil,
+	"localDNSResolver":      nil,
+	"imageVersions":         nil,
+	"imagePuller":           nil,
+	"websiteStyling":        {"defaultTheme", "themeDataRefs"},
+	"secretPropagation":     nil,
+	"sessionManager":        {"clusterAdmin"},
+	"lookupService":         {"enabled"},
+}
+
+// v3DroppedSettings says where the version 4 equivalent of each setting
+// of a v3 values.yaml that the migration drops lives, or that it has
+// none, for the line of the migration notice that notes it. A setting it
+// does not hold is not a version 3 setting the migration knows.
+var v3DroppedSettings = map[string]string{
+	"debug": "it has no version 4 equivalent; 'educates admin platform render --local-config' prints what a " +
+		"deploy applies",
+	"clusterPackages": "a local cluster always installs Contour and Kyverno, and cert-manager when it issues the " +
+		"ingress certificate from a cached root CA; declare the cluster services otherwise in " +
+		"educatesClusterConfig in an EducatesConfig",
+	"imageRegistry": "set educatesClusterConfig.imageRegistry.prefix in an EducatesConfig, under which each image " +
+		"keeps its upstream repository path",
+	"version":        "image versions follow the release of the CLI; imageVersions overrides single images",
+	"clusterRuntime": "it has no version 4 equivalent",
+	"sessionCookies": "set sessionManager.sessionCookieDomain in an EducatesConfig",
+	"clusterStorage": "set sessionManager.storage, its storageClass, storageUser and storageGroup, in an " +
+		"EducatesConfig",
+	"clusterSecrets": "name docker-registry Secrets you create in the operator namespace in " +
+		"educatesClusterConfig.imageRegistry.pullSecrets in an EducatesConfig",
+	"clusterSecurity": "a local cluster enforces cluster policy with Kyverno; an EducatesConfig turns it off with " +
+		"educatesClusterConfig.policyEnforcement.clusterPolicy.engine None",
+	"workshopSecurity": "a local cluster enforces workshop policy with Kyverno; an EducatesConfig turns it off " +
+		"with educatesClusterConfig.policyEnforcement.workshopPolicy.engine None",
+	"trainingPortal": "set the credentials of each training portal in spec.portal.credentials and " +
+		"spec.portal.clients of its TrainingPortal; without them each portal gets credentials of its own",
+	"dockerDaemon": "set sessionManager.network.packetSize in an EducatesConfig for networkMTU; proxyCache, rootless " +
+		"and privileged have no version 4 equivalent",
+	"clusterNetwork": "a local cluster blocks sessions from the cloud metadata addresses 169.254.169.254/32 and " +
+		"fd00:ec2::254/128; set sessionManager.network.blockedCidrs in an EducatesConfig to block others",
+	"workshopAnalytics": "set sessionManager.tracking, its googleAnalytics, clarity, amplitude and webhook, in an " +
+		"EducatesConfig",
+
+	"clusterInfrastructure.aws":              "it applies to EKS clusters, which an EducatesEKSConfig declares",
+	"clusterInfrastructure.gcp":              "it applies to GKE clusters, which an EducatesGKEConfig declares",
+	"clusterInfrastructure.caCertificateRef": v3RootCANote,
+	"clusterIngress.class": "a local cluster's ingress class is Contour's contour; set " +
+		"educatesClusterConfig.ingress.ingressClassName in an EducatesConfig for another",
+	"clusterIngress.tlsCertificate":    v3TLSCertificateNote,
+	"clusterIngress.tlsCertificateRef": v3TLSCertificateNote,
+	"clusterIngress.caCertificate":     v3CACertificateNote,
+	"clusterIngress.caCertificateRef":  v3CACertificateNote,
+	"clusterIngress.caNodeInjector": "a local cluster installs the node CA injector whenever its ingress has a CA; " +
+		"set sessionManager.nodeCATrust.mode in an EducatesConfig to change that",
+	"websiteStyling.workshopDashboard":    v3StylingNote,
+	"websiteStyling.workshopInstructions": v3StylingNote,
+	"websiteStyling.workshopStarted":      v3StylingNote,
+	"websiteStyling.workshopFinished":     v3StylingNote,
+	"websiteStyling.trainingPortal":       v3StylingNote,
+	"websiteStyling.frameAncestors":       "set sessionManager.allowedEmbeddingHosts in an EducatesConfig",
+	"lookupService.ingressPrefix": "a local cluster serves the lookup service under the prefix lookup; set " +
+		"lookupService.ingress.prefix in an EducatesConfig for another",
+}
+
+// The lines of the migration notice that several dropped v3 settings
+// share.
+const (
+	v3RootCANote = "register the root CA with 'educates local secrets add ca <name> --cert ROOT.pem --key " +
+		"ROOT-KEY.pem', from which deploys mint a CA for the ingress domain"
+	v3TLSCertificateNote = "cache the wildcard certificate with 'educates local secrets add tls <name> --cert FILE " +
+		"--key FILE', which deploys serve for the domains of its wildcard DNS names"
+	v3CACertificateNote = "cache the CA certificate for trust with 'educates local secrets add ca <name> --cert FILE'"
+	v3StylingNote       = "put the content in a theme Secret, named in websiteStyling.themeDataRefs and " +
+		"websiteStyling.defaultTheme"
+)
+
+// droppedV3SettingNotes returns a line of the migration notice for each
+// setting of the v3 values map v3 that the migration drops, saying where
+// its version 4 equivalent lives: each top-level setting it does not
+// carry over, and each setting under one it carries only in part. A
+// setting that holds no value drops nothing.
+func droppedV3SettingNotes(v3 map[string]interface{}) []string {
+	var notes []string
+	for _, key := range slices.Sorted(maps.Keys(v3)) {
+		carried, isCarried := v3CarriedSettings[key]
+		switch {
+		case isEmptyV3Value(v3[key]):
+		case !isCarried:
+			notes = append(notes, droppedV3SettingNote(key))
+		case carried != nil:
+			block := asMap(v3[key])
+			for _, sub := range slices.Sorted(maps.Keys(block)) {
+				if !slices.Contains(carried, sub) && !isEmptyV3Value(block[sub]) {
+					notes = append(notes, droppedV3SettingNote(key+"."+sub))
+				}
+			}
+		}
+	}
+	return notes
+}
+
+// isEmptyV3Value reports whether v, a value of a v3 values map, holds no
+// value: it is null, an empty string or list, or a map whose values all
+// hold none.
+func isEmptyV3Value(v interface{}) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case string:
+		return x == ""
+	case []interface{}:
+		return len(x) == 0
+	}
+	if m := asMap(v); m != nil {
+		for _, val := range m {
+			if !isEmptyV3Value(val) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// droppedV3SettingNote is the line of the migration notice for the v3
+// setting path, which the migration drops.
+func droppedV3SettingNote(path string) string {
+	where, known := v3DroppedSettings[path]
+	if !known {
+		where = "it is not a version 3 setting the migration knows"
+	}
+	return fmt.Sprintf("dropped %s: %s", path, where)
+}
+
+// dropV3NipDomain leaves the ingress.domain of cfg, migrated from the v3
+// values map v3, to the version 4 default when it is the nip.io name of an
+// IPv4 address that version 3 served over plain HTTP, and returns the line
+// of the migration notice that says so, empty when it keeps the domain.
+// Version 3 served it over plain HTTP when v3 declares no HTTPS, as
+// v3ServedHTTPS says, and the local secrets cache in secretsDir holds no
+// wildcard TLS certificate for it. A local cluster serves a domain it is
+// given over HTTPS, which needs a root CA, and gives a config without one
+// the nip.io name of the router address, which the router file of the data
+// home dataHome declares, served over plain HTTP. A domain the config
+// already serves over plain HTTP, as v3 clusterIngress.protocol http
+// asked, is kept.
+func dropV3NipDomain(cfg *v1alpha1.EducatesLocalConfig, v3 map[string]interface{}, dataHome string) string {
+	domain := cfg.Ingress.Domain
+	if cfg.Ingress.Insecure || !isNipDomain(domain) || v3ServedHTTPS(v3) ||
+		cachedWildcardCertificateCovers(filepath.Join(dataHome, "secrets"), domain) {
+		return ""
+	}
+	cfg.Ingress.Domain = ""
+	defaultDomain := "the nip.io name of the router address"
+	if router, err := LoadLocalRouter(dataHome); err == nil {
+		if ip, err := netip.ParseAddr(router.Address); err == nil && ip.Is4() {
+			defaultDomain += ", " + hostinfo.NipDomain(router.Address)
+		}
+	}
+	return fmt.Sprintf("dropped clusterIngress.domain %[1]s: no wildcard TLS certificate for it is cached, and a local "+
+		"cluster serves a domain it is given over HTTPS, which needs a root CA, so the cluster takes %[2]s, served "+
+		"over plain HTTP as version 3 served %[1]s; to keep %[1]s, set ingress.domain to it and ingress.insecure to true",
+		domain, defaultDomain)
+}
+
+// v3ServedHTTPS reports whether the v3 values map v3 declares HTTPS for
+// its ingress without the local secrets cache: a wildcard certificate, a
+// CA cert-manager issues one from, or clusterIngress.protocol https.
+func v3ServedHTTPS(v3 map[string]interface{}) bool {
+	ingress := asMap(v3["clusterIngress"])
+	return strMap(ingress, "protocol") == "https" ||
+		!isEmptyV3Value(ingress["tlsCertificate"]) ||
+		!isEmptyV3Value(ingress["tlsCertificateRef"]) ||
+		!isEmptyV3Value(asMap(v3["clusterInfrastructure"])["caCertificateRef"])
+}
+
+// cachedWildcardCertificateCovers reports whether the local secrets cache
+// in secretsDir holds an unexpired TLS certificate with a wildcard DNS
+// name for domain, which a deploy serves for it. Best-effort: a cache or
+// cached file that can't be read holds none.
+func cachedWildcardCertificateCovers(secretsDir, domain string) bool {
+	entries, err := os.ReadDir(secretsDir)
+	if err != nil {
+		return false
+	}
+	domain = strings.ToLower(strings.TrimSuffix(domain, "."))
+	for _, e := range entries {
+		name, isYAML := strings.CutSuffix(e.Name(), ".yaml")
+		if e.IsDir() || !isYAML {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(secretsDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var s apiv1.Secret
+		if err := sigsyaml.Unmarshal(body, &s); err != nil {
+			continue
+		}
+		role, _ := secrets.ClassifyCachedSecret(name, &s)
+		if role != secrets.TLSCertificateRole {
+			continue
+		}
+		domains, _ := secrets.CachedSecretDomains(name, role, &s)
+		if cert := secrets.CachedSecretCertificate(role, &s); cert != nil &&
+			time.Now().Before(cert.NotAfter) && slices.Contains(domains, domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// isNipDomain reports whether domain is the nip.io name of an IPv4
+// address, with dots or with dashes, as 10.10.10.1.nip.io or
+// 10-10-10-1.nip.io are.
+func isNipDomain(domain string) bool {
+	host, ok := strings.CutSuffix(strings.ToLower(strings.TrimSuffix(domain, ".")), ".nip.io")
+	if !ok {
+		return false
+	}
+	ip, err := netip.ParseAddr(strings.ReplaceAll(host, "-", "."))
+	return err == nil && ip.Is4()
 }
 
 // translateV3RegistryMirrors returns the registry mirrors of a v3 values

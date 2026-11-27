@@ -63,7 +63,7 @@ after the change. The write only happens when validation passes, so
 type / enum errors are caught up front with the offending field path. The
 config must also keep following the rules of a local cluster's config,
 such as a cluster.nodes list, when declared, with exactly one
-control-plane node.
+control-plane node, which declares no taints.
 
 --local-cluster <name>, or EDUCATES_LOCAL_CLUSTER, sets a field in the
 config of a named local cluster instead,

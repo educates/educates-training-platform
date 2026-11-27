@@ -10,10 +10,13 @@ import (
 )
 
 // validateClusterNodes checks a declared node list: when set, it must
-// contain exactly one control-plane node and use only the roles kind
-// understands. kind cannot bootstrap without a control-plane node, and the
-// router sends the cluster's names to its one control-plane node, by its
-// container name. An empty list keeps the default
+// contain exactly one control-plane node, which declares no taints, and
+// use only the roles kind understands. kind cannot bootstrap without a
+// control-plane node, and the router sends the cluster's names to its one
+// control-plane node, by its container name. Envoy serves the cluster's
+// ports 80 and 443 from the control-plane node and tolerates only the
+// NoSchedule taint kind leaves on it in a cluster with workers, so a taint
+// declared on it could keep Envoy off. An empty list keeps the default
 // single control-plane cluster and needs no validation. The error gives
 // the reason, without naming the field the list came from.
 func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
@@ -26,6 +29,12 @@ func validateClusterNodes(nodes []v1alpha1.ClusterNode) error {
 		switch n.Role {
 		case "control-plane":
 			controlPlanes++
+			if len(n.Taints) > 0 {
+				return fmt.Errorf("the node with role \"control-plane\" can't have taints, since Envoy serves " +
+					"ports 80 and 443 from that node, which the router sends the cluster's names to, and a taint can keep Envoy off it; " +
+					"declare taints on nodes with role \"worker\" instead, as kind already keeps other " +
+					"workloads off the control-plane node once the cluster has workers")
+			}
 		case "worker":
 		default:
 			return fmt.Errorf("invalid node role %q, which must be \"control-plane\" or \"worker\"", n.Role)

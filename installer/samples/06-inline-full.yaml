@@ -14,18 +14,16 @@
 # Prerequisites (must exist before applying this CR):
 #
 #   1. The wildcard TLS Secret, valid for `*.<domain>`. Both Secrets
-#      live in their own namespace here to show the optional
-#      cross-namespace references; omit `namespace` to default to the
-#      operator namespace:
+#      live in the operator namespace here; a `namespace` on a
+#      reference names another namespace instead:
 #
-#        kubectl create namespace educates-secrets
-#        kubectl -n educates-secrets create secret tls \
+#        kubectl -n educates-installer create secret tls \
 #          educates-wildcard-tls --cert=tls.crt --key=tls.key
 #
 #   2. The CA Secret (key ca.crt) for the chain that issued the
 #      wildcard. Any other key it holds is ignored:
 #
-#        kubectl -n educates-secrets create secret generic \
+#        kubectl -n educates-installer create secret generic \
 #          educates-wildcard-ca --from-file=ca.crt=ca.pem
 #
 #   3. The named ClusterIssuer must exist and be Ready (informational —
@@ -50,12 +48,10 @@ spec:
       ingressClassName: nginx
       wildcardCertificateSecretRef:
         name: educates-wildcard-tls
-        # Optional; empty means the operator namespace.
-        namespace: educates-secrets
+        # namespace: optional; empty means the operator namespace.
       caCertificateSecretRef:
         name: educates-wildcard-ca
-        # Optional; empty means the operator namespace.
-        namespace: educates-secrets
+        # namespace: optional; empty means the operator namespace.
       clusterIssuerRef:
         name: corp-ca-issuer
     policyEnforcement:

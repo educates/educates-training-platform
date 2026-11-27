@@ -2,6 +2,13 @@ package constants
 
 import "sort"
 
+// OperatorNamespace is the namespace of the educates-installer chart's
+// release, the operator namespace. It is also where the CLI keeps the
+// Secrets of its local cache in a cluster, since the operator pod pulls
+// its own image with Secrets that must be there before the chart is
+// installed, and the EducatesClusterConfig names its Secrets there.
+const OperatorNamespace = "educates-installer"
+
 // KubernetesVersionToKindImage maps a supported Kubernetes minor version to
 // the kind node image (with digest) published for the kind release this CLI
 // vendors (sigs.k8s.io/kind v0.33.0). The supported set is kept in sync with

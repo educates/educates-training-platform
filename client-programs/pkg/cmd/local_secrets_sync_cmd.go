@@ -59,7 +59,17 @@ func (o *LocalSecretsSyncOptions) Run(w io.Writer, id localclusters.Identity) er
 		return err
 	}
 
-	return secrets.SyncLocalCachedSecretsToCluster(client, plan.SyncSecretNames)
+	if err := secrets.SyncLocalCachedSecretsToCluster(client, plan.SyncSecretNames); err != nil {
+		return err
+	}
+	note, err := secrets.RetiredSyncNamespaceNote(client)
+	if err != nil {
+		return err
+	}
+	if note != "" {
+		fmt.Fprintln(w, note)
+	}
+	return nil
 }
 
 // resolveLocalSecretsSync resolves what local secrets sync pushes for the
@@ -91,7 +101,12 @@ func (p *ProjectInfo) NewLocalSecretsSyncCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Use:   "sync",
 		Short: "Copy secrets to cluster",
-		Long: `Copy the cached secrets into the educates-secrets namespace of the cluster.
+		Long: `Copy the cached secrets into the educates-installer namespace of the
+cluster, the operator namespace, creating it when missing. Run it before
+installing the operator chart by hand, such as with the output of
+"educates admin platform render", since the operator pod pulls with the
+image pull secrets the configuration names and the platform resources
+reference the secrets there.
 
 CA root key pairs are never copied. A CA key pair is copied only when the
 local config's ingress.domain selects it, and is minted first from the

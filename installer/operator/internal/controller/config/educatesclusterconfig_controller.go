@@ -109,9 +109,8 @@ type EducatesClusterConfigReconciler struct {
 
 	// CachedSecretNamespaces is the set of namespaces the operator's
 	// Secret informer covers. Determined at startup from
-	// (operatorNamespace ∪ educates-secrets ∪ namespaces referenced by
-	// the EducatesClusterConfig and SessionManager SecretReference
-	// fields). The reconciler uses this to detect when a freshly-edited
+	// (operatorNamespace ∪ namespaces referenced by the
+	// EducatesClusterConfig and SessionManager SecretReference fields). The reconciler uses this to detect when a freshly-edited
 	// ref points outside the cached set: Secret watch events don't fire
 	// there, so it logs a message asking the user to restart the
 	// operator pod for change detection on the new namespace. APIReader

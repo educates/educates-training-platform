@@ -223,10 +223,9 @@ func main() {
 	}
 	setupLog.Info("Applied embedded CRDs")
 
-	// Scope the Secret cache to: operator namespace, 'educates-secrets'
-	// (v3 / CLI laptop convention), plus any cross-namespace refs the
-	// current EducatesClusterConfig and SessionManager singletons point
-	// at. APIReader still handles ad-hoc reads from elsewhere; the cache
+	// Scope the Secret cache to: the operator namespace, plus any
+	// cross-namespace refs the current EducatesClusterConfig and
+	// SessionManager singletons point at. APIReader still handles ad-hoc reads from elsewhere; the cache
 	// scope here only affects watch-driven enqueue.
 	//
 	// Boot-time discovery: if the user later edits either singleton to

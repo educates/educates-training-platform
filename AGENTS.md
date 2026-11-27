@@ -358,11 +358,10 @@ components knowing the difference.
   a deleted TLS secret — must propagate to status within seconds.
 - Secret + IngressClass + Deployment are registered in `SetupWithManager`
   (cluster-scoped IngressClass; Deployments only in the cluster-service and
-  platform namespaces). The Secret cache spans the operator namespace,
-  `educates-secrets`, and every namespace the EducatesClusterConfig and
-  SessionManager singletons reference at operator startup
-  (`cmd/secretcache.go`); a reference edited later to a new namespace needs
-  an operator restart for its watch.
+  platform namespaces). The Secret cache spans the operator namespace and
+  every namespace the EducatesClusterConfig and SessionManager singletons
+  reference at operator startup (`cmd/secretcache.go`); a reference edited
+  later to a new namespace needs an operator restart for its watch.
 - The SessionManager reconciler also watches Secrets, narrowed to its CA
   override's source and the key-free copy it derives from it.
 - cert-manager.io ClusterIssuer + Certificate watches are **deferred** —
@@ -520,7 +519,8 @@ Educates uses domain-specific terms that have precise meanings:
   wildcard certificate. In the local flow it is an intermediate CA the CLI
   mints per ingress domain from the CA root key pair, named
   `<domain>-ca-key-pair` and name-constrained to that domain; in the cluster
-  it stays in `educates-secrets` and the `cert-manager` namespace.
+  it stays in the operator namespace, where the CLI syncs its local secrets
+  cache, and the `cert-manager` namespace.
 - **CA root key pair**: the local flow's root CA, cached by the CLI as
   `<name>-root-key-pair` next to its CA trust Secret `<name>`. One per CLI
   data home; its key never leaves the laptop.

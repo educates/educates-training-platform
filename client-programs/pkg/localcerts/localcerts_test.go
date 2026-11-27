@@ -68,6 +68,22 @@ func nested(t *testing.T, root map[string]interface{}, path string) interface{} 
 	return cur
 }
 
+// assertInOperatorNamespace checks that each Secret reference at refs
+// names no namespace, which the EducatesClusterConfig reads as the
+// operator namespace, where the deploy syncs the cache.
+func assertInOperatorNamespace(t *testing.T, root map[string]interface{}, refs ...string) {
+	t.Helper()
+	for _, path := range refs {
+		ref, ok := nested(t, root, path).(map[string]interface{})
+		if !ok {
+			t.Fatalf("%s is not a map in %v", path, root)
+		}
+		if namespace, present := ref["namespace"]; present {
+			t.Errorf("%s.namespace = %v, want none: the operator namespace", path, namespace)
+		}
+	}
+}
+
 // withDomainAnnotation records domain on s with the domain annotation, as
 // caches from earlier releases do, and returns s.
 func withDomainAnnotation(s *apiv1.Secret, domain string) *apiv1.Secret {
@@ -247,8 +263,8 @@ func TestResolve_Root_SelectsTheDomainCAKeyPairAndTheRootTrust(t *testing.T) {
 	want := translator.LocalCertificates{
 		Provider: "BundledCertManager",
 		CustomCA: &translator.LocalCustomCA{
-			CAKeyPairSecretRef:     translator.SecretRef{Name: "workshop.test-ca-key-pair", Namespace: "educates-secrets"},
-			CACertificateSecretRef: &translator.SecretRef{Name: "educates-ca", Namespace: "educates-secrets"},
+			CAKeyPairSecretRef:     translator.SecretRef{Name: "workshop.test-ca-key-pair"},
+			CACertificateSecretRef: &translator.SecretRef{Name: "educates-ca"},
 		},
 	}
 	if !reflect.DeepEqual(plan.Certificates, want) {
@@ -257,17 +273,18 @@ func TestResolve_Root_SelectsTheDomainCAKeyPairAndTheRootTrust(t *testing.T) {
 
 	ingress := translatedIngress(t, cfg, plan)
 	for path, want := range map[string]interface{}{
-		"certificates.provider":                                                     "BundledCertManager",
-		"certificates.bundledCertManager.issuerType":                                "CustomCA",
-		"certificates.bundledCertManager.customCA.caKeyPairSecretRef.name":          "workshop.test-ca-key-pair",
-		"certificates.bundledCertManager.customCA.caKeyPairSecretRef.namespace":     "educates-secrets",
-		"certificates.bundledCertManager.customCA.caCertificateSecretRef.name":      "educates-ca",
-		"certificates.bundledCertManager.customCA.caCertificateSecretRef.namespace": "educates-secrets",
+		"certificates.provider":                                                "BundledCertManager",
+		"certificates.bundledCertManager.issuerType":                           "CustomCA",
+		"certificates.bundledCertManager.customCA.caKeyPairSecretRef.name":     "workshop.test-ca-key-pair",
+		"certificates.bundledCertManager.customCA.caCertificateSecretRef.name": "educates-ca",
 	} {
 		if got := nested(t, ingress, path); got != want {
 			t.Errorf("ingress.%s = %v, want %v", path, got, want)
 		}
 	}
+	assertInOperatorNamespace(t, ingress,
+		"certificates.bundledCertManager.customCA.caKeyPairSecretRef",
+		"certificates.bundledCertManager.customCA.caCertificateSecretRef")
 	if _, present := ingress["protocol"]; present {
 		t.Errorf("ingress.protocol set for a secure install: %v", ingress["protocol"])
 	}
@@ -664,10 +681,10 @@ func wildcardLeaf(ca *testpki.Certificate, domains ...string) *testpki.Certifica
 
 func staticCertificate(tls, ca string) translator.LocalCertificates {
 	static := &translator.LocalStaticCertificate{
-		TLSSecretRef: translator.SecretRef{Name: tls, Namespace: "educates-secrets"},
+		TLSSecretRef: translator.SecretRef{Name: tls},
 	}
 	if ca != "" {
-		static.CACertificateSecretRef = &translator.SecretRef{Name: ca, Namespace: "educates-secrets"}
+		static.CACertificateSecretRef = &translator.SecretRef{Name: ca}
 	}
 	return translator.LocalCertificates{Provider: "StaticCertificate", StaticCertificate: static}
 }
@@ -697,16 +714,17 @@ func TestResolve_OneTLSCertificate_SelectsStaticCertificateWithTheCAThatVerifies
 
 	ingress := translatedIngress(t, cfg, plan)
 	for path, want := range map[string]interface{}{
-		"certificates.provider":                                           "StaticCertificate",
-		"certificates.staticCertificate.tlsSecretRef.name":                "workshop-tls",
-		"certificates.staticCertificate.tlsSecretRef.namespace":           "educates-secrets",
-		"certificates.staticCertificate.caCertificateSecretRef.name":      "mkcert-ca",
-		"certificates.staticCertificate.caCertificateSecretRef.namespace": "educates-secrets",
+		"certificates.provider":                                      "StaticCertificate",
+		"certificates.staticCertificate.tlsSecretRef.name":           "workshop-tls",
+		"certificates.staticCertificate.caCertificateSecretRef.name": "mkcert-ca",
 	} {
 		if got := nested(t, ingress, path); got != want {
 			t.Errorf("ingress.%s = %v, want %v", path, got, want)
 		}
 	}
+	assertInOperatorNamespace(t, ingress,
+		"certificates.staticCertificate.tlsSecretRef",
+		"certificates.staticCertificate.caCertificateSecretRef")
 
 	var r noteRecorder
 	if err := plan.Commit(&r); err != nil {

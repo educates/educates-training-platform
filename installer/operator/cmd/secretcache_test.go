@@ -38,7 +38,7 @@ func TestCollectFromECC_NoCR_DefaultsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"educates-installer", "educates-secrets"}
+	want := []string{"educates-installer"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("no-CR set = %v, want %v", got, want)
 	}
@@ -73,7 +73,7 @@ func TestCollectFromECC_ManagedCustomCANS_Added(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"educates-installer", "educates-secrets", "team-alpha-secrets", "team-alpha-trust"}
+	want := []string{"educates-installer", "team-alpha-secrets", "team-alpha-trust"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Managed CustomCA namespaces not folded in: got %v, want %v", got, want)
 	}
@@ -105,7 +105,7 @@ func TestCollectFromECC_ManagedStaticCertificateNS_Added(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"educates-installer", "educates-secrets", "static-ca", "static-tls"}
+	want := []string{"educates-installer", "static-ca", "static-tls"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Managed StaticCertificate namespaces not folded in: got %v, want %v", got, want)
 	}
@@ -133,7 +133,7 @@ func TestCollectFromECC_ManagedNoneCATrustNS_Added(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"educates-installer", "educates-secrets", "terminator-trust"}
+	want := []string{"educates-installer", "terminator-trust"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Managed None CA trust namespace not folded in: got %v, want %v", got, want)
 	}
@@ -164,7 +164,7 @@ func TestCollectFromECC_InlineCANS_Added(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"educates-installer", "educates-secrets", "shared-ca", "shared-tls"}
+	want := []string{"educates-installer", "shared-ca", "shared-tls"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Inline wildcard and CA namespaces not folded in: got %v, want %v", got, want)
 	}
@@ -187,7 +187,7 @@ func TestCollectFromECC_SessionManagerCAOverrideNS_Added(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"educates-installer", "educates-secrets", "portal-ca-secrets"}
+	want := []string{"educates-installer", "portal-ca-secrets"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("SessionManager CA override namespace not folded in: got %v, want %v", got, want)
 	}
@@ -227,7 +227,7 @@ func TestCollectFromECC_ReferenceTheProviderDoesNotUse_Ignored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"educates-installer", "educates-secrets", "static-tls"}
+	want := []string{"educates-installer", "static-tls"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("a reference the provider does not use widened the cache scope: got %v, want %v", got, want)
 	}
@@ -260,7 +260,7 @@ func TestCollectFromECC_EmptyNamespaceOnRef_Ignored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"educates-installer", "educates-secrets"}
+	want := []string{"educates-installer"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("empty ref.Namespace should not add anything new: got %v, want %v", got, want)
 	}

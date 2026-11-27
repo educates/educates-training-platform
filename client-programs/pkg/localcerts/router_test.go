@@ -30,7 +30,7 @@ func trustingCA(ca string) translator.LocalCertificates {
 	return translator.LocalCertificates{
 		Provider: translator.CertificatesProviderNone,
 		None: &translator.LocalNoneCertificates{
-			CACertificateSecretRef: &translator.SecretRef{Name: ca, Namespace: "educates-secrets"},
+			CACertificateSecretRef: &translator.SecretRef{Name: ca},
 		},
 	}
 }

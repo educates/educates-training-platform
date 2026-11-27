@@ -726,7 +726,7 @@ New Features
 * ``educates admin platform deploy --diff`` shows what a deploy would change
   in the cluster, and changes nothing, in the cluster or in the local
   secrets cache. It lists the cached Secrets a local configuration would
-  sync into the ``educates-secrets`` namespace, by name and never with their
+  sync into the operator namespace, by name and never with their
   values, the CRDs, and the operator release with its chart version and a
   diff of its values, and shows a diff of each platform custom resource
   against the resource as the API server would leave it, from a server-side
@@ -1281,8 +1281,8 @@ Features Changed
   ``training.educates.dev/root-ca``. A local deploy references the CA key
   pair as ``customCA.caKeyPairSecretRef`` and the root's CA trust Secret as
   ``customCA.caCertificateSecretRef``. A deploy and
-  ``educates local secrets sync`` now copy into the ``educates-secrets``
-  namespace every cached secret except CA root key pairs and any other
+  ``educates local secrets sync`` now copy into the operator namespace
+  every cached secret except CA root key pairs and any other
   secret holding a CA private key, apart from the CA key pair selected for
   the ingress domain. ``educates local secrets sync`` selects that CA key
   pair from the ``ingress.domain`` of the local configuration, minting it
@@ -2020,6 +2020,24 @@ Features Changed
   injected every secret in the namespaces it targeted into the service
   accounts it selected. No Educates chart renders such a rule. Selectors
   under ``targetNamespaces`` and ``serviceAccounts`` are not affected.
+
+* A deploy of a local configuration, and ``educates local secrets sync``,
+  copy the local secrets cache into the operator namespace,
+  ``educates-installer``, creating it before the operator is installed, where
+  earlier releases copied it into an ``educates-secrets`` namespace. The
+  operator pod pulls its own image with the image pull secrets the
+  configuration names, so they have to be in its namespace before it starts,
+  and the ``EducatesClusterConfig`` now references the certificates of a local
+  install there, by name alone. A deploy to a cluster that still has the
+  ``educates-secrets`` namespace leaves it in place and says how to remove it,
+  and ``educates admin platform delete --purge`` removes it. Nothing in
+  Educates uses it any more: a workshop whose ``spec.environment.secrets``
+  copies a secret from it on a local cluster finds nothing there on a new
+  one, and can name one of the cluster's image pull secrets in a package's
+  ``pullSecretRef`` directly, since they are copied into the workshop
+  namespace, or name the namespace that holds its secret. The operator no
+  longer watches ``educates-secrets`` unless the ``EducatesClusterConfig``
+  references a secret there when the operator starts.
 
 Removed Features
 ----------------

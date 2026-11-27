@@ -210,11 +210,9 @@ educatesClusterConfig:
       provider: StaticCertificate
       staticCertificate:
         tlsSecretRef:               # tls.crt and tls.key, SANs including *.{domain}
-          name: wildcard-tls
-          namespace: educates-secrets
+          name: wildcard-tls        # in the operator namespace unless a namespace is given
         caCertificateSecretRef:     # optional, ca.crt of a CA that is not publicly trusted
           name: wildcard-ca
-          namespace: educates-secrets
 ```
 
 See [secure HTTP connections](secure-http-connections) for how the operator checks and serves the certificate.
@@ -234,8 +232,7 @@ educatesClusterConfig:
       provider: None
       none:
         caCertificateSecretRef:     # optional, ca.crt of the CA that issued the proxy's certificate
-          name: proxy-ca
-          namespace: educates-secrets
+          name: proxy-ca            # in the operator namespace unless a namespace is given
 ```
 
 In `Managed` mode, `educatesClusterConfig.policyEnforcement` is required. Workshop security is enforced by Kyverno, and both the `clusterPolicy` and the `workshopPolicy` engines default to `Kyverno`, so whenever either engine is `Kyverno` the `kyverno` block must say how Kyverno is provided: `Bundled` has the operator install it, and `External` uses a Kyverno already installed in the cluster. Setting both engines to `None` runs Educates without workshop security, which is only acceptable for trusted users (see [cluster requirements](cluster-requirements)). A spec that leaves out either block fails validation before any cluster service is installed, with the `ValidationSucceeded` condition of the `EducatesClusterConfig` naming the missing field.
@@ -623,7 +620,7 @@ To see what a redeploy would change before running it, add `--diff`:
 educates admin platform deploy --config config.yaml --diff
 ```
 
-It changes nothing, in the cluster or in the local secrets cache, and exits with status 0 whether or not anything would change. It lists the cached Secrets a local configuration would sync into the `educates-secrets` namespace, by name and never with their values, the CRDs, and the operator release with its chart version and a diff of its values. For each platform custom resource it shows a diff against the resource as the API server would leave it after the deploy, defaults included. A change the API server would refuse, such as one to how a cluster service is provided, shows as refused, with the reason. Add `--verbose` for the full diffs of the CRDs and of the other objects of the operator release. What the operator then changes in the components and cluster services it installs is not shown.
+It changes nothing, in the cluster or in the local secrets cache, and exits with status 0 whether or not anything would change. It lists the cached Secrets a local configuration would sync into the operator namespace, `educates-installer`, by name and never with their values, the CRDs, and the operator release with its chart version and a diff of its values. For each platform custom resource it shows a diff against the resource as the API server would leave it after the deploy, defaults included. A change the API server would refuse, such as one to how a cluster service is provided, shows as refused, with the reason. Add `--verbose` for the full diffs of the CRDs and of the other objects of the operator release. What the operator then changes in the components and cluster services it installs is not shown.
 
 To see the configuration a cluster runs, export it:
 

@@ -254,12 +254,17 @@ func TestRender_RootCA_ReferencesTheDomainCAKeyPairWithoutWritingIt(t *testing.T
 
 	s := buf.String()
 	for _, want := range []string{
-		"caKeyPairSecretRef:\n            name: workshop.test-ca-key-pair\n            namespace: educates-secrets",
-		"caCertificateSecretRef:\n            name: test-ca\n            namespace: educates-secrets",
+		"caKeyPairSecretRef:\n            name: workshop.test-ca-key-pair\n",
+		"caCertificateSecretRef:\n            name: test-ca\n",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("render output missing %q:\n%s", want, s)
 		}
+	}
+	// The references name no namespace: the operator namespace, where
+	// the cache is synced.
+	if strings.Contains(s, "namespace: educates-secrets") {
+		t.Errorf("render output references the retired educates-secrets namespace:\n%s", s)
 	}
 	if after := cachedSecretNames(t); !reflect.DeepEqual(after, before) {
 		t.Errorf("render changed the local secrets cache from %v to %v", before, after)
@@ -278,13 +283,13 @@ func TestRender_TLSCertificate_ReportsStaticCertificateWithoutWriting(t *testing
 		"with the CA that issued it": {
 			cacheCA: true,
 			want: []string{
-				"tlsSecretRef:\n          name: workshop-tls\n          namespace: educates-secrets",
-				"caCertificateSecretRef:\n          name: mkcert-ca\n          namespace: educates-secrets",
+				"tlsSecretRef:\n          name: workshop-tls\n",
+				"caCertificateSecretRef:\n          name: mkcert-ca\n",
 				"# Serving TLS certificate \"workshop-tls\" for ingress domain \"workshop.test\" with the\n# StaticCertificate provider: cert-manager will not be installed.",
 				"#   educates local secrets remove workshop-tls\n",
 				"# It also serves these other domains, which removing it affects too: other.test.\n",
 			},
-			absent: []string{"warning:", "caKeyPairSecretRef"},
+			absent: []string{"warning:", "caKeyPairSecretRef", "namespace: educates-secrets"},
 		},
 		"without it": {
 			want: []string{

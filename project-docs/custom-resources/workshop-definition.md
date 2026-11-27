@@ -627,8 +627,11 @@ is used. The pull policy applies where the package image is mounted. Where the
 package contents are fetched instead, the pull policy is ignored.
 
 Where the image is held in a registry requiring credentials, an optional
-``pullSecretRef`` names a secret which must also be listed under
-``spec.environment.secrets`` so that it is copied into the workshop namespace:
+``pullSecretRef`` names a secret in the workshop namespace. The image pull
+secrets of the cluster's configuration are copied into the workshop namespace
+under their own names, so a package can name one of them directly. Any other
+secret must also be listed under ``spec.environment.secrets``, with the
+namespace it is copied from, so that it is copied into the workshop namespace:
 
 ```yaml
 spec:
@@ -640,7 +643,7 @@ spec:
         name: registry-credentials
   environment:
     secrets:
-    - namespace: educates-secrets
+    - namespace: workshop-credentials
       name: registry-credentials
 ```
 

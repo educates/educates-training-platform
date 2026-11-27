@@ -393,9 +393,9 @@ func (r *EducatesClusterConfigReconciler) ensureCertManagerReady(ctx context.Con
 // the Secret from cert-manager's `--cluster-resource-namespace` flag,
 // which defaults to the namespace cert-manager is installed in
 // (cert-manager). The user-supplied Secret can live in any namespace
-// the install pipeline chose (the v4 CLI's laptop mode uses
-// 'educates-secrets' for v3 compatibility); the operator copies from
-// there into cert-manager's namespace.
+// the install pipeline chose, the operator namespace unless its
+// reference names another; the operator copies from there into
+// cert-manager's namespace.
 //
 // Implementation is SSA so subsequent reconciles converge labels and
 // data without read-modify-write races. Owner reference on the copy

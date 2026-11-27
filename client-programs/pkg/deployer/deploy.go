@@ -15,6 +15,7 @@ import (
 
 	"github.com/educates/educates-training-platform/client-programs/pkg/cluster"
 	"github.com/educates/educates-training-platform/client-programs/pkg/config/translator"
+	"github.com/educates/educates-training-platform/client-programs/pkg/constants"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/apply"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/chart"
 	"github.com/educates/educates-training-platform/client-programs/pkg/deployer/crds"
@@ -35,7 +36,7 @@ const (
 	// OperatorNamespace is where the educates-installer helm release
 	// lives. Matches the chart's recommended deploy namespace and the
 	// samples in installer/samples/.
-	OperatorNamespace = "educates-installer"
+	OperatorNamespace = constants.OperatorNamespace
 
 	// OperatorReleaseName is the helm release name.
 	OperatorReleaseName = "educates-installer"
@@ -73,12 +74,12 @@ type Options struct {
 	// kubectl apply, etc.).
 	SkipCRDApply bool
 
-	// SyncLocalSecrets, when true, ensures the cluster's
-	// 'educates-secrets' namespace and copies the cached Secrets named in
-	// LocalSecretNames into it before applying the platform CRs. Matches
-	// the v3 laptop flow: cached CA/TLS material is pushed at deploy
-	// time, ECC's caKeyPairSecretRef points there. Only meaningful for
-	// EducatesLocalConfig deploys.
+	// SyncLocalSecrets, when true, ensures the operator namespace and
+	// copies the cached Secrets named in LocalSecretNames into it before
+	// installing the operator chart, so the operator pod can pull with
+	// them and the EducatesClusterConfig's references to them, which name
+	// no namespace, find them. Only meaningful for EducatesLocalConfig
+	// deploys.
 	SyncLocalSecrets bool
 
 	// LocalSecretNames names the cached Secrets SyncLocalSecrets copies:
@@ -133,11 +134,15 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 	// Push cached local secrets so the operator can consume them.
 	if opts.SyncLocalSecrets {
 		step := opts.Progress.Start("syncing cached local secrets to cluster")
-		if err := syncLocalSecrets(opts.Getter, opts.LocalSecretNames); err != nil {
+		note, err := syncLocalSecrets(opts.Getter, opts.LocalSecretNames)
+		if err != nil {
 			step.Fail(err)
 			return err
 		}
 		step.Done("")
+		if note != "" {
+			opts.Progress.Note(note)
+		}
 	}
 
 	chrt, err := chart.Load()
@@ -435,22 +440,23 @@ func explainApplyRejection(err error) error {
 		"run 'educates admin platform delete' and deploy again, or recreate the cluster: %w", settingsPhrase, err)
 }
 
-// syncLocalSecrets copies the named cached Secrets into the cluster's
-// 'educates-secrets' namespace. Reuses the secrets package so the
-// laptop flow stays the same.
-func syncLocalSecrets(getter genericclioptions.RESTClientGetter, names []string) error {
+// syncLocalSecrets copies the named cached Secrets into the operator
+// namespace, and returns the note secrets.RetiredSyncNamespaceNote gives
+// for a cluster that still has the namespace earlier releases synced
+// into.
+func syncLocalSecrets(getter genericclioptions.RESTClientGetter, names []string) (string, error) {
 	cfg, err := getter.ToRESTConfig()
 	if err != nil {
-		return fmt.Errorf("REST config for secrets sync: %w", err)
+		return "", fmt.Errorf("REST config for secrets sync: %w", err)
 	}
 	cs, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("kubernetes client for secrets sync: %w", err)
+		return "", fmt.Errorf("kubernetes client for secrets sync: %w", err)
 	}
 	if err := secrets.SyncLocalCachedSecretsToCluster(cs, names); err != nil {
-		return fmt.Errorf("sync local secrets: %w", err)
+		return "", fmt.Errorf("sync local secrets: %w", err)
 	}
-	return nil
+	return secrets.RetiredSyncNamespaceNote(cs)
 }
 
 // mapToUnstructured roundtrips a translator-produced CR map through JSON

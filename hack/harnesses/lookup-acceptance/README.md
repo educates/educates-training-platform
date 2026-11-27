@@ -37,10 +37,10 @@ A run:
 3. registers both clusters with the Lookup Service on the lookup cluster:
    the lookup cluster through the service's own remote access token, and the
    remote cluster through a kubeconfig Secret made with `educates admin
-   lookup kubeconfig`, whose server address it rewrites from the host's
-   loopback port to `https://educates-<remote cluster>-control-plane:6443`,
-   the remote control plane container that the lookup cluster's pods reach
-   on Docker's `kind` network; and adds a tenant that reaches every portal
+   lookup kubeconfig`, which for a local cluster names
+   `https://educates-<remote cluster>-control-plane:6443`, the remote
+   control plane container that the lookup cluster's pods reach on Docker's
+   `kind` network; and adds a tenant that reaches every portal
    on those two clusters, selected by a label the run gives their
    `ClusterConfig`s, an admin client and a tenant client, with passwords made
    up for the run;
@@ -188,8 +188,8 @@ forwarding to external machines" setting on, which the router needs and
 ## Tests
 
 The checks a run is judged by, finding each cluster and the router address
-it is reached on, the kubeconfig rewrite and the detection of a sleep have
-unit tests, which need no cluster. `npm test` also runs the
+it is reached on, and the detection of a sleep have unit tests, which need
+no cluster. `npm test` also runs the
 tests of the modules in [`lib/`](../lib/) that the harness shares with the
 other harnesses:
 

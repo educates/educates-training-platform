@@ -30,6 +30,9 @@ func TestDefaultIdentity(t *testing.T) {
 	if got := id.ControlPlaneNode(); got != "educates-control-plane" {
 		t.Errorf("ControlPlaneNode() = %q, want %q", got, "educates-control-plane")
 	}
+	if got, want := id.KindNetworkAPIServerURL(), "https://educates-control-plane:6443"; got != want {
+		t.Errorf("KindNetworkAPIServerURL() = %q, want %q", got, want)
+	}
 }
 
 func TestNamedIdentity(t *testing.T) {
@@ -56,6 +59,9 @@ func TestNamedIdentity(t *testing.T) {
 	}
 	if got := id.ControlPlaneNode(); got != "educates-test2-control-plane" {
 		t.Errorf("ControlPlaneNode() = %q, want %q", got, "educates-test2-control-plane")
+	}
+	if got, want := id.KindNetworkAPIServerURL(), "https://educates-test2-control-plane:6443"; got != want {
+		t.Errorf("KindNetworkAPIServerURL() = %q, want %q", got, want)
 	}
 }
 

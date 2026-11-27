@@ -35,6 +35,10 @@ const (
 	// externalLoadBalancerRole is the role kind names the external load
 	// balancer of a cluster with several control-plane nodes by.
 	externalLoadBalancerRole = "external-load-balancer"
+
+	// kindAPIServerContainerPort is the port the API server of a kind
+	// cluster listens on inside its control-plane node container.
+	kindAPIServerContainerPort = 6443
 )
 
 // ControlPlaneRole is the role kind names a control-plane node by, in
@@ -137,6 +141,17 @@ func (id Identity) Description() string {
 // cluster's first control-plane node.
 func (id Identity) ControlPlaneNode() string {
 	return id.KindName + "-" + ControlPlaneRole
+}
+
+// KindNetworkAPIServerURL is the URL of the cluster's API server that
+// pods of the other local clusters reach: its control-plane node
+// container on Docker's kind network, which every local cluster joins, by
+// the name Docker's DNS gives it, at the port the API server listens on
+// in the container. The API server certificate names the container. It is
+// the address kind writes into a cluster's internal kubeconfig, since a
+// local cluster has exactly one control-plane node.
+func (id Identity) KindNetworkAPIServerURL() string {
+	return fmt.Sprintf("https://%s:%d", id.ControlPlaneNode(), kindAPIServerContainerPort)
 }
 
 // NodeNames returns the names of the node containers kind creates for the

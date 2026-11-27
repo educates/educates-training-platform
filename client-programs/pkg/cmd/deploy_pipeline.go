@@ -116,7 +116,7 @@ func translateAndDeploy(
 		deployOpts.SyncLocalSecrets = true
 		deployOpts.LocalSecretNames = plan.SyncSecretNames
 	}
-	deployOpts.PullSecrets = pullSecretsToCheck(cfg)
+	deployOpts.OperatorNamespacePullSecrets = pullSecretsToCheck(cfg)
 	if flags.Record != nil {
 		record := *flags.Record
 		record.KubeContext = kubeContext
@@ -169,7 +169,7 @@ func translateAndDiff(
 		diffOpts.LocalSecretNames = plan.SyncSecretNames
 		diffOpts.PendingSecrets = plan.PendingCAKeyPairs()
 	}
-	diffOpts.PullSecrets = pullSecretsToCheck(cfg)
+	diffOpts.OperatorNamespacePullSecrets = pullSecretsToCheck(cfg)
 
 	return deployer.Diff(ctx, out, diffOpts)
 }

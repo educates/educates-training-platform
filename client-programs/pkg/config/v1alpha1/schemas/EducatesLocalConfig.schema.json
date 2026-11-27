@@ -184,7 +184,6 @@
       }
     },
 
-
     "imageVersions": {
       "type": "array",
       "description": "Per-component image overrides. Each entry points a named platform component at a specific image, for example to test a locally built image.",

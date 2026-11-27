@@ -123,7 +123,6 @@
       }
     },
 
-
     "imageVersions": {
       "type": "array",
       "description": "Per-component image overrides. Each entry points a named platform component at a specific image.",

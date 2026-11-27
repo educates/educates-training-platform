@@ -16,17 +16,17 @@ func pullSecret(name string, secretType corev1.SecretType) *corev1.Secret {
 	}
 }
 
-func TestCheckPullSecrets_PassesWhenEachIsARegistryCredentialInTheOperatorNamespace(t *testing.T) {
+func TestCheckOperatorNamespacePullSecrets_PassesWhenEachIsARegistryCredentialInTheOperatorNamespace(t *testing.T) {
 	client := fake.NewClientset(
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "educates-installer"}},
 		pullSecret("mirror", corev1.SecretTypeDockerConfigJson),
 	)
-	if err := checkPullSecrets(client, []string{"mirror"}); err != nil {
-		t.Errorf("checkPullSecrets: %v", err)
+	if err := checkOperatorNamespacePullSecrets(client, []string{"mirror"}); err != nil {
+		t.Errorf("checkOperatorNamespacePullSecrets: %v", err)
 	}
 }
 
-func TestCheckPullSecrets_NamesWhatIsMissingAndHowToCreateIt(t *testing.T) {
+func TestCheckOperatorNamespacePullSecrets_NamesWhatIsMissingAndHowToCreateIt(t *testing.T) {
 	cases := []struct {
 		name    string
 		objects []any
@@ -62,9 +62,9 @@ func TestCheckPullSecrets_NamesWhatIsMissingAndHowToCreateIt(t *testing.T) {
 					_ = client.Tracker().Add(obj)
 				}
 			}
-			err := checkPullSecrets(client, []string{"mirror"})
+			err := checkOperatorNamespacePullSecrets(client, []string{"mirror"})
 			if err == nil {
-				t.Fatal("checkPullSecrets accepted a pull secret the operator namespace does not hold")
+				t.Fatal("checkOperatorNamespacePullSecrets accepted a pull secret the operator namespace does not hold")
 			}
 			for _, want := range c.says {
 				if !strings.Contains(err.Error(), want) {

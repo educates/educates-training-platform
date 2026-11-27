@@ -86,11 +86,11 @@ type Options struct {
 	// the local certificate resolution plan's SyncSecretNames.
 	LocalSecretNames []string
 
-	// PullSecrets names the image pull Secrets the operator namespace must
-	// hold before anything is installed, as the config's
-	// imageRegistry.pullSecrets names them, for a config whose Secrets the
-	// deploy does not sync. The deploy checks each one first.
-	PullSecrets []string
+	// OperatorNamespacePullSecrets names the image pull Secrets the
+	// operator namespace must hold before anything is installed, as the
+	// config's imageRegistry.pullSecrets names them, for a config whose
+	// Secrets the deploy does not sync. The deploy checks each one first.
+	OperatorNamespacePullSecrets []string
 
 	// Record, when set, has the deploy recorded as a revision of the
 	// deploy history once it has applied the platform resources.
@@ -151,17 +151,17 @@ func Deploy(ctx context.Context, out *translator.Output, opts Options) error {
 		}
 	}
 
-	if len(opts.PullSecrets) > 0 {
+	if len(opts.OperatorNamespacePullSecrets) > 0 {
 		step := opts.Progress.Start("checking image pull secrets in namespace " + OperatorNamespace)
 		cs, err := clientsetFor(opts.Getter)
 		if err == nil {
-			err = checkPullSecrets(cs, opts.PullSecrets)
+			err = checkOperatorNamespacePullSecrets(cs, opts.OperatorNamespacePullSecrets)
 		}
 		if err != nil {
 			step.Fail(err)
 			return err
 		}
-		step.Done(fmt.Sprintf("%d present", len(opts.PullSecrets)))
+		step.Done(fmt.Sprintf("%d present", len(opts.OperatorNamespacePullSecrets)))
 	}
 
 	chrt, err := chart.Load()
@@ -464,13 +464,9 @@ func explainApplyRejection(err error) error {
 // for a cluster that still has the namespace earlier releases synced
 // into.
 func syncLocalSecrets(getter genericclioptions.RESTClientGetter, names []string) (string, error) {
-	cfg, err := getter.ToRESTConfig()
+	cs, err := clientsetFor(getter)
 	if err != nil {
-		return "", fmt.Errorf("REST config for secrets sync: %w", err)
-	}
-	cs, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return "", fmt.Errorf("kubernetes client for secrets sync: %w", err)
+		return "", fmt.Errorf("secrets sync: %w", err)
 	}
 	if err := secrets.SyncLocalCachedSecretsToCluster(cs, names); err != nil {
 		return "", fmt.Errorf("sync local secrets: %w", err)

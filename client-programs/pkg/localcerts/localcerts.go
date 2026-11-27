@@ -91,7 +91,7 @@ func Resolve(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := checkPullSecrets(cfg); err != nil {
+	if err := checkCachedPullSecrets(cfg); err != nil {
 		return nil, err
 	}
 	plan := &Plan{}
@@ -184,7 +184,7 @@ func ResolveSync(cfg *v1alpha1.EducatesLocalConfig) (*Plan, error) {
 	if cfg == nil {
 		return plan, nil
 	}
-	if err := checkPullSecrets(cfg); err != nil {
+	if err := checkCachedPullSecrets(cfg); err != nil {
 		return nil, err
 	}
 	if cfg.Ingress.Domain == "" {
@@ -218,13 +218,13 @@ ingress domain. Remove the root CAs you do not use with:
 	return roots, nil
 }
 
-// checkPullSecrets checks that each image pull Secret cfg names in
+// checkCachedPullSecrets checks that each image pull Secret cfg names in
 // imageRegistry.pullSecrets is a registry credential in the local secrets
 // cache, which a deploy syncs into the operator namespace with the rest of
 // the cache. The EducatesClusterConfig is not Ready until each one exists
 // there with that type, and the operator pod cannot pull without it, so a
 // name that fails is refused before anything reaches the cluster.
-func checkPullSecrets(cfg *v1alpha1.EducatesLocalConfig) error {
+func checkCachedPullSecrets(cfg *v1alpha1.EducatesLocalConfig) error {
 	for _, name := range cfg.ImageRegistry.PullSecrets {
 		secret, err := secrets.LoadCachedSecret(name)
 		if err != nil {

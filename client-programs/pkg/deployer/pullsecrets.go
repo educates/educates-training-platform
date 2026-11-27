@@ -39,13 +39,13 @@ func pullSecretProblems(client kubernetes.Interface, names []string) ([]pullSecr
 	return problems, nil
 }
 
-// checkPullSecrets checks that the operator namespace holds each image
-// pull Secret of names as a kubernetes.io/dockerconfigjson Secret. The
-// operator pod pulls its own image with them and the EducatesClusterConfig
-// is not Ready until each one exists, so a deploy checks them before it
-// installs anything, and its error gives the commands that create the
-// namespace and each Secret.
-func checkPullSecrets(client kubernetes.Interface, names []string) error {
+// checkOperatorNamespacePullSecrets checks that the operator namespace
+// holds each image pull Secret of names as a kubernetes.io/dockerconfigjson
+// Secret. The operator pod pulls its own image with them and the
+// EducatesClusterConfig is not Ready until each one exists, so a deploy
+// checks them before it installs anything, and its error gives the
+// commands that create the namespace and each Secret.
+func checkOperatorNamespacePullSecrets(client kubernetes.Interface, names []string) error {
 	problems, err := pullSecretProblems(client, names)
 	if err != nil || len(problems) == 0 {
 		return err

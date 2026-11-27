@@ -44,6 +44,12 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+# The operator's log level: debug, info, warn or error. logr has no warning
+# level, so at warn only errors are logged. The CLI sets it from
+# operator.logLevel, which also sets the log level of the platform
+# components.
+logLevel: info
+
 # When false, leader election is disabled — appropriate for the Phase 0
 # single-replica deployment. When the operator scales beyond one replica
 # (not in v4 plan), set to true.

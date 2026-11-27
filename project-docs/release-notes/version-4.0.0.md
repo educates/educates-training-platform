@@ -3108,3 +3108,13 @@ Bugs Fixed
   Kubernetes reserved namespaces unquoted, as ``- !kube-*``, which YAML reads
   as a tag rather than a name, and an example of a ``SecretCopier`` lacked a
   colon. The documentation of the four resources has been corrected.
+
+* ``operator.logLevel`` in a CLI configuration was written into the values of
+  the ``educates-installer`` chart, which had no such value, so the operator
+  always logged at ``debug``, whatever the configuration said, while the
+  platform components took the level. The chart now has a ``logLevel`` value,
+  ``info`` by default, which the operator takes as its new ``--log-level``
+  option, so ``operator.logLevel`` sets the log level of the operator as well
+  as of the components. An operator installed without a ``logLevel``, with
+  the CLI or with Helm, now logs at ``info`` instead of ``debug``. As with the
+  components, ``warn`` logs only errors.

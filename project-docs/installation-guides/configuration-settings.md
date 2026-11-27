@@ -56,7 +56,8 @@ Key fields (all optional: an `apiVersion` + `kind` stub, which `educates local c
   [pre-pulling workshop images](pre-pulling-workshop-images).
 * `secretPropagation.imagePullSecretNames` — locally cached pull secrets to propagate into the cluster.
 * `imageVersions` — per-image reference overrides.
-* `operator.image.*`, `operator.imagePullSecrets`, `operator.logLevel` — operator deployment settings. Image repository and tag default from the CLI binary's own version, so they normally stay unset.
+* `operator.image.*`, `operator.imagePullSecrets`: operator deployment settings. Image repository and tag default from the CLI binary's own version, so they normally stay unset.
+* `operator.logLevel`: the log level of the operator and of the platform components, `debug`, `info`, `warn` or `error`, `info` by default. The operator takes it from the `logLevel` value of the `educates-installer` chart, and each component from the `spec.logLevel` of its resource. Since the components and the operator log through logr, which has no warning level, `warn` logs only errors.
 
 Settings outside the laptop scenario — DNS providers, ACME, image registry prefixes, alternative ingress — are deliberately rejected by this kind's schema. Use `EducatesConfig` for those.
 

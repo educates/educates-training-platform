@@ -33,6 +33,7 @@ spec:
           args:
             - --health-probe-bind-address=:8081
             - --metrics-bind-address=0
+            - --log-level={{ .Values.logLevel | default "info" }}
             {{- if .Values.leaderElection.enabled }}
             - --leader-elect
             {{- end }}

@@ -84,3 +84,72 @@ func TestRender_EmbeddedChartParsesStrictly(t *testing.T) {
 		}
 	}
 }
+
+// TestRender_OperatorLogLevel renders the operator Deployment and checks
+// that the chart's logLevel value reaches the operator as --log-level,
+// info when the value is left at its default.
+func TestRender_OperatorLogLevel(t *testing.T) {
+	cases := []struct {
+		name   string
+		values map[string]any
+		want   string
+	}{
+		{"default", map[string]any{}, "--log-level=info"},
+		{"debug", map[string]any{"logLevel": "debug"}, "--log-level=debug"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			args := renderOperatorArgs(t, c.values)
+			found := false
+			for _, arg := range args {
+				if arg == c.want {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("operator args = %v, want %s among them", args, c.want)
+			}
+		})
+	}
+}
+
+// renderOperatorArgs renders the embedded chart with values and returns
+// the args of the operator Deployment's manager container.
+func renderOperatorArgs(t *testing.T, values map[string]any) []string {
+	t.Helper()
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	renderValues, err := commonutil.ToRenderValues(c, values,
+		common.ReleaseOptions{Name: Name, Namespace: "educates-installer", IsInstall: true}, nil)
+	if err != nil {
+		t.Fatalf("build render values: %v", err)
+	}
+	manifests, err := engine.Render(c, renderValues)
+	if err != nil {
+		t.Fatalf("render chart: %v", err)
+	}
+	var deployment struct {
+		Spec struct {
+			Template struct {
+				Spec struct {
+					Containers []struct {
+						Name string   `json:"name"`
+						Args []string `json:"args"`
+					} `json:"containers"`
+				} `json:"spec"`
+			} `json:"template"`
+		} `json:"spec"`
+	}
+	if err := yaml.Unmarshal([]byte(manifests[Name+"/templates/deployment.yaml"]), &deployment); err != nil {
+		t.Fatalf("parse deployment: %v", err)
+	}
+	for _, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == "manager" {
+			return container.Args
+		}
+	}
+	t.Fatal("deployment: no manager container")
+	return nil
+}
